@@ -160,7 +160,7 @@ public class TestChatBuilder
     /// Builds and persists the chat to the database.
     /// Returns a TestChat containing the chat record for testing.
     /// </summary>
-    public async Task<TestChat> BuildAsync(CancellationToken ct = default)
+    public async Task<TestChat> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var chatRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
@@ -182,7 +182,7 @@ public class TestChatBuilder
             ChatIconPath: _chatIconPath
         );
 
-        await chatRepository.UpsertAsync(chatRecord, ct);
+        await chatRepository.UpsertAsync(chatRecord, cancellationToken);
 
         return new TestChat(chatRecord);
     }

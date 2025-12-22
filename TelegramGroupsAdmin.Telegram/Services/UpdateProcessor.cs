@@ -20,8 +20,8 @@ public class UpdateProcessor(
     /// Process a Telegram update - routes to appropriate handler based on update type.
     /// </summary>
     /// <param name="update">The Telegram update to process</param>
-    /// <param name="ct">Cancellation token</param>
-    public async Task ProcessUpdateAsync(Update update, CancellationToken ct = default)
+    /// <param name="cancellationToken">Cancellation token</param>
+    public async Task ProcessUpdateAsync(Update update, CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Processing update {UpdateId} of type {UpdateType}", update.Id, update.Type);
 
@@ -31,7 +31,7 @@ public class UpdateProcessor(
             logger.LogDebug(
                 "Routing MyChatMember update for chat {Chat}",
                 LogDisplayName.ChatDebug(myChatMember.Chat.Title, myChatMember.Chat.Id));
-            await chatManagementService.HandleMyChatMemberUpdateAsync(myChatMember, ct);
+            await chatManagementService.HandleMyChatMemberUpdateAsync(myChatMember, cancellationToken);
             return;
         }
 
@@ -45,10 +45,10 @@ public class UpdateProcessor(
                 LogDisplayName.ChatDebug(chatMember.Chat.Title, chatMember.Chat.Id));
 
             // Check for admin status changes (instant permission updates)
-            await chatManagementService.HandleAdminStatusChangeAsync(chatMember, ct);
+            await chatManagementService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
 
             // Handle joins/leaves (welcome system)
-            await welcomeService.HandleChatMemberUpdateAsync(chatMember, ct);
+            await welcomeService.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
             return;
         }
 
@@ -56,11 +56,11 @@ public class UpdateProcessor(
         if (update.CallbackQuery is { } callbackQuery)
         {
             logger.LogDebug("Routing CallbackQuery {CallbackId}", callbackQuery.Id);
-            await welcomeService.HandleCallbackQueryAsync(callbackQuery, ct);
+            await welcomeService.HandleCallbackQueryAsync(callbackQuery, cancellationToken);
 
             // Always answer callback queries to remove loading state
             var operations = await botFactory.GetOperationsAsync();
-            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, ct: ct);
+            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
             return;
         }
 

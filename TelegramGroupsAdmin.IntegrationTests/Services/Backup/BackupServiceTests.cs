@@ -644,7 +644,7 @@ public class BackupServiceTests
             NotificationEventType eventType,
             string subject,
             string message,
-            CancellationToken ct = default)
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
         }
@@ -653,7 +653,7 @@ public class BackupServiceTests
             NotificationEventType eventType,
             string subject,
             string message,
-            CancellationToken ct = default)
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
         }
@@ -663,7 +663,7 @@ public class BackupServiceTests
             NotificationEventType eventType,
             string subject,
             string message,
-            CancellationToken ct = default)
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult(true); // No-op for tests
         }

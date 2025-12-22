@@ -33,7 +33,7 @@ public class WarnHandler : IWarnHandler
         string? reason,
         long? chatId = null,
         long? messageId = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Issuing warning for user {UserId} by {Executor}",
@@ -56,7 +56,7 @@ public class WarnHandler : IWarnHandler
             };
 
             // Add warning to user's JSONB collection and get active count
-            var activeCount = await _userRepository.AddWarningAsync(userId, warning, ct);
+            var activeCount = await _userRepository.AddWarningAsync(userId, warning, cancellationToken);
 
             _logger.LogInformation(
                 "Warning issued for user {UserId}: total active warnings {WarnCount}",

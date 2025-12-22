@@ -148,7 +148,7 @@ public class TestUserActionBuilder
     /// Builds and persists the user action record.
     /// Returns the generated action ID.
     /// </summary>
-    public async Task<long> BuildAsync(CancellationToken ct = default)
+    public async Task<long> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
@@ -164,7 +164,7 @@ public class TestUserActionBuilder
             Reason: _reason
         );
 
-        return await repository.InsertAsync(record, ct);
+        return await repository.InsertAsync(record, cancellationToken);
     }
 
     #region Common Action Shortcuts

@@ -12,13 +12,13 @@ public interface IMLTextClassifierService
     /// Trains the SDCA model with TF-IDF features from the training data repository.
     /// Uses SemaphoreSlim to prevent overlapping retraining.
     /// </summary>
-    Task TrainModelAsync(CancellationToken ct = default);
+    Task TrainModelAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads model and metadata from disk with SHA256 hash verification.
     /// Returns true if successful, false if model doesn't exist or verification fails.
     /// </summary>
-    Task<bool> LoadModelAsync(CancellationToken ct = default);
+    Task<bool> LoadModelAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Predicts spam probability for a message.

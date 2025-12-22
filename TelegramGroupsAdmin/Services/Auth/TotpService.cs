@@ -16,9 +16,9 @@ public class TotpService(
     ILogger<TotpService> logger)
     : ITotpService
 {
-    public async Task<TotpSetupResult> SetupTotpAsync(string userId, string userEmail, CancellationToken ct = default)
+    public async Task<TotpSetupResult> SetupTotpAsync(string userId, string userEmail, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null)
         {
             throw new InvalidOperationException("User not found");
@@ -64,7 +64,7 @@ public class TotpService(
 
             // Encrypt and store secret (not enabled yet)
             var protectedSecret = totpProtection.Protect(secret);
-            await userRepository.UpdateTotpSecretAsync(userId, protectedSecret, ct);
+            await userRepository.UpdateTotpSecretAsync(userId, protectedSecret, cancellationToken);
             logger.LogInformation("Generated new TOTP secret for user {UserId} (expired: {Expired})", userId, setupExpired);
         }
 
@@ -74,9 +74,9 @@ public class TotpService(
         return new TotpSetupResult(secret, qrCodeUri, FormatSecretForManualEntry(secret));
     }
 
-    public async Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null || string.IsNullOrEmpty(user.TotpSecret))
         {
             return new TotpVerificationResult(false, false, "User not found or TOTP not configured");
@@ -118,10 +118,10 @@ public class TotpService(
         }
 
         // Enable TOTP
-        await userRepository.EnableTotpAsync(userId, ct);
+        await userRepository.EnableTotpAsync(userId, cancellationToken);
 
         // Update security stamp
-        await userRepository.UpdateSecurityStampAsync(userId, ct);
+        await userRepository.UpdateSecurityStampAsync(userId, cancellationToken);
 
         logger.LogInformation("TOTP enabled for {User}", LogDisplayName.WebUserInfo(user.Email, userId));
 
@@ -131,14 +131,14 @@ public class TotpService(
             actor: Actor.FromWebUser(userId),
             target: Actor.FromWebUser(userId),
             value: "TOTP 2FA enabled",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return new TotpVerificationResult(true, false, null);
     }
 
-    public async Task<bool> VerifyTotpCodeAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<bool> VerifyTotpCodeAsync(string userId, string code, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is not { TotpEnabled: true } || string.IsNullOrEmpty(user.TotpSecret))
         {
             return false;
@@ -160,7 +160,7 @@ public class TotpService(
                 actor: Actor.FromWebUser(userId),
                 target: Actor.FromWebUser(userId),
                 value: "Invalid TOTP code entered",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return false;
         }
@@ -168,10 +168,10 @@ public class TotpService(
         return true;
     }
 
-    public async Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    public async Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default)
     {
         // Verify admin is Owner
-        var admin = await userRepository.GetByIdAsync(adminUserId, ct);
+        var admin = await userRepository.GetByIdAsync(adminUserId, cancellationToken);
         if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
             logger.LogWarning("Non-Owner {Admin} attempted to admin-disable TOTP for user {TargetUserId}",
@@ -180,7 +180,7 @@ public class TotpService(
         }
 
         // Verify target user exists
-        var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
+        var targetUser = await userRepository.GetByIdAsync(targetUserId, cancellationToken);
         if (targetUser is null)
         {
             logger.LogWarning("{Admin} attempted to disable TOTP for non-existent user {TargetUserId}",
@@ -189,8 +189,8 @@ public class TotpService(
         }
 
         // Disable TOTP without password check (keeps secret for re-enable)
-        await userRepository.DisableTotpAsync(targetUserId, ct);
-        await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
+        await userRepository.DisableTotpAsync(targetUserId, cancellationToken);
+        await userRepository.UpdateSecurityStampAsync(targetUserId, cancellationToken);
 
         logger.LogWarning("TOTP admin-disabled for {TargetUser} by Owner {Admin}",
             LogDisplayName.WebUserDebug(targetUser.Email, targetUserId),
@@ -202,15 +202,15 @@ public class TotpService(
             actor: Actor.FromWebUser(adminUserId),
             target: Actor.FromWebUser(targetUserId),
             value: $"TOTP 2FA disabled by Owner admin override (admin: {admin.Email})",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return true;
     }
 
-    public async Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    public async Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default)
     {
         // Verify admin is Owner
-        var admin = await userRepository.GetByIdAsync(adminUserId, ct);
+        var admin = await userRepository.GetByIdAsync(adminUserId, cancellationToken);
         if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
             logger.LogWarning("Non-Owner {Admin} attempted to admin-enable TOTP for user {TargetUserId}",
@@ -219,7 +219,7 @@ public class TotpService(
         }
 
         // Verify target user exists
-        var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
+        var targetUser = await userRepository.GetByIdAsync(targetUserId, cancellationToken);
         if (targetUser is null)
         {
             logger.LogWarning("{Admin} attempted to enable TOTP for non-existent user {TargetUserId}",
@@ -228,8 +228,8 @@ public class TotpService(
         }
 
         // Enable TOTP (works even without secret - forces setup on next login)
-        await userRepository.EnableTotpAsync(targetUserId, ct);
-        await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
+        await userRepository.EnableTotpAsync(targetUserId, cancellationToken);
+        await userRepository.UpdateSecurityStampAsync(targetUserId, cancellationToken);
 
         logger.LogWarning("TOTP admin-enabled for {TargetUser} by Owner {Admin}",
             LogDisplayName.WebUserDebug(targetUser.Email, targetUserId),
@@ -241,15 +241,15 @@ public class TotpService(
             actor: Actor.FromWebUser(adminUserId),
             target: Actor.FromWebUser(targetUserId),
             value: $"TOTP 2FA enabled by Owner admin override (admin: {admin.Email})",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return true;
     }
 
-    public async Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    public async Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default)
     {
         // Verify admin is Owner
-        var admin = await userRepository.GetByIdAsync(adminUserId, ct);
+        var admin = await userRepository.GetByIdAsync(adminUserId, cancellationToken);
         if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
             logger.LogWarning("Non-Owner {Admin} attempted to reset TOTP for user {TargetUserId}",
@@ -258,7 +258,7 @@ public class TotpService(
         }
 
         // Verify target user exists
-        var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
+        var targetUser = await userRepository.GetByIdAsync(targetUserId, cancellationToken);
         if (targetUser is null)
         {
             logger.LogWarning("{Admin} attempted to reset TOTP for non-existent user {TargetUserId}",
@@ -267,8 +267,8 @@ public class TotpService(
         }
 
         // Reset TOTP completely (wipes secret, timestamp, and sets enabled=false)
-        await userRepository.ResetTotpAsync(targetUserId, ct);
-        await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
+        await userRepository.ResetTotpAsync(targetUserId, cancellationToken);
+        await userRepository.UpdateSecurityStampAsync(targetUserId, cancellationToken);
 
         logger.LogWarning("TOTP reset for {TargetUser} by Owner {Admin}",
             LogDisplayName.WebUserDebug(targetUser.Email, targetUserId),
@@ -280,12 +280,12 @@ public class TotpService(
             actor: Actor.FromWebUser(adminUserId),
             target: Actor.FromWebUser(targetUserId),
             value: $"TOTP reset by Owner admin (admin: {admin.Email})",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return true;
     }
 
-    public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
     {
         var codes = new List<string>();
 
@@ -296,20 +296,20 @@ public class TotpService(
             codes.Add(code);
 
             var codeHash = HashRecoveryCode(code);
-            await userRepository.CreateRecoveryCodeAsync(userId, codeHash, ct);
+            await userRepository.CreateRecoveryCodeAsync(userId, codeHash, cancellationToken);
         }
 
         logger.LogInformation("Generated {Count} recovery codes for user: {UserId}", codes.Count, userId);
         return codes.AsReadOnly();
     }
 
-    public async Task<bool> UseRecoveryCodeAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<bool> UseRecoveryCodeAsync(string userId, string code, CancellationToken cancellationToken = default)
     {
         var codeHash = HashRecoveryCode(code);
-        var isValid = await userRepository.UseRecoveryCodeAsync(userId, codeHash, ct);
+        var isValid = await userRepository.UseRecoveryCodeAsync(userId, codeHash, cancellationToken);
 
         // Fetch user for logging (security investigation needs email)
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
 
         if (!isValid)
         {
@@ -322,7 +322,7 @@ public class TotpService(
                 actor: Actor.FromWebUser(userId),
                 target: Actor.FromWebUser(userId),
                 value: "Invalid recovery code entered",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return false;
         }

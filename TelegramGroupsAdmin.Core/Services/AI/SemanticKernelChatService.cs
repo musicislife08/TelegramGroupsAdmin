@@ -39,9 +39,9 @@ public class SemanticKernelChatService : IChatService
         string systemPrompt,
         string userPrompt,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        var lookupResult = await GetOrCreateKernelAsync(feature, ct);
+        var lookupResult = await GetOrCreateKernelAsync(feature, cancellationToken);
         if (lookupResult == null)
         {
             _logger.LogDebug("Feature {Feature} is not configured, skipping AI call", feature);
@@ -65,7 +65,7 @@ public class SemanticKernelChatService : IChatService
                 chatHistory,
                 executionSettings,
                 kernel: kernelInfo.Kernel,
-                cancellationToken: ct);
+                cancellationToken: cancellationToken);
 
             return CreateResult(response, kernelInfo.ModelId);
         }
@@ -85,9 +85,9 @@ public class SemanticKernelChatService : IChatService
         byte[] imageData,
         string mimeType,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        var lookupResult = await GetOrCreateKernelAsync(feature, ct);
+        var lookupResult = await GetOrCreateKernelAsync(feature, cancellationToken);
         if (lookupResult == null)
         {
             _logger.LogDebug("Feature {Feature} is not configured, skipping AI vision call", feature);
@@ -115,7 +115,7 @@ public class SemanticKernelChatService : IChatService
                 chatHistory,
                 executionSettings,
                 kernel: kernelInfo.Kernel,
-                cancellationToken: ct);
+                cancellationToken: cancellationToken);
 
             return CreateResult(response, kernelInfo.ModelId);
         }
@@ -128,9 +128,9 @@ public class SemanticKernelChatService : IChatService
     }
 
     /// <inheritdoc />
-    public async Task<bool> IsFeatureAvailableAsync(AIFeatureType feature, CancellationToken ct = default)
+    public async Task<bool> IsFeatureAvailableAsync(AIFeatureType feature, CancellationToken cancellationToken = default)
     {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
+        var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         if (config == null) return false;
 
         if (!config.Features.TryGetValue(feature, out var featureConfig) || featureConfig.ConnectionId == null)
@@ -143,7 +143,7 @@ public class SemanticKernelChatService : IChatService
         // Check API key for non-local providers
         if (connection.Provider != AIProviderType.LocalOpenAI || connection.LocalRequiresApiKey)
         {
-            var apiKeys = await _configRepository.GetApiKeysAsync(ct);
+            var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
             var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
             if (string.IsNullOrWhiteSpace(apiKey))
                 return false;
@@ -180,9 +180,9 @@ public class SemanticKernelChatService : IChatService
         string systemPrompt,
         string userPrompt,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, ct);
+        var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, cancellationToken);
         if (kernelInfo == null)
         {
             // Debug level - specific reason already logged at Warning level by GetOrCreateTestKernelAsync
@@ -205,7 +205,7 @@ public class SemanticKernelChatService : IChatService
                 chatHistory,
                 executionSettings,
                 kernel: kernelInfo.Kernel,
-                cancellationToken: ct);
+                cancellationToken: cancellationToken);
 
             // Detailed response logging for debugging
             _logger.LogDebug("SK Response - Content: '{Content}', ModelId: {ModelId}, Role: {Role}, ItemCount: {ItemCount}",
@@ -261,9 +261,9 @@ public class SemanticKernelChatService : IChatService
         byte[] imageData,
         string mimeType,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, ct);
+        var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, cancellationToken);
         if (kernelInfo == null)
         {
             // Debug level - specific reason already logged at Warning level by GetOrCreateTestKernelAsync
@@ -291,7 +291,7 @@ public class SemanticKernelChatService : IChatService
                 chatHistory,
                 executionSettings,
                 kernel: kernelInfo.Kernel,
-                cancellationToken: ct);
+                cancellationToken: cancellationToken);
 
             var result = CreateResult(response, kernelInfo.ModelId);
             _logger.LogDebug("Test vision returned: Content={HasContent}, Tokens={Tokens}",
@@ -315,9 +315,9 @@ public class SemanticKernelChatService : IChatService
         string connectionId,
         string model,
         string? azureDeploymentName,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
+        var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         if (config == null) return null;
 
         var connection = config.Connections.SingleOrDefault(c => c.Id == connectionId);
@@ -327,7 +327,7 @@ public class SemanticKernelChatService : IChatService
             return null;
         }
 
-        var apiKeys = await _configRepository.GetApiKeysAsync(ct);
+        var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
         // Validate API key if required
@@ -372,9 +372,9 @@ public class SemanticKernelChatService : IChatService
     /// <summary>
     /// Get or create a cached Kernel for the specified feature
     /// </summary>
-    private async Task<KernelLookupResult?> GetOrCreateKernelAsync(AIFeatureType feature, CancellationToken ct)
+    private async Task<KernelLookupResult?> GetOrCreateKernelAsync(AIFeatureType feature, CancellationToken cancellationToken)
     {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
+        var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         if (config == null) return null;
 
         if (!config.Features.TryGetValue(feature, out var featureConfig) || featureConfig.ConnectionId == null)
@@ -384,7 +384,7 @@ public class SemanticKernelChatService : IChatService
         if (connection == null || !connection.Enabled)
             return null;
 
-        var apiKeys = await _configRepository.GetApiKeysAsync(ct);
+        var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
         // Validate API key if required

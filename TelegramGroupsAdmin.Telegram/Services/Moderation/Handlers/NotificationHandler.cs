@@ -51,11 +51,11 @@ public class NotificationHandler : INotificationHandler
         long userId,
         int warningCount,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            var success = await SendWarningNotificationAsync(userId, warningCount, reason, ct);
+            var success = await SendWarningNotificationAsync(userId, warningCount, reason, cancellationToken);
             return success
                 ? NotificationResult.Succeeded()
                 : NotificationResult.Failed("Notification delivery failed");
@@ -75,11 +75,11 @@ public class NotificationHandler : INotificationHandler
         TimeSpan duration,
         DateTimeOffset expiresAt,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            var success = await SendTempBanNotificationAsync(userId, duration, expiresAt, reason, ct);
+            var success = await SendTempBanNotificationAsync(userId, duration, expiresAt, reason, cancellationToken);
             return success
                 ? NotificationResult.Succeeded()
                 : NotificationResult.Failed("Notification delivery failed");
@@ -98,11 +98,11 @@ public class NotificationHandler : INotificationHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            await SendBanAdminNotificationAsync(userId, executor, reason, ct);
+            await SendBanAdminNotificationAsync(userId, executor, reason, cancellationToken);
             return NotificationResult.Succeeded();
         }
         catch (Exception ex)
@@ -118,7 +118,7 @@ public class NotificationHandler : INotificationHandler
     /// Send warning DM to the user.
     /// </summary>
     /// <returns>True if the notification was sent successfully.</returns>
-    private async Task<bool> SendWarningNotificationAsync(long userId, int warningCount, string? reason, CancellationToken ct)
+    private async Task<bool> SendWarningNotificationAsync(long userId, int warningCount, string? reason, CancellationToken cancellationToken)
     {
         var message = $"⚠️ <b>Warning Issued</b>\n\n" +
                       $"You have received a warning.\n\n" +
@@ -128,7 +128,7 @@ public class NotificationHandler : INotificationHandler
                       $"💡 Use /mystatus to check your current status.";
 
         var notification = new Notification("warning", message);
-        var result = await _notificationOrchestrator.SendTelegramDmAsync(userId, notification, ct);
+        var result = await _notificationOrchestrator.SendTelegramDmAsync(userId, notification, cancellationToken);
 
         if (result.Success)
         {
@@ -150,10 +150,10 @@ public class NotificationHandler : INotificationHandler
     /// Send temp ban DM to the user with rejoin links.
     /// </summary>
     /// <returns>True if the notification was sent successfully.</returns>
-    private async Task<bool> SendTempBanNotificationAsync(long userId, TimeSpan duration, DateTimeOffset expiresAt, string? reason, CancellationToken ct)
+    private async Task<bool> SendTempBanNotificationAsync(long userId, TimeSpan duration, DateTimeOffset expiresAt, string? reason, CancellationToken cancellationToken)
     {
         // Get all active managed chats for rejoin links
-        var allChats = await _managedChatsRepository.GetAllChatsAsync(ct);
+        var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
         var activeChats = allChats.Where(c => c.IsActive && !c.IsDeleted).ToList();
 
         // Build notification message
@@ -164,14 +164,14 @@ public class NotificationHandler : INotificationHandler
                           $"You will be automatically unbanned after this time.";
 
         // Collect invite links for all active chats
-        var inviteLinkSection = await BuildInviteLinkSectionAsync(activeChats, ct);
+        var inviteLinkSection = await BuildInviteLinkSectionAsync(activeChats, cancellationToken);
         if (!string.IsNullOrEmpty(inviteLinkSection))
         {
             notificationMessage += $"\n\n**Rejoin Links:**\n{inviteLinkSection}";
         }
 
         var notification = new Notification("tempban", notificationMessage);
-        var result = await _notificationOrchestrator.SendTelegramDmAsync(userId, notification, ct);
+        var result = await _notificationOrchestrator.SendTelegramDmAsync(userId, notification, cancellationToken);
 
         if (result.Success)
         {
@@ -192,10 +192,10 @@ public class NotificationHandler : INotificationHandler
     /// <summary>
     /// Send ban notification to admins subscribed to UserBanned events.
     /// </summary>
-    private async Task SendBanAdminNotificationAsync(long userId, Actor executor, string? reason, CancellationToken ct)
+    private async Task SendBanAdminNotificationAsync(long userId, Actor executor, string? reason, CancellationToken cancellationToken)
     {
         // Get user info for the notification
-        var userInfo = await GetUserDisplayNameAsync(userId, ct);
+        var userInfo = await GetUserDisplayNameAsync(userId, cancellationToken);
 
         var subject = "User Banned";
         var message = $"User {userInfo} has been banned.\n\n" +
@@ -207,7 +207,7 @@ public class NotificationHandler : INotificationHandler
             NotificationEventType.UserBanned,
             subject,
             message,
-            ct);
+            cancellationToken);
 
         _logger.LogDebug(
             "Dispatched UserBanned admin notification for user {UserId}",
@@ -217,11 +217,11 @@ public class NotificationHandler : INotificationHandler
     /// <summary>
     /// Get display name for a Telegram user.
     /// </summary>
-    private async Task<string> GetUserDisplayNameAsync(long userId, CancellationToken ct)
+    private async Task<string> GetUserDisplayNameAsync(long userId, CancellationToken cancellationToken)
     {
         try
         {
-            var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, ct);
+            var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
             if (user != null)
             {
                 return TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, userId);
@@ -240,7 +240,7 @@ public class NotificationHandler : INotificationHandler
     /// </summary>
     private async Task<string> BuildInviteLinkSectionAsync(
         List<ManagedChatRecord> activeChats,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var inviteLinks = new List<string>();
 
@@ -248,7 +248,7 @@ public class NotificationHandler : INotificationHandler
         {
             try
             {
-                var inviteLink = await _chatInviteLinkService.GetInviteLinkAsync(chat.ChatId, ct);
+                var inviteLink = await _chatInviteLinkService.GetInviteLinkAsync(chat.ChatId, cancellationToken);
                 if (!string.IsNullOrEmpty(inviteLink))
                 {
                     var chatName = chat.ChatName ?? $"Chat {chat.ChatId}";

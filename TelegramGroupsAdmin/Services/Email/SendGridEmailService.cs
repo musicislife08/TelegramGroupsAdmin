@@ -21,16 +21,16 @@ public class SendGridEmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
+    public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
     {
-        await SendEmailAsync([to], subject, body, isHtml, ct);
+        await SendEmailAsync([to], subject, body, isHtml, cancellationToken);
     }
 
-    public async Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
+    public async Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
     {
         // Load configuration from database (supports hot-reload)
-        var sendGridConfig = await _configRepo.GetSendGridConfigAsync(ct);
-        var apiKeys = await _configRepo.GetApiKeysAsync(ct);
+        var sendGridConfig = await _configRepo.GetSendGridConfigAsync(cancellationToken);
+        var apiKeys = await _configRepo.GetApiKeysAsync(cancellationToken);
 
         if (sendGridConfig?.Enabled != true)
         {
@@ -71,7 +71,7 @@ public class SendGridEmailService : IEmailService
             var client = new SendGridClient(apiKey);
 
             _logger.LogDebug("Sending email via SendGrid API...");
-            var response = await client.SendEmailAsync(msg, ct);
+            var response = await client.SendEmailAsync(msg, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -80,7 +80,7 @@ public class SendGridEmailService : IEmailService
             }
             else
             {
-                var responseBody = await response.Body.ReadAsStringAsync(ct);
+                var responseBody = await response.Body.ReadAsStringAsync(cancellationToken);
                 _logger.LogError("SendGrid API returned error. StatusCode: {StatusCode}, Body: {Body}",
                     response.StatusCode, responseBody);
                 throw new Exception($"SendGrid API error: {response.StatusCode}");
@@ -94,19 +94,19 @@ public class SendGridEmailService : IEmailService
         }
     }
 
-    public async Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken ct = default)
+    public async Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken cancellationToken = default)
     {
         var (subject, body) = GetTemplate(template, parameters);
-        await SendEmailAsync(to, subject, body, isHtml: true, ct);
+        await SendEmailAsync(to, subject, body, isHtml: true, cancellationToken);
     }
 
-    public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
+    public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             // Load configuration from database
-            var sendGridConfig = await _configRepo.GetSendGridConfigAsync(ct);
-            var apiKeys = await _configRepo.GetApiKeysAsync(ct);
+            var sendGridConfig = await _configRepo.GetSendGridConfigAsync(cancellationToken);
+            var apiKeys = await _configRepo.GetApiKeysAsync(cancellationToken);
 
             if (sendGridConfig?.Enabled != true)
             {

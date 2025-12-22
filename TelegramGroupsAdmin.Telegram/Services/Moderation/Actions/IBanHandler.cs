@@ -18,7 +18,7 @@ public interface IBanHandler
         Actor executor,
         string? reason,
         long? triggeredByMessageId = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Temporarily ban user globally with automatic unban after duration.
@@ -29,7 +29,7 @@ public interface IBanHandler
         TimeSpan duration,
         string? reason,
         long? triggeredByMessageId = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Unban user globally across all managed chats.
@@ -38,5 +38,5 @@ public interface IBanHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

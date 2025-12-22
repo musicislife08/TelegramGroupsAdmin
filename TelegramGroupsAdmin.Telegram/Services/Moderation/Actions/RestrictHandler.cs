@@ -34,7 +34,7 @@ public class RestrictHandler : IRestrictHandler
         Actor executor,
         TimeSpan duration,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         var isGlobal = chatId == 0;
         _logger.LogDebug(
@@ -49,11 +49,11 @@ public class RestrictHandler : IRestrictHandler
 
             if (isGlobal)
             {
-                return await ExecuteGlobalRestrictionAsync(userId, mutePermissions, expiresAt, ct);
+                return await ExecuteGlobalRestrictionAsync(userId, mutePermissions, expiresAt, cancellationToken);
             }
             else
             {
-                return await ExecuteSingleChatRestrictionAsync(userId, chatId, mutePermissions, expiresAt, ct);
+                return await ExecuteSingleChatRestrictionAsync(userId, chatId, mutePermissions, expiresAt, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -70,7 +70,7 @@ public class RestrictHandler : IRestrictHandler
         long userId,
         ChatPermissions permissions,
         DateTimeOffset expiresAt,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
             async (ops, targetChatId, token) => await ops.RestrictChatMemberAsync(
@@ -78,9 +78,9 @@ public class RestrictHandler : IRestrictHandler
                 userId: userId,
                 permissions: permissions,
                 untilDate: expiresAt.UtcDateTime,
-                ct: token),
+                cancellationToken: token),
             "Restrict",
-            ct);
+            cancellationToken);
 
         _logger.LogInformation(
             "Global restriction completed for user {UserId}: {Success} succeeded, {Failed} failed. Expires at {ExpiresAt}",
@@ -97,7 +97,7 @@ public class RestrictHandler : IRestrictHandler
         long chatId,
         ChatPermissions permissions,
         DateTimeOffset expiresAt,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var operations = await _botClientFactory.GetOperationsAsync();
 
@@ -106,7 +106,7 @@ public class RestrictHandler : IRestrictHandler
             userId: userId,
             permissions: permissions,
             untilDate: expiresAt.UtcDateTime,
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         _logger.LogInformation(
             "Single-chat restriction completed for user {UserId} in chat {ChatId}. Expires at {ExpiresAt}",

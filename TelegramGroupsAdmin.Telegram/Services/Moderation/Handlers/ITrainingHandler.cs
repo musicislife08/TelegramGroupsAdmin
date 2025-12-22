@@ -14,5 +14,5 @@ public interface ITrainingHandler
     Task CreateSpamSampleAsync(
         long messageId,
         Actor executor,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

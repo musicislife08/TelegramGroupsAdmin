@@ -188,7 +188,7 @@ public class RotateBackupPassphraseJob : IJob
                         actor: Actor.FromWebUser(userId),
                         target: null,
                         value: $"Re-encrypted {processedCount} backup(s) in {backupDirectory}" + (failedCount > 0 ? $" ({failedCount} failed)" : ""),
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     _logger.LogInformation("Audit log entry created for passphrase rotation");
                 }

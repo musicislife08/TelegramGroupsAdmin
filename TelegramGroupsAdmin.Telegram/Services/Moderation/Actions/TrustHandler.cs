@@ -28,7 +28,7 @@ public class TrustHandler : ITrustHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Setting trust for user {UserId} by {Executor}",
@@ -39,7 +39,7 @@ public class TrustHandler : ITrustHandler
             await _telegramUserRepository.UpdateTrustStatusAsync(
                 userId,
                 isTrusted: true,
-                ct);
+                cancellationToken);
 
             _logger.LogInformation(
                 "Trust set for user {UserId} globally",
@@ -59,7 +59,7 @@ public class TrustHandler : ITrustHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Removing trust for user {UserId} by {Executor}. Reason: {Reason}",
@@ -72,7 +72,7 @@ public class TrustHandler : ITrustHandler
             await _telegramUserRepository.UpdateTrustStatusAsync(
                 userId,
                 isTrusted: false,
-                ct);
+                cancellationToken);
 
             _logger.LogInformation(
                 "Trust removed for user {UserId} by {Executor}",

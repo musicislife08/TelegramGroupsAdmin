@@ -12,7 +12,7 @@ public interface IChatInviteLinkService
     /// </summary>
     Task<string?> GetInviteLinkAsync(
         long chatId,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Refresh invite link from Telegram API and update cache
@@ -20,5 +20,5 @@ public interface IChatInviteLinkService
     /// </summary>
     Task<string?> RefreshInviteLinkAsync(
         long chatId,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

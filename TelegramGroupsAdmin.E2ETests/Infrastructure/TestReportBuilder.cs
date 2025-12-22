@@ -155,7 +155,7 @@ public class TestReportBuilder
     /// Builds and persists the report to the database.
     /// Returns a TestReport containing the report record for testing.
     /// </summary>
-    public async Task<TestReport> BuildAsync(CancellationToken ct = default)
+    public async Task<TestReport> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var reportRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
@@ -176,7 +176,7 @@ public class TestReportBuilder
             WebUserId: _webUserId
         );
 
-        var id = await reportRepository.InsertAsync(report, ct);
+        var id = await reportRepository.InsertAsync(report, cancellationToken);
 
         // Return the report with the assigned ID
         var savedReport = report with { Id = id };

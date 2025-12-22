@@ -30,7 +30,7 @@ public class RateLimitService : IRateLimitService
         _logger = logger;
     }
 
-    public Task<RateLimitCheckResult> CheckRateLimitAsync(string identifier, string endpointKey, CancellationToken ct = default)
+    public Task<RateLimitCheckResult> CheckRateLimitAsync(string identifier, string endpointKey, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -79,7 +79,7 @@ public class RateLimitService : IRateLimitService
         }
     }
 
-    public Task RecordAttemptAsync(string identifier, string endpointKey, CancellationToken ct = default)
+    public Task RecordAttemptAsync(string identifier, string endpointKey, CancellationToken cancellationToken = default)
     {
         try
         {

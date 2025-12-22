@@ -11,12 +11,12 @@ public interface ICrossChatExecutor
     /// </summary>
     /// <param name="action">Action to execute per chat (receives operations, chatId, cancellationToken).</param>
     /// <param name="actionName">Name for logging purposes (e.g., "Ban", "Unban").</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result containing success/fail/skipped counts.</returns>
     Task<CrossChatResult> ExecuteAcrossChatsAsync(
         Func<ITelegramOperations, long, CancellationToken, Task> action,
         string actionName,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

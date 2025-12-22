@@ -148,7 +148,7 @@ public class StartCommand : IBotCommand
             chatId: message.Chat.Id,
             text: messageText,
             parseMode: ParseMode.Html,
-            ct: cancellationToken);
+            cancellationToken: cancellationToken);
 
         // Send Accept button in separate message (will be deleted after click)
         // Format: dm_accept:chatId:userId
@@ -164,7 +164,7 @@ public class StartCommand : IBotCommand
             chatId: message.Chat.Id,
             text: "👇 Click below to accept the rules:",
             replyMarkup: keyboard,
-            ct: cancellationToken);
+            cancellationToken: cancellationToken);
 
         // Mark as DM sent in database (update the welcome response record)
         var welcomeResponse = await _welcomeResponsesRepository.GetByUserAndChatAsync(targetUserId, chatId, cancellationToken);
@@ -215,7 +215,7 @@ public class StartCommand : IBotCommand
                     await operations.SendMessageAsync(
                         chatId: telegramUserId,
                         text: notification.MessageText,
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     // Delete successfully delivered notification
                     await _pendingNotificationsRepository.DeletePendingNotificationAsync(

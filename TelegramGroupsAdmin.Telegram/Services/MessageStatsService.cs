@@ -405,7 +405,7 @@ public class MessageStatsService : IMessageStatsService
             startDate: startDate,
             endDate: endDate,
             chatIds: chatIds.Count > 0 ? chatIds : null,
-            ct: cancellationToken);
+            cancellationToken: cancellationToken);
 
         // 5. Trusted User Breakdown (by content_check_skip_reason) - in-memory grouping
         UiModels.TrustedUserBreakdown? trustedBreakdown = null;

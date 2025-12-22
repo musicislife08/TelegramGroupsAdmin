@@ -1117,7 +1117,7 @@ public class MessageHistoryRepositoryTests
         // Arrange - Use date range covering golden dataset
         var endDate = DateTimeOffset.UtcNow;
         var startDate = endDate.AddDays(-30);
-        var chatIds = new List<long> { GoldenDataset.ManagedChats.MainChat_Id };
+        List<long> chatIds = [GoldenDataset.ManagedChats.MainChat_Id];
         var timeZoneId = "America/Los_Angeles";
 
         // Act

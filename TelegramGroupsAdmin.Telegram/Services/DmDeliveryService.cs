@@ -47,7 +47,7 @@ public class DmDeliveryService : IDmDeliveryService
             await operations.SendMessageAsync(
                 chatId: telegramUserId,
                 text: messageText,
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "DM sent successfully to user {UserId}",
@@ -132,7 +132,7 @@ public class DmDeliveryService : IDmDeliveryService
             await operations.SendMessageAsync(
                 chatId: telegramUserId,
                 text: messageText,
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "DM sent successfully to user {UserId} (notification type: {NotificationType})",
@@ -229,7 +229,7 @@ public class DmDeliveryService : IDmDeliveryService
             var fallbackMessage = await operations.SendMessageAsync(
                 chatId: chatId,
                 text: messageText,
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "Sent fallback message {MessageId} in chat {ChatId}{DeleteInfo}",
@@ -315,7 +315,7 @@ public class DmDeliveryService : IDmDeliveryService
                         photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
                         caption: messageText,
                         parseMode: ParseMode.MarkdownV2,
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     _logger.LogInformation("DM with photo sent successfully to user {UserId}", telegramUserId);
                 }
@@ -328,7 +328,7 @@ public class DmDeliveryService : IDmDeliveryService
                         video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
                         caption: messageText,
                         parseMode: ParseMode.MarkdownV2,
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     _logger.LogInformation("DM with video sent successfully to user {UserId}", telegramUserId);
                 }
@@ -342,7 +342,7 @@ public class DmDeliveryService : IDmDeliveryService
                         chatId: telegramUserId,
                         text: messageText,
                         parseMode: ParseMode.MarkdownV2,
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
                 }
             }
             else
@@ -352,7 +352,7 @@ public class DmDeliveryService : IDmDeliveryService
                     chatId: telegramUserId,
                     text: messageText,
                     parseMode: ParseMode.MarkdownV2,
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
 
                 _logger.LogInformation("DM sent successfully to user {UserId}", telegramUserId);
             }

@@ -42,27 +42,27 @@ public class NotificationStateService : IDisposable
     /// <summary>
     /// Initialize state for a user (call from layout OnInitializedAsync)
     /// </summary>
-    public async Task InitializeAsync(string userId, CancellationToken ct = default)
+    public async Task InitializeAsync(string userId, CancellationToken cancellationToken = default)
     {
         if (_userId == userId && _isLoaded)
             return; // Already initialized for this user
 
         _userId = userId;
-        await RefreshAsync(ct);
+        await RefreshAsync(cancellationToken);
     }
 
     /// <summary>
     /// Refresh notifications from database
     /// </summary>
-    public async Task RefreshAsync(CancellationToken ct = default)
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))
             return;
 
         try
         {
-            _unreadCount = await _notificationService.GetUnreadCountAsync(_userId, ct);
-            _notifications = (await _notificationService.GetRecentAsync(_userId, DefaultNotificationLimit, 0, ct)).ToList();
+            _unreadCount = await _notificationService.GetUnreadCountAsync(_userId, cancellationToken);
+            _notifications = (await _notificationService.GetRecentAsync(_userId, DefaultNotificationLimit, 0, cancellationToken)).ToList();
             _isLoaded = true;
 
             await NotifyStateChangedAsync();
@@ -76,9 +76,9 @@ public class NotificationStateService : IDisposable
     /// <summary>
     /// Mark a single notification as read
     /// </summary>
-    public async Task MarkAsReadAsync(long notificationId, CancellationToken ct = default)
+    public async Task MarkAsReadAsync(long notificationId, CancellationToken cancellationToken = default)
     {
-        await _notificationService.MarkAsReadAsync(notificationId, ct);
+        await _notificationService.MarkAsReadAsync(notificationId, cancellationToken);
 
         // Update local state
         var notification = _notifications.FirstOrDefault(n => n.Id == notificationId);
@@ -94,12 +94,12 @@ public class NotificationStateService : IDisposable
     /// <summary>
     /// Mark all notifications as read
     /// </summary>
-    public async Task MarkAllAsReadAsync(CancellationToken ct = default)
+    public async Task MarkAllAsReadAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))
             return;
 
-        await _notificationService.MarkAllAsReadAsync(_userId, ct);
+        await _notificationService.MarkAllAsReadAsync(_userId, cancellationToken);
 
         // Update local state
         foreach (var notification in _notifications.Where(n => !n.IsRead))
@@ -135,9 +135,9 @@ public class NotificationStateService : IDisposable
     /// <summary>
     /// Delete a single notification
     /// </summary>
-    public async Task DeleteAsync(long notificationId, CancellationToken ct = default)
+    public async Task DeleteAsync(long notificationId, CancellationToken cancellationToken = default)
     {
-        await _notificationService.DeleteAsync(notificationId, ct);
+        await _notificationService.DeleteAsync(notificationId, cancellationToken);
 
         // Update local state
         var notification = _notifications.FirstOrDefault(n => n.Id == notificationId);
@@ -155,12 +155,12 @@ public class NotificationStateService : IDisposable
     /// <summary>
     /// Delete all notifications for current user
     /// </summary>
-    public async Task DeleteAllAsync(CancellationToken ct = default)
+    public async Task DeleteAllAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))
             return;
 
-        await _notificationService.DeleteAllAsync(_userId, ct);
+        await _notificationService.DeleteAllAsync(_userId, cancellationToken);
 
         // Update local state
         _notifications.Clear();

@@ -59,7 +59,7 @@ public class DeleteMessageJob(
             await operations.DeleteMessageAsync(
                 chatId: payload.ChatId,
                 messageId: payload.MessageId,
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "Deleted message {MessageId} in chat {ChatId} (reason: {Reason})",

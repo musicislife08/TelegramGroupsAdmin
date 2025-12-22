@@ -360,7 +360,7 @@ public class DetectionActionService(
             await userActionsRepo.InsertAsync(banAction, cancellationToken);
 
             // Get all managed chats for cross-chat enforcement
-            var managedChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken);
+            var managedChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken: cancellationToken);
             var activeChats = managedChats.Where(c => c.IsActive).ToList();
 
             // ADMIN PROTECTION: Check if user is admin in ANY managed chat
@@ -413,7 +413,7 @@ public class DetectionActionService(
                         chatId: chat.ChatId,
                         userId: message.From.Id,
                         untilDate: null, // Permanent ban
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     successCount++;
 
@@ -624,7 +624,7 @@ public class DetectionActionService(
         TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
         AutoBanResult? banResult,
         bool messageDeleted,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         _ = Task.Run(async () =>
         {
@@ -694,7 +694,7 @@ public class DetectionActionService(
                 var messagesRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
                 // Look up the message to get local file paths if media was downloaded
-                var messageRecord = await messagesRepo.GetMessageAsync(message.MessageId, ct);
+                var messageRecord = await messagesRepo.GetMessageAsync(message.MessageId, cancellationToken);
                 if (messageRecord != null)
                 {
                     // Photos are stored in PhotoLocalPath
@@ -720,12 +720,12 @@ public class DetectionActionService(
                 var dmDeliveryService = scope.ServiceProvider.GetRequiredService<IDmDeliveryService>();
 
                 // Get all active admins for this chat
-                var chatAdmins = await chatAdminsRepo.GetChatAdminsAsync(message.Chat.Id, ct);
+                var chatAdmins = await chatAdminsRepo.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
 
                 foreach (var admin in chatAdmins)
                 {
                     // Map telegram ID to web user ID to verify they're linked
-                    var mapping = await telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, ct);
+                    var mapping = await telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
                     if (mapping == null)
                         continue;
 
@@ -736,7 +736,7 @@ public class DetectionActionService(
                         consolidatedMessage,
                         photoPath,
                         videoPath,
-                        ct);
+                        cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -744,7 +744,7 @@ public class DetectionActionService(
                 logger.LogError(ex, "Failed to send consolidated spam notification for message {MessageId} in chat {ChatId}",
                     message.MessageId, message.Chat.Id);
             }
-        }, ct);
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -767,7 +767,7 @@ public class DetectionActionService(
     /// Creates scope to resolve scoped INotificationService from singleton background service
     /// Fire-and-forget pattern - does not await the notification task
     /// </summary>
-    private void SendNotificationAsync(long chatId, NotificationEventType eventType, string subject, string message, CancellationToken ct)
+    private void SendNotificationAsync(long chatId, NotificationEventType eventType, string subject, string message, CancellationToken cancellationToken)
     {
         _ = Task.Run(async () =>
         {
@@ -775,13 +775,13 @@ public class DetectionActionService(
             {
                 using var scope = serviceProvider.CreateScope();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                await notificationService.SendChatNotificationAsync(chatId, eventType, subject, message, ct);
+                await notificationService.SendChatNotificationAsync(chatId, eventType, subject, message, cancellationToken);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to send notification for event {EventType} in chat {ChatId}", eventType, chatId);
             }
-        }, ct);
+        }, cancellationToken);
     }
 }
 

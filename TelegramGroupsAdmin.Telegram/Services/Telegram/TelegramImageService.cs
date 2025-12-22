@@ -16,7 +16,7 @@ public class TelegramImageService : ITelegramImageService
         _logger = logger;
     }
 
-    public async Task<Stream?> DownloadPhotoAsync(string fileId, CancellationToken ct = default)
+    public async Task<Stream?> DownloadPhotoAsync(string fileId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -24,7 +24,7 @@ public class TelegramImageService : ITelegramImageService
 
             _logger.LogDebug("Downloading photo {FileId}", fileId);
 
-            var file = await operations.GetFileAsync(fileId, ct);
+            var file = await operations.GetFileAsync(fileId, cancellationToken);
 
             if (file.FilePath == null)
             {
@@ -33,7 +33,7 @@ public class TelegramImageService : ITelegramImageService
             }
 
             var stream = new MemoryStream();
-            await operations.DownloadFileAsync(file.FilePath, stream, ct);
+            await operations.DownloadFileAsync(file.FilePath, stream, cancellationToken);
             stream.Position = 0;
 
             _logger.LogInformation(

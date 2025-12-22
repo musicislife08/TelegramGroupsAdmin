@@ -20,56 +20,56 @@ public class UserRepository : IUserRepository
         _logger = logger;
     }
 
-    public async Task<int> GetUserCountAsync(CancellationToken ct = default)
+    public async Task<int> GetUserCountAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        return await context.Users.CountAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Users.CountAsync(cancellationToken);
     }
 
-    public async Task<UiModels.UserRecord?> GetByEmailAsync(string email, CancellationToken ct = default)
+    public async Task<UiModels.UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var normalizedEmail = email.ToUpperInvariant();
 
         var entity = await context.Users
             .AsNoTracking()
             .Where(u => u.NormalizedEmail == normalizedEmail && u.Status != DataModels.UserStatus.Deleted)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default)
+    public async Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var normalizedEmail = email.ToUpperInvariant();
 
         var entity = await context.Users
             .AsNoTracking()
             .Where(u => u.NormalizedEmail == normalizedEmail)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default)
+    public async Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Users
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken ct = default)
+    public async Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = user.ToDto();
         entity.NormalizedEmail = user.Email.ToUpperInvariant();
 
         context.Users.Add(entity);
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Created user {Email} with ID {UserId}", user.Email, user.Id);
 
@@ -87,21 +87,21 @@ public class UserRepository : IUserRepository
         PermissionLevel permissionLevel,
         string? invitedBy,
         string inviteToken,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var normalizedEmail = email.ToUpperInvariant();
         var now = DateTimeOffset.UtcNow;
 
         // Step 1: Validate invite exists FIRST (fail-fast before modifying user)
-        var inviteEntity = await context.Invites.FirstOrDefaultAsync(i => i.Token == inviteToken, ct)
+        var inviteEntity = await context.Invites.FirstOrDefaultAsync(i => i.Token == inviteToken, cancellationToken)
             ?? throw new InvalidOperationException(
                 "Invite token not found after validation - possible race condition or data integrity issue");
 
         // Step 2: Check if user exists by email (including deleted users)
         var existingEntity = await context.Users
-            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
+            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
 
         string userId;
         bool isReactivation = existingEntity != null;
@@ -172,7 +172,7 @@ public class UserRepository : IUserRepository
         inviteEntity.ModifiedAt = now;
 
         // Single SaveChangesAsync for both operations (implicit transaction)
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Atomically {Action} user {Email} with ID {UserId} and marked invite {Token} as used",
@@ -182,87 +182,87 @@ public class UserRepository : IUserRepository
         return userId;
     }
 
-    public async Task UpdateLastLoginAsync(string userId, CancellationToken ct = default)
+    public async Task UpdateLastLoginAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.LastLoginAt = DateTimeOffset.UtcNow;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task UpdateSecurityStampAsync(string userId, CancellationToken ct = default)
+    public async Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.SecurityStamp = Guid.NewGuid().ToString();
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken ct = default)
+    public async Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.TotpSecret = totpSecret;
         entity.TotpSetupStartedAt = DateTimeOffset.UtcNow;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task EnableTotpAsync(string userId, CancellationToken ct = default)
+    public async Task EnableTotpAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.TotpEnabled = true;
         entity.TotpSetupStartedAt = null;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Enabled TOTP for user {UserId}", userId);
     }
 
-    public async Task DisableTotpAsync(string userId, CancellationToken ct = default)
+    public async Task DisableTotpAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         // IMPORTANT: Only set TotpEnabled=false, KEEP the secret and timestamp
         // This allows user to re-enable TOTP later without re-scanning QR code
         entity.TotpEnabled = false;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Disabled TOTP for user {UserId} (secret preserved)", userId);
     }
 
-    public async Task ResetTotpAsync(string userId, CancellationToken ct = default)
+    public async Task ResetTotpAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.TotpSecret = null;
         entity.TotpEnabled = false;
         entity.TotpSetupStartedAt = null;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Reset TOTP for user {UserId}", userId);
     }
 
-    public async Task DeleteRecoveryCodesAsync(string userId, CancellationToken ct = default)
+    public async Task DeleteRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var codes = await context.RecoveryCodes
             .Where(rc => rc.UserId == userId)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         context.RecoveryCodes.RemoveRange(codes);
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
     }
@@ -294,9 +294,9 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Added {Count} recovery codes for user {UserId}", codeHashes.Count, userId);
     }
 
-    public async Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default)
+    public async Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = new DataModels.RecoveryCodeRecordDto
         {
             UserId = userId,
@@ -305,102 +305,102 @@ public class UserRepository : IUserRepository
         };
 
         context.RecoveryCodes.Add(entity);
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default)
+    public async Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.RecoveryCodes
-            .FirstOrDefaultAsync(rc => rc.UserId == userId && rc.CodeHash == codeHash && rc.UsedAt == null, ct);
+            .FirstOrDefaultAsync(rc => rc.UserId == userId && rc.CodeHash == codeHash && rc.UsedAt == null, cancellationToken);
 
         if (entity == null)
             return false;
 
         entity.UsedAt = DateTimeOffset.UtcNow;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         return true;
     }
 
-    public async Task<UiModels.InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken ct = default)
+    public async Task<UiModels.InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Invites
             .AsNoTracking()
-            .FirstOrDefaultAsync(i => i.Token == token, ct);
+            .FirstOrDefaultAsync(i => i.Token == token, cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task UseInviteAsync(string token, string userId, CancellationToken ct = default)
+    public async Task UseInviteAsync(string token, string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Invites.FirstOrDefaultAsync(i => i.Token == token, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Invites.FirstOrDefaultAsync(i => i.Token == token, cancellationToken);
         if (entity == null) return;
 
         entity.UsedBy = userId;
         entity.Status = DataModels.InviteStatus.Used;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
 
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Invite {Token} used by user {UserId}", token, userId);
     }
 
-    public async Task<List<UiModels.UserRecord>> GetAllAsync(CancellationToken ct = default)
+    public async Task<List<UiModels.UserRecord>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.Users
             .AsNoTracking()
             .OrderByDescending(u => u.CreatedAt)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken ct = default)
+    public async Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.Users
             .AsNoTracking()
             .OrderByDescending(u => u.CreatedAt)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default)
+    public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.PermissionLevel = (DataModels.PermissionLevel)permissionLevel;
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
 
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Updated permission level for user {UserId} to {PermissionLevel} by {ModifiedBy}", userId, permissionLevel, modifiedBy);
     }
 
-    public async Task SetActiveAsync(string userId, bool isActive, CancellationToken ct = default)
+    public async Task SetActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.IsActive = isActive;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Set user {UserId} active status to {IsActive}", userId, isActive);
     }
 
-    public async Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken ct = default)
+    public async Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.Status = (DataModels.UserStatus)(int)newStatus;
@@ -408,15 +408,15 @@ public class UserRepository : IUserRepository
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
 
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Updated status for user {UserId} to {Status} by {ModifiedBy}", userId, newStatus, modifiedBy);
     }
 
-    public async Task UpdateAsync(UiModels.UserRecord user, CancellationToken ct = default)
+    public async Task UpdateAsync(UiModels.UserRecord user, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == user.Id, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == user.Id, cancellationToken);
         if (entity == null) return;
 
         // Update all fields
@@ -439,67 +439,67 @@ public class UserRepository : IUserRepository
         entity.PasswordResetToken = user.PasswordResetToken;
         entity.PasswordResetTokenExpiresAt = user.PasswordResetTokenExpiresAt;
 
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Updated user {UserId}", user.Id);
     }
 
     // Account Lockout Methods (SECURITY-5, SECURITY-6)
 
-    public async Task IncrementFailedLoginAttemptsAsync(string userId, CancellationToken ct = default)
+    public async Task IncrementFailedLoginAttemptsAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.FailedLoginAttempts++;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Incremented failed login attempts for user {UserId} to {Attempts}",
             userId, entity.FailedLoginAttempts);
     }
 
-    public async Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken ct = default)
+    public async Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.FailedLoginAttempts = 0;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Reset failed login attempts for user {UserId}", userId);
     }
 
-    public async Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken ct = default)
+    public async Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.LockedUntil = lockedUntil;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogWarning("Locked account for {User} until {LockedUntil}",
             LogDisplayName.WebUserDebug(entity.Email, userId), lockedUntil);
     }
 
-    public async Task UnlockAccountAsync(string userId, CancellationToken ct = default)
+    public async Task UnlockAccountAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.LockedUntil = null;
         entity.FailedLoginAttempts = 0;
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Unlocked account for user {UserId}", userId);
     }
 
-    public async Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken ct = default)
+    public async Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Get the first Owner (permission_level=2) by created_at - this is the primary/original owner
         var email = await context.Users
@@ -508,7 +508,7 @@ public class UserRepository : IUserRepository
                      && u.Status == DataModels.UserStatus.Active)
             .OrderBy(u => u.CreatedAt)
             .Select(u => u.Email)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(cancellationToken);
 
         return email;
     }

@@ -6,17 +6,17 @@ namespace TelegramGroupsAdmin.Services;
 
 public class UserManagementService(IUserRepository userRepository, IAuditService auditLog) : IUserManagementService
 {
-    public async Task<List<UserRecord>> GetAllUsersAsync(CancellationToken ct = default)
+    public async Task<List<UserRecord>> GetAllUsersAsync(CancellationToken cancellationToken = default)
     {
-        return await userRepository.GetAllAsync(ct);
+        return await userRepository.GetAllAsync(cancellationToken);
     }
 
-    public async Task<UserRecord?> GetUserByIdAsync(string userId, CancellationToken ct = default)
+    public async Task<UserRecord?> GetUserByIdAsync(string userId, CancellationToken cancellationToken = default)
     {
-        return await userRepository.GetByIdAsync(userId, ct);
+        return await userRepository.GetByIdAsync(userId, cancellationToken);
     }
 
-    public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, int modifierPermissionLevel, CancellationToken ct = default)
+    public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, int modifierPermissionLevel, CancellationToken cancellationToken = default)
     {
         // Validate permission level (0=Admin, 1=GlobalAdmin, 2=Owner)
         if (permissionLevel is < 0 or > 2)
@@ -48,10 +48,10 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
         }
 
         // Get old permission level for audit log
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         var oldPermissionLevel = user?.PermissionLevel;
 
-        await userRepository.UpdatePermissionLevelAsync(userId, permissionLevel, modifiedBy, ct);
+        await userRepository.UpdatePermissionLevelAsync(userId, permissionLevel, modifiedBy, cancellationToken);
 
         // Audit log
         var permissionName = permissionLevel switch
@@ -67,12 +67,12 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
             actor: Actor.FromWebUser(modifiedBy),
             target: Actor.FromWebUser(userId),
             value: $"Changed to {permissionName}",
-            ct: ct);
+            cancellationToken: cancellationToken);
     }
 
-    public async Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken ct = default)
+    public async Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default)
     {
-        await userRepository.UpdateStatusAsync(userId, newStatus, modifiedBy, ct);
+        await userRepository.UpdateStatusAsync(userId, newStatus, modifiedBy, cancellationToken);
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -80,24 +80,24 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
             actor: Actor.FromWebUser(modifiedBy),
             target: Actor.FromWebUser(userId),
             value: $"Status changed to {newStatus}",
-            ct: ct);
+            cancellationToken: cancellationToken);
     }
 
-    public async Task SetUserActiveAsync(string userId, bool isActive, CancellationToken ct = default)
+    public async Task SetUserActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default)
     {
-        await userRepository.SetActiveAsync(userId, isActive, ct);
+        await userRepository.SetActiveAsync(userId, isActive, cancellationToken);
     }
 
-    public async Task Reset2FaAsync(string userId, string modifiedBy, CancellationToken ct = default)
+    public async Task Reset2FaAsync(string userId, string modifiedBy, CancellationToken cancellationToken = default)
     {
         // Reset TOTP (clears secret, disables TOTP, clears setup timestamp)
-        await userRepository.ResetTotpAsync(userId, ct);
+        await userRepository.ResetTotpAsync(userId, cancellationToken);
 
         // Delete all recovery codes
-        await userRepository.DeleteRecoveryCodesAsync(userId, ct);
+        await userRepository.DeleteRecoveryCodesAsync(userId, cancellationToken);
 
         // Update security stamp to invalidate existing sessions
-        await userRepository.UpdateSecurityStampAsync(userId, ct);
+        await userRepository.UpdateSecurityStampAsync(userId, cancellationToken);
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -105,6 +105,6 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
             actor: Actor.FromWebUser(modifiedBy),
             target: Actor.FromWebUser(userId),
             value: "2FA reset by admin",
-            ct: ct);
+            cancellationToken: cancellationToken);
     }
 }

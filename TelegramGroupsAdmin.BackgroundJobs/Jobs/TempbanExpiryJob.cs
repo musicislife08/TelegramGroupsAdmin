@@ -84,7 +84,7 @@ public class TempbanExpiryJob(
                             chatId: chat.ChatId,
                             userId: payload.UserId,
                             onlyIfBanned: true,
-                            ct: cancellationToken);
+                            cancellationToken: cancellationToken);
 
                         successCount++;
                         _logger.LogInformation(

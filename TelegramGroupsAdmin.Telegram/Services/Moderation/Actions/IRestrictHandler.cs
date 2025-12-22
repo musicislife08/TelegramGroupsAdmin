@@ -18,7 +18,7 @@ public interface IRestrictHandler
     /// <param name="executor">Who initiated the restriction.</param>
     /// <param name="duration">How long the restriction lasts.</param>
     /// <param name="reason">Reason for the restriction (for logging).</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result with success status and affected chat count.</returns>
     Task<RestrictResult> RestrictAsync(
         long userId,
@@ -26,5 +26,5 @@ public interface IRestrictHandler
         Actor executor,
         TimeSpan duration,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

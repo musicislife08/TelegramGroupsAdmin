@@ -35,14 +35,14 @@ public class MessageHandler : IMessageHandler
         long messageId,
         long chatId,
         Message? telegramMessage = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Ensuring message {MessageId} exists in database for chat {ChatId}",
             messageId, chatId);
 
         // Check if message already exists
-        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, ct);
+        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
         if (existingMessage != null)
         {
             _logger.LogDebug("Message {MessageId} already exists in database", messageId);
@@ -53,7 +53,7 @@ public class MessageHandler : IMessageHandler
         if (telegramMessage != null)
         {
             var backfilled = await _messageBackfillService.BackfillIfMissingAsync(
-                messageId, chatId, telegramMessage, ct);
+                messageId, chatId, telegramMessage, cancellationToken);
 
             if (backfilled)
             {
@@ -78,7 +78,7 @@ public class MessageHandler : IMessageHandler
         long chatId,
         long messageId,
         Actor executor,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Deleting message {MessageId} from chat {ChatId} by {Executor}",
@@ -90,7 +90,7 @@ public class MessageHandler : IMessageHandler
                 chatId,
                 (int)messageId,
                 deletionSource: "moderation_action",
-                ct);
+                cancellationToken);
 
             _logger.LogInformation(
                 "Deleted message {MessageId} from chat {ChatId}",

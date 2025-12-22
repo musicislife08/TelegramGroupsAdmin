@@ -101,7 +101,7 @@ public partial class ThreatIntelContentCheckV2(
     /// <summary>
     /// Check URL against VirusTotal
     /// </summary>
-    private async Task<ThreatResult> CheckVirusTotalAsync(string url, string apiKey, CancellationToken ct)
+    private async Task<ThreatResult> CheckVirusTotalAsync(string url, string apiKey, CancellationToken cancellationToken)
     {
         try
         {
@@ -119,10 +119,10 @@ public partial class ThreatIntelContentCheckV2(
                 .Replace('/', '_');
 
             // Step 1: Try to fetch an existing report
-            var response = await client.GetAsync($"urls/{b64}", ct);
+            var response = await client.GetAsync($"urls/{b64}", cancellationToken);
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
                 return new ThreatResult(IsVirusTotalMalicious(json), "Existing scan result");
             }
 
@@ -133,22 +133,22 @@ public partial class ThreatIntelContentCheckV2(
             }
 
             var submitContent = new FormUrlEncodedContent([new("url", url)]);
-            var submitResponse = await client.PostAsync("urls", submitContent, ct);
+            var submitResponse = await client.PostAsync("urls", submitContent, cancellationToken);
             if (!submitResponse.IsSuccessStatusCode)
             {
                 return new ThreatResult(false, $"Submit failed: {submitResponse.StatusCode}");
             }
 
             // Step 3: Wait and retry (simplified - no polling)
-            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken);
 
-            var retryResponse = await client.GetAsync($"urls/{b64}", ct);
+            var retryResponse = await client.GetAsync($"urls/{b64}", cancellationToken);
             if (!retryResponse.IsSuccessStatusCode)
             {
                 return new ThreatResult(false, "Scan not ready");
             }
 
-            var retryJson = await retryResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            var retryJson = await retryResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
             return new ThreatResult(IsVirusTotalMalicious(retryJson), "New scan result");
         }
         catch (Exception ex)

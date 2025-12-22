@@ -148,7 +148,7 @@ public class BackupService : IBackupService
                     message: $"Critical: Database backup failed while exporting table '{tableName}'.\n\n" +
                              $"Error: {ex.Message}\n\n" +
                              $"Please investigate the database connection and ensure all tables are accessible.",
-                    ct: CancellationToken.None);
+                    cancellationToken: CancellationToken.None);
 
                 throw;
             }

@@ -65,10 +65,10 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
     /// Trains the SDCA model with TF-IDF features.
     /// Uses SemaphoreSlim to prevent overlapping retraining.
     /// </summary>
-    public async Task TrainModelAsync(CancellationToken ct = default)
+    public async Task TrainModelAsync(CancellationToken cancellationToken = default)
     {
         // Prevent overlapping retrains
-        if (!await _retrainingSemaphore.WaitAsync(0, ct))
+        if (!await _retrainingSemaphore.WaitAsync(0, cancellationToken))
         {
             _logger.LogWarning("Training already in progress, skipping this trigger");
             return;
@@ -80,11 +80,11 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             var startTime = DateTimeOffset.UtcNow;
 
             // Load labeled message IDs once (reused by both spam and ham queries to avoid duplication)
-            var labeledMessageIds = await _trainingDataRepository.GetLabeledMessageIdsAsync(ct);
+            var labeledMessageIds = await _trainingDataRepository.GetLabeledMessageIdsAsync(cancellationToken);
 
             // Load training samples from repository (encapsulates multi-table queries)
-            var spamSamples = await _trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, ct);
-            var hamSamples = await _trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, ct);
+            var spamSamples = await _trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
+            var hamSamples = await _trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
 
             if (spamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass || hamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass)
             {
@@ -138,7 +138,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             }
 
             // Save model and metadata
-            await SaveModelAsync(model, metadata, ct);
+            await SaveModelAsync(model, metadata, cancellationToken);
 
             // Create new container and atomically swap (thread-safe)
             var predictionEngine = mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
@@ -162,7 +162,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
     /// <summary>
     /// Saves model and metadata to disk with SHA256 hash verification.
     /// </summary>
-    private async Task SaveModelAsync(ITransformer model, SpamClassifierMetadata metadata, CancellationToken ct)
+    private async Task SaveModelAsync(ITransformer model, SpamClassifierMetadata metadata, CancellationToken cancellationToken)
     {
         // Ensure directory exists (should be created by Program.cs, but double-check)
         Directory.CreateDirectory(ModelDirectory);
@@ -174,7 +174,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
         // Compute SHA256 hash
         await using (var stream = File.OpenRead(ModelPath))
         {
-            var hash = await SHA256.HashDataAsync(stream, ct);
+            var hash = await SHA256.HashDataAsync(stream, cancellationToken);
             metadata.ModelHash = Convert.ToHexString(hash);
         }
 
@@ -184,7 +184,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 
         // Save metadata as JSON
         var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(MetadataPath, json, ct);
+        await File.WriteAllTextAsync(MetadataPath, json, cancellationToken);
 
         _logger.LogInformation(
             "Model saved: {Size} bytes, SHA256: {Hash}",
@@ -195,7 +195,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
     /// Loads model and metadata from disk with SHA256 hash verification.
     /// Returns true if successful, false if model doesn't exist or verification fails.
     /// </summary>
-    public async Task<bool> LoadModelAsync(CancellationToken ct = default)
+    public async Task<bool> LoadModelAsync(CancellationToken cancellationToken = default)
     {
         if (!File.Exists(ModelPath) || !File.Exists(MetadataPath))
         {
@@ -206,7 +206,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
         try
         {
             // Load metadata
-            var json = await File.ReadAllTextAsync(MetadataPath, ct);
+            var json = await File.ReadAllTextAsync(MetadataPath, cancellationToken);
             var metadata = JsonSerializer.Deserialize<SpamClassifierMetadata>(json);
 
             if (metadata == null)
@@ -218,7 +218,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             // Verify SHA256 hash
             await using (var stream = File.OpenRead(ModelPath))
             {
-                var hash = await SHA256.HashDataAsync(stream, ct);
+                var hash = await SHA256.HashDataAsync(stream, cancellationToken);
                 var computedHash = Convert.ToHexString(hash);
 
                 if (computedHash != metadata.ModelHash)

@@ -17,13 +17,13 @@ public interface IMessageHandler
     /// <param name="messageId">The message ID to ensure exists.</param>
     /// <param name="chatId">The chat the message belongs to.</param>
     /// <param name="telegramMessage">Optional Telegram message object for backfill if not in DB.</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating whether message exists (either already or after backfill).</returns>
     Task<BackfillResult> EnsureExistsAsync(
         long messageId,
         long chatId,
         Message? telegramMessage = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete message from Telegram and mark as deleted in database.
@@ -32,5 +32,5 @@ public interface IMessageHandler
         long chatId,
         long messageId,
         Actor executor,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

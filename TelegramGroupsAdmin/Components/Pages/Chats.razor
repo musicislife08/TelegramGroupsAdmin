@@ -46,6 +46,11 @@
             <ToolBarContent>
                 <MudText Typo="Typo.h6">Managed Chats</MudText>
                 <MudSpacer />
+                <MudCheckBox @bind-Value="_showDeletedChats"
+                            Label="Show deleted chats"
+                            Color="Color.Primary"
+                            Dense="true"
+                            Class="mr-4" />
                 <MudTextField @bind-Value="_searchString" Placeholder="Search chats" Adornment="Adornment.Start"
                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
             </ToolBarContent>
@@ -108,6 +113,7 @@
     private List<ManagedChatInfo> _chats = [];
     private bool _loading = true;
     private string _searchString = "";
+    private bool _showDeletedChats;
 
     protected override async Task OnInitializedAsync()
     {
@@ -133,9 +139,11 @@
             }
 
             // Load chats accessible to this user (filtered by permission level)
+            // Include deleted chats - UI toggle controls visibility
             var chats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
-                permissionLevel);
+                permissionLevel,
+                includeDeleted: true);
 
             // Check which chats have custom spam configs
             var allConfigs = await SpamConfigRepository.GetAllChatConfigsAsync();
@@ -205,6 +213,10 @@
 
     private bool FilterFunc(ManagedChatInfo chat)
     {
+        // Filter by deleted status first
+        if (!_showDeletedChats && chat.Chat.IsDeleted)
+            return false;
+
         if (string.IsNullOrWhiteSpace(_searchString))
             return true;
 

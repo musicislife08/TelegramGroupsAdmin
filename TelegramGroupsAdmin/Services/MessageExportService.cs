@@ -42,7 +42,7 @@ public class MessageExportService(
     public async Task<byte[]> ExportToCsvAsync(
         IEnumerable<MessageRecord> messages,
         Dictionary<long, ContentCheckRecord?> contentChecks,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         // Validate permission (Admin+ required)
         var userId = await ValidateExportPermissionAsync();
@@ -111,7 +111,7 @@ public class MessageExportService(
             actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
             target: null,
             value: $"Exported {messageCount} messages to CSV ({result.Length} bytes)",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return result;
     }
@@ -119,7 +119,7 @@ public class MessageExportService(
     public async Task<byte[]> ExportToJsonAsync(
         IEnumerable<MessageRecord> messages,
         Dictionary<long, ContentCheckRecord?> contentChecks,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         // Validate permission (Admin+ required)
         var userId = await ValidateExportPermissionAsync();
@@ -176,7 +176,7 @@ public class MessageExportService(
             actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
             target: null,
             value: $"Exported {messageCount} messages to JSON ({result.Length} bytes)",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return result;
     }

@@ -45,7 +45,7 @@ public class UserMessagingService : IUserMessagingService
                     chatId: userId, // Send to user's private chat
                     text: messageText,
                     parseMode: ParseMode.Markdown,
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
 
                 _logger.LogInformation(
                     "Sent DM to user {UserId}: {MessagePreview}",
@@ -104,7 +104,7 @@ public class UserMessagingService : IUserMessagingService
                         chatId: userId,
                         text: messageText,
                         parseMode: ParseMode.Markdown,
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     _logger.LogInformation(
                         "Sent DM to user {UserId}: {MessagePreview}",
@@ -157,7 +157,7 @@ public class UserMessagingService : IUserMessagingService
                     replyParameters: replyToMessageId.HasValue
                         ? new ReplyParameters { MessageId = replyToMessageId.Value }
                         : null,
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
 
                 _logger.LogInformation(
                     "Sent batched chat mention to {UserCount} users in chat {ChatId}",
@@ -219,7 +219,7 @@ public class UserMessagingService : IUserMessagingService
                 replyParameters: replyToMessageId.HasValue
                     ? new ReplyParameters { MessageId = replyToMessageId.Value }
                     : null,
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "Sent chat mention to user {UserId} in chat {ChatId}",

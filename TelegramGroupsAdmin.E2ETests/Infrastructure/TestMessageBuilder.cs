@@ -250,7 +250,7 @@ public class TestMessageBuilder
     /// Builds and persists the message to the database.
     /// Returns a TestMessage containing the message record for testing.
     /// </summary>
-    public async Task<TestMessage> BuildAsync(CancellationToken ct = default)
+    public async Task<TestMessage> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var messageRepository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
@@ -293,7 +293,7 @@ public class TestMessageBuilder
             ContentCheckSkipReason: _contentCheckSkipReason
         );
 
-        await messageRepository.InsertMessageAsync(messageRecord, ct);
+        await messageRepository.InsertMessageAsync(messageRecord, cancellationToken);
 
         return new TestMessage(messageRecord);
     }

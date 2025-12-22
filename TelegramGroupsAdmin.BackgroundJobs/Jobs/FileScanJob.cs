@@ -334,7 +334,7 @@ public class FileScanJob(
                         chatId: payload.UserId,
                         text: notificationText,
                         parseMode: ParseMode.Markdown,
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     _logger.LogInformation(
                         "Sent malware notification DM to user {UserId}",
@@ -360,7 +360,7 @@ public class FileScanJob(
                 chatId: payload.ChatId,
                 text: chatNotificationText,
                 parseMode: ParseMode.Markdown,
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "Sent malware notification in chat {ChatId} (DM not available for user {UserId})",

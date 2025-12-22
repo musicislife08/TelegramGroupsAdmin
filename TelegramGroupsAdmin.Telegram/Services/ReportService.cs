@@ -59,7 +59,7 @@ public class ReportService(
             actor,
             target,
             value: $"Report #{reportId} for message {report.MessageId} in chat {report.ChatId}",
-            ct: cancellationToken);
+            cancellationToken: cancellationToken);
 
         // 3. Send notification via INotificationService (respects user preferences)
         var chatName = originalMessage?.Chat.Title ?? $"Chat {report.ChatId}";

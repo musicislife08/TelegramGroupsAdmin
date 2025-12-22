@@ -233,7 +233,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage(userName: "testuser");
-        var edits = new List<MessageEditRecord> { CreateTestEdit() };
+        List<MessageEditRecord> edits = [CreateTestEdit()];
         MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
 
         // Act
@@ -252,7 +252,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage(messageId: 12345);
-        var edits = new List<MessageEditRecord> { CreateTestEdit(messageId: 12345) };
+        List<MessageEditRecord> edits = [CreateTestEdit(messageId: 12345)];
         MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
 
         // Act
@@ -275,7 +275,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
-        var edits = new List<MessageEditRecord> { CreateTestEdit() };
+        List<MessageEditRecord> edits = [CreateTestEdit()];
         MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
 
         // Act
@@ -294,12 +294,12 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
-        var edits = new List<MessageEditRecord>
-        {
+        List<MessageEditRecord> edits =
+        [
             CreateTestEdit(id: 1),
             CreateTestEdit(id: 2),
             CreateTestEdit(id: 3)
-        };
+        ];
         MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
 
         // Act
@@ -322,7 +322,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
-        var edits = new List<MessageEditRecord> { CreateTestEdit() };
+        List<MessageEditRecord> edits = [CreateTestEdit()];
         MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
 
         // Act
@@ -341,7 +341,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
-        var edits = new List<MessageEditRecord> { CreateTestEdit() };
+        List<MessageEditRecord> edits = [CreateTestEdit()];
         MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
 
         // Act

@@ -54,7 +54,7 @@ public class CrossChatExecutorTests
     {
         // Arrange
         var chats = CreateManagedChats([-100001, -100002, -100003]);
-        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<CancellationToken>())
+        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
         _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002, -100003]);
@@ -63,7 +63,7 @@ public class CrossChatExecutorTests
 
         // Act
         var result = await _executor.ExecuteAcrossChatsAsync(
-            async (ops, chatId, ct) =>
+            async (ops, chatId, cancellationToken) =>
             {
                 executedChatIds.Add(chatId);
                 await Task.CompletedTask;
@@ -85,7 +85,7 @@ public class CrossChatExecutorTests
     {
         // Arrange - 3 active chats, only 2 are healthy
         var chats = CreateManagedChats([-100001, -100002, -100003]);
-        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<CancellationToken>())
+        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
         _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002]); // Only 2 healthy
@@ -94,7 +94,7 @@ public class CrossChatExecutorTests
 
         // Act
         var result = await _executor.ExecuteAcrossChatsAsync(
-            async (ops, chatId, ct) =>
+            async (ops, chatId, cancellationToken) =>
             {
                 executedChatIds.Add(chatId);
                 await Task.CompletedTask;
@@ -120,14 +120,14 @@ public class CrossChatExecutorTests
     {
         // Arrange
         var chats = CreateManagedChats([-100001, -100002, -100003]);
-        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<CancellationToken>())
+        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
         _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002, -100003]);
 
         // Act
         var result = await _executor.ExecuteAcrossChatsAsync(
-            async (ops, chatId, ct) =>
+            async (ops, chatId, cancellationToken) =>
             {
                 if (chatId == -100002)
                     throw new InvalidOperationException("Simulated failure");
@@ -149,14 +149,14 @@ public class CrossChatExecutorTests
     {
         // Arrange
         var chats = CreateManagedChats([-100001, -100002]);
-        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<CancellationToken>())
+        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
         _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002]);
 
         // Act
         var result = await _executor.ExecuteAcrossChatsAsync(
-            (ops, chatId, ct) => throw new InvalidOperationException("All fail"),
+            (ops, chatId, cancellationToken) => throw new InvalidOperationException("All fail"),
             "TestAction");
 
         // Assert
@@ -180,14 +180,14 @@ public class CrossChatExecutorTests
             CreateManagedChat(-100001, isActive: false, isDeleted: false),
             CreateManagedChat(-100002, isActive: true, isDeleted: true)
         };
-        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<CancellationToken>())
+        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
         _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns(new List<long>());
 
         // Act
         var result = await _executor.ExecuteAcrossChatsAsync(
-            async (ops, chatId, ct) => await Task.CompletedTask,
+            async (ops, chatId, cancellationToken) => await Task.CompletedTask,
             "TestAction");
 
         // Assert
@@ -203,14 +203,14 @@ public class CrossChatExecutorTests
     public async Task ExecuteAcrossChatsAsync_EmptyChatList_ReturnsZeroCounts()
     {
         // Arrange
-        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<CancellationToken>())
+        _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<ManagedChatRecord>());
         _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns(new List<long>());
 
         // Act
         var result = await _executor.ExecuteAcrossChatsAsync(
-            async (ops, chatId, ct) => await Task.CompletedTask,
+            async (ops, chatId, cancellationToken) => await Task.CompletedTask,
             "TestAction");
 
         // Assert

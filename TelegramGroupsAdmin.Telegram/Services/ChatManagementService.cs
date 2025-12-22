@@ -355,7 +355,7 @@ public class ChatManagementService(
                              $"Telegram ID: {user.Id}\n" +
                              $"Chat ID: {chat.Id}\n\n" +
                              $"This is a security notification to keep you informed of permission changes.",
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
             }
             else
             {
@@ -378,7 +378,7 @@ public class ChatManagementService(
                              $"Telegram ID: {user.Id}\n" +
                              $"Chat ID: {chat.Id}\n\n" +
                              $"This is a security notification to keep you informed of permission changes.",
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
             }
         }
         catch (Exception ex)
@@ -694,7 +694,7 @@ public class ChatManagementService(
                              $"Bot Admin: {health.IsAdmin}\n" +
                              $"Warnings:\n- {warningsText}\n\n" +
                              $"Please review the chat settings and bot permissions.",
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
             }
         }
         catch (OperationCanceledException cancelEx)
@@ -751,7 +751,7 @@ public class ChatManagementService(
                     message: $"Critical: Health check failed for chat '{chatName ?? chatId.ToString()}'.\n\n" +
                              $"Error: {ex.Message}\n\n" +
                              $"The bot may have been removed from the chat or lost permissions.",
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
             }
         }
 
@@ -779,7 +779,7 @@ public class ChatManagementService(
             using var scope = serviceProvider.CreateScope();
             var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
             // Check all non-deleted chats (active + inactive) for health status
-            var chats = await managedChatsRepository.GetAllChatsAsync(cancellationToken);
+            var chats = await managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
 
             foreach (var chat in chats)
             {
@@ -1024,11 +1024,20 @@ public class ChatManagementService(
                         LogDisplayName.ChatDebug(linkedChannel.Title, linkedChannelId),
                         LogDisplayName.ChatDebug(chat.Title, chatId));
                 }
+                catch (ApiRequestException apiEx) when (apiEx.ErrorCode == 403)
+                {
+                    // Expected: bot is not a member of a private linked channel
+                    // Log at Debug level - this is normal, not an error condition
+                    logger.LogDebug(
+                        "Linked channel {ChannelId} for {Chat} is inaccessible (private channel, bot not a member)",
+                        linkedChannelId,
+                        LogDisplayName.ChatDebug(chat.Title, chatId));
+                }
                 catch (Exception channelEx)
                 {
-                    // Bot may not have permission to GetChat on the linked channel
+                    // Unexpected error - log at Warning level
                     logger.LogWarning(channelEx,
-                        "Failed to fetch linked channel {ChannelId} for {Chat} - bot may lack permission",
+                        "Failed to fetch linked channel {ChannelId} for {Chat}",
                         linkedChannelId,
                         LogDisplayName.ChatDebug(chat.Title, chatId));
                 }
