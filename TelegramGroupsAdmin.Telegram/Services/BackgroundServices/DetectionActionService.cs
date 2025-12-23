@@ -659,9 +659,16 @@ public class DetectionActionService(
                     message.From?.Username,
                     message.From?.Id);
 
-                // Build message text preview (truncate if >200 chars for caption limit)
+                // Create scope early to query for translated text
+                using var scope = serviceProvider.CreateScope();
+
+                // Query for translated text (prefer over original for non-English spam)
+                var translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
+                var translation = await translationService.GetTranslationForMessageAsync(message.MessageId, cancellationToken);
+
+                // Build message text preview - use translated text if available, fallback to original
                 // Note: Photos/videos use .Caption, plain messages use .Text
-                var messageContent = message.Text ?? message.Caption;
+                var messageContent = translation?.TranslatedText ?? message.Text ?? message.Caption;
                 var messageTextPreview = messageContent != null && messageContent.Length > NotificationConstants.MessagePreviewMaxLength
                     ? messageContent[..(NotificationConstants.MessagePreviewMaxLength - NotificationConstants.PreviewTruncationOffset)] + "..."
                     : messageContent ?? "[No text]";
@@ -712,7 +719,6 @@ public class DetectionActionService(
                 string? photoPath = null;
                 string? videoPath = null;
 
-                using var scope = serviceProvider.CreateScope();
                 var messagesRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
                 // Look up the message to get local file paths if media was downloaded
