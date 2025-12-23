@@ -137,12 +137,42 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
-            // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
+            // Create user record if not exists (IsActive: false - not engaged yet)
+            // Must happen for ALL joining users, not just those checked for impersonation
             using var impersonationScope = _serviceProvider.CreateScope();
-            var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
             var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+            var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
 
-            // Check if user should be screened for impersonation
+            if (existingUser == null)
+            {
+                var now = DateTimeOffset.UtcNow;
+                var newUser = new Models.TelegramUser(
+                    TelegramUserId: user.Id,
+                    Username: user.Username,
+                    FirstName: user.FirstName,
+                    LastName: user.LastName,
+                    UserPhotoPath: null,
+                    PhotoHash: null,
+                    PhotoFileUniqueId: null,
+                    IsBot: user.IsBot,
+                    IsTrusted: false,
+                    BotDmEnabled: false,
+                    FirstSeenAt: now,
+                    LastSeenAt: now,
+                    CreatedAt: now,
+                    UpdatedAt: now,
+                    IsActive: false // Inactive until welcome accepted or message sent
+                );
+                await telegramUserRepo.UpsertAsync(newUser, cancellationToken);
+
+                _logger.LogInformation(
+                    "Created inactive user record for {UserId} (@{Username}) on join",
+                    user.Id,
+                    user.Username);
+            }
+
+            // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
+            var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
             var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
 
             if (shouldCheck)
@@ -153,7 +183,6 @@ public class WelcomeService : IWelcomeService
                     chatMemberUpdate.Chat.Id);
 
                 // Get user's photo path if available (may be null if not cached yet)
-                var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
                 var photoPath = existingUser?.UserPhotoPath;
 
                 // Check for impersonation
@@ -590,6 +619,13 @@ public class WelcomeService : IWelcomeService
         // Step 4: Restore user permissions
         await RestoreUserPermissionsAsync(operations, chatId, user.Id, cancellationToken);
 
+        // Step 4b: Mark user as active (completed welcome flow)
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+            await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
+        }
+
         // Step 5: Delete welcome message
         try
         {
@@ -768,6 +804,13 @@ public class WelcomeService : IWelcomeService
                 text: "❌ Failed to restore your permissions. Please contact an admin.",
                 cancellationToken: cancellationToken);
             return;
+        }
+
+        // Step 4b: Mark user as active (completed welcome flow via DM)
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+            await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
         }
 
         // Step 5: Delete welcome message in group

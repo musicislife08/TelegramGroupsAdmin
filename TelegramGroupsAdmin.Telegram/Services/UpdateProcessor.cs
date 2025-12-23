@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -13,6 +14,7 @@ public class UpdateProcessor(
     MessageProcessingService messageProcessingService,
     IChatManagementService chatManagementService,
     IWelcomeService welcomeService,
+    IBanCallbackHandler banCallbackHandler,
     ITelegramBotClientFactory botFactory,
     ILogger<UpdateProcessor> logger) : IUpdateProcessor
 {
@@ -52,11 +54,22 @@ public class UpdateProcessor(
             return;
         }
 
-        // Handle callback queries from inline buttons (for welcome accept/deny)
+        // Handle callback queries from inline buttons
         if (update.CallbackQuery is { } callbackQuery)
         {
             logger.LogDebug("Routing CallbackQuery {CallbackId}", callbackQuery.Id);
-            await welcomeService.HandleCallbackQueryAsync(callbackQuery, cancellationToken);
+
+            // Route to appropriate handler based on callback data prefix
+            var callbackData = callbackQuery.Data ?? "";
+            if (banCallbackHandler.CanHandle(callbackData))
+            {
+                await banCallbackHandler.HandleCallbackAsync(callbackQuery, cancellationToken);
+            }
+            else
+            {
+                // Default to welcome service for welcome accept/deny buttons
+                await welcomeService.HandleCallbackQueryAsync(callbackQuery, cancellationToken);
+            }
 
             // Always answer callback queries to remove loading state
             var operations = await botFactory.GetOperationsAsync();

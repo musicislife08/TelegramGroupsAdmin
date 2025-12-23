@@ -65,4 +65,32 @@ public interface ITelegramUserRepository
     /// Check if user is trusted (source of truth: telegram_users.is_trusted).
     /// </summary>
     Task<bool> IsTrustedAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    // ============================================================================
+    // IsActive Methods (Phase: /ban @username support)
+    // ============================================================================
+
+    /// <summary>
+    /// Get user by username (case-insensitive, without @ prefix).
+    /// Returns only active users by default.
+    /// </summary>
+    Task<UiModels.TelegramUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Set user's active status.
+    /// Active = user has completed welcome flow OR sent a message.
+    /// </summary>
+    Task SetActiveAsync(long telegramUserId, bool isActive, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Search users by name (fuzzy contains match on combined "first last" and username).
+    /// Searches ALL users (active and inactive) - used by ban command to find timeout users.
+    /// </summary>
+    Task<List<UiModels.TelegramUser>> SearchByNameAsync(string searchText, int limit = 10, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get inactive users (users who joined but never engaged).
+    /// Used by the Inactive Users UI tab.
+    /// </summary>
+    Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
 }

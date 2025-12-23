@@ -24,7 +24,8 @@ public static class TelegramUserMappings
             FirstSeenAt: data.FirstSeenAt,
             LastSeenAt: data.LastSeenAt,
             CreatedAt: data.CreatedAt,
-            UpdatedAt: data.UpdatedAt
+            UpdatedAt: data.UpdatedAt,
+            IsActive: data.IsActive
         );
     }
 
@@ -41,6 +42,7 @@ public static class TelegramUserMappings
             PhotoFileUniqueId = ui.PhotoFileUniqueId,
             IsBot = ui.IsBot,
             IsTrusted = ui.IsTrusted,
+            IsActive = ui.IsActive,
             BotDmEnabled = ui.BotDmEnabled,
             FirstSeenAt = ui.FirstSeenAt,
             LastSeenAt = ui.LastSeenAt,

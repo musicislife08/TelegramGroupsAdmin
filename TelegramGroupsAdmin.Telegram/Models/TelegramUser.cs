@@ -20,7 +20,8 @@ public record TelegramUser(
     DateTimeOffset FirstSeenAt,
     DateTimeOffset LastSeenAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTimeOffset UpdatedAt,
+    bool IsActive = true
 )
 {
     /// <summary>

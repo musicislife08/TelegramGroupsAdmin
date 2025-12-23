@@ -6,6 +6,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -22,6 +23,7 @@ public class UpdateProcessorTests
 {
     private IChatManagementService _mockChatManagementService = null!;
     private IWelcomeService _mockWelcomeService = null!;
+    private IBanCallbackHandler _mockBanCallbackHandler = null!;
     private ITelegramBotClientFactory _mockBotFactory = null!;
     private ITelegramOperations _mockOperations = null!;
     private ILogger<UpdateProcessor> _mockLogger = null!;
@@ -32,12 +34,16 @@ public class UpdateProcessorTests
     {
         _mockChatManagementService = Substitute.For<IChatManagementService>();
         _mockWelcomeService = Substitute.For<IWelcomeService>();
+        _mockBanCallbackHandler = Substitute.For<IBanCallbackHandler>();
         _mockBotFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockOperations = Substitute.For<ITelegramOperations>();
         _mockLogger = Substitute.For<ILogger<UpdateProcessor>>();
 
         // Setup factory to return mock operations
         _mockBotFactory.GetOperationsAsync().Returns(_mockOperations);
+
+        // Ban callback handler returns false by default (routes to welcome service)
+        _mockBanCallbackHandler.CanHandle(Arg.Any<string>()).Returns(false);
 
         // Create SUT with null for MessageProcessingService.
         // SAFETY: This is safe because Message/EditedMessage routes (which use this dependency)
@@ -47,6 +53,7 @@ public class UpdateProcessorTests
             null!, // MessageProcessingService - Message/EditedMessage routes not tested (see #23)
             _mockChatManagementService,
             _mockWelcomeService,
+            _mockBanCallbackHandler,
             _mockBotFactory,
             _mockLogger);
     }
