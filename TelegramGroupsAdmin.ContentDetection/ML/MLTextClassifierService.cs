@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.ML;
 using System.Security.Cryptography;
@@ -15,7 +16,7 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// </summary>
 public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 {
-    private readonly IMLTrainingDataRepository _trainingDataRepository;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<MLTextClassifierService> _logger;
     private readonly string _dataDirectory;
 
@@ -35,11 +36,11 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
         SpamClassifierMetadata Metadata);
 
     public MLTextClassifierService(
-        IMLTrainingDataRepository trainingDataRepository,
+        IServiceProvider serviceProvider,
         ILogger<MLTextClassifierService> logger,
         IConfiguration configuration)
     {
-        _trainingDataRepository = trainingDataRepository;
+        _serviceProvider = serviceProvider;
         _logger = logger;
         _dataDirectory = configuration["App:DataPath"] ?? "/data";
     }
@@ -77,12 +78,16 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             _logger.LogInformation("Starting SDCA model training...");
             var startTime = DateTimeOffset.UtcNow;
 
+            // Create scope to resolve Scoped repository from Singleton service
+            using var scope = _serviceProvider.CreateScope();
+            var trainingDataRepository = scope.ServiceProvider.GetRequiredService<IMLTrainingDataRepository>();
+
             // Load labeled message IDs once (reused by both spam and ham queries to avoid duplication)
-            var labeledMessageIds = await _trainingDataRepository.GetLabeledMessageIdsAsync(cancellationToken);
+            var labeledMessageIds = await trainingDataRepository.GetLabeledMessageIdsAsync(cancellationToken);
 
             // Load training samples from repository (encapsulates multi-table queries)
-            var spamSamples = await _trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
-            var hamSamples = await _trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
+            var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
+            var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
 
             if (spamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass || hamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass)
             {
