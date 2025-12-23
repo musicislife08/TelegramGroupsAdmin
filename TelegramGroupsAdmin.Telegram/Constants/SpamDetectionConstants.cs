@@ -1,23 +1,23 @@
 namespace TelegramGroupsAdmin.Telegram.Constants;
 
 /// <summary>
-/// Centralized constants for spam detection confidence thresholds and decision logic.
+/// Constants for spam detection that are NOT admin-configurable.
+/// These are implementation details of the ML training system and job scheduling.
+///
+/// NOTE: Detection thresholds (auto-ban, review queue, veto) are now database-driven
+/// via ContentDetectionConfig. See: AutoBanThreshold, ReviewQueueThreshold, MaxConfidenceVetoThreshold.
 /// </summary>
 public static class SpamDetectionConstants
 {
-    /// <summary>
-    /// Minimum net confidence required to trigger auto-ban (50%)
-    /// </summary>
-    public const int AutoBanNetConfidenceThreshold = 50;
+    // ============================================================
+    // TRAINING DATA QUALITY THRESHOLDS
+    // These ensure only high-quality samples enter the training dataset.
+    // Not admin-configurable - changing these affects ML model quality.
+    // ============================================================
 
     /// <summary>
-    /// Minimum net confidence to create borderline report for admin review (0%)
-    /// </summary>
-    public const int BorderlineNetConfidenceThreshold = 0;
-
-    /// <summary>
-    /// Minimum OpenAI confidence required to be considered "confident" (85%)
-    /// Used for auto-ban decisions and training data quality filtering
+    /// Minimum OpenAI confidence required for training data (85%)
+    /// Used in DetermineIfTrainingWorthy to filter high-quality samples
     /// </summary>
     public const int OpenAIConfidentThreshold = 85;
 
@@ -26,6 +26,12 @@ public static class SpamDetectionConstants
     /// Prevents low-quality auto-detections from polluting training dataset
     /// </summary>
     public const int TrainingConfidenceThreshold = 80;
+
+    // ============================================================
+    // JOB SCHEDULING CONSTANTS
+    // Timing parameters for background cleanup jobs.
+    // Not admin-configurable - these are race condition mitigations.
+    // ============================================================
 
     /// <summary>
     /// Delay before executing cross-chat message cleanup job (15 seconds)

@@ -2,8 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
@@ -25,12 +27,29 @@ public class DetectionActionService(
     IServiceProvider serviceProvider,
     IChatManagementService chatManagementService,
     IJobScheduler jobScheduler,
+    IContentDetectionConfigRepository configRepository,
     ILogger<DetectionActionService> logger)
 {
 
     // FEATURE-4.23: Track recent cleanup job schedules to prevent duplicate jobs for same user
     // Key: TelegramUserId, Value: Timestamp when cleanup job was last scheduled
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, DateTimeOffset> _recentCleanupJobs = new();
+
+    /// <summary>
+    /// Load effective content detection config for a chat (with fallback to defaults)
+    /// </summary>
+    private async Task<ContentDetectionConfig> GetConfigAsync(long chatId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await configRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to load content detection config for chat {ChatId}, using defaults", chatId);
+            return new ContentDetectionConfig();
+        }
+    }
 
     /// <summary>
     /// Determine if detection result should be used for training
@@ -61,8 +80,9 @@ public class DetectionActionService(
     /// Phase 4.13: Differentiates between Spam, HardBlock, and Malware
     /// - HardBlock → Instant ban + delete (no OpenAI veto, policy violation)
     /// - Malware → Delete + alert admin (no auto-ban, might be accidental)
-    /// - Spam (Net > +50 with OpenAI 85%+) → Auto-ban + delete
+    /// - Spam (Net > AutoBanThreshold with OpenAI MaxConfidenceVetoThreshold%+) → Auto-ban + delete
     /// - Spam (borderline or uncertain) → Create report for admin review
+    /// Thresholds are loaded from database config (ContentDetectionConfig)
     /// </summary>
     public async Task HandleSpamDetectionActionsAsync(
         Message message,
@@ -72,8 +92,11 @@ public class DetectionActionService(
     {
         try
         {
+            // Load thresholds from database config (admin-configurable per chat)
+            var config = await GetConfigAsync(message.Chat.Id, cancellationToken);
+
             // Only take action if spam was detected
-            if (!spamResult.IsSpam || spamResult.NetConfidence <= SpamDetectionConstants.BorderlineNetConfidenceThreshold)
+            if (!spamResult.IsSpam || spamResult.NetConfidence <= config.ReviewQueueThreshold)
             {
                 return;
             }
@@ -177,7 +200,7 @@ public class DetectionActionService(
             // Standard spam detection handling below...
             // Check if OpenAI was involved and how confident it was
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-            var openAIConfident = openAIResult != null && openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
+            var openAIConfident = openAIResult != null && openAIResult.Confidence >= config.MaxConfidenceVetoThreshold;
 
             // Decision logic based on net confidence and OpenAI involvement
             // Phase 4.5: Skip auto-ban if OpenAI flagged for review
@@ -203,7 +226,7 @@ public class DetectionActionService(
                 return; // Early return - don't auto-ban
             }
 
-            if (spamResult.NetConfidence > SpamDetectionConstants.AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
+            if (spamResult.NetConfidence > config.AutoBanThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
@@ -258,11 +281,11 @@ public class DetectionActionService(
                     messageDeleted,
                     cancellationToken);
             }
-            else if (spamResult.NetConfidence > SpamDetectionConstants.BorderlineNetConfidenceThreshold)
+            else if (spamResult.NetConfidence > config.ReviewQueueThreshold)
             {
-                // Borderline detection (0 < net ≤ 50) OR OpenAI uncertain (<85%) → Admin review
-                var reason = spamResult.NetConfidence > SpamDetectionConstants.AutoBanNetConfidenceThreshold
-                    ? $"OpenAI uncertain (<{SpamDetectionConstants.OpenAIConfidentThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
+                // Borderline detection OR OpenAI uncertain → Admin review
+                var reason = spamResult.NetConfidence > config.AutoBanThreshold
+                    ? $"OpenAI uncertain (<{config.MaxConfidenceVetoThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
                     : $"Borderline detection - Net: {spamResult.NetConfidence}";
 
                 var borderlineReport = BuildAutoDetectionReport(
