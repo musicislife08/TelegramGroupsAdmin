@@ -26,7 +26,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
 
     public async Task<string?> GetInviteLinkAsync(
         long chatId,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -34,7 +34,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
             using var scope = _serviceProvider.CreateScope();
             var configRepo = scope.ServiceProvider.GetRequiredService<IConfigRepository>();
 
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
+            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, cancellationToken);
             if (cachedConfig?.InviteLink != null)
             {
                 _logger.LogDebug("Using cached invite link for chat {ChatId}", chatId);
@@ -42,7 +42,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
             }
 
             // Step 2: Not cached - fetch and cache
-            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, ct);
+            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -61,7 +61,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
 
     public async Task<string?> RefreshInviteLinkAsync(
         long chatId,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -72,7 +72,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
 
             _logger.LogDebug("Refreshing invite link from Telegram for chat {ChatId}", chatId);
 
-            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, ct);
+            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -91,12 +91,12 @@ public class ChatInviteLinkService : IChatInviteLinkService
     private async Task<string?> FetchAndCacheInviteLinkAsync(
         long chatId,
         IConfigRepository configRepo,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var operations = await _botClientFactory.GetOperationsAsync();
 
         // Get chat info from Telegram
-        var chat = await operations.GetChatAsync(chatId, ct);
+        var chat = await operations.GetChatAsync(chatId, cancellationToken);
 
         string? currentLink;
 
@@ -107,10 +107,10 @@ public class ChatInviteLinkService : IChatInviteLinkService
             _logger.LogDebug("Got public invite link for chat {ChatId}: {Link}", chatId, currentLink);
 
             // Cache public group link too (username could change)
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
+            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, cancellationToken);
             if (cachedConfig?.InviteLink != currentLink)
             {
-                await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
+                await configRepo.SaveInviteLinkAsync(chatId, currentLink, cancellationToken);
                 _logger.LogDebug("Cached public invite link for chat {ChatId}", chatId);
             }
 
@@ -120,7 +120,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
         {
             // Private group - check if we already have a cached link
             // ExportChatInviteLink GENERATES a new link (revokes old), so we must avoid calling it
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
+            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, cancellationToken);
 
             if (cachedConfig?.InviteLink != null)
             {
@@ -131,7 +131,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
 
             // No cached link - export the primary link (this WILL revoke any previous primary link)
             // This should only happen on first setup
-            currentLink = await operations.ExportChatInviteLinkAsync(chatId, ct);
+            currentLink = await operations.ExportChatInviteLinkAsync(chatId, cancellationToken);
             _logger.LogWarning(
                 "Exported PRIMARY invite link for private chat {ChatId} - this revokes previous primary link! " +
                 "Link: {Link}",
@@ -139,7 +139,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
                 currentLink);
 
             // Cache it so we never call ExportChatInviteLink again for this chat
-            await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
+            await configRepo.SaveInviteLinkAsync(chatId, currentLink, cancellationToken);
             return currentLink;
         }
     }

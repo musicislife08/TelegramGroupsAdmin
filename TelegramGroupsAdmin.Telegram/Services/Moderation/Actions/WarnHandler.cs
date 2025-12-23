@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 
@@ -13,7 +14,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 /// </summary>
 public class WarnHandler : IWarnHandler
 {
-    private static readonly TimeSpan DefaultWarningExpiry = TimeSpan.FromDays(90);
 
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<WarnHandler> _logger;
@@ -33,7 +33,7 @@ public class WarnHandler : IWarnHandler
         string? reason,
         long? chatId = null,
         long? messageId = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Issuing warning for user {UserId} by {Executor}",
@@ -47,7 +47,7 @@ public class WarnHandler : IWarnHandler
             var warning = new WarningEntry
             {
                 IssuedAt = now,
-                ExpiresAt = now.Add(DefaultWarningExpiry),
+                ExpiresAt = now.Add(ModerationConstants.DefaultWarningExpiry),
                 Reason = reason,
                 ActorType = GetActorType(executor),
                 ActorId = GetActorId(executor),
@@ -56,7 +56,7 @@ public class WarnHandler : IWarnHandler
             };
 
             // Add warning to user's JSONB collection and get active count
-            var activeCount = await _userRepository.AddWarningAsync(userId, warning, ct);
+            var activeCount = await _userRepository.AddWarningAsync(userId, warning, cancellationToken);
 
             _logger.LogInformation(
                 "Warning issued for user {UserId}: total active warnings {WarnCount}",

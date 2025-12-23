@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -230,8 +231,7 @@ public class TelegramBotPollingHost(
         _consecutiveErrors++;
 
         // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s (capped)
-        const int maxRetryDelay = 60;
-        var delaySeconds = Math.Min(Math.Pow(2, _consecutiveErrors - 1), maxRetryDelay);
+        var delaySeconds = Math.Min(Math.Pow(ConnectionConstants.ExponentialBackoffBase, _consecutiveErrors - ConnectionConstants.ConnectionAttemptOffset), ConnectionConstants.MaxRetryDelaySeconds);
 
         // Log retry attempt (clean message, no exception details)
         logger.LogInformation("Telegram bot retrying connection in {Delay}s (attempt {Attempt})", (int)delaySeconds, _consecutiveErrors);
@@ -247,7 +247,7 @@ public class TelegramBotPollingHost(
             // Register commands with different scopes based on permission levels
 
             // Default scope - commands for all users (Admin level 0)
-            var defaultCommands = commandRouter.GetAvailableCommands(permissionLevel: 0)
+            var defaultCommands = commandRouter.GetAvailableCommands(permissionLevel: CommandConstants.DefaultCommandPermissionLevel)
                 .Select(cmd => new BotCommand
                 {
                     Command = cmd.Name,
@@ -261,7 +261,7 @@ public class TelegramBotPollingHost(
                 cancellationToken: cancellationToken);
 
             // Admin scope - commands for group admins (Admin level 1+)
-            var adminCommands = commandRouter.GetAvailableCommands(permissionLevel: 1)
+            var adminCommands = commandRouter.GetAvailableCommands(permissionLevel: CommandConstants.AdminCommandPermissionLevel)
                 .Select(cmd => new BotCommand
                 {
                     Command = cmd.Name,

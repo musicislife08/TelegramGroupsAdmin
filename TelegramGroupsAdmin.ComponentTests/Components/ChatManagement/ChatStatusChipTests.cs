@@ -88,7 +88,7 @@ public class ChatStatusChipTests : MudBlazorTestContext
     [Test]
     public void HealthStatus_WithWarnings_ShowsWarningIcon()
     {
-        var warnings = new List<string> { "Missing permission", "Bot not admin" };
+        List<string> warnings = ["Missing permission", "Bot not admin"];
 
         var cut = Render<ChatStatusChip>(p => p
             .Add(x => x.HealthStatus, ChatHealthStatusType.Warning)
@@ -116,7 +116,7 @@ public class ChatStatusChipTests : MudBlazorTestContext
     {
         var cut = Render<ChatStatusChip>(p => p
             .Add(x => x.HealthStatus, ChatHealthStatusType.Healthy)
-            .Add(x => x.Warnings, new List<string>()));
+            .Add(x => x.Warnings, (List<string>)[]));
 
         // Should not have the warning icon (only the chip)
         var iconCount = cut.FindAll("svg").Count;

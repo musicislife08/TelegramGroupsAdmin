@@ -25,7 +25,7 @@ public class InviteService : IInviteService
         _logger = logger;
     }
 
-    public async Task<InviteResult> CreateInviteAsync(string createdBy, int expirationDays = 7, CancellationToken ct = default)
+    public async Task<InviteResult> CreateInviteAsync(string createdBy, int expirationDays = 7, CancellationToken cancellationToken = default)
     {
         var token = Guid.NewGuid().ToString();
         var createdAt = DateTimeOffset.UtcNow;
@@ -42,7 +42,7 @@ public class InviteService : IInviteService
             ModifiedAt: null
         );
 
-        await _inviteRepository.CreateAsync(invite, ct);
+        await _inviteRepository.CreateAsync(invite, cancellationToken);
 
         _logger.LogInformation("Created invite {Token} by user {UserId}, expires at {ExpiresAt}",
             token, createdBy, expiresAt);
@@ -53,14 +53,14 @@ public class InviteService : IInviteService
         return new InviteResult(token, url, expiresAt);
     }
 
-    public async Task<InviteRecord?> GetInviteAsync(string token, CancellationToken ct = default)
+    public async Task<InviteRecord?> GetInviteAsync(string token, CancellationToken cancellationToken = default)
     {
-        return await _inviteRepository.GetByTokenAsync(token, ct);
+        return await _inviteRepository.GetByTokenAsync(token, cancellationToken);
     }
 
-    public async Task<List<InviteListItem>> GetUserInvitesAsync(string userId, CancellationToken ct = default)
+    public async Task<List<InviteListItem>> GetUserInvitesAsync(string userId, CancellationToken cancellationToken = default)
     {
-        var invites = await _inviteRepository.GetByCreatorAsync(userId, ct);
+        var invites = await _inviteRepository.GetByCreatorAsync(userId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
         return invites.Select(i => new InviteListItem(
@@ -76,7 +76,7 @@ public class InviteService : IInviteService
         )).ToList();
     }
 
-    public async Task<string> CreateInviteWithPermissionAsync(string createdBy, int permissionLevel, int creatorPermissionLevel, int validDays = 7, CancellationToken ct = default)
+    public async Task<string> CreateInviteWithPermissionAsync(string createdBy, int permissionLevel, int creatorPermissionLevel, int validDays = 7, CancellationToken cancellationToken = default)
     {
         // Escalation prevention: Users cannot create invites for permission levels above their own
         if (permissionLevel > creatorPermissionLevel)
@@ -101,7 +101,7 @@ public class InviteService : IInviteService
                 $"Cannot create invite with permission level {requestedPermissionName} (your level: {creatorPermissionName})");
         }
 
-        var token = await _inviteRepository.CreateAsync(createdBy, validDays, permissionLevel, ct);
+        var token = await _inviteRepository.CreateAsync(createdBy, validDays, permissionLevel, cancellationToken);
 
         var permissionName = permissionLevel switch
         {
@@ -117,12 +117,12 @@ public class InviteService : IInviteService
             actor: Actor.FromWebUser(createdBy),
             target: null,
             value: $"Invite expires in {validDays} days, permission: {permissionName}",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return token;
     }
 
-    public async Task<List<InviteWithCreator>> GetAllInvitesAsync(string? filter = "pending", CancellationToken ct = default)
+    public async Task<List<InviteWithCreator>> GetAllInvitesAsync(string? filter = "pending", CancellationToken cancellationToken = default)
     {
         // Convert UI string filter to enum for type-safe repository access
         var enumFilter = filter?.ToLower() switch
@@ -134,15 +134,15 @@ public class InviteService : IInviteService
             _ => InviteFilter.Pending
         };
 
-        return await _inviteRepository.GetAllWithCreatorEmailAsync((DataModels.InviteFilter)enumFilter, ct);
+        return await _inviteRepository.GetAllWithCreatorEmailAsync((DataModels.InviteFilter)enumFilter, cancellationToken);
     }
 
-    public async Task<bool> RevokeInviteAsync(string token, string revokedBy, CancellationToken ct = default)
+    public async Task<bool> RevokeInviteAsync(string token, string revokedBy, CancellationToken cancellationToken = default)
     {
         // Get invite details before revocation for audit logging
-        var invite = await _inviteRepository.GetByTokenAsync(token, ct);
+        var invite = await _inviteRepository.GetByTokenAsync(token, cancellationToken);
 
-        var success = await _inviteRepository.RevokeAsync(token, ct);
+        var success = await _inviteRepository.RevokeAsync(token, cancellationToken);
 
         if (success)
         {
@@ -152,7 +152,7 @@ public class InviteService : IInviteService
                 actor: Actor.FromWebUser(revokedBy),
                 target: null,
                 value: $"Revoked invite (permission: {invite?.PermissionLevel ?? 0})",
-                ct: ct);
+                cancellationToken: cancellationToken);
         }
 
         return success;

@@ -2,8 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
@@ -12,6 +14,7 @@ using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Constants;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -26,15 +29,30 @@ public class DetectionActionService(
     IJobScheduler jobScheduler,
     ILogger<DetectionActionService> logger)
 {
-    // Confidence thresholds for spam detection decisions
-    private const int AutoBanNetConfidenceThreshold = 50;
-    private const int BorderlineNetConfidenceThreshold = 0;
-    private const int OpenAIConfidentThreshold = 85;
 
     // FEATURE-4.23: Track recent cleanup job schedules to prevent duplicate jobs for same user
     // Key: TelegramUserId, Value: Timestamp when cleanup job was last scheduled
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, DateTimeOffset> _recentCleanupJobs = new();
-    private static readonly TimeSpan CleanupJobDeduplicationWindow = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Load effective content detection config for a chat (with fallback to defaults).
+    /// Resolves repository from scope since this is a Singleton service and repositories are Scoped.
+    /// </summary>
+    private async Task<ContentDetectionConfig> GetConfigAsync(long chatId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var configRepository = scope.ServiceProvider.GetRequiredService<IContentDetectionConfigRepository>();
+            return await configRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to load content detection config for chat {ChatId}, using defaults", chatId);
+            return new ContentDetectionConfig();
+        }
+    }
+
     /// <summary>
     /// Determine if detection result should be used for training
     /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions
@@ -50,13 +68,13 @@ public class DetectionActionService(
         if (openAIResult != null)
         {
             // OpenAI confident (85%+) = training-worthy
-            return openAIResult.Confidence >= OpenAIConfidentThreshold;
+            return openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
         }
 
         // No OpenAI veto = borderline/uncertain detection
         // Only use for training if net confidence is very high (>80)
         // This prevents low-quality auto-detections from polluting training data
-        return result.NetConfidence > 80;
+        return result.NetConfidence > SpamDetectionConstants.TrainingConfidenceThreshold;
     }
 
     /// <summary>
@@ -64,8 +82,9 @@ public class DetectionActionService(
     /// Phase 4.13: Differentiates between Spam, HardBlock, and Malware
     /// - HardBlock → Instant ban + delete (no OpenAI veto, policy violation)
     /// - Malware → Delete + alert admin (no auto-ban, might be accidental)
-    /// - Spam (Net > +50 with OpenAI 85%+) → Auto-ban + delete
+    /// - Spam (Net > AutoBanThreshold with OpenAI MaxConfidenceVetoThreshold%+) → Auto-ban + delete
     /// - Spam (borderline or uncertain) → Create report for admin review
+    /// Thresholds are loaded from database config (ContentDetectionConfig)
     /// </summary>
     public async Task HandleSpamDetectionActionsAsync(
         Message message,
@@ -75,8 +94,11 @@ public class DetectionActionService(
     {
         try
         {
+            // Load thresholds from database config (admin-configurable per chat)
+            var config = await GetConfigAsync(message.Chat.Id, cancellationToken);
+
             // Only take action if spam was detected
-            if (!spamResult.IsSpam || spamResult.NetConfidence <= BorderlineNetConfidenceThreshold)
+            if (!spamResult.IsSpam || spamResult.NetConfidence <= config.ReviewQueueThreshold)
             {
                 return;
             }
@@ -180,7 +202,7 @@ public class DetectionActionService(
             // Standard spam detection handling below...
             // Check if OpenAI was involved and how confident it was
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-            var openAIConfident = openAIResult != null && openAIResult.Confidence >= OpenAIConfidentThreshold;
+            var openAIConfident = openAIResult != null && openAIResult.Confidence >= config.MaxConfidenceVetoThreshold;
 
             // Decision logic based on net confidence and OpenAI involvement
             // Phase 4.5: Skip auto-ban if OpenAI flagged for review
@@ -206,7 +228,7 @@ public class DetectionActionService(
                 return; // Early return - don't auto-ban
             }
 
-            if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
+            if (spamResult.NetConfidence > config.AutoBanThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
@@ -261,11 +283,11 @@ public class DetectionActionService(
                     messageDeleted,
                     cancellationToken);
             }
-            else if (spamResult.NetConfidence > BorderlineNetConfidenceThreshold)
+            else if (spamResult.NetConfidence > config.ReviewQueueThreshold)
             {
-                // Borderline detection (0 < net ≤ 50) OR OpenAI uncertain (<85%) → Admin review
-                var reason = spamResult.NetConfidence > AutoBanNetConfidenceThreshold
-                    ? $"OpenAI uncertain (<{OpenAIConfidentThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
+                // Borderline detection OR OpenAI uncertain → Admin review
+                var reason = spamResult.NetConfidence > config.AutoBanThreshold
+                    ? $"OpenAI uncertain (<{config.MaxConfidenceVetoThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
                     : $"Borderline detection - Net: {spamResult.NetConfidence}";
 
                 var borderlineReport = BuildAutoDetectionReport(
@@ -360,7 +382,7 @@ public class DetectionActionService(
             await userActionsRepo.InsertAsync(banAction, cancellationToken);
 
             // Get all managed chats for cross-chat enforcement
-            var managedChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken);
+            var managedChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken: cancellationToken);
             var activeChats = managedChats.Where(c => c.IsActive).ToList();
 
             // ADMIN PROTECTION: Check if user is admin in ANY managed chat
@@ -413,7 +435,7 @@ public class DetectionActionService(
                         chatId: chat.ChatId,
                         userId: message.From.Id,
                         untilDate: null, // Permanent ban
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     successCount++;
 
@@ -453,7 +475,7 @@ public class DetectionActionService(
                 if (_recentCleanupJobs.TryGetValue(userId, out var lastScheduled))
                 {
                     var timeSinceLastSchedule = now - lastScheduled;
-                    if (timeSinceLastSchedule < CleanupJobDeduplicationWindow)
+                    if (timeSinceLastSchedule < SpamDetectionConstants.CleanupJobDeduplicationWindow)
                     {
                         logger.LogDebug(
                             "Skipping duplicate cleanup job for user {UserId} (already scheduled {Seconds}s ago)",
@@ -472,14 +494,14 @@ public class DetectionActionService(
                 await jobScheduler.ScheduleJobAsync(
                     "DeleteUserMessages",
                     deleteMessagesPayload,
-                    delaySeconds: 15); // 15-second delay allows spambot to post across all chats before cleanup
+                    delaySeconds: SpamDetectionConstants.CleanupJobDelaySeconds); // 15-second delay allows spambot to post across all chats before cleanup
 
                 // Track this scheduling to prevent duplicates
                 _recentCleanupJobs[userId] = now;
 
                 // Cleanup old entries to prevent memory leak (remove entries older than window)
                 var expiredEntries = _recentCleanupJobs
-                    .Where(kvp => now - kvp.Value > CleanupJobDeduplicationWindow)
+                    .Where(kvp => now - kvp.Value > SpamDetectionConstants.CleanupJobDeduplicationWindow)
                     .Select(kvp => kvp.Key)
                     .ToList();
 
@@ -624,7 +646,7 @@ public class DetectionActionService(
         TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
         AutoBanResult? banResult,
         bool messageDeleted,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         _ = Task.Run(async () =>
         {
@@ -640,8 +662,8 @@ public class DetectionActionService(
                 // Build message text preview (truncate if >200 chars for caption limit)
                 // Note: Photos/videos use .Caption, plain messages use .Text
                 var messageContent = message.Text ?? message.Caption;
-                var messageTextPreview = messageContent != null && messageContent.Length > 200
-                    ? messageContent[..197] + "..."
+                var messageTextPreview = messageContent != null && messageContent.Length > NotificationConstants.MessagePreviewMaxLength
+                    ? messageContent[..(NotificationConstants.MessagePreviewMaxLength - NotificationConstants.PreviewTruncationOffset)] + "..."
                     : messageContent ?? "[No text]";
 
                 // Escape MarkdownV2 special characters
@@ -658,7 +680,7 @@ public class DetectionActionService(
                 var topChecks = spamResult.CheckResults
                     .Where(c => c.Result == ContentDetection.Models.CheckResultType.Spam)
                     .OrderByDescending(c => c.Confidence)
-                    .Take(3);
+                    .Take(NotificationConstants.MaxDetectionChecksInNotification);
 
                 foreach (var check in topChecks)
                 {
@@ -694,7 +716,7 @@ public class DetectionActionService(
                 var messagesRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
                 // Look up the message to get local file paths if media was downloaded
-                var messageRecord = await messagesRepo.GetMessageAsync(message.MessageId, ct);
+                var messageRecord = await messagesRepo.GetMessageAsync(message.MessageId, cancellationToken);
                 if (messageRecord != null)
                 {
                     // Photos are stored in PhotoLocalPath
@@ -720,12 +742,12 @@ public class DetectionActionService(
                 var dmDeliveryService = scope.ServiceProvider.GetRequiredService<IDmDeliveryService>();
 
                 // Get all active admins for this chat
-                var chatAdmins = await chatAdminsRepo.GetChatAdminsAsync(message.Chat.Id, ct);
+                var chatAdmins = await chatAdminsRepo.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
 
                 foreach (var admin in chatAdmins)
                 {
                     // Map telegram ID to web user ID to verify they're linked
-                    var mapping = await telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, ct);
+                    var mapping = await telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
                     if (mapping == null)
                         continue;
 
@@ -736,7 +758,7 @@ public class DetectionActionService(
                         consolidatedMessage,
                         photoPath,
                         videoPath,
-                        ct);
+                        cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -744,7 +766,7 @@ public class DetectionActionService(
                 logger.LogError(ex, "Failed to send consolidated spam notification for message {MessageId} in chat {ChatId}",
                     message.MessageId, message.Chat.Id);
             }
-        }, ct);
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -767,7 +789,7 @@ public class DetectionActionService(
     /// Creates scope to resolve scoped INotificationService from singleton background service
     /// Fire-and-forget pattern - does not await the notification task
     /// </summary>
-    private void SendNotificationAsync(long chatId, NotificationEventType eventType, string subject, string message, CancellationToken ct)
+    private void SendNotificationAsync(long chatId, NotificationEventType eventType, string subject, string message, CancellationToken cancellationToken)
     {
         _ = Task.Run(async () =>
         {
@@ -775,13 +797,13 @@ public class DetectionActionService(
             {
                 using var scope = serviceProvider.CreateScope();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                await notificationService.SendChatNotificationAsync(chatId, eventType, subject, message, ct);
+                await notificationService.SendChatNotificationAsync(chatId, eventType, subject, message, cancellationToken);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to send notification for event {EventType} in chat {ChatId}", eventType, chatId);
             }
-        }, ct);
+        }, cancellationToken);
     }
 }
 

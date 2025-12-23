@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
@@ -46,11 +47,11 @@ public class ScheduledBackupJob : IJob
             // Scheduled trigger - use default payload (standard retention: 24h/7d/4w/12m/3y)
             payload = new ScheduledBackupPayload
             {
-                RetainHourlyBackups = 24,
-                RetainDailyBackups = 7,
-                RetainWeeklyBackups = 4,
-                RetainMonthlyBackups = 12,
-                RetainYearlyBackups = 3,
+                RetainHourlyBackups = BackupRetentionConstants.DefaultRetainHourlyBackups,
+                RetainDailyBackups = BackupRetentionConstants.DefaultRetainDailyBackups,
+                RetainWeeklyBackups = BackupRetentionConstants.DefaultRetainWeeklyBackups,
+                RetainMonthlyBackups = BackupRetentionConstants.DefaultRetainMonthlyBackups,
+                RetainYearlyBackups = BackupRetentionConstants.DefaultRetainYearlyBackups,
                 BackupDirectory = null // Uses default /data/backups
             };
         }

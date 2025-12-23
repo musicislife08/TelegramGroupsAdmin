@@ -41,10 +41,10 @@ public class TrainingHandler : ITrainingHandler
     public async Task CreateSpamSampleAsync(
         long messageId,
         Actor executor,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         // Try to get message from database
-        var message = await _messageHistoryRepository.GetMessageAsync(messageId, ct);
+        var message = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
 
         if (message == null)
         {
@@ -72,7 +72,7 @@ public class TrainingHandler : ITrainingHandler
             EditVersion = 0
         };
 
-        await _detectionResultsRepository.InsertAsync(detectionResult, ct);
+        await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
 
         // Create explicit training label for ML (spam)
         if (hasText)
@@ -83,13 +83,13 @@ public class TrainingHandler : ITrainingHandler
                 labeledByUserId: executor.GetTelegramUserId(), // Null if executor is web user or system
                 reason: "Marked as spam by moderator",
                 auditLogId: null,
-                cancellationToken: ct);
+                cancellationToken: cancellationToken);
 
             // Trigger ML text classifier retraining (immediate, no payload)
             await _jobTriggerService.TriggerNowAsync(
                 BackgroundJobNames.TextClassifierRetraining,
                 payload: new { }, // Empty payload - job doesn't need parameters
-                cancellationToken: ct);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "Created training label and triggered retraining for message {MessageId} marked as spam by {Executor}",
@@ -107,7 +107,7 @@ public class TrainingHandler : ITrainingHandler
             messageId,
             isSpam: true,
             executor,
-            ct);
+            cancellationToken);
 
         if (imageSaved)
         {

@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -19,8 +20,6 @@ public class VirusTotalScannerService : ICloudScannerService
     private readonly ISystemConfigRepository _configRepository;
     private readonly IFileScanQuotaRepository _quotaRepository;
     private readonly IHttpClientFactory _httpClientFactory;
-
-    private const int MinEngineThreshold = 2;  // Consider malicious if >= 2 engines detect it
 
     public string ServiceName => "VirusTotal";
 
@@ -149,7 +148,7 @@ public class VirusTotalScannerService : ICloudScannerService
             HashLookupStatus status;
             string? threatName = null;
 
-            if (detectionCount >= MinEngineThreshold)
+            if (detectionCount >= FileScanningConstants.VirusTotalMinEngineThreshold)
             {
                 status = HashLookupStatus.Malicious;
 
@@ -330,8 +329,8 @@ public class VirusTotalScannerService : ICloudScannerService
             // Premium users get instant analysis, free tier is deprioritized
             // This is a background job - no user waiting, so prioritize quota conservation
             // Goal: 2-3 total requests per file (1 upload + 1-2 polls)
-            const int maxPolls = 5;  // Up to 5 poll attempts
-            var pollDelay = TimeSpan.FromMinutes(2);  // Wait 2 minutes between polls (10 min total timeout)
+            var maxPolls = FileScanningConstants.VirusTotalMaxPolls;
+            var pollDelay = TimeSpan.FromMinutes(FileScanningConstants.VirusTotalPollDelayMinutes);
 
             for (int i = 0; i < maxPolls; i++)
             {
@@ -372,7 +371,7 @@ public class VirusTotalScannerService : ICloudScannerService
 
                     stopwatch.Stop();
 
-                    if (detectionCount >= MinEngineThreshold)
+                    if (detectionCount >= FileScanningConstants.VirusTotalMinEngineThreshold)
                     {
                         // Extract threat name
                         string? threatName = null;

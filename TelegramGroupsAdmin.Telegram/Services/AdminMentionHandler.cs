@@ -98,7 +98,7 @@ public class AdminMentionHandler
                 text: notificationText,
                 parseMode: ParseMode.Html,
                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "Notified {AdminCount} admins in chat {ChatId} for @admin mention by user {UserId}",

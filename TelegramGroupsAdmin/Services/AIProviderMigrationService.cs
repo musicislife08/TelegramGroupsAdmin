@@ -161,9 +161,9 @@ public class AIProviderMigrationService : IHostedService
     /// <summary>
     /// Migrates legacy API key properties (OpenAI, AzureOpenAI, LocalAI) to the new AIConnectionKeys dictionary
     /// </summary>
-    private async Task MigrateLegacyApiKeysAsync(ISystemConfigRepository configRepo, CancellationToken ct)
+    private async Task MigrateLegacyApiKeysAsync(ISystemConfigRepository configRepo, CancellationToken cancellationToken)
     {
-        var apiKeys = await configRepo.GetApiKeysAsync(ct);
+        var apiKeys = await configRepo.GetApiKeysAsync(cancellationToken);
         if (apiKeys == null)
         {
             return;
@@ -171,7 +171,7 @@ public class AIProviderMigrationService : IHostedService
 
         if (apiKeys.MigrateLegacyKeys())
         {
-            await configRepo.SaveApiKeysAsync(apiKeys, ct);
+            await configRepo.SaveApiKeysAsync(apiKeys, cancellationToken);
             _logger.LogInformation("Migrated legacy API keys to new connection-based format");
         }
     }

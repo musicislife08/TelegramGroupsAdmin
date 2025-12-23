@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Jobs;
 using TelegramGroupsAdmin.BackgroundJobs.Listeners;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
@@ -43,7 +44,7 @@ public static class ServiceCollectionExtensions
             // Configure thread pool (MaxConcurrency = 4)
             q.UseDefaultThreadPool(tp =>
             {
-                tp.MaxConcurrency = 4;
+                tp.MaxConcurrency = QuartzConstants.MaxConcurrency;
             });
 
             // Configure PostgreSQL persistence

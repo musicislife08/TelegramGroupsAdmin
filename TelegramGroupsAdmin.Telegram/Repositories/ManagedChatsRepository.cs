@@ -169,12 +169,17 @@ public class ManagedChatsRepository : IManagedChatsRepository
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<ManagedChatRecord>> GetAllChatsAsync(CancellationToken cancellationToken = default)
+    public async Task<List<ManagedChatRecord>> GetAllChatsAsync(bool includeDeleted = false, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entities = await context.ManagedChats
-            .AsNoTracking()
-            .Where(mc => mc.IsDeleted == false)
+        var query = context.ManagedChats.AsNoTracking();
+
+        if (!includeDeleted)
+        {
+            query = query.Where(mc => mc.IsDeleted == false);
+        }
+
+        var entities = await query
             .OrderByDescending(mc => mc.IsActive)
             .ThenBy(mc => mc.ChatName)
             .ToListAsync(cancellationToken);
@@ -184,7 +189,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task<List<ManagedChatRecord>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await GetAllChatsAsync(cancellationToken);
+        return await GetAllChatsAsync(includeDeleted: false, cancellationToken);
     }
 
     public async Task DeleteAsync(long chatId, CancellationToken cancellationToken = default)
@@ -214,30 +219,36 @@ public class ManagedChatsRepository : IManagedChatsRepository
     public async Task<List<ManagedChatRecord>> GetUserAccessibleChatsAsync(
         string userId,
         PermissionLevel permissionLevel,
+        bool includeDeleted = false,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // GlobalAdmin (1) and Owner (2) see all non-deleted chats (active + inactive)
+        // GlobalAdmin (1) and Owner (2) see all chats (active + inactive)
         if (permissionLevel >= PermissionLevel.GlobalAdmin)
         {
-            return await GetAllChatsAsync(cancellationToken);
+            return await GetAllChatsAsync(includeDeleted, cancellationToken);
         }
 
         // Admin (0) sees only chats where their linked Telegram account is admin
         // Query: managed_chats JOIN chat_admins ON chat_id WHERE telegram_id IN (user's linked accounts)
-        var accessibleChats = await (
+        var query =
             from mc in context.ManagedChats
             join ca in context.ChatAdmins on mc.ChatId equals ca.ChatId
             join tum in context.TelegramUserMappings on ca.TelegramId equals tum.TelegramId
-            where mc.IsDeleted == false
-                && tum.UserId == userId
+            where tum.UserId == userId
                 && tum.IsActive == true
-            select mc
-        )
-        .Distinct()
-        .OrderBy(mc => mc.ChatName)
-        .ToListAsync(cancellationToken);
+            select mc;
+
+        if (!includeDeleted)
+        {
+            query = query.Where(mc => mc.IsDeleted == false);
+        }
+
+        var accessibleChats = await query
+            .Distinct()
+            .OrderBy(mc => mc.ChatName)
+            .ToListAsync(cancellationToken);
 
         var result = accessibleChats.Select(e => e.ToModel()).ToList();
 

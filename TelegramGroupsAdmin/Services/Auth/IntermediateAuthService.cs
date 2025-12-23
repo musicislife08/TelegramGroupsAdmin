@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using TelegramGroupsAdmin.Constants;
 
 namespace TelegramGroupsAdmin.Services.Auth;
 
@@ -11,7 +12,6 @@ public class IntermediateAuthService : IIntermediateAuthService
 {
     private readonly ConcurrentDictionary<string, TokenData> _tokens = new();
     private readonly ILogger<IntermediateAuthService> _logger;
-    private static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(5);
 
     public IntermediateAuthService(ILogger<IntermediateAuthService> logger)
     {
@@ -21,12 +21,12 @@ public class IntermediateAuthService : IIntermediateAuthService
     public string CreateToken(string userId)
     {
         // Generate cryptographically secure random token (32 bytes = 256 bits)
-        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var tokenBytes = RandomNumberGenerator.GetBytes(AuthenticationConstants.IntermediateTokenByteLength);
         var token = Convert.ToBase64String(tokenBytes);
 
         var tokenData = new TokenData(
             UserId: userId,
-            ExpiresAt: DateTimeOffset.UtcNow.Add(TokenLifetime)
+            ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.IntermediateTokenLifetime)
         );
 
         _tokens[token] = tokenData;

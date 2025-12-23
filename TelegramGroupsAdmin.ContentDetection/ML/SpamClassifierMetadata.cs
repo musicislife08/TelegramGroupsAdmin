@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.ContentDetection.Constants;
+
 namespace TelegramGroupsAdmin.ContentDetection.ML;
 
 /// <summary>
@@ -7,25 +9,25 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 public class SpamClassifierMetadata
 {
     /// <summary>
-    /// Minimum balanced spam ratio (20%) - below this indicates too few spam samples.
+    /// Minimum balanced spam ratio - below this indicates too few spam samples.
     /// </summary>
-    public const double MinBalancedSpamRatio = 0.2;
+    public const double MinBalancedSpamRatio = MLConstants.MinBalancedSpamRatio;
 
     /// <summary>
-    /// Maximum balanced spam ratio (80%) - above this indicates too few ham samples.
+    /// Maximum balanced spam ratio - above this indicates too few ham samples.
     /// </summary>
-    public const double MaxBalancedSpamRatio = 0.8;
+    public const double MaxBalancedSpamRatio = MLConstants.MaxBalancedSpamRatio;
 
     /// <summary>
-    /// Target spam ratio (30%) - optimal balance for SDCA training.
+    /// Target spam ratio - optimal balance for SDCA training.
     /// </summary>
-    public const double TargetSpamRatio = 0.3;
+    public const double TargetSpamRatio = MLConstants.TargetSpamRatio;
 
     /// <summary>
     /// Minimum samples required per class (spam and ham) for meaningful training.
     /// Below this threshold, the model lacks sufficient data for reliable classification.
     /// </summary>
-    public const int MinimumSamplesPerClass = 20;
+    public const int MinimumSamplesPerClass = MLConstants.MinimumSamplesPerClass;
 
     /// <summary>
     /// When the model was trained.

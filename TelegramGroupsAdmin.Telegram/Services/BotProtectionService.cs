@@ -122,7 +122,7 @@ public class BotProtectionService : IBotProtectionService
 
             // Ban the bot
             var operations = await _botClientFactory.GetOperationsAsync();
-            await operations.BanChatMemberAsync(chatId, bot.Id, ct: cancellationToken);
+            await operations.BanChatMemberAsync(chatId, bot.Id, cancellationToken: cancellationToken);
 
             _logger.LogWarning("Banned unauthorized bot {BotDisplayName} from chat {ChatId}. Reason: {Reason}",
                 TelegramDisplayName.Format(bot.FirstName, bot.LastName, bot.Username, bot.Id), chatId, reason);

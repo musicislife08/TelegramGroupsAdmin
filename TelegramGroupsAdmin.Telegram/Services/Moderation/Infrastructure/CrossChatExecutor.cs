@@ -33,10 +33,10 @@ public class CrossChatExecutor : ICrossChatExecutor
     public async Task<CrossChatResult> ExecuteAcrossChatsAsync(
         Func<ITelegramOperations, long, CancellationToken, Task> action,
         string actionName,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         var operations = await _botClientFactory.GetOperationsAsync();
-        var allChats = await _managedChatsRepository.GetAllChatsAsync(ct);
+        var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
         var activeChatIds = allChats
             .Where(c => c.IsActive && !c.IsDeleted)
             .Select(c => c.ChatId)
@@ -61,10 +61,10 @@ public class CrossChatExecutor : ICrossChatExecutor
         using var semaphore = new SemaphoreSlim(MaxConcurrentApiCalls);
         var tasks = actionableChatIds.Select(async chatId =>
         {
-            await semaphore.WaitAsync(ct);
+            await semaphore.WaitAsync(cancellationToken);
             try
             {
-                await action(operations, chatId, ct);
+                await action(operations, chatId, cancellationToken);
                 return true;
             }
             catch (Exception ex)

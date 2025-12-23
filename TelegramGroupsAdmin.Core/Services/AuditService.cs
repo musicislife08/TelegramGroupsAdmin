@@ -18,29 +18,29 @@ public class AuditService : IAuditService
         Actor actor,
         Actor? target = null,
         string? value = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        return _repository.LogEventAsync((DataModels.AuditEventType)eventType, actor, target, value, ct);
+        return _repository.LogEventAsync((DataModels.AuditEventType)eventType, actor, target, value, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
+    public Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        return _repository.GetRecentEventsAsync(limit, ct);
+        return _repository.GetRecentEventsAsync(limit, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken ct = default)
+    public Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        return _repository.GetEventsForUserAsync(userId, limit, ct);
+        return _repository.GetEventsForUserAsync(userId, limit, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken ct = default)
+    public Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        return _repository.GetEventsByActorAsync(actorUserId, limit, ct);
+        return _repository.GetEventsByActorAsync(actorUserId, limit, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = 100, CancellationToken ct = default)
+    public Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        return _repository.GetEventsByTypeAsync((DataModels.AuditEventType)eventType, limit, ct);
+        return _repository.GetEventsByTypeAsync((DataModels.AuditEventType)eventType, limit, cancellationToken);
     }
 
     public Task<(List<AuditLogRecord> Events, int TotalCount)> GetPagedEventsAsync(
@@ -49,7 +49,7 @@ public class AuditService : IAuditService
         AuditEventType? eventTypeFilter = null,
         string? actorUserIdFilter = null,
         string? targetUserIdFilter = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         return _repository.GetPagedEventsAsync(
             skip,
@@ -57,6 +57,6 @@ public class AuditService : IAuditService
             eventTypeFilter.HasValue ? (DataModels.AuditEventType)eventTypeFilter.Value : null,
             actorUserIdFilter,
             targetUserIdFilter,
-            ct);
+            cancellationToken);
     }
 }

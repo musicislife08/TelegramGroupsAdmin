@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using HumanCron.Quartz.Abstractions;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
@@ -246,11 +247,11 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 Schedule = "every day at 2am", // Daily at 2 AM (natural language)
                 Settings = new Dictionary<string, object>
                 {
-                    [BackgroundJobSettings.RetainHourlyBackups] = 24,  // Last 24 hours
-                    [BackgroundJobSettings.RetainDailyBackups] = 7,    // Last 7 days
-                    [BackgroundJobSettings.RetainWeeklyBackups] = 4,   // Last 4 weeks
-                    [BackgroundJobSettings.RetainMonthlyBackups] = 12, // Last 12 months
-                    [BackgroundJobSettings.RetainYearlyBackups] = 3,   // Last 3 years
+                    [BackgroundJobSettings.RetainHourlyBackups] = BackupRetentionConstants.DefaultRetainHourlyBackups,
+                    [BackgroundJobSettings.RetainDailyBackups] = BackupRetentionConstants.DefaultRetainDailyBackups,
+                    [BackgroundJobSettings.RetainWeeklyBackups] = BackupRetentionConstants.DefaultRetainWeeklyBackups,
+                    [BackgroundJobSettings.RetainMonthlyBackups] = BackupRetentionConstants.DefaultRetainMonthlyBackups,
+                    [BackgroundJobSettings.RetainYearlyBackups] = BackupRetentionConstants.DefaultRetainYearlyBackups,
                     [BackgroundJobSettings.BackupDirectory] = "/data/backups"
                 }
             },

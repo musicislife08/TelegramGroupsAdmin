@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 
@@ -19,15 +20,15 @@ public class SimilarityHashBackfillService(
     /// Backfills similarity hashes for all messages and translations that don't have one.
     /// Skips if backfill already complete.
     /// </summary>
-    public async Task BackfillAsync(CancellationToken ct = default)
+    public async Task BackfillAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Check if backfill needed (any messages OR translations without hash)
         var messagesNeedBackfill = await context.Messages
-            .AnyAsync(m => m.SimilarityHash == null && m.MessageText != null, ct);
+            .AnyAsync(m => m.SimilarityHash == null && m.MessageText != null, cancellationToken);
         var translationsNeedBackfill = await context.MessageTranslations
-            .AnyAsync(mt => mt.SimilarityHash == null && mt.TranslatedText != null, ct);
+            .AnyAsync(mt => mt.SimilarityHash == null && mt.TranslatedText != null, cancellationToken);
 
         if (!messagesNeedBackfill && !translationsNeedBackfill)
         {
@@ -38,26 +39,25 @@ public class SimilarityHashBackfillService(
         logger.LogInformation("Starting similarity hash backfill...");
         var sw = Stopwatch.StartNew();
 
-        var messageCount = await BackfillMessagesAsync(context, ct);
-        var translationCount = await BackfillTranslationsAsync(context, ct);
+        var messageCount = await BackfillMessagesAsync(context, cancellationToken);
+        var translationCount = await BackfillTranslationsAsync(context, cancellationToken);
 
         logger.LogInformation(
             "Similarity hash backfill complete: {Messages} messages, {Translations} translations in {Elapsed}ms",
             messageCount, translationCount, sw.ElapsedMilliseconds);
     }
 
-    private async Task<int> BackfillMessagesAsync(AppDbContext context, CancellationToken ct)
+    private async Task<int> BackfillMessagesAsync(AppDbContext context, CancellationToken cancellationToken)
     {
-        const int batchSize = 500;
         int totalProcessed = 0;
 
-        while (!ct.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             var batch = await context.Messages
                 .Where(m => m.SimilarityHash == null && m.MessageText != null)
                 .OrderBy(m => m.MessageId)  // Deterministic ordering for batch processing
-                .Take(batchSize)
-                .ToListAsync(ct);
+                .Take(DataProcessingConstants.SimilarityHashBackfillBatchSize)
+                .ToListAsync(cancellationToken);
 
             if (batch.Count == 0) break;
 
@@ -66,7 +66,7 @@ public class SimilarityHashBackfillService(
                 message.SimilarityHash = simHashService.ComputeHash(message.MessageText);
             }
 
-            await context.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(cancellationToken);
             totalProcessed += batch.Count;
             logger.LogDebug("Backfilled {Count} messages ({Total} total)", batch.Count, totalProcessed);
         }
@@ -74,12 +74,12 @@ public class SimilarityHashBackfillService(
         return totalProcessed;
     }
 
-    private async Task<int> BackfillTranslationsAsync(AppDbContext context, CancellationToken ct)
+    private async Task<int> BackfillTranslationsAsync(AppDbContext context, CancellationToken cancellationToken)
     {
         // Translations are typically much fewer than messages, so process all at once
         var translations = await context.MessageTranslations
             .Where(mt => mt.SimilarityHash == null)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         foreach (var translation in translations)
         {
@@ -87,7 +87,7 @@ public class SimilarityHashBackfillService(
         }
 
         if (translations.Count > 0)
-            await context.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(cancellationToken);
 
         return translations.Count;
     }

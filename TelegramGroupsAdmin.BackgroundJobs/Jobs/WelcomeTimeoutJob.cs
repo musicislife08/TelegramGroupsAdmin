@@ -88,11 +88,11 @@ public class WelcomeTimeoutJob(
                 await operations.BanChatMemberAsync(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
                 await operations.UnbanChatMemberAsync(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
 
                 _logger.LogInformation(
                     "Kicked user {UserId} from chat {ChatId} due to welcome timeout",
@@ -115,7 +115,7 @@ public class WelcomeTimeoutJob(
                 await operations.DeleteMessageAsync(
                     chatId: payload.ChatId,
                     messageId: payload.WelcomeMessageId,
-                    ct: cancellationToken);
+                    cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {

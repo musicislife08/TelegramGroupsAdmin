@@ -14,19 +14,19 @@ public class TestEmailService : IEmailService
     /// </summary>
     public ConcurrentBag<SentEmail> SentEmails { get; } = new();
 
-    public Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
+    public Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
     {
         SentEmails.Add(new SentEmail([to], subject, body, isHtml));
         return Task.CompletedTask;
     }
 
-    public Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
+    public Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
     {
         SentEmails.Add(new SentEmail(to.ToArray(), subject, body, isHtml));
         return Task.CompletedTask;
     }
 
-    public Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken ct = default)
+    public Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken cancellationToken = default)
     {
         // Store template info as subject for easy test verification
         var subject = $"[Template:{template}]";
@@ -35,7 +35,7 @@ public class TestEmailService : IEmailService
         return Task.CompletedTask;
     }
 
-    public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
+    public Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
     /// <summary>
     /// Clears all captured emails. Call at start of each test for isolation.

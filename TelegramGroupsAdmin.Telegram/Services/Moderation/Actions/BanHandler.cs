@@ -40,7 +40,7 @@ public class BanHandler : IBanHandler
         Actor executor,
         string? reason,
         long? triggeredByMessageId = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Executing ban for user {UserId} by {Executor}",
@@ -49,12 +49,12 @@ public class BanHandler : IBanHandler
         try
         {
             var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-                async (ops, chatId, token) => await ops.BanChatMemberAsync(chatId, userId, ct: token),
+                async (ops, chatId, token) => await ops.BanChatMemberAsync(chatId, userId, cancellationToken: token),
                 "Ban",
-                ct);
+                cancellationToken);
 
             // Update source of truth: is_banned column on telegram_users
-            await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: null, ct);
+            await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
                 "Ban completed for user {UserId}: {Success} succeeded, {Failed} failed",
@@ -76,7 +76,7 @@ public class BanHandler : IBanHandler
         TimeSpan duration,
         string? reason,
         long? triggeredByMessageId = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Executing temp ban for user {UserId} for {Duration} by {Executor}",
@@ -88,12 +88,12 @@ public class BanHandler : IBanHandler
 
             // Ban globally (permanent in Telegram, lifted by background job)
             var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-                async (ops, chatId, token) => await ops.BanChatMemberAsync(chatId, userId, ct: token),
+                async (ops, chatId, token) => await ops.BanChatMemberAsync(chatId, userId, cancellationToken: token),
                 "TempBan",
-                ct);
+                cancellationToken);
 
             // Update source of truth: is_banned column with expiry
-            await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: expiresAt, ct);
+            await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: expiresAt, cancellationToken);
 
             // Schedule automatic unban via Quartz.NET
             var payload = new TempbanExpiryJobPayload(
@@ -106,7 +106,7 @@ public class BanHandler : IBanHandler
                 "TempbanExpiry",
                 payload,
                 delaySeconds: delaySeconds,
-                ct);
+                cancellationToken);
 
             _logger.LogInformation(
                 "Temp ban completed for user {UserId}: {Success} succeeded, {Failed} failed. " +
@@ -127,7 +127,7 @@ public class BanHandler : IBanHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
             "Executing unban for user {UserId} by {Executor}",
@@ -137,12 +137,12 @@ public class BanHandler : IBanHandler
         {
             // Unban from all Telegram chats
             var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-                async (ops, chatId, token) => await ops.UnbanChatMemberAsync(chatId, userId, ct: token),
+                async (ops, chatId, token) => await ops.UnbanChatMemberAsync(chatId, userId, cancellationToken: token),
                 "Unban",
-                ct);
+                cancellationToken);
 
             // Update source of truth: clear is_banned flag
-            await _userRepository.SetBanStatusAsync(userId, isBanned: false, expiresAt: null, ct);
+            await _userRepository.SetBanStatusAsync(userId, isBanned: false, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
                 "Unban completed for user {UserId}: {Success} succeeded, {Failed} failed",

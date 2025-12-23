@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using Microsoft.Extensions.Options;
@@ -28,9 +29,9 @@ public class AuthService(
 {
     private readonly AppOptions _appOptions = appOptions.Value;
 
-    public async Task<AuthResult> LoginAsync(string email, string password, CancellationToken ct = default)
+    public async Task<AuthResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByEmailAsync(email, ct);
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
         if (user == null)
         {
             logger.LogWarning("Login attempt for non-existent email: {Email}", email);
@@ -41,7 +42,7 @@ public class AuthService(
                 actor: Actor.FromSystem("login_failed"),
                 target: null,
                 value: $"Non-existent email: {email}",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
         }
@@ -59,7 +60,7 @@ public class AuthService(
                 actor: Actor.FromWebUser(user.Id),
                 target: Actor.FromWebUser(user.Id),
                 value: $"Account locked until {user.LockedUntil:yyyy-MM-dd HH:mm:ss UTC}",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return new AuthResult(false, null, null, null, false, false,
                 $"Account is temporarily locked due to multiple failed login attempts. Please try again in {Math.Ceiling(timeRemaining.TotalMinutes)} minutes.");
@@ -77,7 +78,7 @@ public class AuthService(
                 actor: Actor.FromWebUser(user.Id),
                 target: Actor.FromWebUser(user.Id),
                 value: "Account disabled",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return new AuthResult(false, null, null, null, false, false, "Account has been disabled. Please contact an administrator.");
         }
@@ -93,7 +94,7 @@ public class AuthService(
                 actor: Actor.FromWebUser(user.Id),
                 target: Actor.FromWebUser(user.Id),
                 value: "Account deleted",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return new AuthResult(false, null, null, null, false, false, "Account has been deleted. Please contact an administrator.");
         }
@@ -109,10 +110,10 @@ public class AuthService(
                 actor: Actor.FromWebUser(user.Id),
                 target: Actor.FromWebUser(user.Id),
                 value: "Invalid password",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             // SECURITY-6: Handle failed login attempt (may lock account)
-            await accountLockoutService.HandleFailedLoginAsync(user.Id, ct);
+            await accountLockoutService.HandleFailedLoginAsync(user.Id, cancellationToken);
 
             return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
         }
@@ -129,16 +130,16 @@ public class AuthService(
                 actor: Actor.FromWebUser(user.Id),
                 target: Actor.FromWebUser(user.Id),
                 value: "Email not verified",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return new AuthResult(false, null, null, null, false, false, "Please verify your email before logging in. Check your inbox for the verification link.");
         }
 
         // SECURITY-6: Reset lockout state on successful password verification
-        await accountLockoutService.ResetLockoutAsync(user.Id, ct);
+        await accountLockoutService.ResetLockoutAsync(user.Id, cancellationToken);
 
         // Update last login timestamp
-        await userRepository.UpdateLastLoginAsync(user.Id, ct);
+        await userRepository.UpdateLastLoginAsync(user.Id, cancellationToken);
 
         // Audit log - successful login
         await auditLog.LogEventAsync(
@@ -146,7 +147,7 @@ public class AuthService(
             actor: Actor.FromWebUser(user.Id),
             target: Actor.FromWebUser(user.Id),
             value: user.TotpEnabled ? "Login (requires TOTP)" : "Login successful",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         // Handle TOTP states based on enabled flag and secret existence
         if (user.TotpEnabled)
@@ -170,49 +171,49 @@ public class AuthService(
         return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, false, false, null);
     }
 
-    public async Task<AuthResult> VerifyTotpAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<AuthResult> VerifyTotpAsync(string userId, string code, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null)
         {
             return new AuthResult(false, null, null, null, false, false, "User not found");
         }
 
-        var isValid = await totpService.VerifyTotpCodeAsync(userId, code, ct);
+        var isValid = await totpService.VerifyTotpCodeAsync(userId, code, cancellationToken);
         if (!isValid)
         {
             return new AuthResult(false, null, null, null, false, false, "Invalid verification code");
         }
 
-        await userRepository.UpdateLastLoginAsync(userId, ct);
+        await userRepository.UpdateLastLoginAsync(userId, cancellationToken);
         return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
     }
 
-    public async Task<bool> IsFirstRunAsync(CancellationToken ct = default)
+    public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
     {
-        return await userRepository.GetUserCountAsync(ct) == 0;
+        return await userRepository.GetUserCountAsync(cancellationToken) == 0;
     }
 
-    public async Task<RegisterResult> RegisterAsync(string email, string password, string? inviteToken, CancellationToken ct = default)
+    public async Task<RegisterResult> RegisterAsync(string email, string password, string? inviteToken, CancellationToken cancellationToken = default)
     {
         // Check if this is first run (no users exist)
-        var isFirstRun = await IsFirstRunAsync(ct);
+        var isFirstRun = await IsFirstRunAsync(cancellationToken);
 
         if (isFirstRun)
         {
             // First run - create owner account without invite
-            return await CreateOwnerAccountAsync(email, password, ct);
+            return await CreateOwnerAccountAsync(email, password, cancellationToken);
         }
 
         // Validate invite token for all subsequent users
-        var inviteValidation = await ValidateInviteTokenAsync(inviteToken, ct);
+        var inviteValidation = await ValidateInviteTokenAsync(inviteToken, cancellationToken);
         if (!inviteValidation.IsValid)
         {
             return new RegisterResult(false, null, inviteValidation.ErrorMessage);
         }
 
         // Check if email is already registered (active/disabled - not deleted)
-        var existing = await userRepository.GetByEmailAsync(email, ct);
+        var existing = await userRepository.GetByEmailAsync(email, cancellationToken);
         if (existing != null)
         {
             logger.LogWarning("Registration attempt for existing active/disabled user: {Email}", email);
@@ -227,7 +228,7 @@ public class AuthService(
             inviteValidation.PermissionLevel,
             inviteValidation.InvitedBy,
             inviteToken!,
-            ct);
+            cancellationToken);
 
         logger.LogInformation("User registered: {Email} via invite from {InviterId}", email, inviteValidation.InvitedBy);
 
@@ -237,12 +238,12 @@ public class AuthService(
             actor: Actor.FromWebUser(userId),
             target: Actor.FromWebUser(userId),
             value: $"Registered via invite from {inviteValidation.InvitedBy}",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         // Send verification email if email service is configured
         if (await featureAvailability.IsEmailVerificationEnabledAsync())
         {
-            await SendVerificationEmailAsync(userId, email, ct);
+            await SendVerificationEmailAsync(userId, email, cancellationToken);
         }
         else
         {
@@ -257,7 +258,7 @@ public class AuthService(
     /// <summary>
     /// Create the first user (owner) without requiring an invite.
     /// </summary>
-    private async Task<RegisterResult> CreateOwnerAccountAsync(string email, string password, CancellationToken ct)
+    private async Task<RegisterResult> CreateOwnerAccountAsync(string email, string password, CancellationToken cancellationToken)
     {
         logger.LogInformation("First run detected - creating owner account");
 
@@ -288,7 +289,7 @@ public class AuthService(
             LockedUntil: null
         );
 
-        await userRepository.CreateAsync(user, ct);
+        await userRepository.CreateAsync(user, cancellationToken);
         logger.LogInformation("Owner account created: {Email}", email);
 
         await auditLog.LogEventAsync(
@@ -296,21 +297,21 @@ public class AuthService(
             actor: Actor.FromWebUser(userId),
             target: Actor.FromWebUser(userId),
             value: "First user (Owner)",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return new RegisterResult(true, userId, null);
     }
 
     private async Task<(bool IsValid, string? ErrorMessage, string? InvitedBy, PermissionLevel PermissionLevel)> ValidateInviteTokenAsync(
         string? inviteToken,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(inviteToken))
         {
             return (false, "Invite token is required", null, default);
         }
 
-        var invite = await userRepository.GetInviteByTokenAsync(inviteToken, ct);
+        var invite = await userRepository.GetInviteByTokenAsync(inviteToken, cancellationToken);
         if (invite == null)
         {
             return (false, "Invalid invite token", null, default);
@@ -336,63 +337,63 @@ public class AuthService(
         return (true, null, invite.CreatedBy, invite.PermissionLevel);
     }
 
-    public async Task<TotpSetupResult> EnableTotpAsync(string userId, CancellationToken ct = default)
+    public async Task<TotpSetupResult> EnableTotpAsync(string userId, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null)
         {
             throw new InvalidOperationException("User not found");
         }
 
-        return await totpService.SetupTotpAsync(userId, user.Email, ct);
+        return await totpService.SetupTotpAsync(userId, user.Email, cancellationToken);
     }
 
-    public async Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken cancellationToken = default)
     {
-        return await totpService.VerifyAndEnableTotpAsync(userId, code, ct);
+        return await totpService.VerifyAndEnableTotpAsync(userId, code, cancellationToken);
     }
 
-    public async Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    public async Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default)
     {
-        return await totpService.AdminDisableTotpAsync(targetUserId, adminUserId, ct);
+        return await totpService.AdminDisableTotpAsync(targetUserId, adminUserId, cancellationToken);
     }
 
-    public async Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    public async Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default)
     {
-        return await totpService.AdminEnableTotpAsync(targetUserId, adminUserId, ct);
+        return await totpService.AdminEnableTotpAsync(targetUserId, adminUserId, cancellationToken);
     }
 
-    public async Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    public async Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default)
     {
-        return await totpService.AdminResetTotpAsync(targetUserId, adminUserId, ct);
+        return await totpService.AdminResetTotpAsync(targetUserId, adminUserId, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
     {
-        return await totpService.GenerateRecoveryCodesAsync(userId, ct);
+        return await totpService.GenerateRecoveryCodesAsync(userId, cancellationToken);
     }
 
-    public async Task<AuthResult> UseRecoveryCodeAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<AuthResult> UseRecoveryCodeAsync(string userId, string code, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null)
         {
             return new AuthResult(false, null, null, null, false, false, "Invalid recovery code");
         }
 
-        var isValid = await totpService.UseRecoveryCodeAsync(userId, code, ct);
+        var isValid = await totpService.UseRecoveryCodeAsync(userId, code, cancellationToken);
 
         if (!isValid)
         {
             return new AuthResult(false, null, null, null, false, false, "Invalid recovery code");
         }
 
-        await userRepository.UpdateLastLoginAsync(userId, ct);
+        await userRepository.UpdateLastLoginAsync(userId, cancellationToken);
 
         return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
     }
 
-    public async Task LogoutAsync(string userId, CancellationToken ct = default)
+    public async Task LogoutAsync(string userId, CancellationToken cancellationToken = default)
     {
         logger.LogInformation("User logged out: {UserId}", userId); // Note: No email in scope
 
@@ -402,12 +403,12 @@ public class AuthService(
             actor: Actor.FromWebUser(userId),
             target: Actor.FromWebUser(userId),
             value: "User logged out",
-            ct: ct);
+            cancellationToken: cancellationToken);
     }
 
-    public async Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword, CancellationToken ct = default)
+    public async Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null)
         {
             logger.LogWarning("Password change attempt for non-existent user: {UserId}", userId);
@@ -434,7 +435,7 @@ public class AuthService(
             ModifiedAt = DateTimeOffset.UtcNow
         };
 
-        await userRepository.UpdateAsync(updatedUser, ct);
+        await userRepository.UpdateAsync(updatedUser, cancellationToken);
 
         logger.LogInformation("Password changed for {User}", LogDisplayName.WebUserInfo(user.Email, userId));
 
@@ -444,29 +445,29 @@ public class AuthService(
             actor: Actor.FromWebUser(userId),
             target: Actor.FromWebUser(userId),
             value: "Password changed",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return true;
     }
 
-    private async Task SendVerificationEmailAsync(string userId, string email, CancellationToken ct)
+    private async Task SendVerificationEmailAsync(string userId, string email, CancellationToken cancellationToken)
     {
         try
         {
             // Generate verification token
-            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(AuthenticationConstants.VerificationTokenByteLength));
             var verificationToken = new VerificationToken(
                 Id: 0,
                 UserId: userId,
                 TokenType: TokenType.EmailVerification,
                 Token: tokenString,
                 Value: null,
-                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.EmailVerificationTokenExpiration),
                 CreatedAt: DateTimeOffset.UtcNow,
                 UsedAt: null
             );
 
-            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
+            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), cancellationToken);
 
             await emailService.SendTemplatedEmailAsync(
                 email,
@@ -476,7 +477,7 @@ public class AuthService(
                     { "VerificationToken", tokenString },
                     { "BaseUrl", _appOptions.BaseUrl }
                 },
-                ct);
+                cancellationToken);
 
             logger.LogInformation("Sent verification email to {Email}", email);
 
@@ -486,7 +487,7 @@ public class AuthService(
                 actor: Actor.FromSystem("email_verification"),
                 target: Actor.FromWebUser(userId),
                 value: email,
-                ct: ct);
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -495,9 +496,9 @@ public class AuthService(
         }
     }
 
-    public async Task<bool> ResendVerificationEmailAsync(string email, CancellationToken ct = default)
+    public async Task<bool> ResendVerificationEmailAsync(string email, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByEmailAsync(email, ct);
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
         if (user == null)
         {
             logger.LogWarning("Resend verification attempt for non-existent email: {Email}", email);
@@ -516,19 +517,19 @@ public class AuthService(
         try
         {
             // Generate new verification token
-            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(AuthenticationConstants.VerificationTokenByteLength));
             var verificationToken = new VerificationToken(
                 Id: 0, // Will be set by database
                 UserId: user.Id,
                 TokenType: TokenType.EmailVerification,
                 Token: tokenString,
                 Value: null,
-                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.EmailVerificationTokenExpiration),
                 CreatedAt: DateTimeOffset.UtcNow,
                 UsedAt: null
             );
 
-            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
+            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), cancellationToken);
 
             await emailService.SendTemplatedEmailAsync(
                 email,
@@ -538,7 +539,7 @@ public class AuthService(
                     { "VerificationToken", tokenString },
                     { "BaseUrl", _appOptions.BaseUrl }
                 },
-                ct);
+                cancellationToken);
 
             logger.LogInformation("Resent verification email to {Email}", email);
 
@@ -548,7 +549,7 @@ public class AuthService(
                 actor: Actor.FromSystem("email_verification"), // System event
                 target: Actor.FromWebUser(user.Id),
                 value: $"Resent to {email}",
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return true;
         }
@@ -559,9 +560,9 @@ public class AuthService(
         }
     }
 
-    public async Task<bool> RequestPasswordResetAsync(string email, CancellationToken ct = default)
+    public async Task<bool> RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByEmailAsync(email, ct);
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
         if (user is null)
         {
             logger.LogWarning("Password reset requested for non-existent email: {Email}", email);
@@ -569,19 +570,19 @@ public class AuthService(
         }
 
         // Generate password reset token
-        var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(AuthenticationConstants.VerificationTokenByteLength));
         var resetToken = new VerificationToken(
             Id: 0, // Will be set by database
             UserId: user.Id,
             TokenType: TokenType.PasswordReset,
             Token: tokenString,
             Value: null,
-            ExpiresAt: DateTimeOffset.UtcNow.AddHours(1), // 1 hour expiry for password reset
+            ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.PasswordResetTokenExpiration),
             CreatedAt: DateTimeOffset.UtcNow,
             UsedAt: null
         );
 
-        await verificationTokenRepository.CreateAsync(resetToken.ToDto(), ct);
+        await verificationTokenRepository.CreateAsync(resetToken.ToDto(), cancellationToken);
 
         // Send password reset email
         try
@@ -596,7 +597,7 @@ public class AuthService(
                     { "resetLink", resetLink },
                     { "expiryMinutes", "60" }
                 },
-                ct);
+                cancellationToken);
 
             logger.LogInformation("Password reset email sent to {Email}", email);
 
@@ -606,7 +607,7 @@ public class AuthService(
                 actor: Actor.FromSystem("password_reset"), // System event
                 target: Actor.FromWebUser(user.Id),
                 value: email,
-                ct: ct);
+                cancellationToken: cancellationToken);
 
             return true;
         }
@@ -617,10 +618,10 @@ public class AuthService(
         }
     }
 
-    public async Task<bool> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default)
+    public async Task<bool> ResetPasswordAsync(string token, string newPassword, CancellationToken cancellationToken = default)
     {
         // Validate token
-        var resetToken = await verificationTokenRepository.GetValidTokenAsync(token, (DataModels.TokenType)TokenType.PasswordReset, ct);
+        var resetToken = await verificationTokenRepository.GetValidTokenAsync(token, (DataModels.TokenType)TokenType.PasswordReset, cancellationToken);
         if (resetToken is null)
         {
             logger.LogWarning("Invalid or expired password reset token attempted");
@@ -628,7 +629,7 @@ public class AuthService(
         }
 
         // Get user
-        var user = await userRepository.GetByIdAsync(resetToken.UserId, ct);
+        var user = await userRepository.GetByIdAsync(resetToken.UserId, cancellationToken);
         if (user is null)
         {
             logger.LogWarning("Password reset token references non-existent user {UserId}", resetToken.UserId);
@@ -646,10 +647,10 @@ public class AuthService(
             ModifiedAt = DateTimeOffset.UtcNow
         };
 
-        await userRepository.UpdateAsync(updatedUser, ct);
+        await userRepository.UpdateAsync(updatedUser, cancellationToken);
 
         // Mark token as used
-        await verificationTokenRepository.MarkAsUsedAsync(token, ct);
+        await verificationTokenRepository.MarkAsUsedAsync(token, cancellationToken);
 
         logger.LogInformation("Password reset for {User}", LogDisplayName.WebUserInfo(user.Email, user.Id));
 
@@ -659,7 +660,7 @@ public class AuthService(
             actor: Actor.FromWebUser(user.Id),
             target: Actor.FromWebUser(user.Id),
             value: "Password reset via email",
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return true;
     }

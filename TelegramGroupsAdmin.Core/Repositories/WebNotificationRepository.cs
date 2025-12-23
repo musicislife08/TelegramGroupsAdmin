@@ -8,24 +8,24 @@ namespace TelegramGroupsAdmin.Core.Repositories;
 public class WebNotificationRepository(IDbContextFactory<AppDbContext> contextFactory)
     : IWebNotificationRepository
 {
-    public async Task<WebNotification> CreateAsync(WebNotification notification, CancellationToken ct = default)
+    public async Task<WebNotification> CreateAsync(WebNotification notification, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var dto = notification.ToDto();
         context.WebNotifications.Add(dto);
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         return dto.ToModel();
     }
 
     public async Task<IReadOnlyList<WebNotification>> GetRecentAsync(
         string userId,
-        int limit = 20,
+        int limit = QueryConstants.DefaultWebNotificationLimit,
         int offset = 0,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var notifications = await context.WebNotifications
             .AsNoTracking()
@@ -33,67 +33,67 @@ public class WebNotificationRepository(IDbContextFactory<AppDbContext> contextFa
             .OrderByDescending(n => n.CreatedAt)
             .Skip(offset)
             .Take(limit)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return notifications.Select(n => n.ToModel()).ToList();
     }
 
-    public async Task<int> GetUnreadCountAsync(string userId, CancellationToken ct = default)
+    public async Task<int> GetUnreadCountAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.WebNotifications
-            .CountAsync(n => n.UserId == userId && !n.IsRead, ct);
+            .CountAsync(n => n.UserId == userId && !n.IsRead, cancellationToken);
     }
 
-    public async Task MarkAsReadAsync(long notificationId, CancellationToken ct = default)
+    public async Task MarkAsReadAsync(long notificationId, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         await context.WebNotifications
             .Where(n => n.Id == notificationId && !n.IsRead)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(n => n.IsRead, true)
-                .SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow), ct);
+                .SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow), cancellationToken);
     }
 
-    public async Task MarkAllAsReadAsync(string userId, CancellationToken ct = default)
+    public async Task MarkAllAsReadAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         await context.WebNotifications
             .Where(n => n.UserId == userId && !n.IsRead)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(n => n.IsRead, true)
-                .SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow), ct);
+                .SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow), cancellationToken);
     }
 
-    public async Task<int> DeleteOldReadNotificationsAsync(TimeSpan retention, CancellationToken ct = default)
+    public async Task<int> DeleteOldReadNotificationsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var cutoff = DateTimeOffset.UtcNow - retention;
 
         return await context.WebNotifications
             .Where(n => n.IsRead && n.CreatedAt < cutoff)
-            .ExecuteDeleteAsync(ct);
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task DeleteAsync(long notificationId, CancellationToken ct = default)
+    public async Task DeleteAsync(long notificationId, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         await context.WebNotifications
             .Where(n => n.Id == notificationId)
-            .ExecuteDeleteAsync(ct);
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task DeleteAllAsync(string userId, CancellationToken ct = default)
+    public async Task DeleteAllAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         await context.WebNotifications
             .Where(n => n.UserId == userId)
-            .ExecuteDeleteAsync(ct);
+            .ExecuteDeleteAsync(cancellationToken);
     }
 }

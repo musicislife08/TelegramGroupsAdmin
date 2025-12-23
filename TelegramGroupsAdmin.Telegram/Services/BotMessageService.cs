@@ -55,7 +55,7 @@ public class BotMessageService : IBotMessageService
             text: text,
             parseMode: parseMode,
             replyParameters: replyParameters,
-            ct: cancellationToken);
+            cancellationToken: cancellationToken);
 
         // Get bot user info (fetch once and cache in memory)
         if (_cachedBotInfo == null)
@@ -160,7 +160,7 @@ public class BotMessageService : IBotMessageService
             messageId: messageId,
             text: text,
             parseMode: parseMode,
-            ct: cancellationToken);
+            cancellationToken: cancellationToken);
 
         var editDate = editedMessage.EditDate.HasValue
             ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero) // DateTime (UTC) → DateTimeOffset

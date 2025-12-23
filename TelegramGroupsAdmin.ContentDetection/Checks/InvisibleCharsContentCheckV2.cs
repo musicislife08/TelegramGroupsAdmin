@@ -14,8 +14,6 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class InvisibleCharsContentCheckV2(ILogger<InvisibleCharsContentCheckV2> logger) : IContentCheckV2
 {
-    private const double ScoreInvisibleChars = 1.5; // Research: heuristics = 1.5 points
-
     public CheckName CheckName => CheckName.InvisibleChars;
 
     public bool ShouldExecute(ContentCheckRequest request)
@@ -54,7 +52,7 @@ public class InvisibleCharsContentCheckV2(ILogger<InvisibleCharsContentCheckV2> 
                 return ValueTask.FromResult(new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
-                    Score = ScoreInvisibleChars,
+                    Score = ScoringConstants.ScoreInvisibleChars,
                     Abstained = false,
                     Details = $"Contains {count} invisible/hidden characters",
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds

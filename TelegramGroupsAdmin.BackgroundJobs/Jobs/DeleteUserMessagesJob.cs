@@ -95,7 +95,7 @@ public class DeleteUserMessagesJob(
                     await operations.DeleteMessageAsync(
                         chatId: message.ChatId,
                         messageId: (int)message.MessageId,
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     deletedCount++;
 

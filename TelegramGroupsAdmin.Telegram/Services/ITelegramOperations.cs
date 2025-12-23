@@ -25,7 +25,7 @@ public interface ITelegramOperations
     /// <summary>
     /// Get basic information about the bot.
     /// </summary>
-    Task<User> GetMeAsync(CancellationToken ct = default);
+    Task<User> GetMeAsync(CancellationToken cancellationToken = default);
 
     // ─── Messaging ────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ public interface ITelegramOperations
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         ReplyMarkup? replyMarkup = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Edit text of an existing message.
@@ -49,12 +49,12 @@ public interface ITelegramOperations
         string text,
         ParseMode? parseMode = null,
         InlineKeyboardMarkup? replyMarkup = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete a message from a chat.
     /// </summary>
-    Task DeleteMessageAsync(long chatId, int messageId, CancellationToken ct = default);
+    Task DeleteMessageAsync(long chatId, int messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Send a photo to a chat.
@@ -65,7 +65,7 @@ public interface ITelegramOperations
         string? caption = null,
         ParseMode? parseMode = null,
         ReplyMarkup? replyMarkup = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Send a video to a chat.
@@ -75,41 +75,41 @@ public interface ITelegramOperations
         InputFile video,
         string? caption = null,
         ParseMode? parseMode = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     // ─── Chat Info ────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Get information about a chat.
     /// </summary>
-    Task<ChatFullInfo> GetChatAsync(long chatId, CancellationToken ct = default);
+    Task<ChatFullInfo> GetChatAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get information about a member of a chat.
     /// </summary>
-    Task<ChatMember> GetChatMemberAsync(long chatId, long userId, CancellationToken ct = default);
+    Task<ChatMember> GetChatMemberAsync(long chatId, long userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a list of administrators in a chat.
     /// </summary>
-    Task<ChatMember[]> GetChatAdministratorsAsync(long chatId, CancellationToken ct = default);
+    Task<ChatMember[]> GetChatAdministratorsAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a user's profile photos.
     /// </summary>
-    Task<UserProfilePhotos> GetUserProfilePhotosAsync(long userId, int limit = 1, CancellationToken ct = default);
+    Task<UserProfilePhotos> GetUserProfilePhotosAsync(long userId, int limit = 1, CancellationToken cancellationToken = default);
 
     // ─── Moderation ───────────────────────────────────────────────────────────
 
     /// <summary>
     /// Ban a user from a chat (kick and prevent rejoin).
     /// </summary>
-    Task BanChatMemberAsync(long chatId, long userId, DateTime? untilDate = null, CancellationToken ct = default);
+    Task BanChatMemberAsync(long chatId, long userId, DateTime? untilDate = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Unban a previously banned user in a chat.
     /// </summary>
-    Task UnbanChatMemberAsync(long chatId, long userId, bool onlyIfBanned = true, CancellationToken ct = default);
+    Task UnbanChatMemberAsync(long chatId, long userId, bool onlyIfBanned = true, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Restrict a user's permissions in a chat.
@@ -119,43 +119,43 @@ public interface ITelegramOperations
         long userId,
         ChatPermissions permissions,
         DateTime? untilDate = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     // ─── File Operations ──────────────────────────────────────────────────────
 
     /// <summary>
     /// Get basic info about a file and prepare it for downloading.
     /// </summary>
-    Task<TGFile> GetFileAsync(string fileId, CancellationToken ct = default);
+    Task<TGFile> GetFileAsync(string fileId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Download a file from Telegram servers.
     /// </summary>
-    Task DownloadFileAsync(string filePath, Stream destination, CancellationToken ct = default);
+    Task DownloadFileAsync(string filePath, Stream destination, CancellationToken cancellationToken = default);
 
     // ─── Callbacks & Admin ────────────────────────────────────────────────────
 
     /// <summary>
     /// Send an answer to a callback query.
     /// </summary>
-    Task AnswerCallbackQueryAsync(string callbackQueryId, string? text = null, CancellationToken ct = default);
+    Task AnswerCallbackQueryAsync(string callbackQueryId, string? text = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Set the bot's command list.
     /// </summary>
-    Task SetMyCommandsAsync(BotCommand[] commands, BotCommandScope? scope = null, CancellationToken ct = default);
+    Task SetMyCommandsAsync(BotCommand[] commands, BotCommandScope? scope = null, CancellationToken cancellationToken = default);
 
     // ─── Invite Links ─────────────────────────────────────────────────────────
 
     /// <summary>
     /// Export the invite link for a chat.
     /// </summary>
-    Task<string> ExportChatInviteLinkAsync(long chatId, CancellationToken ct = default);
+    Task<string> ExportChatInviteLinkAsync(long chatId, CancellationToken cancellationToken = default);
 
     // ─── Chat Management ───────────────────────────────────────────────────────
 
     /// <summary>
     /// Leave a chat (group, supergroup, or channel).
     /// </summary>
-    Task LeaveChatAsync(long chatId, CancellationToken ct = default);
+    Task LeaveChatAsync(long chatId, CancellationToken cancellationToken = default);
 }

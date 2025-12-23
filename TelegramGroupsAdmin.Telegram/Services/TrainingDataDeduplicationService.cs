@@ -128,7 +128,7 @@ public class TrainingDataDeduplicationService(
         double minSimilarity,
         double maxSimilarity)
     {
-        var groups = new List<DuplicateGroup>();
+        List<DuplicateGroup> groups = [];
         var processedSamples = new HashSet<long>();
 
         for (int i = 0; i < samples.Count; i++)
@@ -136,7 +136,7 @@ public class TrainingDataDeduplicationService(
             if (processedSamples.Contains(samples[i].Id))
                 continue;
 
-            var similarSamples = new List<TrainingSampleDto> { samples[i] };
+            List<TrainingSampleDto> similarSamples = [samples[i]];
             var maxScore = 0.0;
 
             for (int j = i + 1; j < samples.Count; j++)

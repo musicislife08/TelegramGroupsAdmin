@@ -129,7 +129,7 @@ public class TestTelegramUserBuilder
     /// <summary>
     /// Builds and persists the Telegram user to the database.
     /// </summary>
-    public async Task<TelegramUser> BuildAsync(CancellationToken ct = default)
+    public async Task<TelegramUser> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -152,7 +152,7 @@ public class TestTelegramUserBuilder
             UpdatedAt: now
         );
 
-        await userRepository.UpsertAsync(user, ct);
+        await userRepository.UpsertAsync(user, cancellationToken);
 
         return user;
     }

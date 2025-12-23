@@ -38,11 +38,11 @@ public class NotificationStateServiceTests
     public async Task InitializeAsync_LoadsNotificationsFromService()
     {
         // Arrange
-        var notifications = new List<WebNotification>
-        {
+        List<WebNotification> notifications =
+        [
             CreateNotification(1, "Test 1", false),
             CreateNotification(2, "Test 2", true)
-        };
+        ];
 
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(1);
@@ -65,7 +65,7 @@ public class NotificationStateServiceTests
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(5);
         _mockNotificationService.GetRecentAsync(TestUserId, 20, 0, Arg.Any<CancellationToken>())
-            .Returns(new List<WebNotification>().AsReadOnly());
+            .Returns(((List<WebNotification>)[]).AsReadOnly());
 
         // Act - Initialize twice
         await _stateService.InitializeAsync(TestUserId);
@@ -82,7 +82,7 @@ public class NotificationStateServiceTests
         _mockNotificationService.GetUnreadCountAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(0);
         _mockNotificationService.GetRecentAsync(Arg.Any<string>(), 20, 0, Arg.Any<CancellationToken>())
-            .Returns(new List<WebNotification>().AsReadOnly());
+            .Returns(((List<WebNotification>)[]).AsReadOnly());
 
         // Act
         await _stateService.InitializeAsync("user-1");
@@ -113,7 +113,7 @@ public class NotificationStateServiceTests
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(2);
         _mockNotificationService.GetRecentAsync(TestUserId, 20, 0, Arg.Any<CancellationToken>())
-            .Returns(new List<WebNotification>().AsReadOnly());
+            .Returns(((List<WebNotification>)[]).AsReadOnly());
 
         await _stateService.InitializeAsync(TestUserId);
 
@@ -137,7 +137,7 @@ public class NotificationStateServiceTests
     {
         // Arrange
         var notification = CreateNotification(1, "Test", false);
-        var notifications = new List<WebNotification> { notification };
+        List<WebNotification> notifications = [notification];
 
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(1);
@@ -161,7 +161,7 @@ public class NotificationStateServiceTests
     {
         // Arrange
         var notification = CreateNotification(1, "Test", true); // Already read
-        var notifications = new List<WebNotification> { notification };
+        List<WebNotification> notifications = [notification];
 
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(0);
@@ -182,7 +182,7 @@ public class NotificationStateServiceTests
     {
         // Arrange
         var notification = CreateNotification(1, "Test", false);
-        var notifications = new List<WebNotification> { notification };
+        List<WebNotification> notifications = [notification];
 
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(1);
@@ -207,12 +207,12 @@ public class NotificationStateServiceTests
     public async Task MarkAllAsReadAsync_MarksAllNotificationsRead()
     {
         // Arrange
-        var notifications = new List<WebNotification>
-        {
+        List<WebNotification> notifications =
+        [
             CreateNotification(1, "Test 1", false),
             CreateNotification(2, "Test 2", false),
             CreateNotification(3, "Test 3", true) // Already read
-        };
+        ];
 
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(2);
@@ -252,7 +252,7 @@ public class NotificationStateServiceTests
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(0);
         _mockNotificationService.GetRecentAsync(TestUserId, 20, 0, Arg.Any<CancellationToken>())
-            .Returns(new List<WebNotification> { existing }.AsReadOnly());
+            .Returns(((List<WebNotification>)[existing]).AsReadOnly());
 
         await _stateService.InitializeAsync(TestUserId);
 
@@ -272,7 +272,7 @@ public class NotificationStateServiceTests
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(1);
         _mockNotificationService.GetRecentAsync(TestUserId, 20, 0, Arg.Any<CancellationToken>())
-            .Returns(new List<WebNotification>().AsReadOnly());
+            .Returns(((List<WebNotification>)[]).AsReadOnly());
 
         await _stateService.InitializeAsync(TestUserId);
         Assert.That(_stateService.UnreadCount, Is.EqualTo(1));
@@ -291,7 +291,7 @@ public class NotificationStateServiceTests
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(0);
         _mockNotificationService.GetRecentAsync(TestUserId, 20, 0, Arg.Any<CancellationToken>())
-            .Returns(new List<WebNotification>().AsReadOnly());
+            .Returns(((List<WebNotification>)[]).AsReadOnly());
 
         await _stateService.InitializeAsync(TestUserId);
 
@@ -337,7 +337,7 @@ public class NotificationStateServiceTests
         _mockNotificationService.GetUnreadCountAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(0);
         _mockNotificationService.GetRecentAsync(TestUserId, 20, 0, Arg.Any<CancellationToken>())
-            .Returns(new List<WebNotification>().AsReadOnly());
+            .Returns(((List<WebNotification>)[]).AsReadOnly());
 
         var changeCount = 0;
         _stateService.OnChange += () =>

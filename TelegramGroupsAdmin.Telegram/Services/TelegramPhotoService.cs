@@ -143,7 +143,7 @@ public class TelegramPhotoService
 
             // Fetch current photo from Telegram
             var operations = await _botClientFactory.GetOperationsAsync();
-            var photos = await operations.GetUserProfilePhotosAsync(userId, limit: 1, ct: cancellationToken);
+            var photos = await operations.GetUserProfilePhotosAsync(userId, limit: 1, cancellationToken: cancellationToken);
             if (photos.TotalCount == 0 || photos.Photos.Length == 0)
             {
                 _logger.LogDebug("User {UserId} has no profile photo", userId);

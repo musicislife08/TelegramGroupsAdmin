@@ -208,7 +208,7 @@ public class TestImpersonationAlertBuilder
     /// <summary>
     /// Builds and persists the impersonation alert to the database.
     /// </summary>
-    public async Task<TestImpersonationAlert> BuildAsync(CancellationToken ct = default)
+    public async Task<TestImpersonationAlert> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var alertRepository = scope.ServiceProvider.GetRequiredService<IImpersonationAlertsRepository>();
@@ -239,7 +239,7 @@ public class TestImpersonationAlertBuilder
             ChatName = _chatName
         };
 
-        var id = await alertRepository.CreateAlertAsync(alert, ct);
+        var id = await alertRepository.CreateAlertAsync(alert, cancellationToken);
 
         return new TestImpersonationAlert(
             Id: id,

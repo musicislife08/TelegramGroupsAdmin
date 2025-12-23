@@ -50,7 +50,9 @@ public interface IManagedChatsRepository
     /// <summary>
     /// Get all chats (active and inactive)
     /// </summary>
-    Task<List<ManagedChatRecord>> GetAllChatsAsync(CancellationToken cancellationToken = default);
+    /// <param name="includeDeleted">Include soft-deleted chats (default: false)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<List<ManagedChatRecord>> GetAllChatsAsync(bool includeDeleted = false, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all active managed chats (alias for GetActiveChatsAsync)
@@ -70,10 +72,12 @@ public interface IManagedChatsRepository
     /// </summary>
     /// <param name="userId">Web app user ID</param>
     /// <param name="permissionLevel">User's permission level</param>
+    /// <param name="includeDeleted">Include soft-deleted chats (default: false)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of accessible chats, empty if Admin user has no linked Telegram account</returns>
     Task<List<ManagedChatRecord>> GetUserAccessibleChatsAsync(
         string userId,
         PermissionLevel permissionLevel,
+        bool includeDeleted = false,
         CancellationToken cancellationToken = default);
 }

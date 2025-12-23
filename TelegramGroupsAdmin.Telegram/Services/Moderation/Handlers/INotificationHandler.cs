@@ -17,7 +17,7 @@ public interface INotificationHandler
         long userId,
         int warningCount,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Notify user about a temporary ban with expected unban time.
@@ -27,7 +27,7 @@ public interface INotificationHandler
         TimeSpan duration,
         DateTimeOffset expiresAt,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Notify admins about a ban action (for audit/awareness).
@@ -36,5 +36,5 @@ public interface INotificationHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

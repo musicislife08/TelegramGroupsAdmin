@@ -13,8 +13,6 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class SpacingContentCheckV2(ILogger<SpacingContentCheckV2> logger) : IContentCheckV2
 {
-    private const double ScoreFormattingAnomaly = 0.8;
-
     public CheckName CheckName => CheckName.Spacing;
 
     public bool ShouldExecute(ContentCheckRequest request)
@@ -53,7 +51,7 @@ public class SpacingContentCheckV2(ILogger<SpacingContentCheckV2> logger) : ICon
                 return ValueTask.FromResult(new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
-                    Score = ScoreFormattingAnomaly,
+                    Score = ScoringConstants.ScoreFormattingAnomaly,
                     Abstained = false,
                     Details = details,
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds

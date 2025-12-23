@@ -14,11 +14,11 @@ public interface IMessageBackfillService
     /// <param name="messageId">The Telegram message ID.</param>
     /// <param name="chatId">The chat ID where the message was sent.</param>
     /// <param name="telegramMessage">The Telegram message object with full data.</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if message was backfilled, false if it already existed or has no text content.</returns>
     Task<bool> BackfillIfMissingAsync(
         long messageId,
         long chatId,
         Message telegramMessage,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

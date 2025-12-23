@@ -51,12 +51,12 @@ public class NotificationService : INotificationService
         NotificationEventType eventType,
         string subject,
         string message,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
             // Get all active admins for this chat (telegram IDs)
-            var chatAdmins = await _chatAdminsRepo.GetChatAdminsAsync(chatId, ct);
+            var chatAdmins = await _chatAdminsRepo.GetChatAdminsAsync(chatId, cancellationToken);
 
             if (!chatAdmins.Any())
             {
@@ -69,7 +69,7 @@ public class NotificationService : INotificationService
 
             foreach (var admin in chatAdmins)
             {
-                var mapping = await _telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, ct);
+                var mapping = await _telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
                 if (mapping != null)
                 {
                     webUserIds.Add(mapping.UserId);
@@ -92,7 +92,7 @@ public class NotificationService : INotificationService
             var results = new Dictionary<string, bool>();
             foreach (var userId in webUserIds)
             {
-                var success = await SendNotificationAsync(userId, eventType, subject, message, ct);
+                var success = await SendNotificationAsync(userId, eventType, subject, message, cancellationToken);
                 results[userId] = success;
             }
 
@@ -110,12 +110,12 @@ public class NotificationService : INotificationService
         NotificationEventType eventType,
         string subject,
         string message,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
             // Get all users with Owner permission level (PermissionLevel = 2)
-            var allUsers = await _userRepo.GetAllAsync(ct);
+            var allUsers = await _userRepo.GetAllAsync(cancellationToken);
             var ownerUsers = allUsers.Where(u => u.PermissionLevel == PermissionLevel.Owner).ToList();
 
             if (!ownerUsers.Any())
@@ -132,7 +132,7 @@ public class NotificationService : INotificationService
             var results = new Dictionary<string, bool>();
             foreach (var owner in ownerUsers)
             {
-                var success = await SendNotificationAsync(owner.Id, eventType, subject, message, ct);
+                var success = await SendNotificationAsync(owner.Id, eventType, subject, message, cancellationToken);
                 results[owner.Id] = success;
             }
 
@@ -150,33 +150,33 @@ public class NotificationService : INotificationService
         NotificationEventType eventType,
         string subject,
         string message,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
             // Get user preferences (creates default if not exists)
-            var config = await _preferencesRepo.GetOrCreateAsync(userId, ct);
+            var config = await _preferencesRepo.GetOrCreateAsync(userId, cancellationToken);
 
             var deliverySuccess = false;
 
             // Telegram DM channel - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.TelegramDm, eventType))
             {
-                var telegramSuccess = await SendTelegramDmAsync(userId, subject, message, ct);
+                var telegramSuccess = await SendTelegramDmAsync(userId, subject, message, cancellationToken);
                 deliverySuccess = deliverySuccess || telegramSuccess;
             }
 
             // Email channel - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.Email, eventType))
             {
-                var emailSuccess = await SendEmailAsync(userId, subject, message, ct);
+                var emailSuccess = await SendEmailAsync(userId, subject, message, cancellationToken);
                 deliverySuccess = deliverySuccess || emailSuccess;
             }
 
             // WebPush channel (in-app notifications) - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.WebPush, eventType))
             {
-                var webPushSuccess = await _webPushService.SendAsync(userId, eventType, subject, message, ct);
+                var webPushSuccess = await _webPushService.SendAsync(userId, eventType, subject, message, cancellationToken);
                 deliverySuccess = deliverySuccess || webPushSuccess;
             }
 
@@ -221,14 +221,14 @@ public class NotificationService : INotificationService
         NotificationEventType eventType,
         string subject,
         string message,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         var results = new Dictionary<string, bool>();
 
         // Send notifications in parallel for better performance
         var tasks = userIds.Select(async userId =>
         {
-            var success = await SendNotificationAsync(userId, eventType, subject, message, ct);
+            var success = await SendNotificationAsync(userId, eventType, subject, message, cancellationToken);
             return (UserId: userId, Success: success);
         });
 
@@ -246,12 +246,12 @@ public class NotificationService : INotificationService
     /// Send notification via Telegram DM
     /// Maps web user ID to Telegram ID and delivers via DM (with queue fallback)
     /// </summary>
-    private async Task<bool> SendTelegramDmAsync(string userId, string subject, string message, CancellationToken ct)
+    private async Task<bool> SendTelegramDmAsync(string userId, string subject, string message, CancellationToken cancellationToken)
     {
         try
         {
             // Get Telegram mapping for this web user
-            var mappings = await _telegramMappingRepo.GetByUserIdAsync(userId, ct);
+            var mappings = await _telegramMappingRepo.GetByUserIdAsync(userId, cancellationToken);
             var mapping = mappings.FirstOrDefault();
 
             if (mapping == null)
@@ -268,7 +268,7 @@ public class NotificationService : INotificationService
                 mapping.TelegramId,
                 "notification", // notification type for pending_notifications table
                 formattedMessage,
-                ct);
+                cancellationToken);
 
             if (result.DmSent)
             {
@@ -301,13 +301,13 @@ public class NotificationService : INotificationService
         string userId,
         string subject,
         string message,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         Telegram.Models.UserRecord? user = null;
         try
         {
             // Get user's account email
-            user = await _userRepo.GetByIdAsync(userId, ct);
+            user = await _userRepo.GetByIdAsync(userId, cancellationToken);
             if (user == null)
             {
                 _logger.LogWarning("User {UserId} not found, cannot send email notification", userId);
@@ -340,7 +340,7 @@ public class NotificationService : INotificationService
 </body>
 </html>";
 
-            await _emailService.SendEmailAsync(emailAddress, subject, htmlBody, isHtml: true, ct);
+            await _emailService.SendEmailAsync(emailAddress, subject, htmlBody, isHtml: true, cancellationToken);
 
             _logger.LogInformation("Sent email notification to {User}",
                 LogDisplayName.WebUserInfo(emailAddress, userId));

@@ -42,7 +42,9 @@ public static class HashUtilities
     /// <returns>Uppercase hex string representation of SHA256 hash</returns>
     public static string ComputeContentHash(string messageText, string urls)
     {
-        var normalized = $"{messageText.ToLowerInvariant().Trim()}{urls.ToLowerInvariant().Trim()}";
+        var normalized = string.Concat(
+            messageText.ToLowerInvariant().Trim(),
+            urls.ToLowerInvariant().Trim());
         return ComputeSHA256(normalized);
     }
 }

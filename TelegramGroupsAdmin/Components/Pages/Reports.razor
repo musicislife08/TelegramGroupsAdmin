@@ -175,7 +175,7 @@
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
                 permissionLevel,
-                CancellationToken.None);
+                cancellationToken: CancellationToken.None);
             var accessibleChatIds = accessibleChats.Select(c => c.ChatId).ToHashSet();
 
             var unifiedQueue = new List<ReportQueueItem>();

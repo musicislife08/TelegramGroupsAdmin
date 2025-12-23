@@ -19,5 +19,5 @@ public interface IWarnHandler
         string? reason,
         long? chatId = null,
         long? messageId = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

@@ -256,7 +256,7 @@ public class UpdateProcessorTests
         // Assert
         await _mockBotFactory.Received(1).GetOperationsAsync();
         await _mockOperations.Received(1)
-            .AnswerCallbackQueryAsync("answer-this-callback", text: null, ct: Arg.Any<CancellationToken>());
+            .AnswerCallbackQueryAsync("answer-this-callback", text: null, cancellationToken: Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -292,7 +292,7 @@ public class UpdateProcessorTests
         await _mockWelcomeService.Received(1)
             .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), token);
         await _mockOperations.Received(1)
-            .AnswerCallbackQueryAsync(Arg.Any<string>(), text: null, ct: token);
+            .AnswerCallbackQueryAsync(Arg.Any<string>(), text: null, cancellationToken: token);
     }
 
     #endregion

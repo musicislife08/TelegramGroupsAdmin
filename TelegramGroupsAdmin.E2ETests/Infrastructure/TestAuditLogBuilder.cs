@@ -123,12 +123,12 @@ public class TestAuditLogBuilder
     /// <summary>
     /// Builds and persists the audit log entry.
     /// </summary>
-    public async Task BuildAsync(CancellationToken ct = default)
+    public async Task BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var auditService = scope.ServiceProvider.GetRequiredService<IAuditService>();
 
-        await auditService.LogEventAsync(_eventType, _actor, _target, _value, ct);
+        await auditService.LogEventAsync(_eventType, _actor, _target, _value, cancellationToken);
     }
 
     #region Common Event Shortcuts

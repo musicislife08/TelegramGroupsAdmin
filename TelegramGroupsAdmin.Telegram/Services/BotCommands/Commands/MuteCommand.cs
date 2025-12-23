@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -19,7 +20,7 @@ public class MuteCommand : IBotCommand
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
     public string Usage => "/mute (reply to message) <5m|1h|24h> [reason]";
-    public int MinPermissionLevel => 1; // Admin required
+    public int MinPermissionLevel => ModerationConstants.AdminPermissionLevel; // Admin required
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -62,7 +63,7 @@ public class MuteCommand : IBotCommand
         }
 
         // Parse duration (default 5 minutes if not specified or invalid)
-        TimeSpan duration = TimeSpan.FromMinutes(5);
+        TimeSpan duration = CommandConstants.DefaultMuteDuration;
         string? reason = null;
 
         if (args.Length > 0)

@@ -18,7 +18,7 @@ public interface ITrustHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Remove trust from user globally.
@@ -28,5 +28,5 @@ public interface ITrustHandler
         long userId,
         Actor executor,
         string? reason,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

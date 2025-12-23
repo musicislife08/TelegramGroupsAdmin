@@ -94,10 +94,10 @@ public class SimilarityContentCheckV2(
             // Plan: ≥0.95→5pts, ≥0.85→3.5pts, ≥0.70→2pts, ≥0.60→1pt, <0.60→abstain
             var score = prediction.Probability switch
             {
-                >= 0.95f => 5.0,
-                >= 0.85f => 3.5,
-                >= 0.70f => 2.0,
-                >= 0.60f => 1.0,
+                >= ScoringConstants.SimilarityThreshold95 => ScoringConstants.ScoreSimilarity95,
+                >= ScoringConstants.SimilarityThreshold85 => ScoringConstants.ScoreSimilarity85,
+                >= ScoringConstants.SimilarityThreshold70 => ScoringConstants.ScoreSimilarity70,
+                >= ScoringConstants.SimilarityThreshold60 => ScoringConstants.ScoreSimilarity60,
                 _ => 0.0 // Should never reach here (abstained above)
             };
 

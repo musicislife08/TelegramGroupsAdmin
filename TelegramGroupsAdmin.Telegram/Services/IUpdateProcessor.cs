@@ -16,7 +16,7 @@ public interface IUpdateProcessor
     /// Process a Telegram update - routes to appropriate handler based on update type.
     /// </summary>
     /// <param name="update">The Telegram update to process</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <remarks>
     /// Routes updates to the appropriate service:
     /// - MyChatMember → ChatManagementService (bot added/removed from chats)
@@ -25,5 +25,5 @@ public interface IUpdateProcessor
     /// - Message → MessageProcessingService (new messages)
     /// - EditedMessage → MessageProcessingService (message edits)
     /// </remarks>
-    Task ProcessUpdateAsync(Update update, CancellationToken ct = default);
+    Task ProcessUpdateAsync(Update update, CancellationToken cancellationToken = default);
 }

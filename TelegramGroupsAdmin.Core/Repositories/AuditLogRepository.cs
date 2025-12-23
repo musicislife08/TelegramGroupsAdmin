@@ -23,9 +23,9 @@ public class AuditLogRepository : IAuditLogRepository
         Actor actor,
         Actor? target = null,
         string? value = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = new DataModels.AuditLogRecordDto
         {
@@ -46,7 +46,7 @@ public class AuditLogRepository : IAuditLogRepository
         };
 
         context.AuditLogs.Add(entity);
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         // Format actor for logging
         var actorDisplay = actor.SystemIdentifier ?? actor.WebUserId ?? actor.TelegramUserId?.ToString() ?? "UNKNOWN";
@@ -56,57 +56,57 @@ public class AuditLogRepository : IAuditLogRepository
             eventType, actorDisplay, targetDisplay);
     }
 
-    public async Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
+    public async Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entities = await context.AuditLogs
             .AsNoTracking()
             .OrderByDescending(al => al.Timestamp)
             .Take(limit)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken ct = default)
+    public async Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entities = await context.AuditLogs
             .AsNoTracking()
             .Where(al => al.TargetWebUserId == userId)
             .OrderByDescending(al => al.Timestamp)
             .Take(limit)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken ct = default)
+    public async Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entities = await context.AuditLogs
             .AsNoTracking()
             .Where(al => al.ActorWebUserId == actorUserId)
             .OrderByDescending(al => al.Timestamp)
             .Take(limit)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = 100, CancellationToken ct = default)
+    public async Task<List<AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entities = await context.AuditLogs
             .AsNoTracking()
             .Where(al => al.EventType == eventType)
             .OrderByDescending(al => al.Timestamp)
             .Take(limit)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
@@ -117,9 +117,9 @@ public class AuditLogRepository : IAuditLogRepository
         DataModels.AuditEventType? eventTypeFilter = null,
         string? actorUserIdFilter = null,
         string? targetUserIdFilter = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Build query with filters
         var query = context.AuditLogs.AsNoTracking();
@@ -149,14 +149,14 @@ public class AuditLogRepository : IAuditLogRepository
         }
 
         // Get total count for pagination
-        var totalCount = await query.CountAsync(ct);
+        var totalCount = await query.CountAsync(cancellationToken);
 
         // Get page of results
         var entities = await query
             .OrderByDescending(al => al.Timestamp)
             .Skip(skip)
             .Take(take)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         var events = entities.Select(e => e.ToModel()).ToList();
 

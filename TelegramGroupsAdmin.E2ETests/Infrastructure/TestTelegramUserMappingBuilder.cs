@@ -94,7 +94,7 @@ public class TestTelegramUserMappingBuilder
     /// Builds and persists the Telegram user mapping to the database.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if LinkedToWebUser() was not called.</exception>
-    public async Task<TelegramUserMappingRecord> BuildAsync(CancellationToken ct = default)
+    public async Task<TelegramUserMappingRecord> BuildAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))
         {
@@ -113,7 +113,7 @@ public class TestTelegramUserMappingBuilder
             IsActive: _isActive
         );
 
-        var id = await mappingRepository.InsertAsync(mapping, ct);
+        var id = await mappingRepository.InsertAsync(mapping, cancellationToken);
 
         // Return with the generated ID
         return mapping with { Id = id };

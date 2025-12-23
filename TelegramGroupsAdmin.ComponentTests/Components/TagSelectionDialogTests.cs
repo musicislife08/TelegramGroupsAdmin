@@ -217,7 +217,7 @@ public class TagSelectionDialogTests : TagSelectionDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var tags = new List<TagDefinition> { CreateTestTag("ExistingTag") };
+        List<TagDefinition> tags = [CreateTestTag("ExistingTag")];
         TagDefinitionsRepository.GetAllAsync().Returns(tags);
 
         // Act - User already has the only tag
@@ -239,11 +239,11 @@ public class TagSelectionDialogTests : TagSelectionDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var tags = new List<TagDefinition>
-        {
+        List<TagDefinition> tags =
+        [
             CreateTestTag("Spammer"),
             CreateTestTag("VIP")
-        };
+        ];
         TagDefinitionsRepository.GetAllAsync().Returns(tags);
 
         // Act
@@ -262,11 +262,11 @@ public class TagSelectionDialogTests : TagSelectionDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var tags = new List<TagDefinition>
-        {
+        List<TagDefinition> tags =
+        [
             CreateTestTag("Assigned"),
             CreateTestTag("Available")
-        };
+        ];
         TagDefinitionsRepository.GetAllAsync().Returns(tags);
 
         // Act - User has "Assigned" tag
@@ -285,7 +285,7 @@ public class TagSelectionDialogTests : TagSelectionDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var tags = new List<TagDefinition> { CreateTestTag() };
+        List<TagDefinition> tags = [CreateTestTag()];
         TagDefinitionsRepository.GetAllAsync().Returns(tags);
 
         // Act
@@ -307,7 +307,7 @@ public class TagSelectionDialogTests : TagSelectionDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var tags = new List<TagDefinition> { CreateTestTag() };
+        List<TagDefinition> tags = [CreateTestTag()];
         TagDefinitionsRepository.GetAllAsync().Returns(tags);
 
         // Act

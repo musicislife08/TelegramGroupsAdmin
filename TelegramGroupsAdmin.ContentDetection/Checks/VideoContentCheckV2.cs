@@ -256,7 +256,7 @@ public class VideoContentCheckV2(
                 if (matchedSpamLabel == true)
                 {
                     // Spam: map confidence (0-100) to score (0-5.0)
-                    score = (config.HashMatchConfidence / 100.0) * 5.0;
+                    score = (config.HashMatchConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
                     abstained = false;
                 }
                 else
@@ -377,7 +377,7 @@ public class VideoContentCheckV2(
                 if (ocrResult.IsSpam)
                 {
                     // Spam: map confidence (0-100) to score (0-5.0)
-                    score = (ocrResult.MaxConfidence / 100.0) * 5.0;
+                    score = (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
                     abstained = false;
                 }
                 else
@@ -461,7 +461,7 @@ public class VideoContentCheckV2(
                 "image/jpeg",
                 new ChatCompletionOptions
                 {
-                    MaxTokens = 300
+                    MaxTokens = AIConstants.VideoVisionMaxTokens
                 },
                 cancellationToken);
 
@@ -583,7 +583,7 @@ public class VideoContentCheckV2(
             if (response.Spam)
             {
                 // Spam: map confidence (0-100) to score (0-5.0)
-                score = (response.Confidence / 100.0) * 5.0;
+                score = (response.Confidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
                 abstained = false;
             }
             else

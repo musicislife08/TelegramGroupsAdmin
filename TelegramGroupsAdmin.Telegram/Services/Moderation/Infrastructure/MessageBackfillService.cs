@@ -29,10 +29,10 @@ public class MessageBackfillService : IMessageBackfillService
         long messageId,
         long chatId,
         Message telegramMessage,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         // Check if message already exists in database
-        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, ct);
+        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
         if (existingMessage != null)
         {
             _logger.LogDebug(
@@ -91,7 +91,7 @@ public class MessageBackfillService : IMessageBackfillService
                 ContentCheckSkipReason: ContentCheckSkipReason.NotSkipped
             );
 
-            await _messageHistoryRepository.InsertMessageAsync(messageRecord, ct);
+            await _messageHistoryRepository.InsertMessageAsync(messageRecord, cancellationToken);
 
             _logger.LogInformation(
                 "Backfilled message {MessageId} from chat {ChatId} for user {UserId}",
