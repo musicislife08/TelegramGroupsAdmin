@@ -25,6 +25,22 @@ public static class EncryptionConstants
     /// Number of PBKDF2 iterations for key derivation from passphrase.
     /// Higher values increase security but also computation time.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// OWASP 2023 recommends 600K+ iterations for PBKDF2-SHA256. However, 100K is acceptable
+    /// for this homelab use case because:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>Passphrases are admin-controlled (not user-generated weak passwords)</item>
+    ///   <item>Backups are stored locally on admin-controlled infrastructure</item>
+    ///   <item>Single-user system with no multi-tenant concerns</item>
+    ///   <item>Higher iterations would significantly slow backup/restore operations</item>
+    /// </list>
+    /// <para>
+    /// For multi-tenant or cloud-hosted deployments with user-generated passphrases,
+    /// consider increasing to 600K+ iterations.
+    /// </para>
+    /// </remarks>
     public const int Pbkdf2Iterations = 100000;
 
     /// <summary>
