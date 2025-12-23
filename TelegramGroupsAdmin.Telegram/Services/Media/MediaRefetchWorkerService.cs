@@ -14,13 +14,13 @@ public class MediaRefetchWorkerService : BackgroundService
 {
     private readonly MediaRefetchQueueService _queueService;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly MessageProcessingService _messageProcessingService;
+    private readonly IMessageProcessingService _messageProcessingService;
     private readonly ILogger<MediaRefetchWorkerService> _logger;
 
     public MediaRefetchWorkerService(
         IMediaRefetchQueueService queueService,
         IServiceScopeFactory scopeFactory,
-        MessageProcessingService messageProcessingService,
+        IMessageProcessingService messageProcessingService,
         ILogger<MediaRefetchWorkerService> logger)
     {
         _queueService = (MediaRefetchQueueService)queueService;

@@ -14,28 +14,25 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 /// - ban_select:{userId}:{commandMessageId} - Execute ban for selected user
 /// - ban_cancel:{commandMessageId} - Cancel selection, cleanup messages
 /// </summary>
+/// <remarks>
+/// Registered as Singleton - creates scopes internally for scoped services.
+/// </remarks>
 public class BanCallbackHandler : IBanCallbackHandler
 {
     private readonly ILogger<BanCallbackHandler> _logger;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ITelegramBotClientFactory _botClientFactory;
-    private readonly ModerationOrchestrator _moderationService;
-    private readonly IUserMessagingService _messagingService;
 
     private const string DefaultReason = "Banned by admin";
 
     public BanCallbackHandler(
         ILogger<BanCallbackHandler> logger,
-        IServiceProvider serviceProvider,
-        ITelegramBotClientFactory botClientFactory,
-        ModerationOrchestrator moderationService,
-        IUserMessagingService messagingService)
+        IServiceScopeFactory scopeFactory,
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
+        _scopeFactory = scopeFactory;
         _botClientFactory = botClientFactory;
-        _moderationService = moderationService;
-        _messagingService = messagingService;
     }
 
     public bool CanHandle(string callbackData)
@@ -94,8 +91,8 @@ public class BanCallbackHandler : IBanCallbackHandler
 
         var executorUser = callbackQuery.From;
 
-        // Get target user details
-        using var scope = _serviceProvider.CreateScope();
+        // Create scope for scoped services (ModerationOrchestrator, repositories, etc.)
+        using var scope = _scopeFactory.CreateScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var targetUser = await userRepo.GetByTelegramIdAsync(targetUserId, cancellationToken);
 
@@ -125,8 +122,9 @@ public class BanCallbackHandler : IBanCallbackHandler
                 executorUser.FirstName,
                 executorUser.LastName);
 
-            // Execute ban
-            var result = await _moderationService.BanUserAsync(
+            // Execute ban (resolve from scope since ModerationOrchestrator is Scoped)
+            var moderationService = scope.ServiceProvider.GetRequiredService<ModerationOrchestrator>();
+            var result = await moderationService.BanUserAsync(
                 userId: targetUserId,
                 messageId: null, // No trigger message for fuzzy search bans
                 executor: executor,
@@ -140,7 +138,8 @@ public class BanCallbackHandler : IBanCallbackHandler
                     LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.TelegramUserId),
                     LogDisplayName.UserInfo(executorUser.FirstName, executorUser.LastName, executorUser.Username, executorUser.Id));
 
-                // Send ban notification to user
+                // Send ban notification to user (resolve from scope since IUserMessagingService is Scoped)
+                var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
                 var chatName = callbackQuery.Message?.Chat.Title ?? "this chat";
                 var banNotification = $"🚫 **You have been banned**\n\n" +
                                      $"**Chat:** {chatName}\n" +
@@ -148,7 +147,7 @@ public class BanCallbackHandler : IBanCallbackHandler
                                      $"**Chats affected:** {result.ChatsAffected}\n\n" +
                                      $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
 
-                await _messagingService.SendToUserAsync(
+                await messagingService.SendToUserAsync(
                     userId: targetUserId,
                     chatId: chatId,
                     messageText: banNotification,

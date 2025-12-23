@@ -13,7 +13,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// The polling lifecycle is handled separately by TelegramBotPollingHost.
 /// </summary>
 public class TelegramBotService(
-    MessageProcessingService messageProcessingService,
+    IMessageProcessingService messageProcessingService,
     IChatManagementService chatManagementService,
     ILogger<TelegramBotService> logger) : ITelegramBotService
 {
