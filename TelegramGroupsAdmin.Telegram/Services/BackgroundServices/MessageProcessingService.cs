@@ -29,7 +29,7 @@ public partial class MessageProcessingService(
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
-    ILogger<MessageProcessingService> logger)
+    ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
@@ -533,6 +533,7 @@ public partial class MessageProcessingService(
                 PhotoFileUniqueId: null, // Will be populated by FetchUserPhotoJob
                 IsBot: message.From.IsBot, // Track bot status from Telegram API
                 IsTrusted: false,
+                IsBanned: false, // New users are not banned
                 BotDmEnabled: false, // Will be set to true when user sends /start in private chat
                 FirstSeenAt: now,
                 LastSeenAt: now,

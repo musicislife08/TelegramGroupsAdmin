@@ -213,6 +213,7 @@ public class UserAutoTrustServiceTests
             PhotoFileUniqueId: null,
             IsBot: false,
             IsTrusted: false,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: now.AddHours(-firstSeenHoursAgo),
             LastSeenAt: now,

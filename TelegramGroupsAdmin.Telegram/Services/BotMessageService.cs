@@ -77,6 +77,7 @@ public class BotMessageService : IBotMessageService
             PhotoFileUniqueId: null,
             IsBot: true,
             IsTrusted: false,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: now,
             LastSeenAt: now,

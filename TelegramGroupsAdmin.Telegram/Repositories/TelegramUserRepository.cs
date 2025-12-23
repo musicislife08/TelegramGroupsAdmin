@@ -72,6 +72,9 @@ public class TelegramUserRepository : ITelegramUserRepository
             // to prevent message processing from clearing trust status set by admin/auto-trust
             // NOTE: BotDmEnabled is NOT updated here - it's only set via SetBotDmEnabledAsync()
             // to prevent message processing from resetting DM status after user completes /start
+            // NOTE: IsActive IS updated here - sending a message definitively makes user active
+            // (unlike IsTrusted which is admin-controlled, IsActive is behavior-driven)
+            existing.IsActive = true;
             existing.LastSeenAt = user.LastSeenAt;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -311,9 +314,11 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Distinct()
             .ToHashSetAsync(cancellationToken);
 
-        // Query 9: Get all users and populate with pre-computed stats (O(1) lookups)
+        // Query 9: Get active users and populate with pre-computed stats (O(1) lookups)
+        // Filters to IsActive=true by default (inactive users shown via GetInactiveUsersAsync)
         var users = await context.TelegramUsers
             .AsNoTracking()
+            .Where(u => u.IsActive)
             .Select(u => new UiModels.TelegramUserListItem
             {
                 TelegramUserId = u.TelegramUserId,
@@ -435,10 +440,11 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Distinct()
             .ToHashSetAsync(cancellationToken);
 
-        // Query 9: Get users who have posted in accessible chats
+        // Query 9: Get active users who have posted in accessible chats
+        // Filters to IsActive=true (users with messages are active by definition, but filter for consistency)
         var users = await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => userIdsInChats.Contains(u.TelegramUserId))
+            .Where(u => userIdsInChats.Contains(u.TelegramUserId) && u.IsActive)
             .Select(u => new UiModels.TelegramUserListItem
             {
                 TelegramUserId = u.TelegramUserId,
@@ -942,5 +948,104 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Where(u => u.TelegramUserId == telegramUserId)
             .Select(u => u.IsTrusted)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // ============================================================================
+    // IsActive Methods (Phase: /ban @username support)
+    // ============================================================================
+
+    /// <inheritdoc />
+    public async Task<UiModels.TelegramUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var normalizedUsername = username.TrimStart('@').ToLowerInvariant();
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.Username != null
+                && u.Username.ToLower() == normalizedUsername
+                && u.IsActive) // Only return active users
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return entity?.ToModel();
+    }
+
+    /// <inheritdoc />
+    public async Task SetActiveAsync(long telegramUserId, bool isActive, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var user = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (user == null)
+        {
+            _logger.LogWarning("Cannot set active status for unknown user {UserId}", telegramUserId);
+            return;
+        }
+
+        user.IsActive = isActive;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Set active status for user {UserId}: IsActive={IsActive}",
+            telegramUserId, isActive);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<UiModels.TelegramUser>> SearchByNameAsync(string searchText, int limit = 10, CancellationToken cancellationToken = default)
+    {
+        var searchLower = searchText.ToLowerInvariant().Trim();
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Fuzzy search: match against combined "first last" name OR username
+        // Searches ALL users (active and inactive) for ban command
+        var matches = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u =>
+                // Match against combined full name (first + space + last)
+                (u.FirstName + " " + u.LastName).ToLower().Contains(searchLower) ||
+                // Or match against username
+                (u.Username != null && u.Username.ToLower().Contains(searchLower)))
+            .OrderBy(u => u.FirstName) // Alphabetical for consistent ordering
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return matches.Select(u => u.ToModel()).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Get inactive users (joined but never engaged)
+        // Uses partial index ix_telegram_users_is_active for efficient filtering
+        return await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => !u.IsActive)
+            .OrderByDescending(u => u.CreatedAt)
+            .Select(u => new UiModels.TelegramUserListItem
+            {
+                TelegramUserId = u.TelegramUserId,
+                Username = u.Username,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                UserPhotoPath = u.UserPhotoPath,
+                IsTrusted = u.IsTrusted,
+                LastSeenAt = u.LastSeenAt,
+                // Stats not needed for inactive users (they haven't engaged)
+                ChatCount = 0,
+                WarningCount = 0,
+                NoteCount = 0,
+                IsBanned = u.IsBanned,
+                HasWarnings = false,
+                IsTagged = false,
+                IsAdmin = false
+            })
+            .ToListAsync(cancellationToken);
     }
 }

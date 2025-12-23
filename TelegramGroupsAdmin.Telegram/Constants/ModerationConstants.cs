@@ -29,4 +29,9 @@ public static class ModerationConstants
     /// Chat ID for global restrictions (across all managed chats)
     /// </summary>
     public const long GlobalChatId = 0;
+
+    /// <summary>
+    /// Default reason used for admin-initiated bans when no specific reason is provided.
+    /// </summary>
+    public const string DefaultBanReason = "Banned by admin";
 }

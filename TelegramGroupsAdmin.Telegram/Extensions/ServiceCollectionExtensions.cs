@@ -107,6 +107,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
             services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
             services.AddSingleton<IWelcomeService, WelcomeService>();
+            services.AddSingleton<IBanCallbackHandler, BanCallbackHandler>(); // Ban user selection callbacks
             services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
@@ -143,7 +144,7 @@ public static class ServiceCollectionExtensions
             // Background services (refactored into smaller services)
             services.AddSingleton<DetectionActionService>();
             services.AddSingleton<IChatManagementService, ChatManagementService>();
-            services.AddSingleton<MessageProcessingService>();
+            services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
 
             // Telegram bot services (clean separation: capabilities vs lifecycle vs routing)
             services.AddSingleton<IUpdateProcessor, UpdateProcessor>();

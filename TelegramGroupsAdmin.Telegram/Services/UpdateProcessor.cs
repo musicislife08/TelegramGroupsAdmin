@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -10,9 +11,10 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Extracted for testability - pure routing logic with mockable dependencies.
 /// </summary>
 public class UpdateProcessor(
-    MessageProcessingService messageProcessingService,
+    IMessageProcessingService messageProcessingService,
     IChatManagementService chatManagementService,
     IWelcomeService welcomeService,
+    IBanCallbackHandler banCallbackHandler,
     ITelegramBotClientFactory botFactory,
     ILogger<UpdateProcessor> logger) : IUpdateProcessor
 {
@@ -52,11 +54,22 @@ public class UpdateProcessor(
             return;
         }
 
-        // Handle callback queries from inline buttons (for welcome accept/deny)
+        // Handle callback queries from inline buttons
         if (update.CallbackQuery is { } callbackQuery)
         {
             logger.LogDebug("Routing CallbackQuery {CallbackId}", callbackQuery.Id);
-            await welcomeService.HandleCallbackQueryAsync(callbackQuery, cancellationToken);
+
+            // Route to appropriate handler based on callback data prefix
+            var callbackData = callbackQuery.Data ?? "";
+            if (banCallbackHandler.CanHandle(callbackData))
+            {
+                await banCallbackHandler.HandleCallbackAsync(callbackQuery, cancellationToken);
+            }
+            else
+            {
+                // Default to welcome service for welcome accept/deny buttons
+                await welcomeService.HandleCallbackQueryAsync(callbackQuery, cancellationToken);
+            }
 
             // Always answer callback queries to remove loading state
             var operations = await botFactory.GetOperationsAsync();
@@ -71,7 +84,7 @@ public class UpdateProcessor(
                 "Routing new message {MessageId} from chat {Chat}",
                 message.MessageId,
                 LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id));
-            await messageProcessingService.HandleNewMessageAsync(message);
+            await messageProcessingService.HandleNewMessageAsync(message, cancellationToken);
             return;
         }
 
@@ -82,7 +95,7 @@ public class UpdateProcessor(
                 "Routing edited message {MessageId} from chat {Chat}",
                 editedMessage.MessageId,
                 LogDisplayName.ChatDebug(editedMessage.Chat.Title, editedMessage.Chat.Id));
-            await messageProcessingService.HandleEditedMessageAsync(editedMessage);
+            await messageProcessingService.HandleEditedMessageAsync(editedMessage, cancellationToken);
             return;
         }
 

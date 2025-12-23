@@ -85,6 +85,14 @@ public class TelegramUserManagementService
     }
 
     /// <summary>
+    /// Get inactive users (joined but never engaged - no welcome accept or message)
+    /// </summary>
+    public Task<List<TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default)
+    {
+        return _userRepository.GetInactiveUsersAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Get top active users by 30-day message count
     /// </summary>
     public Task<List<TopActiveUser>> GetTopActiveUsersAsync(int limit = 3, CancellationToken cancellationToken = default)

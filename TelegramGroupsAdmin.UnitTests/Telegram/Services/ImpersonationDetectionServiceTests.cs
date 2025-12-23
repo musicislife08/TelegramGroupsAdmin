@@ -186,6 +186,7 @@ public class ImpersonationDetectionServiceTests
             PhotoFileUniqueId: null,
             IsBot: false,
             IsTrusted: isTrusted,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow,
             LastSeenAt: DateTimeOffset.UtcNow,

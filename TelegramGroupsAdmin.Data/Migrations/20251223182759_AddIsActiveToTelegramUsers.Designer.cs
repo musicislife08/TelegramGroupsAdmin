@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251223182759_AddIsActiveToTelegramUsers")]
+    partial class AddIsActiveToTelegramUsers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2302,10 +2305,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("TelegramUserId");
 
-                    b.HasIndex("IsActive")
-                        .HasDatabaseName("ix_telegram_users_is_active")
-                        .HasFilter("is_active = false");
-
                     b.HasIndex("IsBanned");
 
                     b.HasIndex("IsTrusted");
@@ -2972,8 +2971,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("TimeoutJobId")
                         .HasFilter("timeout_job_id IS NOT NULL");
 
-                    b.HasIndex("UserId");
-
                     b.ToTable("welcome_responses");
                 });
 
@@ -3449,15 +3446,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.WelcomeResponseDto", b =>
-                {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

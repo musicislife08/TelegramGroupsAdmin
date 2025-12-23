@@ -414,6 +414,55 @@
         <MudTabPanel Text="Tags" Icon="@Icons.Material.Filled.LocalOffer">
             <TagManagement />
         </MudTabPanel>
+
+        <MudTabPanel Text="Inactive" Icon="@Icons.Material.Filled.HourglassEmpty" BadgeData="@FilteredInactiveUsers.Count" BadgeColor="Color.Default">
+            <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+                Users who joined but never completed welcome or sent a message. These users can still be banned.
+            </MudText>
+            <MudTable Items="@FilteredInactiveUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Joined</MudTableSortLabel></MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="User">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudAvatar Size="Size.Small" Color="Color.Secondary">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" />
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @if (!string.IsNullOrEmpty(context.Username))
+                                    {
+                                        <text>@@@context.Username · </text>
+                                    }
+                                    ID: @context.TelegramUserId
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Joined">
+                        <span class="local-timestamp" data-utc="@context.LastSeenAt.ToString("o")">@context.LastSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudTooltip Text="View Details">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ViewUserDetail(context.TelegramUserId))" />
+                        </MudTooltip>
+                        <MudTooltip Text="Trust User">
+                            <MudIconButton Icon="@Icons.Material.Filled.VerifiedUser"
+                                          Size="Size.Small"
+                                          Color="Color.Success"
+                                          OnClick="@(() => ToggleTrust(context))" />
+                        </MudTooltip>
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="[25, 50, 100]" />
+                </PagerContent>
+            </MudTable>
+        </MudTabPanel>
     </MudTabs>
 </MudContainer>
 
@@ -423,6 +472,7 @@
     private List<TelegramUserListItem> _trustedUsers = [];
     private List<TelegramUserListItem> _bannedUsers = [];
     private List<BannedUserListItem> _bannedUsersWithDetails = [];
+    private List<TelegramUserListItem> _inactiveUsers = [];
     private bool _loading = true;
 
     // Search and filter state
@@ -436,6 +486,7 @@
     private List<TelegramUserListItem> FilteredTrustedUsers => FilterUsers(_trustedUsers);
     private List<TelegramUserListItem> FilteredBannedUsers => FilterUsers(_bannedUsers);
     private List<BannedUserListItem> FilteredBannedUsersWithDetails => FilterBannedUsers(_bannedUsersWithDetails);
+    private List<TelegramUserListItem> FilteredInactiveUsers => FilterUsers(_inactiveUsers);
 
     protected override async Task OnInitializedAsync()
     {
@@ -510,8 +561,9 @@
             var trustedTask = UserManagementService.GetTrustedUsersAsync();
             var bannedTask = UserManagementService.GetBannedUsersAsync();
             var bannedWithDetailsTask = UserManagementService.GetBannedUsersWithDetailsAsync();
+            var inactiveTask = UserManagementService.GetInactiveUsersAsync();
 
-            await Task.WhenAll(allUsersTask, taggedTask, trustedTask, bannedTask, bannedWithDetailsTask);
+            await Task.WhenAll(allUsersTask, taggedTask, trustedTask, bannedTask, bannedWithDetailsTask, inactiveTask);
 
             // Exclude system user (telegram_user_id=0) from all lists
             _allUsers = (await allUsersTask).Where(u => u.TelegramUserId != 0).ToList();
@@ -519,6 +571,7 @@
             _trustedUsers = (await trustedTask).Where(u => u.TelegramUserId != 0).ToList();
             _bannedUsers = (await bannedTask).Where(u => u.TelegramUserId != 0).ToList();
             _bannedUsersWithDetails = (await bannedWithDetailsTask).Where(u => u.TelegramUserId != 0).ToList();
+            _inactiveUsers = (await inactiveTask).Where(u => u.TelegramUserId != 0).ToList();
         }
         catch (Exception ex)
         {

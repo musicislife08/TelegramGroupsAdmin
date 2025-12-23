@@ -119,6 +119,15 @@ public class TelegramUserDto
     public bool IsTrusted { get; set; } = false;
 
     /// <summary>
+    /// Whether user is active (has completed welcome or sent a message).
+    /// Users created on JOIN start as inactive (false).
+    /// Set to true when: user completes welcome flow OR sends first message.
+    /// Used to identify users who joined but never engaged (e.g., welcome timeouts).
+    /// </summary>
+    [Column("is_active")]
+    public bool IsActive { get; set; } = false;
+
+    /// <summary>
     /// Whether user is currently banned from all managed chats.
     ///
     /// ARCHITECTURAL DECISION: Ban state stored on user table, not derived from audit log.

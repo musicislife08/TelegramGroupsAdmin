@@ -12,26 +12,16 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 /// <summary>
 /// Repository for retrieving ML training data.
 /// Handles complex multi-table queries and DTO-to-model conversion.
+/// Scoped lifetime - matches standard pattern used by all other repositories.
 /// </summary>
-public class MLTrainingDataRepository : IMLTrainingDataRepository
+public class MLTrainingDataRepository(
+    AppDbContext context,
+    SimHashService simHashService,
+    ILogger<MLTrainingDataRepository> logger) : IMLTrainingDataRepository
 {
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
-    private readonly SimHashService _simHashService;
-    private readonly ILogger<MLTrainingDataRepository> _logger;
-
-    public MLTrainingDataRepository(
-        IDbContextFactory<AppDbContext> contextFactory,
-        SimHashService simHashService,
-        ILogger<MLTrainingDataRepository> logger)
-    {
-        _contextFactory = contextFactory;
-        _simHashService = simHashService;
-        _logger = logger;
-    }
 
     public async Task<HashSet<long>> GetLabeledMessageIdsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var ids = await context.TrainingLabels
             .AsNoTracking()
             .Select(tl => tl.MessageId)
@@ -41,8 +31,6 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
 
     public async Task<List<TrainingSample>> GetSpamSamplesAsync(HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
         // Explicit spam labels (admin decisions override auto-detection)
         var explicitSpam = await context.TrainingLabels
             .AsNoTracking()
@@ -99,7 +87,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
             })
         ];
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Loaded {Count} spam training samples ({Explicit} explicit + {Implicit} implicit)",
             samples.Count, explicitSpam.Count, implicitSpam.Count);
 
@@ -110,8 +98,6 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
     public async Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(spamCount);
-
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Calculate target ham count for balance
         // Dynamic ham cap: maintains ~30% spam ratio
@@ -155,7 +141,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
         List<TrainingSample> explicitHam;
         if (explicitHamDeduped.Count > dynamicHamCap)
         {
-            _logger.LogDebug(
+            logger.LogDebug(
                 "Deduplicated explicit ham ({Count}) exceeds balance cap ({Cap}). " +
                 "Capping to {Used} longest messages to maintain {TargetRatio:P0} spam ratio.",
                 explicitHamDeduped.Count, dynamicHamCap, dynamicHamCap,
@@ -219,7 +205,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
         var totalSamples = spamCount + totalHam;
         var spamRatio = totalSamples > 0 ? (double)spamCount / totalSamples : 0.0;
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Loaded {Count} ham training samples ({Explicit} explicit + {Implicit} implicit, capped at {Cap} for balance). " +
             "Total dataset: {Spam} spam + {Ham} ham = {Total} samples ({SpamRatio:P1} spam ratio, balanced: {Balanced})",
             samples.Count, explicitHam.Count, implicitHam.Count, dynamicHamCap,
@@ -271,7 +257,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
         // Sort by text length descending (prefer longer samples = better training signal)
         foreach (var sample in samples.OrderByDescending(s => s.Text.Length))
         {
-            var hash = _simHashService.ComputeHash(sample.Text);
+            var hash = simHashService.ComputeHash(sample.Text);
             if (hash == 0)
             {
                 // Empty/short text has no hash to compare - keep it
@@ -280,7 +266,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
             }
 
             // Check if similar hash already in deduplicated set
-            var isDuplicate = usedHashes.Any(h => _simHashService.AreSimilar(h, hash));
+            var isDuplicate = usedHashes.Any(h => simHashService.AreSimilar(h, hash));
             if (!isDuplicate)
             {
                 deduplicated.Add(sample);
@@ -291,7 +277,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
         var removed = samples.Count - deduplicated.Count;
         if (removed > 0)
         {
-            _logger.LogDebug(
+            logger.LogDebug(
                 "Deduplicated {Original} {Label} samples to {Deduplicated} ({Removed} near-duplicates removed)",
                 samples.Count, label, deduplicated.Count, removed);
         }

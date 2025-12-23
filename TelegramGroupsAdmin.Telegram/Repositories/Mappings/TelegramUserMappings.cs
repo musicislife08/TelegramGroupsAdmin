@@ -20,11 +20,13 @@ public static class TelegramUserMappings
             PhotoFileUniqueId: data.PhotoFileUniqueId,
             IsBot: data.IsBot,
             IsTrusted: data.IsTrusted,
+            IsBanned: data.IsBanned,
             BotDmEnabled: data.BotDmEnabled,
             FirstSeenAt: data.FirstSeenAt,
             LastSeenAt: data.LastSeenAt,
             CreatedAt: data.CreatedAt,
-            UpdatedAt: data.UpdatedAt
+            UpdatedAt: data.UpdatedAt,
+            IsActive: data.IsActive
         );
     }
 
@@ -41,6 +43,8 @@ public static class TelegramUserMappings
             PhotoFileUniqueId = ui.PhotoFileUniqueId,
             IsBot = ui.IsBot,
             IsTrusted = ui.IsTrusted,
+            IsBanned = ui.IsBanned,
+            IsActive = ui.IsActive,
             BotDmEnabled = ui.BotDmEnabled,
             FirstSeenAt = ui.FirstSeenAt,
             LastSeenAt = ui.LastSeenAt,

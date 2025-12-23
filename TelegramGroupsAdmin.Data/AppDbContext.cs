@@ -568,6 +568,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(tu => tu.IsBanned);
         modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.LastSeenAt);
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.IsActive)
+            .HasFilter("is_active = false")
+            .HasDatabaseName("ix_telegram_users_is_active"); // Partial index for inactive users (UI filtering)
 
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()
@@ -787,6 +791,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<WelcomeResponseDto>()
             .HasIndex(w => w.TimeoutJobId)
             .HasFilter("timeout_job_id IS NOT NULL"); // Partial index for active jobs only
+
+        // WelcomeResponseDto FK to TelegramUserDto (user must exist after backfill migration)
+        modelBuilder.Entity<WelcomeResponseDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(wr => wr.UserId)
+            .HasPrincipalKey(tu => tu.TelegramUserId)
+            .OnDelete(DeleteBehavior.Restrict); // Don't cascade delete users when welcome response deleted
 
         // VerificationTokenDto stores token_type as string in DB but exposes as enum
         // The entity already handles this with TokenTypeString property
