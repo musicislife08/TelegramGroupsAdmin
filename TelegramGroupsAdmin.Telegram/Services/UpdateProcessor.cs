@@ -84,7 +84,7 @@ public class UpdateProcessor(
                 "Routing new message {MessageId} from chat {Chat}",
                 message.MessageId,
                 LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id));
-            await messageProcessingService.HandleNewMessageAsync(message);
+            await messageProcessingService.HandleNewMessageAsync(message, cancellationToken);
             return;
         }
 
@@ -95,7 +95,7 @@ public class UpdateProcessor(
                 "Routing edited message {MessageId} from chat {Chat}",
                 editedMessage.MessageId,
                 LogDisplayName.ChatDebug(editedMessage.Chat.Title, editedMessage.Chat.Id));
-            await messageProcessingService.HandleEditedMessageAsync(editedMessage);
+            await messageProcessingService.HandleEditedMessageAsync(editedMessage, cancellationToken);
             return;
         }
 

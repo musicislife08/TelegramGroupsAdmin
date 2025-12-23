@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -113,6 +114,48 @@ public class UpdateProcessorTests
     private static Update CreateUnhandledUpdate()
     {
         return new Update { Id = 999 };
+    }
+
+    private static Message CreateMessage(int messageId = 100, long chatId = 123)
+    {
+        // Message.MessageId is read-only in Telegram.Bot v22
+        // Use JSON deserialization (how Telegram.Bot creates objects internally)
+        var json = $$"""
+        {
+            "message_id": {{messageId}},
+            "date": {{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}},
+            "chat": {
+                "id": {{chatId}},
+                "type": "supergroup",
+                "title": "Test Chat"
+            },
+            "from": {
+                "id": 456,
+                "is_bot": false,
+                "first_name": "Test"
+            },
+            "text": "Test message"
+        }
+        """;
+        return JsonSerializer.Deserialize<Message>(json, JsonSerializerOptions.Web)!;
+    }
+
+    private static Update CreateMessageUpdate(int messageId = 100)
+    {
+        return new Update
+        {
+            Id = 4,
+            Message = CreateMessage(messageId)
+        };
+    }
+
+    private static Update CreateEditedMessageUpdate(int messageId = 100)
+    {
+        return new Update
+        {
+            Id = 5,
+            EditedMessage = CreateMessage(messageId)
+        };
     }
 
     #endregion
@@ -356,6 +399,116 @@ public class UpdateProcessorTests
                 Arg.Any<CancellationToken>());
         await _mockChatManagementService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Message Update Tests
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithMessage_RoutesToMessageProcessingService()
+    {
+        // Arrange
+        var update = CreateMessageUpdate(messageId: 12345);
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert
+        await _mockMessageProcessingService.Received(1)
+            .HandleNewMessageAsync(
+                Arg.Is<Message>(m => m.MessageId == 12345),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithMessage_DoesNotCallOtherHandlers()
+    {
+        // Arrange
+        var update = CreateMessageUpdate();
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert - verify other handlers NOT called
+        await _mockChatManagementService.DidNotReceive()
+            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockChatManagementService.DidNotReceive()
+            .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeService.DidNotReceive()
+            .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeService.DidNotReceive()
+            .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithMessage_PassesCancellationToken()
+    {
+        // Arrange
+        var update = CreateMessageUpdate();
+        using var cts = new CancellationTokenSource();
+        var token = cts.Token;
+
+        // Act
+        await _sut.ProcessUpdateAsync(update, token);
+
+        // Assert
+        await _mockMessageProcessingService.Received(1)
+            .HandleNewMessageAsync(Arg.Any<Message>(), token);
+    }
+
+    #endregion
+
+    #region EditedMessage Update Tests
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithEditedMessage_RoutesToMessageProcessingService()
+    {
+        // Arrange
+        var update = CreateEditedMessageUpdate(messageId: 67890);
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert
+        await _mockMessageProcessingService.Received(1)
+            .HandleEditedMessageAsync(
+                Arg.Is<Message>(m => m.MessageId == 67890),
+                Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithEditedMessage_DoesNotCallOtherHandlers()
+    {
+        // Arrange
+        var update = CreateEditedMessageUpdate();
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert - verify other handlers NOT called
+        await _mockMessageProcessingService.DidNotReceive()
+            .HandleNewMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>());
+        await _mockChatManagementService.DidNotReceive()
+            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockWelcomeService.DidNotReceive()
+            .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithEditedMessage_PassesCancellationToken()
+    {
+        // Arrange
+        var update = CreateEditedMessageUpdate();
+        using var cts = new CancellationTokenSource();
+        var token = cts.Token;
+
+        // Act
+        await _sut.ProcessUpdateAsync(update, token);
+
+        // Assert
+        await _mockMessageProcessingService.Received(1)
+            .HandleEditedMessageAsync(Arg.Any<Message>(), token);
     }
 
     #endregion
