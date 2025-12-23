@@ -27,7 +27,6 @@ public class DetectionActionService(
     IServiceProvider serviceProvider,
     IChatManagementService chatManagementService,
     IJobScheduler jobScheduler,
-    IContentDetectionConfigRepository configRepository,
     ILogger<DetectionActionService> logger)
 {
 
@@ -36,12 +35,15 @@ public class DetectionActionService(
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, DateTimeOffset> _recentCleanupJobs = new();
 
     /// <summary>
-    /// Load effective content detection config for a chat (with fallback to defaults)
+    /// Load effective content detection config for a chat (with fallback to defaults).
+    /// Resolves repository from scope since this is a Singleton service and repositories are Scoped.
     /// </summary>
     private async Task<ContentDetectionConfig> GetConfigAsync(long chatId, CancellationToken cancellationToken)
     {
         try
         {
+            using var scope = serviceProvider.CreateScope();
+            var configRepository = scope.ServiceProvider.GetRequiredService<IContentDetectionConfigRepository>();
             return await configRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
         }
         catch (Exception ex)
