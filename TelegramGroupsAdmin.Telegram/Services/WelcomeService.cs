@@ -156,6 +156,7 @@ public class WelcomeService : IWelcomeService
                     PhotoFileUniqueId: null,
                     IsBot: user.IsBot,
                     IsTrusted: false,
+                    IsBanned: false,
                     BotDmEnabled: false,
                     FirstSeenAt: now,
                     LastSeenAt: now,

@@ -112,6 +112,7 @@ public class BotProtectionService : IBotProtectionService
                 PhotoFileUniqueId: null,
                 IsBot: true, // This is a bot
                 IsTrusted: false,
+                IsBanned: false, // Will be set by moderation after ban
                 BotDmEnabled: false, // Bots don't accept DMs
                 FirstSeenAt: now,
                 LastSeenAt: now,

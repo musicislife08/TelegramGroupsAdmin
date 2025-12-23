@@ -162,6 +162,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             PhotoFileUniqueId: null,
             IsBot: false,
             IsTrusted: false,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-7),
             LastSeenAt: DateTimeOffset.UtcNow.AddHours(-3),

@@ -23,8 +23,6 @@ public class BanCallbackHandler : IBanCallbackHandler
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ITelegramBotClientFactory _botClientFactory;
 
-    private const string DefaultReason = "Banned by admin";
-
     public BanCallbackHandler(
         ILogger<BanCallbackHandler> logger,
         IServiceScopeFactory scopeFactory,
@@ -128,7 +126,7 @@ public class BanCallbackHandler : IBanCallbackHandler
                 userId: targetUserId,
                 messageId: null, // No trigger message for fuzzy search bans
                 executor: executor,
-                reason: DefaultReason,
+                reason: ModerationConstants.DefaultBanReason,
                 cancellationToken: cancellationToken);
 
             if (result.Success)
@@ -143,7 +141,7 @@ public class BanCallbackHandler : IBanCallbackHandler
                 var chatName = callbackQuery.Message?.Chat.Title ?? "this chat";
                 var banNotification = $"🚫 **You have been banned**\n\n" +
                                      $"**Chat:** {chatName}\n" +
-                                     $"**Reason:** {DefaultReason}\n" +
+                                     $"**Reason:** {ModerationConstants.DefaultBanReason}\n" +
                                      $"**Chats affected:** {result.ChatsAffected}\n\n" +
                                      $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
 

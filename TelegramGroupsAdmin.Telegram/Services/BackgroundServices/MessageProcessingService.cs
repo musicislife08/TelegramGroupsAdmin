@@ -533,6 +533,7 @@ public partial class MessageProcessingService(
                 PhotoFileUniqueId: null, // Will be populated by FetchUserPhotoJob
                 IsBot: message.From.IsBot, // Track bot status from Telegram API
                 IsTrusted: false,
+                IsBanned: false, // New users are not banned
                 BotDmEnabled: false, // Will be set to true when user sends /start in private chat
                 FirstSeenAt: now,
                 LastSeenAt: now,

@@ -145,6 +145,7 @@ public class TestTelegramUserBuilder
             PhotoFileUniqueId: _photoFileUniqueId,
             IsBot: _isBot,
             IsTrusted: _isTrusted,
+            IsBanned: false,
             BotDmEnabled: _botDmEnabled,
             FirstSeenAt: _firstSeenAt,
             LastSeenAt: _lastSeenAt,

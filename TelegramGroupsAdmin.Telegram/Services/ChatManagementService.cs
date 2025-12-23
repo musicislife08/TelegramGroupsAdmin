@@ -941,6 +941,7 @@ public class ChatManagementService(
             PhotoFileUniqueId: null,
             IsBot: telegramUser.IsBot,
             IsTrusted: false, // Will be set to true by auto-trust logic after this
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: now,
             LastSeenAt: now,

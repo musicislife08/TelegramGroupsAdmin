@@ -16,6 +16,7 @@ public record TelegramUser(
     string? PhotoFileUniqueId,
     bool IsBot,
     bool IsTrusted,
+    bool IsBanned,
     bool BotDmEnabled,
     DateTimeOffset FirstSeenAt,
     DateTimeOffset LastSeenAt,

@@ -22,8 +22,6 @@ public class BanCommand : IBotCommand
     private readonly IUserMessagingService _messagingService;
     private readonly ITelegramBotClientFactory _botClientFactory;
 
-    private const string DefaultReason = "Banned by admin";
-
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
     public string Usage => "/ban (reply) | /ban @username | /ban <user_id> | /ban <name>";
@@ -194,7 +192,7 @@ public class BanCommand : IBotCommand
                 userId: targetUser.Id,
                 messageId: triggerMessageId,
                 executor: executor,
-                reason: DefaultReason,
+                reason: ModerationConstants.DefaultBanReason,
                 cancellationToken: cancellationToken);
 
             if (!result.Success)
@@ -206,7 +204,7 @@ public class BanCommand : IBotCommand
             var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
             var banNotification = $"🚫 **You have been banned**\n\n" +
                                  $"**Chat:** {chatName}\n" +
-                                 $"**Reason:** {DefaultReason}\n" +
+                                 $"**Reason:** {ModerationConstants.DefaultBanReason}\n" +
                                  $"**Chats affected:** {result.ChatsAffected}\n\n" +
                                  $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
 
@@ -226,7 +224,7 @@ public class BanCommand : IBotCommand
                 "Reason: {Reason}. User notified via {DeliveryMethod}. Trust removed: {TrustRemoved}",
                 LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
                 LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
-                result.ChatsAffected, DefaultReason, deliveryMethod, result.TrustRemoved);
+                result.ChatsAffected, ModerationConstants.DefaultBanReason, deliveryMethod, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears
             return new CommandResult(null, DeleteCommandMessage, DeleteResponseAfterSeconds);
