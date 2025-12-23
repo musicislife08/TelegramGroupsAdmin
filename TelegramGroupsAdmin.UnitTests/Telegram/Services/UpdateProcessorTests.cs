@@ -13,14 +13,11 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 /// <summary>
 /// Unit tests for UpdateProcessor routing logic.
 /// Tests verify updates are routed to correct handlers based on update type.
-///
-/// NOTE: Message and EditedMessage tests are deferred to issue #23 (REFACTOR-18-4)
-/// which will extract IMessageProcessingService interface for proper mocking.
-/// MessageProcessingService is a concrete class with non-virtual methods.
 /// </summary>
 [TestFixture]
 public class UpdateProcessorTests
 {
+    private IMessageProcessingService _mockMessageProcessingService = null!;
     private IChatManagementService _mockChatManagementService = null!;
     private IWelcomeService _mockWelcomeService = null!;
     private IBanCallbackHandler _mockBanCallbackHandler = null!;
@@ -32,6 +29,7 @@ public class UpdateProcessorTests
     [SetUp]
     public void SetUp()
     {
+        _mockMessageProcessingService = Substitute.For<IMessageProcessingService>();
         _mockChatManagementService = Substitute.For<IChatManagementService>();
         _mockWelcomeService = Substitute.For<IWelcomeService>();
         _mockBanCallbackHandler = Substitute.For<IBanCallbackHandler>();
@@ -45,12 +43,8 @@ public class UpdateProcessorTests
         // Ban callback handler returns false by default (routes to welcome service)
         _mockBanCallbackHandler.CanHandle(Arg.Any<string>()).Returns(false);
 
-        // Create SUT with null for MessageProcessingService.
-        // SAFETY: This is safe because Message/EditedMessage routes (which use this dependency)
-        // are explicitly NOT tested here - those tests are deferred to #23 which will extract
-        // IMessageProcessingService interface. All routes tested in this file use other dependencies.
         _sut = new UpdateProcessor(
-            null!, // MessageProcessingService - Message/EditedMessage routes not tested (see #23)
+            _mockMessageProcessingService,
             _mockChatManagementService,
             _mockWelcomeService,
             _mockBanCallbackHandler,
@@ -395,20 +389,6 @@ public class UpdateProcessorTests
         Assert.ThrowsAsync<InvalidOperationException>(
             async () => await _sut.ProcessUpdateAsync(update));
     }
-
-    #endregion
-
-    #region Deferred Tests (Require IMessageProcessingService - Issue #23)
-
-    // NOTE: The following tests are deferred until issue #23 (REFACTOR-18-4) is completed.
-    // MessageProcessingService is a concrete class with non-virtual methods,
-    // preventing proper mocking with NSubstitute.
-    //
-    // Deferred tests:
-    // - ProcessUpdateAsync_WithMessage_RoutesToMessageProcessingService
-    // - ProcessUpdateAsync_WithEditedMessage_RoutesToMessageProcessingService
-    // - ProcessUpdateAsync_WithMessage_DoesNotCallOtherHandlers
-    // - ProcessUpdateAsync_WithEditedMessage_DoesNotCallOtherHandlers
 
     #endregion
 }

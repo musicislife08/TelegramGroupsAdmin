@@ -29,7 +29,7 @@ public partial class MessageProcessingService(
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
-    ILogger<MessageProcessingService> logger)
+    ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;

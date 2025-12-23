@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Extracted for testability - pure routing logic with mockable dependencies.
 /// </summary>
 public class UpdateProcessor(
-    MessageProcessingService messageProcessingService,
+    IMessageProcessingService messageProcessingService,
     IChatManagementService chatManagementService,
     IWelcomeService welcomeService,
     IBanCallbackHandler banCallbackHandler,
