@@ -101,9 +101,7 @@ public static class ServiceCollectionExtensions
             // Scoped: Matches standard pattern used by all other repositories
             services.AddScoped<IMLTrainingDataRepository, MLTrainingDataRepository>();
 
-            // Register V2 spam detection engine (SpamAssassin-style additive scoring)
-            // Fixes critical bug where abstentions voted "Clean" and cancelled spam signals
-            services.AddScoped<ContentDetectionEngineV2>();
+            // Note: ContentDetectionEngineV2 registered above (line 25) with IContentDetectionEngine interface
 
             // Register V2 content checks (proper abstention support)
             // Key fix: Return Score=0 when finding nothing (not "Clean 20%")
