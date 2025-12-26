@@ -30,8 +30,7 @@ public static class ServiceCollectionExtensions
         // Register Backup services
         services.AddBackupServices();
 
-        // Register retry listener
-        services.AddSingleton<RetryJobListener>();
+        // Note: RetryJobListener is registered by Quartz via AddJobListener<T>() below
 
         // Register scheduling sync service (syncs database configs to Quartz triggers)
         services.AddHostedService<QuartzSchedulingSyncService>();
