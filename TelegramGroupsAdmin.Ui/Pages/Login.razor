@@ -1,0 +1,151 @@
+@page "/login"
+@layout LoginLayout
+@using TelegramGroupsAdmin.Ui.Api
+@inject NavigationManager Navigation
+@inject IHttpClientFactory HttpFactory
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Login - Telegram Groups Admin</PageTitle>
+
+<div class="login-container">
+    <h1 class="login-title">Telegram Groups Admin</h1>
+    <p class="login-subtitle">Sign in to your account</p>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="alert-success">@_successMessage</div>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert-error">@_errorMessage</div>
+    }
+
+    <form @onsubmit="HandleLogin" @onsubmit:preventDefault>
+        <div class="form-group">
+            <label class="form-label" for="email">Email</label>
+            <input type="email"
+                   id="email"
+                   class="form-input"
+                   @bind="_email"
+                   placeholder="your.email@example.com"
+                   required />
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="password">Password</label>
+            <input type="password"
+                   id="password"
+                   class="form-input"
+                   @bind="_password"
+                   required />
+        </div>
+
+        <button type="submit" class="btn-primary" disabled="@_isLoading">
+            @if (_isLoading)
+            {
+                <span>Signing In...</span>
+            }
+            else
+            {
+                <span>Sign In</span>
+            }
+        </button>
+    </form>
+
+    <div class="divider"></div>
+
+    <p class="text-center">
+        <span><a href="/forgot-password" style="color: #594ae2;">Forgot your password?</a><br /></span>
+        <span>Need to verify your email? <a href="/resend-verification" style="color: #594ae2;">Resend verification email</a><br /></span>
+        Need an invite? Contact your administrator.
+    </p>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "verified")]
+    public string? Verified { get; set; }
+
+    private bool _isLoading;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    protected override void OnInitialized()
+    {
+        // Handle email verification status messages
+        if (!string.IsNullOrEmpty(Verified))
+        {
+            _successMessage = Verified switch
+            {
+                "success" => "Email verified successfully! You can now log in.",
+                "already" => "Your email is already verified. Please log in.",
+                _ => null
+            };
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        _errorMessage = null;
+        _isLoading = true;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Routes.Auth.Login, new LoginRequest(_email, _password));
+            var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+
+            if (result?.Success == true)
+            {
+                // Handle TOTP verification required
+                if (result.RequiresTotp)
+                {
+                    // URL-encode the token - Base64 contains +/= which must be escaped
+                    Navigation.NavigateTo($"/login/verify?token={Uri.EscapeDataString(result.IntermediateToken!)}", forceLoad: false);
+                    return;
+                }
+
+                // Handle TOTP setup required
+                if (result.RequiresTotpSetup)
+                {
+                    // URL-encode the token - Base64 contains +/= which must be escaped
+                    Navigation.NavigateTo($"/login/setup-2fa?token={Uri.EscapeDataString(result.IntermediateToken!)}", forceLoad: false);
+                    return;
+                }
+
+                // Notify auth state provider to refresh
+                if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+                {
+                    wasmAuth.NotifyAuthenticationStateChanged();
+                }
+
+                // Navigate to home
+                Navigation.NavigateTo("/", forceLoad: false);
+            }
+            else
+            {
+                _errorMessage = result?.Error ?? "Login failed. Please check your credentials.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "Unable to connect to the server. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private record LoginRequest(string Email, string Password);
+    private record LoginResponse(
+        bool Success,
+        string? Error = null,
+        bool RequiresTotp = false,
+        bool RequiresTotpSetup = false,
+        string? UserId = null,
+        string? IntermediateToken = null);
+}

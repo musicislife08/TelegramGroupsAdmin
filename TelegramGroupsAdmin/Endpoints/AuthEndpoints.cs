@@ -140,14 +140,16 @@ public static class AuthEndpoints
             [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
-            // SECURITY: Validate intermediate auth token to ensure password was verified first
-            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, request.UserId))
+            // SECURITY: Validate intermediate auth token and extract userId from the token itself.
+            // This prevents userId manipulation attacks where an attacker could try to authenticate
+            // as a different user by modifying the userId in the request.
+            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId is null)
             {
                 return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
             }
 
             // Rate limiting (SECURITY-5) - use userId as identifier for TOTP verification
-            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.UserId, "totp_verify");
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "totp_verify");
             if (!rateLimitCheck.IsAllowed)
             {
                 return Results.Json(new
@@ -158,9 +160,9 @@ public static class AuthEndpoints
             }
 
             // Record attempt for rate limiting
-            await rateLimitService.RecordAttemptAsync(request.UserId, "totp_verify");
+            await rateLimitService.RecordAttemptAsync(userId, "totp_verify");
 
-            var result = await authService.VerifyTotpAsync(request.UserId, request.Code);
+            var result = await authService.VerifyTotpAsync(userId, request.Code);
 
             if (!result.Success)
             {
@@ -189,14 +191,16 @@ public static class AuthEndpoints
             [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
-            // SECURITY: Validate intermediate auth token to ensure password was verified first
-            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, request.UserId))
+            // SECURITY: Validate intermediate auth token and extract userId from the token itself.
+            // This prevents userId manipulation attacks where an attacker could try to authenticate
+            // as a different user by modifying the userId in the request.
+            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId is null)
             {
                 return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
             }
 
             // Rate limiting (SECURITY-5) - use userId as identifier for recovery code verification
-            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.UserId, "recovery_code");
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "recovery_code");
             if (!rateLimitCheck.IsAllowed)
             {
                 return Results.Json(new
@@ -207,9 +211,9 @@ public static class AuthEndpoints
             }
 
             // Record attempt for rate limiting
-            await rateLimitService.RecordAttemptAsync(request.UserId, "recovery_code");
+            await rateLimitService.RecordAttemptAsync(userId, "recovery_code");
 
-            var result = await authService.UseRecoveryCodeAsync(request.UserId, request.RecoveryCode);
+            var result = await authService.UseRecoveryCodeAsync(userId, request.RecoveryCode);
 
             if (!result.Success)
             {

@@ -1,0 +1,28 @@
+@page "/"
+@attribute [Authorize]
+
+<PageTitle>Dashboard - Telegram Groups Admin</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+<MudAlert Severity="Severity.Info" Class="mb-4">
+    This is the Blazor WebAssembly UI proof-of-concept.
+    Currently implementing: Auth flow + Messages page with SSE.
+</MudAlert>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard>
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Quick Links</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudNavLink Href="/messages" Icon="@Icons.Material.Filled.Message">
+                    View Messages
+                </MudNavLink>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>

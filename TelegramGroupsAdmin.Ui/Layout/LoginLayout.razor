@@ -1,0 +1,31 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="@_theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudMainContent>
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = Colors.Blue.Default,
+            AppbarBackground = Colors.Blue.Default,
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = Colors.Blue.Lighten1,
+            AppbarBackground = Colors.Gray.Darken4,
+            Background = Colors.Gray.Darken4,
+            Surface = Colors.Gray.Darken3,
+            DrawerBackground = Colors.Gray.Darken4,
+        }
+    };
+}

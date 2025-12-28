@@ -125,6 +125,35 @@ public class IntermediateAuthService : IIntermediateAuthService
         return true;
     }
 
+    public bool ValidateAndConsumeToken(string token, out string? userId)
+    {
+        userId = null;
+
+        if (string.IsNullOrEmpty(token))
+        {
+            _logger.LogWarning("Token validation failed: null/empty token");
+            return false;
+        }
+
+        // Try to remove the token (consume it)
+        if (!_tokens.TryRemove(token, out var tokenData))
+        {
+            _logger.LogWarning("Token validation failed: token not found or already consumed");
+            return false;
+        }
+
+        // Check if token is expired
+        if (tokenData.ExpiresAt < DateTimeOffset.UtcNow)
+        {
+            _logger.LogWarning("Token validation failed: token expired at {ExpiresAt}", tokenData.ExpiresAt);
+            return false;
+        }
+
+        userId = tokenData.UserId;
+        _logger.LogInformation("Successfully validated and consumed token for user {UserId}", userId);
+        return true;
+    }
+
     private void CleanupExpiredTokens()
     {
         var now = DateTimeOffset.UtcNow;

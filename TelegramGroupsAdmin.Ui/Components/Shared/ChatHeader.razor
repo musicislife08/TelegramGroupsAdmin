@@ -1,0 +1,80 @@
+@* Chat header bar - Telegram Desktop style *@
+
+<div class="chat-header">
+    @if (ShowBackButton)
+    {
+        <button class="back-button" @onclick="OnBackClicked" type="button">
+            <svg viewBox="0 0 24 24" class="back-icon">
+                <path fill="currentColor" d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z" />
+            </svg>
+        </button>
+    }
+
+    @if (!string.IsNullOrEmpty(ChatIconPath))
+    {
+        <img src="@GetChatIconPath(ChatIconPath)"
+             alt="@ChatName"
+             class="chat-header-avatar"
+             loading="lazy" />
+    }
+    else
+    {
+        <div class="chat-header-avatar chat-header-avatar-fallback">
+            <svg viewBox="0 0 24 24" class="chat-header-icon">
+                <path fill="currentColor" d="M16,13C15.71,13 15.38,13 15.03,13.05C16.19,13.89 17,15 17,16.5V19H23V16.5C23,14.17 18.33,13 16,13M8,13C5.67,13 1,14.17 1,16.5V19H15V16.5C15,14.17 10.33,13 8,13M8,11A3,3 0 0,0 11,8A3,3 0 0,0 8,5A3,3 0 0,0 5,8A3,3 0 0,0 8,11M16,11A3,3 0 0,0 19,8A3,3 0 0,0 16,5A3,3 0 0,0 13,8A3,3 0 0,0 16,11Z" />
+            </svg>
+        </div>
+    }
+
+    <div class="chat-header-info">
+        <div class="chat-header-title">@ChatName</div>
+        @if (!string.IsNullOrEmpty(ChatDescription))
+        {
+            <div class="chat-header-subtitle">@ChatDescription</div>
+        }
+    </div>
+
+    @if (ShowMenuButton)
+    {
+        <button class="menu-button" @onclick="OnMenuClicked" type="button">
+            <svg viewBox="0 0 24 24" class="menu-icon">
+                <path fill="currentColor" d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z" />
+            </svg>
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string ChatName { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? ChatIconPath { get; set; }
+
+    [Parameter]
+    public string? ChatDescription { get; set; }
+
+    [Parameter]
+    public bool ShowBackButton { get; set; }
+
+    [Parameter]
+    public bool ShowMenuButton { get; set; }
+
+    [Parameter]
+    public EventCallback OnBackClicked { get; set; }
+
+    [Parameter]
+    public EventCallback OnMenuClicked { get; set; }
+
+    private string GetChatIconPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+
+        var relativePath = path.Contains('/') || path.Contains('\\')
+            ? path.Replace('\\', '/')
+            : Path.GetFileName(path);
+
+        return $"/media/{relativePath}";
+    }
+}

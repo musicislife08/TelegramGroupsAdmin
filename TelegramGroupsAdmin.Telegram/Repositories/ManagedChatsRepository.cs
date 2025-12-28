@@ -259,4 +259,34 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
         return result;
     }
+
+    public async Task<bool> HasAccessToChatAsync(
+        string userId,
+        PermissionLevel permissionLevel,
+        long chatId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // GlobalAdmin (1) and Owner (2) have access to all active managed chats
+        if (permissionLevel >= PermissionLevel.GlobalAdmin)
+        {
+            return await context.ManagedChats
+                .AsNoTracking()
+                .AnyAsync(mc => mc.ChatId == chatId && mc.IsDeleted == false, cancellationToken);
+        }
+
+        // Admin (0) has access only if their linked Telegram account is admin in the chat
+        // Uses EXISTS for efficient single-chat lookup instead of fetching all accessible chats
+        return await (
+            from mc in context.ManagedChats
+            join ca in context.ChatAdmins on mc.ChatId equals ca.ChatId
+            join tum in context.TelegramUserMappings on ca.TelegramId equals tum.TelegramId
+            where mc.ChatId == chatId
+                && mc.IsDeleted == false
+                && tum.UserId == userId
+                && tum.IsActive == true
+            select mc
+        ).AnyAsync(cancellationToken);
+    }
 }

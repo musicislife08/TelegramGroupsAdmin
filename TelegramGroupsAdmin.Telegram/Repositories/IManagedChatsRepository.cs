@@ -80,4 +80,21 @@ public interface IManagedChatsRepository
         PermissionLevel permissionLevel,
         bool includeDeleted = false,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Check if a user has access to a specific chat.
+    /// More efficient than GetUserAccessibleChatsAsync when checking a single chat.
+    /// - GlobalAdmin (1) / Owner (2): Always true for active managed chats
+    /// - Admin (0): Only if user's linked Telegram account is admin in the chat
+    /// </summary>
+    /// <param name="userId">Web app user ID</param>
+    /// <param name="permissionLevel">User's permission level</param>
+    /// <param name="chatId">The chat ID to check access for</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if user has access to the chat, false otherwise</returns>
+    Task<bool> HasAccessToChatAsync(
+        string userId,
+        PermissionLevel permissionLevel,
+        long chatId,
+        CancellationToken cancellationToken = default);
 }

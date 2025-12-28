@@ -1,0 +1,801 @@
+@using TelegramGroupsAdmin.Ui.Helpers
+@using TelegramGroupsAdmin.ContentDetection.Utilities
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Constants
+@using TelegramGroupsAdmin.Core
+@using TelegramGroupsAdmin.Core.Utilities
+@* Telegram-authentic message bubble design *@
+
+<div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
+    @* User profile photo (clickable to view user details) *@
+    <div class="tg-avatar-container" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" style="cursor: pointer;" title="View user details">
+        @if (!string.IsNullOrEmpty(Message.UserPhotoPath))
+        {
+            <img src="@GetImagePath(Message.UserPhotoPath)" alt="@GetUserDisplayName()" class="tg-avatar" loading="lazy" />
+        }
+        else
+        {
+            <div class="tg-avatar tg-avatar-fallback">
+                <svg viewBox="0 0 24 24" class="tg-avatar-icon">
+                    <path fill="currentColor" d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z" />
+                </svg>
+            </div>
+        }
+    </div>
+
+    @* Message bubble with tail *@
+    <div class="tg-bubble-wrapper">
+        <div class="tg-bubble-inner">
+            @* Telegram-style Header: User name + timestamp + badges *@
+            <div class="tg-header">
+                <span class="tg-user-name" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" title="View user details">
+                    @GetUserDisplayName()
+                </span>
+                <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
+                    @Message.Timestamp.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
+                </span>
+
+                @* User Tags (Phase 4.12) *@
+                @if (UserTags != null && UserTags.Any())
+                {
+                    foreach (var tag in UserTags)
+                    {
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="@tag.TagColor.ToMudColor()"
+                                 Class="tg-user-tag"
+                                 title="@($"Added by {tag.AddedBy.DisplayName} on {tag.AddedAt:yyyy-MM-dd}")">
+                            @tag.TagName
+                        </MudChip>
+                    }
+                }
+
+                @* Notes Icon (Phase 4.12) *@
+                @if (UserNotes != null && UserNotes.Any())
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Notes"
+                                   Size="Size.Small"
+                                   Class="tg-notes-icon"
+                                   title="@($"{UserNotes.Count} note(s)")"
+                                   OnClick="@ShowNotesDialog" />
+                }
+
+                @if (Message.DeletedAt.HasValue)
+                {
+                    <span class="tg-badge tg-badge-deleted" title="@($"Deleted: {Message.DeletionSource ?? "unknown"}")">
+                        🗑️ DELETED <span class="local-timestamp" data-utc="@Message.DeletedAt.Value.ToString("o")">@Message.DeletedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    </span>
+                }
+                @if (Message.EditDate.HasValue)
+                {
+                    <span class="tg-edited">edited</span>
+                }
+                @if (ContentCheck != null)
+                {
+                    <span class="tg-badge tg-badge-@(ContentCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
+                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Confidence%
+                        @if (!string.IsNullOrEmpty(_cachedContributingFactors))
+                        {
+                            <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>
+                        }
+                    </span>
+                }
+                @* Phase 4.20: Translation badge with toggle *@
+                @if (Message.Translation != null)
+                {
+                    <span class="tg-badge tg-badge-translation" title="Detected language: @Message.Translation.DetectedLanguage">
+                        🌐 @Message.Translation.DetectedLanguage.ToUpper()→EN
+                    </span>
+                    <MudIconButton Icon="@(_showTranslation ? Icons.Material.Filled.Translate : Icons.Material.Outlined.Translate)"
+                                   Size="Size.Small"
+                                   Class="tg-translate-toggle"
+                                   title="@(_showTranslation ? "Show original" : "Show translation")"
+                                   OnClick="@ToggleTranslation" />
+                }
+            </div>
+
+            @* Content *@
+            <div class="tg-content">
+                @* Reply Preview *@
+                <ReplyPreview ReplyToMessageId="@Message.ReplyToMessageId"
+                              ReplyToUser="@Message.ReplyToUser"
+                              ReplyToText="@Message.ReplyToText"
+                              OnReplyClick="@OnReplyClick" />
+
+                @* Image Thumbnail *@
+                @if (!string.IsNullOrEmpty(Message.PhotoThumbnailPath))
+                {
+                    <img src="@GetImagePath(Message.PhotoThumbnailPath)"
+                         alt="Message image"
+                         class="tg-image"
+                         loading="lazy"
+                         @onclick="() => OnImageClick.InvokeAsync(Message)" />
+                }
+
+                @* Media Attachments (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote) *@
+                @if (Message.MediaType.HasValue &&
+                     Message.MediaType.Value != MediaType.Document)
+                {
+                    @if (!string.IsNullOrEmpty(Message.MediaLocalPath))
+                    {
+                        @switch (Message.MediaType.Value)
+                    {
+                        case MediaType.Animation:
+                            <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
+                                   class="tg-media tg-animation"
+                                   autoplay loop muted playsinline
+                                   title="GIF Animation">
+                            </video>
+                            break;
+
+                        case MediaType.Video:
+                            <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
+                                   class="tg-media tg-video"
+                                   controls preload="metadata"
+                                   title="@(Message.MediaFileName ?? "Video")">
+                            </video>
+                            break;
+
+                        case MediaType.Audio:
+                            <div class="tg-audio-container">
+                                <div class="tg-audio-icon">🎵</div>
+                                <audio src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
+                                       class="tg-audio"
+                                       controls preload="metadata"
+                                       title="@(Message.MediaFileName ?? "Audio")">
+                                </audio>
+                            </div>
+                            break;
+
+                        case MediaType.Voice:
+                            <div class="tg-voice-container">
+                                <div class="tg-voice-icon">🎤</div>
+                                <audio src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
+                                       class="tg-voice"
+                                       controls preload="metadata"
+                                       title="Voice message (@FormatDuration(Message.MediaDuration))">
+                                </audio>
+                                @if (Message.MediaDuration.HasValue)
+                                {
+                                    <span class="tg-voice-duration">@FormatDuration(Message.MediaDuration.Value)</span>
+                                }
+                            </div>
+                            break;
+
+                        case MediaType.Sticker:
+                            <img src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
+                                 alt="Sticker"
+                                 class="tg-media tg-sticker"
+                                 loading="lazy" />
+                            break;
+
+                        case MediaType.VideoNote:
+                            <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
+                                   class="tg-media tg-videonote"
+                                   controls preload="metadata"
+                                   title="Video message">
+                            </video>
+                            break;
+                    }
+                    }
+                    else
+                    {
+                        @* Media file is being downloaded - show placeholder *@
+                        <div class="tg-media-placeholder">
+                            <div class="tg-media-placeholder-icon">
+                                @switch (Message.MediaType.Value)
+                                {
+                                    case MediaType.Animation:
+                                    case MediaType.Video:
+                                    case MediaType.VideoNote:
+                                        <span>🎬</span>
+                                        break;
+                                    case MediaType.Audio:
+                                    case MediaType.Voice:
+                                        <span>🎵</span>
+                                        break;
+                                    case MediaType.Sticker:
+                                        <span>🎭</span>
+                                        break;
+                                }
+                            </div>
+                            <div class="tg-media-placeholder-text">
+                                @GetMediaTypeName(Message.MediaType.Value) downloading...
+                            </div>
+                        </div>
+                    }
+                }
+                else if (Message.MediaType == MediaType.Document)
+                {
+                    @* Document: Show icon + filename (no download, file scanner handles security) *@
+                    <div class="tg-document-container">
+                        <div class="tg-document-icon">📎</div>
+                        <div class="tg-document-info">
+                            <div class="tg-document-name">@(Message.MediaFileName ?? "Document")</div>
+                            @if (Message.MediaFileSize.HasValue)
+                            {
+                                <div class="tg-document-size">@FormatFileSize(Message.MediaFileSize.Value)</div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @* Message Text (Phase 4.20: Show translation or original based on toggle) *@
+                @if (!string.IsNullOrEmpty(Message.MessageText))
+                {
+                    var (messageContent, urlPreviews) = ParseUrlPreviews(Message.MessageText);
+
+                    @if (_showTranslation && Message.Translation != null)
+                    {
+                        <div class="tg-text tg-text-translated">
+                            @Message.Translation.TranslatedText
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="tg-text">@messageContent</div>
+                    }
+
+                    @* URL Previews Section (Telegram-style cards) *@
+                    @if (urlPreviews != null && urlPreviews.Any())
+                    {
+                        <div class="tg-url-previews">
+                            @foreach (var preview in urlPreviews)
+                            {
+                                <div class="tg-url-preview-card">
+                                    <a href="@preview.Url" target="_blank" class="tg-preview-url" rel="noopener noreferrer">@preview.Url</a>
+                                    @if (!string.IsNullOrEmpty(preview.Title))
+                                    {
+                                        <div class="tg-preview-title">@preview.Title</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(preview.Description))
+                                    {
+                                        <div class="tg-preview-description">@preview.Description</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(preview.OgTitle))
+                                    {
+                                        <div class="tg-preview-og-title">@preview.OgTitle</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(preview.OgDescription))
+                                    {
+                                        <div class="tg-preview-og-description">@preview.OgDescription</div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+
+            @* Actions menu - compact popover like Telegram (hover-triggered) *@
+            @if (ShowSpamActions)
+            {
+                <div class="tg-actions-menu"
+                     @onmouseenter="@(() => _popoverOpen = true)"
+                     @onmouseleave="@(() => _popoverOpen = false)">
+                    <MudIconButton Icon="@Icons.Material.Filled.MoreVert"
+                                   Size="Size.Small"
+                                   Class="tg-menu-btn" />
+
+                    <MudPopover Open="@_popoverOpen"
+                                AnchorOrigin="Origin.BottomRight"
+                                TransformOrigin="Origin.TopRight"
+                                Class="tg-actions-popover"
+                                @onmouseenter="@(() => _popoverOpen = true)"
+                                @onmouseleave="@(() => _popoverOpen = false)">
+                        <div class="tg-actions-list">
+                            @* Phase 1: Reply button (all messages) *@
+                            <MudMenuItem OnClick="@(() => { _popoverOpen = false; OnReplyToClick.InvokeAsync(Message.MessageId); })">
+                                <div class="tg-menu-item">
+                                    <MudIcon Icon="@Icons.Material.Filled.Reply" Size="Size.Small" />
+                                    <span>Reply</span>
+                                </div>
+                            </MudMenuItem>
+
+                            @* Phase 1: Edit button (bot messages only) *@
+                            @if (IsBotMessage)
+                            {
+                                <MudMenuItem OnClick="@(() => { _popoverOpen = false; OnEditClick.InvokeAsync((Message.MessageId, Message.MessageText ?? string.Empty)); })">
+                                    <div class="tg-menu-item">
+                                        <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                        <span>Edit Message</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+
+                            @if (EditCount > 0)
+                            {
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnViewEdits.InvokeAsync(Message); })">
+                                    <div class="tg-menu-item">
+                                        <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" />
+                                        <span>View Edits (@EditCount)</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+
+                            @if (DetectionHistory?.Count > 0)
+                            {
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnViewDetections.InvokeAsync(Message); })">
+                                    <div class="tg-menu-item">
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
+                                        <span>Detection History</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+
+                            @if (ContentCheck?.IsSpam != true && !IsCurrentUser)
+                            {
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsSpam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                    <div class="tg-menu-item tg-menu-item-danger">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
+                                        <span>Mark as Spam</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+
+                            @if (!IsManuallyMarkedAsHam())
+                            {
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsHam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                    <div class="tg-menu-item tg-menu-item-success">
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
+                                        <span>Mark as Ham</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnDeleteMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <div class="tg-menu-item tg-menu-item-danger">
+                                    <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" />
+                                    <span>Delete Message</span>
+                                </div>
+                            </MudMenuItem>
+
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTempBan.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <div class="tg-menu-item tg-menu-item-warning">
+                                    <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" />
+                                    <span>Temp Ban User</span>
+                                </div>
+                            </MudMenuItem>
+
+                            @* Phase 4.20: Manual translation button (for messages that didn't auto-translate) *@
+                            @if (Message.Translation == null && !string.IsNullOrWhiteSpace(Message.MessageText))
+                            {
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTranslateMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                    <div class="tg-menu-item">
+                                        <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" />
+                                        <span>Translate Message</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+                        </div>
+                    </MudPopover>
+                </div>
+            }
+        </div>
+
+        @* Telegram tail - small subtle curve at bottom-left *@
+        <svg class="tg-tail" viewBox="0 0 6 12" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6,12 L0,12 L0,8 Q0,6 2,4 Q4,2 6,0 Z"/>
+        </svg>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public MessageRecord Message { get; set; } = null!;
+
+    [Parameter]
+    public ContentCheckRecord? ContentCheck { get; set; }
+
+    [Parameter]
+    public int EditCount { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnImageClick { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewEdits { get; set; }
+
+    [Parameter]
+    public bool ShowSpamActions { get; set; }
+
+    [Parameter]
+    public List<DetectionResultRecord>? DetectionHistory { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsSpam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsHam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewDetections { get; set; }
+
+    /// <summary>
+    /// Click on username or avatar to view user details in a dialog
+    /// </summary>
+    [Parameter]
+    public EventCallback<long> OnViewUserDetail { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnFilterByChat { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnDeleteMessage { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnTempBan { get; set; }
+
+    [Parameter]
+    public bool IsCurrentUser { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnReplyClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Reply button callback
+    /// </summary>
+    [Parameter]
+    public EventCallback<long> OnReplyToClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Edit button callback (messageId, messageText)
+    /// </summary>
+    [Parameter]
+    public EventCallback<(long MessageId, string MessageText)> OnEditClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Is this message from the bot?
+    /// </summary>
+    [Parameter]
+    public bool IsBotMessage { get; set; }
+
+    /// <summary>
+    /// Phase 4.20: Manual translation callback
+    /// </summary>
+    [Parameter]
+    public EventCallback<MessageRecord> OnTranslateMessage { get; set; }
+
+    /// <summary>
+    /// Phase 4.12: User tags for contextual display in message UI
+    /// </summary>
+    [Parameter]
+    public List<UserTag>? UserTags { get; set; }
+
+    /// <summary>
+    /// Phase 4.12: Admin notes for contextual display in message UI
+    /// </summary>
+    [Parameter]
+    public List<AdminNote>? UserNotes { get; set; }
+
+    [Inject]
+    private IDialogService DialogService { get; set; } = null!;
+
+    private readonly bool _actionInProgress = false;
+    private bool _popoverOpen;
+    private bool _showTranslation = true; // Phase 4.20: Show translation by default when available
+
+    // UX-1: Cached detection display values (computed once per parameter set)
+    private string? _cachedContributingFactors;
+    private string? _cachedTooltip;
+
+    /// <summary>
+    /// Show admin notes dialog when notes icon is clicked
+    /// Phase 4.12: Display all notes for the message author
+    /// </summary>
+    private async Task ShowNotesDialog()
+    {
+        if (UserNotes == null || !UserNotes.Any())
+            return;
+
+        var parameters = new DialogParameters
+        {
+            { nameof(UserNotesDialog.Notes), UserNotes },
+            { nameof(UserNotesDialog.UserName), Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}" }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<UserNotesDialog>("User Notes", parameters, options);
+    }
+
+    private string GetBubbleClass()
+    {
+        var baseClass = "tg-message";
+
+        // Add spam/ham/neutral class
+        if (ContentCheck != null)
+        {
+            if (ContentCheck.IsSpam)
+                baseClass += " tg-message-spam";
+            else
+                baseClass += " tg-message-ham";
+        }
+
+        // Add current user class for lighter color
+        if (IsCurrentUser)
+            baseClass += " tg-message-current-user";
+
+        return baseClass;
+    }
+
+    private string GetImagePath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+
+        var relativePath = path.Contains('/') || path.Contains('\\')
+            ? path.Replace('\\', '/')
+            : Path.GetFileName(path);
+
+        // All media files (images, videos, audio, etc.) are served from /media/
+        return $"/media/{relativePath}";
+    }
+
+    private string GetMediaPath(string? filename, MediaType mediaType)
+    {
+        if (string.IsNullOrEmpty(filename))
+            return string.Empty;
+
+        // Use centralized utility to construct media path
+        return Core.Utilities.MediaPathUtilities.GetMediaWebPath(filename, (int)mediaType);
+    }
+
+    private bool IsManuallyMarkedAsHam()
+    {
+        if (DetectionHistory == null || !DetectionHistory.Any())
+            return false;
+
+        var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).First();
+        return latest is { DetectionSource: "manual", IsSpam: false };
+    }
+
+    /// <summary>
+    /// Format duration in seconds to MM:SS format
+    /// Phase 4.X: Used for audio/voice/video duration display
+    /// </summary>
+    private string FormatDuration(int? seconds)
+    {
+        if (seconds is null or < 0)
+            return "0:00";
+
+        var duration = TimeSpan.FromSeconds(seconds.Value);
+        return duration.TotalHours >= 1
+            ? duration.ToString(@"h\:mm\:ss")  // 1:23:45 for long files
+            : duration.ToString(@"m\:ss");      // 3:45 for short files
+    }
+
+    /// <summary>
+    /// Format file size in bytes to human-readable format (KB, MB, GB)
+    /// Phase 4.X: Used for document file size display
+    /// </summary>
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = ["B", "KB", "MB", "GB", "TB"];
+        double len = bytes;
+        int order = 0;
+
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+
+        return $"{len:0.##} {sizes[order]}";
+    }
+
+    /// <summary>
+    /// Get friendly name for media type
+    /// Phase 4.X: Used for media placeholder display
+    /// </summary>
+    private string GetMediaTypeName(MediaType mediaType)
+    {
+        return mediaType switch
+        {
+            MediaType.Animation => "GIF",
+            MediaType.Video => "Video",
+            MediaType.Audio => "Audio",
+            MediaType.Voice => "Voice message",
+            MediaType.Sticker => "Sticker",
+            MediaType.VideoNote => "Video message",
+            MediaType.Document => "Document",
+            _ => "Media"
+        };
+    }
+
+    /// <summary>
+    /// Toggle between original and translated text
+    /// Phase 4.20: User can switch between viewing original foreign language text or English translation
+    /// </summary>
+    private void ToggleTranslation()
+    {
+        _showTranslation = !_showTranslation;
+    }
+
+    /// <summary>
+    /// Parse message text to extract URL previews section
+    /// Returns tuple of (message content, list of URL previews)
+    /// </summary>
+    private (string messageContent, List<UrlPreview>? urlPreviews) ParseUrlPreviews(string messageText)
+    {
+        const string delimiter = "\n\n━━━ URL Previews ━━━\n\n";
+
+        if (!messageText.Contains(delimiter))
+        {
+            return (messageText, null);
+        }
+
+        var parts = messageText.Split(new[] { delimiter }, 2, StringSplitOptions.None);
+        var content = parts[0];
+        var previewSection = parts.Length > 1 ? parts[1] : null;
+
+        if (string.IsNullOrEmpty(previewSection))
+        {
+            return (content, null);
+        }
+
+        // Parse each URL preview block (separated by double newline)
+        var previewBlocks = previewSection.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var previews = new List<UrlPreview>();
+
+        foreach (var block in previewBlocks)
+        {
+            var lines = block.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0)
+                continue;
+
+            var preview = new UrlPreview
+            {
+                Url = lines[0],
+                Title = lines.Length > 1 ? lines[1] : null,
+                Description = lines.Length > 2 ? lines[2] : null,
+                OgTitle = lines.Length > 3 ? lines[3] : null,
+                OgDescription = lines.Length > 4 ? lines[4] : null
+            };
+
+            previews.Add(preview);
+        }
+
+        return (content, previews.Count > 0 ? previews : null);
+    }
+
+    /// <summary>
+    /// URL preview data extracted from enriched message text
+    /// </summary>
+    private record UrlPreview
+    {
+        public string Url { get; init; } = string.Empty;
+        public string? Title { get; init; }
+        public string? Description { get; init; }
+        public string? OgTitle { get; init; }
+        public string? OgDescription { get; init; }
+    }
+
+    /// <summary>
+    /// Cache detection display values when parameters change
+    /// Phase UX-1: Performance optimization - compute once instead of on every render
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+
+        if (ContentCheck != null && DetectionHistory?.Any() == true)
+        {
+            var contributingFactors = GetContributingFactors();
+            _cachedContributingFactors = contributingFactors?.Any() == true
+                ? string.Join(", ", contributingFactors)
+                : null;
+            _cachedTooltip = GetDetectionTooltip(contributingFactors);
+        }
+        else
+        {
+            _cachedContributingFactors = null;
+            _cachedTooltip = ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+        }
+    }
+
+    /// <summary>
+    /// Get the latest detection result from history (cached to avoid repeated LINQ queries)
+    /// Phase UX-1: Performance optimization
+    /// </summary>
+    private DetectionResultRecord? GetLatestDetection() =>
+        DetectionHistory?.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+
+    /// <summary>
+    /// Get top contributing factors from detection history for spam/ham badge
+    /// Phase UX-1: Show which algorithms contributed to the decision
+    /// Returns top 3 algorithms by confidence score
+    /// </summary>
+    private List<string>? GetContributingFactors()
+    {
+        var latest = GetLatestDetection();
+        if (latest?.CheckResultsJson == null)
+            return null;
+
+        // Parse the check results
+        var checkResults = CheckResultsSerializer.Deserialize(latest.CheckResultsJson);
+        if (checkResults == null || !checkResults.Any())
+            return null;
+
+        // Get top 3 contributing algorithms (highest confidence spam or ham checks)
+        var topContributors = checkResults
+            .Where(c => c.Confidence > 0)  // Only show checks that had confidence
+            .OrderByDescending(c => c.Confidence)
+            .Take(3)
+            .Select(c => $"{GetFriendlyCheckName(c.CheckName)} {c.Confidence}%")
+            .ToList();
+
+        return topContributors.Any() ? topContributors : null;
+    }
+
+    /// <summary>
+    /// Get tooltip text showing full detection details
+    /// Phase UX-1: Enhanced transparency for spam detection decisions
+    /// </summary>
+    private string GetDetectionTooltip(List<string>? contributingFactors)
+    {
+        var latest = GetLatestDetection();
+        if (latest == null)
+            return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+
+        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetConfidence}% confidence\n";
+        tooltip += $"Detection: {latest.DetectionMethod}\n";
+        tooltip += $"Source: {latest.DetectionSource}\n";
+
+        if (contributingFactors?.Any() == true)
+        {
+            tooltip += $"\nTop Contributors:\n• {string.Join("\n• ", contributingFactors)}";
+        }
+
+        if (!string.IsNullOrEmpty(latest.Reason))
+        {
+            tooltip += $"\n\nReason: {latest.Reason}";
+        }
+
+        return tooltip;
+    }
+
+    /// <summary>
+    /// Get display name for user, handling special case for Telegram service account (user 777000).
+    /// For service account, shows the group/channel name instead of "Telegram" or "User 777000".
+    /// </summary>
+    private string GetUserDisplayName()
+    {
+        return TelegramDisplayName.Format(
+            Message.FirstName,
+            Message.LastName,
+            Message.UserName,
+            Message.UserId,
+            Message.ChatName);
+    }
+
+    /// <summary>
+    /// Convert CheckName enum to friendly display name
+    /// Phase UX-1: User-friendly algorithm names for spam detection results
+    /// </summary>
+    private static string GetFriendlyCheckName(CheckName checkName)
+    {
+        return checkName switch
+        {
+            CheckName.CAS => "CAS",
+            CheckName.StopWords => "Keywords",
+            CheckName.Similarity => "Similarity",
+            CheckName.Bayes => "Bayes",
+            CheckName.OpenAI => "AI",
+            CheckName.ThreatIntel => "Threat Intel",
+            CheckName.ImageSpam => "Image",
+            CheckName.VideoSpam => "Video",
+            CheckName.Spacing => "Spacing",
+            CheckName.InvisibleChars => "Invisible Chars",
+            CheckName.UrlBlocklist => "URL Block",
+            CheckName.SeoScraping => "SEO Spam",
+            CheckName.FileScanning => "File Scan",
+            _ => checkName.ToString()
+        };
+    }
+}

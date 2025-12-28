@@ -1,0 +1,282 @@
+@page "/register"
+@using TelegramGroupsAdmin.Ui.Api
+@using System.Text.Json
+@layout LoginLayout
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+
+<PageTitle>Register - Telegram Groups Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">
+            @(_isFirstRun ? "Setup Owner Account" : "Create Account")
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">
+            @(_isFirstRun ? "Create the initial administrator account" : "Register with your invite code")
+        </MudText>
+
+        @if (_isFirstRun)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                No users exist. The first account will be created with Owner permissions.
+            </MudAlert>
+
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    <strong>Have a backup?</strong> You can restore from a previous backup instead of creating a new account.
+                </MudText>
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.SettingsBackupRestore"
+                           OnClick="@OpenRestoreModal">
+                    Restore from Backup
+                </MudButton>
+            </MudAlert>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+        }
+
+        @if (_registrationSuccess)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-4">
+                @(_successMessage ?? "Account created successfully! You can now log in.")
+            </MudAlert>
+        }
+
+        @if (!_isFirstRun && !_isEmailVerificationEnabled)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText Typo="Typo.body2">
+                    <strong>Note:</strong> Email verification is currently disabled (email service not configured).
+                    You will be able to log in immediately after registration. If you cannot log in, contact your administrator.
+                </MudText>
+            </MudAlert>
+        }
+
+        @if (!_isFirstRun)
+        {
+            <MudTextField T="string"
+                          Label="Invite Code"
+                          @bind-Value="_inviteToken"
+                          Variant="Variant.Outlined"
+                          Class="mb-4"
+                          Disabled="@(_isLoading || _registrationSuccess)" />
+        }
+
+        <MudTextField T="string"
+                      Label="Email"
+                      @bind-Value="_email"
+                      Variant="Variant.Outlined"
+                      Class="mb-4"
+                      InputType="InputType.Email"
+                      Disabled="@(_isLoading || _registrationSuccess)" />
+
+        <MudTextField T="string"
+                      Label="Password"
+                      @bind-Value="_password"
+                      Variant="Variant.Outlined"
+                      Class="mb-4"
+                      InputType="InputType.Password"
+                      Disabled="@(_isLoading || _registrationSuccess)"
+                      HelperText="Minimum 8 characters with uppercase, lowercase, and number"
+                      Validation="@(new Func<string, string?>(ValidatePassword))"
+                      Immediate="true" />
+
+        <MudTextField T="string"
+                      Label="Confirm Password"
+                      @bind-Value="_confirmPassword"
+                      Variant="Variant.Outlined"
+                      Class="mb-6"
+                      InputType="InputType.Password"
+                      Disabled="@(_isLoading || _registrationSuccess)"
+                      Validation="@(new Func<string, string?>(ValidateConfirmPassword))"
+                      Immediate="true" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   OnClick="@(async () => await HandleRegisterAsync())"
+                   Disabled="@(_isLoading || _registrationSuccess)">
+            @if (_isLoading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ml-2">Creating Account...</MudText>
+            }
+            else
+            {
+                <span>Create Account</span>
+            }
+        </MudButton>
+
+        <MudDivider Class="my-6" />
+
+        <MudText Typo="Typo.body2" Align="Align.Center">
+            Already have an account?
+            <MudLink Href="/login" Color="Color.Primary">Sign In</MudLink>
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private bool _isLoading;
+    private bool _registrationSuccess;
+    private bool _isFirstRun;
+    private bool _isEmailVerificationEnabled;
+    private string _inviteToken = string.Empty;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    [SupplyParameterFromQuery(Name = "invite")]
+    private string? InviteQueryParam { get; set; }
+
+    private string? ValidatePassword(string password)
+    {
+        if (string.IsNullOrEmpty(password))
+            return "Password is required";
+
+        if (password.Length < 8)
+            return "Password must be at least 8 characters";
+
+        if (!password.Any(char.IsUpper))
+            return "Password must contain at least one uppercase letter";
+
+        if (!password.Any(char.IsLower))
+            return "Password must contain at least one lowercase letter";
+
+        if (!password.Any(char.IsDigit))
+            return "Password must contain at least one number";
+
+        return null;
+    }
+
+    private string? ValidateConfirmPassword(string confirmPassword)
+    {
+        if (string.IsNullOrEmpty(confirmPassword))
+            return "Please confirm your password";
+
+        if (confirmPassword != _password)
+            return "Passwords do not match";
+
+        return null;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if this is first run (no users exist)
+        try
+        {
+            var response = await Http.GetAsync(Routes.Auth.FirstRun);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+                _isFirstRun = result.TryGetProperty("isFirstRun", out var prop) && prop.GetBoolean();
+            }
+        }
+        catch
+        {
+            // Default to non-first-run on error
+            _isFirstRun = false;
+        }
+
+        // TODO: Check if email verification is enabled via API
+        // For now, default to true (assume enabled)
+        _isEmailVerificationEnabled = true;
+
+        if (!string.IsNullOrEmpty(InviteQueryParam))
+        {
+            _inviteToken = InviteQueryParam;
+        }
+    }
+
+    private async Task OpenRestoreModal()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<RestoreBackupModal>("Restore from Backup", options);
+    }
+
+    private async Task HandleRegisterAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // Validate password is not null (form validation should prevent this)
+            if (string.IsNullOrEmpty(_password))
+            {
+                _errorMessage = "Password is required";
+                _isLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            var response = await Http.PostAsJsonAsync(Routes.Auth.Register, new
+            {
+                Email = _email,
+                Password = _password,
+                InviteToken = _inviteToken
+            });
+
+            // Check if response has content and is JSON
+            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength == 0)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _errorMessage = string.IsNullOrEmpty(errorBody)
+                    ? $"Server error: {response.StatusCode}"
+                    : "Registration failed. Please check the server logs for details.";
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+            if (result.ValueKind == JsonValueKind.Undefined || !result.GetProperty("success").GetBoolean())
+            {
+                _errorMessage = result.ValueKind != JsonValueKind.Undefined && result.TryGetProperty("error", out var error)
+                    ? error.GetString()
+                    : "Registration failed";
+                return;
+            }
+
+            // Registration successful - show message and redirect to login
+            // The login flow handles all verification: email, TOTP setup, TOTP verify
+            _successMessage = result.TryGetProperty("message", out var msg)
+                ? msg.GetString()
+                : "Account created successfully! Please log in.";
+            _registrationSuccess = true;
+            StateHasChanged();
+
+            // Wait for user to see the success message
+            await Task.Delay(2000);
+
+            // Always redirect to login - no auto-login
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+        catch (Exception)
+        {
+            _errorMessage = "An error occurred during registration. Please try again.";
+            _registrationSuccess = false;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

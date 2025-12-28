@@ -47,7 +47,7 @@ public class MessagesPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/messages");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public class MessagesPage
             url += "?" + string.Join("&", queryParams);
 
         await _page.GotoAsync(url);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     /// <summary>
@@ -117,6 +117,20 @@ public class MessagesPage
     }
 
     /// <summary>
+    /// Waits for at least the specified number of chats to appear in the sidebar.
+    /// Use this for WASM tests where chat data loads asynchronously.
+    /// </summary>
+    public async Task WaitForChatsAsync(int expectedCount, int timeoutMs = 10000)
+    {
+        await Assertions.Expect(_page.Locator(ChatListItem)).ToHaveCountAsync(expectedCount, new() { Timeout = timeoutMs });
+    }
+
+    /// <summary>
+    /// Locator for chat list items (for Playwright assertions).
+    /// </summary>
+    public ILocator ChatListItems => _page.Locator(ChatListItem);
+
+    /// <summary>
     /// Gets the names of all chats in the sidebar.
     /// </summary>
     public async Task<List<string>> GetChatNamesAsync()
@@ -149,7 +163,7 @@ public class MessagesPage
     {
         var chatItem = _page.Locator(ChatListItem).Filter(new() { HasText = chatName });
         await chatItem.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     /// <summary>
@@ -162,7 +176,7 @@ public class MessagesPage
         await searchInput.ClearAsync();
         // Type character by character to trigger oninput event
         await searchInput.PressSequentiallyAsync(searchText, new LocatorPressSequentiallyOptions { Delay = 50 });
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     /// <summary>
@@ -174,7 +188,7 @@ public class MessagesPage
         // Clear and dispatch input event to trigger filtering
         await searchInput.FillAsync("");
         await searchInput.DispatchEventAsync("input");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     /// <summary>

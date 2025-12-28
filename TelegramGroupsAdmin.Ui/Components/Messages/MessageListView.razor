@@ -1,0 +1,338 @@
+@* MessageListView - Main message view area with chat header, messages, and input *@
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Ui.Models
+
+<div class="telegram-main @(SelectedChat != null ? "active" : "")">
+    @if (SelectedChat != null)
+    {
+        @* Chat Header *@
+        <ChatHeader ChatName="@SelectedChat.ChatName"
+                    ChatIconPath="@SelectedChat.ChatIconPath"
+                    ChatDescription="@GetChatDescription()"
+                    ShowBackButton="true"
+                    ShowMenuButton="false"
+                    OnBackClicked="OnBackClicked" />
+
+        @* Messages Container *@
+        <div class="messages-container">
+            @if (Loading)
+            {
+                <div class="empty-state">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+            else if (Messages.Any())
+            {
+                <MudVirtualize Items="Messages" Context="messageWrapper" OverscanCount="10">
+                    <MessageBubbleTelegram Message="messageWrapper.Message"
+                                           ContentCheck="@GetContentCheck(messageWrapper)"
+                                           EditCount="@messageWrapper.EditCount"
+                                           ShowSpamActions="@(UserPermissionLevel >= PermissionLevel.GlobalAdmin)"
+                                           DetectionHistory="@messageWrapper.DetectionResults"
+                                           UserTags="@messageWrapper.UserTags"
+                                           UserNotes="@messageWrapper.UserNotes"
+                                           IsCurrentUser="@IsCurrentUserMessage(messageWrapper.Message.UserId)"
+                                           IsBotMessage="@IsBotMessage(messageWrapper.Message.UserId)"
+                                           OnImageClick="OnViewImage"
+                                           OnViewEdits="OnViewEdits"
+                                           OnMarkAsSpam="OnMarkAsSpam"
+                                           OnMarkAsHam="OnMarkAsHam"
+                                           OnViewDetections="OnViewDetections"
+                                           OnViewUserDetail="OnViewUserDetail"
+                                           OnFilterByChat="OnFilterByChat"
+                                           OnDeleteMessage="OnDeleteMessage"
+                                           OnTempBan="OnTempBan"
+                                           OnReplyClick="OnReplyClick"
+                                           OnReplyToClick="HandleReplyToClick"
+                                           OnEditClick="@(tuple => HandleEditClick(tuple.MessageId, tuple.MessageText))"
+                                           OnTranslateMessage="OnTranslateMessage" />
+                </MudVirtualize>
+
+                @* Scroll Sentinel - triggers loading when scrolled near top *@
+                @if (HasMore)
+                {
+                    <div class="scroll-sentinel">
+                        @if (LoadingMore)
+                        {
+                            <div class="load-more-container">
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                <span class="loading-text">Loading older messages...</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M20,2H4A2,2 0 0,0 2,4V22L6,18H20A2,2 0 0,0 22,16V4A2,2 0 0,0 20,2M6,9H18V11H6M14,14H6V12H14M18,8H6V6H18" />
+                        </svg>
+                    </div>
+                    <div class="empty-state-text">No messages yet</div>
+                    <div class="empty-state-subtext">Messages will appear here as they are received</div>
+                </div>
+            }
+        </div>
+
+        @* Message Input (Bot messages) *@
+        <ChatInput IsEnabled="@IsFeatureAvailable"
+                   PlaceholderText="@GetChatInputPlaceholder()"
+                   MaxMessageLength="@GetMaxMessageLength()"
+                   CurrentText="@EditingOriginalText"
+                   IsEditMode="@(EditingMessageId.HasValue)"
+                   ReplyToMessageId="@ReplyToMessageId"
+                   ReplyToUser="@GetReplyToUser()"
+                   ReplyToText="@GetReplyToText()"
+                   OnSendMessage="OnSendMessage"
+                   OnEditMessage="OnEditMessage"
+                   OnCancelEdit="OnCancelEdit"
+                   OnCancelReply="OnCancelReply"
+                   OnReplyPreviewClick="OnReplyClick" />
+    }
+    else
+    {
+        @* Empty State - No Chat Selected *@
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M20,2H4A2,2 0 0,0 2,4V22L6,18H20A2,2 0 0,0 22,16V4A2,2 0 0,0 20,2M6,9H18V11H6M14,14H6V12H14M18,8H6V6H18" />
+                </svg>
+            </div>
+            <div class="empty-state-text">Select a chat to view messages</div>
+            <div class="empty-state-subtext">Choose a chat from the list to start viewing its message history</div>
+        </div>
+    }
+</div>
+
+@code {
+    // ========================================================================
+    // Data Parameters
+    // ========================================================================
+
+    [Parameter, EditorRequired]
+    public List<MessageWithMetadata> Messages { get; set; } = [];
+
+    [Parameter]
+    public ChatSummary? SelectedChat { get; set; }
+
+    [Parameter]
+    public bool Loading { get; set; }
+
+    [Parameter]
+    public bool LoadingMore { get; set; }
+
+    [Parameter]
+    public bool HasMore { get; set; }
+
+    [Parameter]
+    public PermissionLevel UserPermissionLevel { get; set; } = PermissionLevel.Admin;
+
+    [Parameter]
+    public HashSet<long> UserTelegramIds { get; set; } = [];
+
+    [Parameter]
+    public long? BotUserId { get; set; }
+
+    // ========================================================================
+    // Bot Messaging Parameters
+    // ========================================================================
+
+    [Parameter]
+    public bool IsFeatureAvailable { get; set; }
+
+    [Parameter]
+    public string? LinkedUsername { get; set; }
+
+    [Parameter]
+    public string? FeatureUnavailableReason { get; set; }
+
+    [Parameter]
+    public long? EditingMessageId { get; set; }
+
+    [Parameter]
+    public long? ReplyToMessageId { get; set; }
+
+    [Parameter]
+    public string? EditingOriginalText { get; set; }
+
+    // ========================================================================
+    // Navigation EventCallbacks
+    // ========================================================================
+
+    [Parameter]
+    public EventCallback OnBackClicked { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnReplyClick { get; set; }
+
+    [Parameter]
+    public EventCallback OnLoadMoreMessages { get; set; }
+
+    // ========================================================================
+    // Message Action EventCallbacks
+    // ========================================================================
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsSpam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsHam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnDeleteMessage { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewEdits { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewDetections { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewImage { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnViewUserDetail { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnFilterByChat { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnTempBan { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnTranslateMessage { get; set; }
+
+    // ========================================================================
+    // Bot Messaging EventCallbacks
+    // ========================================================================
+
+    [Parameter]
+    public EventCallback<string> OnSendMessage { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnEditMessage { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancelEdit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancelReply { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnReplyToMessage { get; set; }
+
+    [Parameter]
+    public EventCallback<(long MessageId, string Text)> OnEditMessageClick { get; set; }
+
+    // ========================================================================
+    // Helper Methods
+    // ========================================================================
+
+    private string GetChatDescription()
+    {
+        if (SelectedChat == null) return "";
+        return SelectedChat.MessageCount > 0
+            ? $"{SelectedChat.MessageCount:N0} messages"
+            : "No messages";
+    }
+
+    private ContentCheckRecord? GetContentCheck(MessageWithMetadata messageWrapper)
+    {
+        if (messageWrapper.DetectionResults?.Any() == true)
+        {
+            var latest = messageWrapper.DetectionResults.OrderByDescending(d => d.DetectedAt).First();
+            return new ContentCheckRecord(
+                Id: latest.Id,
+                CheckTimestamp: latest.DetectedAt,
+                UserId: latest.UserId,
+                ContentHash: messageWrapper.Message.ContentHash,
+                IsSpam: latest.IsSpam,
+                Confidence: Math.Abs(latest.NetConfidence),
+                Reason: latest.Reason,
+                CheckType: latest.DetectionMethod,
+                MatchedMessageId: messageWrapper.Message.MessageId
+            );
+        }
+
+        if (messageWrapper.LatestContentCheck != null)
+        {
+            var summary = messageWrapper.LatestContentCheck;
+            return new ContentCheckRecord(
+                Id: 0,
+                CheckTimestamp: summary.CheckedAt,
+                UserId: messageWrapper.Message.UserId,
+                ContentHash: messageWrapper.Message.ContentHash,
+                IsSpam: summary.IsSpam,
+                Confidence: summary.Confidence,
+                Reason: summary.Reason,
+                CheckType: "Summary",
+                MatchedMessageId: null
+            );
+        }
+
+        return null;
+    }
+
+    private bool IsCurrentUserMessage(long telegramUserId) => UserTelegramIds.Contains(telegramUserId);
+
+    private bool IsBotMessage(long userId) => BotUserId.HasValue && userId == BotUserId.Value;
+
+    private async Task HandleReplyToClick(long messageId)
+    {
+        await OnReplyToMessage.InvokeAsync(messageId);
+    }
+
+    private async Task HandleEditClick(long messageId, string messageText)
+    {
+        await OnEditMessageClick.InvokeAsync((messageId, messageText));
+    }
+
+    private string GetChatInputPlaceholder()
+    {
+        if (!IsFeatureAvailable)
+            return FeatureUnavailableReason ?? "Feature unavailable";
+
+        if (EditingMessageId.HasValue)
+            return "Edit message...";
+
+        return "Type a message...";
+    }
+
+    private int GetMaxMessageLength()
+    {
+        const int telegramLimit = 4096;
+
+        if (!IsFeatureAvailable || string.IsNullOrEmpty(LinkedUsername))
+            return telegramLimit;
+
+        var signatureLength = 3 + LinkedUsername.Length;
+        return telegramLimit - signatureLength;
+    }
+
+    private string? GetReplyToUser()
+    {
+        if (!ReplyToMessageId.HasValue) return null;
+
+        var replyMessage = Messages.FirstOrDefault(mw => mw.Message.MessageId == ReplyToMessageId.Value);
+        if (replyMessage == null) return null;
+
+        return TelegramGroupsAdmin.Core.Utilities.TelegramDisplayName.Format(
+            replyMessage.Message.FirstName,
+            replyMessage.Message.LastName,
+            replyMessage.Message.UserName,
+            replyMessage.Message.UserId,
+            replyMessage.Message.ChatName);
+    }
+
+    private string? GetReplyToText()
+    {
+        if (!ReplyToMessageId.HasValue) return null;
+
+        var replyMessage = Messages.FirstOrDefault(mw => mw.Message.MessageId == ReplyToMessageId.Value);
+        return replyMessage?.Message.MessageText;
+    }
+}

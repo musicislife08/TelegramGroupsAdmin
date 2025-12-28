@@ -1,0 +1,176 @@
+@using TelegramGroupsAdmin.Ui.Helpers
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ITagDefinitionsRepository TagDefinitionsRepository
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.body1">Add tags to this user:</MudText>
+                <MudButton Variant="Variant.Text"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Add"
+                          Size="Size.Small"
+                          OnClick="@CreateNewTag">
+                    Create New Tag
+                </MudButton>
+            </MudStack>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (_availableTags.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    @if (UserAssignedTags.Count > 0)
+                    {
+                        <text>All available tags are already assigned to this user. Click "Create New Tag" to add a new one.</text>
+                    }
+                    else
+                    {
+                        <text>No tags available. Click "Create New Tag" to add one.</text>
+                    }
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                    Click tags to select (you can select multiple):
+                </MudText>
+                <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; min-height: 120px;">
+                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                        @foreach (var tagDef in _availableTags)
+                        {
+                            var isSelected = _selectedTags.Contains(tagDef.TagName);
+                            <MudChip T="string"
+                                     Size="Size.Medium"
+                                     Color="@tagDef.Color.ToMudColor()"
+                                     Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                                     OnClick="@(() => ToggleTag(tagDef.TagName))"
+                                     Style="cursor: pointer;">
+                                @if (isSelected)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" />
+                                }
+                                @tagDef.TagName
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudPaper>
+
+                @if (_selectedTags.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2">
+                        Selected @_selectedTags.Count tag@(_selectedTags.Count == 1 ? "" : "s"): @string.Join(", ", _selectedTags)
+                    </MudAlert>
+                }
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@Submit" Disabled="@(_selectedTags.Count == 0)">
+            Add @(_selectedTags.Count == 1 ? "Tag" : $"{_selectedTags.Count} Tags")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public List<string> UserAssignedTags { get; set; } = [];
+
+    private List<TagDefinition> _availableTags = [];
+    private readonly HashSet<string> _selectedTags = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAvailableTags();
+    }
+
+    private async Task LoadAvailableTags()
+    {
+        _loading = true;
+        try
+        {
+            var allTags = await TagDefinitionsRepository.GetAllAsync();
+
+            // Filter out tags that the user already has assigned
+            _availableTags = allTags
+                .Where(t => !UserAssignedTags.Contains(t.TagName))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tags: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ToggleTag(string tagName)
+    {
+        if (!_selectedTags.Add(tagName))
+        {
+            _selectedTags.Remove(tagName);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task CreateNewTag()
+    {
+        var parameters = new DialogParameters
+        {
+            { "IsEdit", false }
+        };
+
+        var dialog = await DialogService.ShowAsync<TagEditDialog>("Create New Tag", parameters, new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        });
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: TagEditDialog.TagEditResult tagEditResult })
+        {
+            try
+            {
+                // Create the tag definition in the database
+                await TagDefinitionsRepository.CreateAsync(tagEditResult.TagName, tagEditResult.Color);
+
+                // Reload tags to include the new one
+                await LoadAvailableTags();
+
+                // Auto-select the newly created tag
+                _selectedTags.Add(tagEditResult.TagName);
+
+                Snackbar.Add($"Tag '{tagEditResult.TagName}' created successfully", Severity.Success);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating tag: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private void Submit()
+    {
+        var result = new TagSelectionResult
+        {
+            SelectedTags = _selectedTags.ToList()
+        };
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    public class TagSelectionResult
+    {
+        public List<string> SelectedTags { get; set; } = [];
+    }
+}

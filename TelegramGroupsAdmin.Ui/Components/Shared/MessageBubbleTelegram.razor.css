@@ -1,0 +1,570 @@
+/* Telegram-style message layout with app's dark grey theme */
+
+/* Message container - flex row with avatar + bubble */
+.tg-message {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 0 12px;
+    position: relative;
+    transition: background-color 0.1s ease;
+}
+
+.tg-message:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.tg-message:hover .tg-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Avatar container - left side, fixed width */
+.tg-avatar-container {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    margin-top: 4px;
+}
+
+.tg-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.tg-avatar-fallback {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tg-avatar-icon {
+    width: 22px;
+    height: 22px;
+    color: white;
+}
+
+/* Bubble wrapper - contains bubble + tail */
+.tg-bubble-wrapper {
+    position: relative;
+    flex: 1;
+    max-width: 70%;
+    display: flex;
+    gap: 0;
+}
+
+/* The actual message bubble */
+.tg-bubble-inner {
+    flex: 1;
+    padding: 6px 10px 7px 10px;
+    border-radius: 8px 8px 8px 0; /* Square bottom-left corner for tail connection */
+    background: #2b2b2b; /* Dark grey for incoming messages */
+    box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+    position: relative;
+}
+
+/* Telegram tail - small subtle curve at bottom */
+.tg-tail {
+    width: 6px;
+    height: 12px;
+    position: absolute;
+    left: -5px;
+    bottom: 0;
+    fill: #2b2b2b; /* Match bubble color */
+}
+
+/* Current user messages - lighter grey */
+.tg-message-current-user .tg-bubble-inner {
+    background: #3d3d3d; /* Lighter grey for your messages */
+}
+
+.tg-message-current-user .tg-tail {
+    fill: #3d3d3d; /* Match bubble color */
+}
+
+/* Spam/Ham status - subtle tinted overlays */
+.tg-message-spam .tg-bubble-inner {
+    background: #3a2626; /* Dark grey with red tint */
+    box-shadow: 0 0 0 1px rgba(239, 83, 80, 0.3), 0 1px 0.5px rgba(0, 0, 0, 0.13);
+}
+
+.tg-message-spam .tg-tail {
+    fill: #3a2626;
+}
+
+.tg-message-ham .tg-bubble-inner {
+    background: #2a332a; /* Dark grey with green tint */
+    box-shadow: 0 0 0 1px rgba(102, 187, 106, 0.25), 0 1px 0.5px rgba(0, 0, 0, 0.13);
+}
+
+.tg-message-ham .tg-tail {
+    fill: #2a332a;
+}
+
+/* Header - username + timestamp in one line */
+.tg-header {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 2px;
+    flex-wrap: wrap;
+}
+
+/* Username - prominent and clickable */
+.tg-user-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #64b5f6;
+    cursor: pointer;
+    transition: color 0.1s;
+}
+
+.tg-user-name:hover {
+    color: #7ec5ff;
+}
+
+/* Timestamp - small and subtle */
+.tg-timestamp {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    white-space: nowrap;
+    font-weight: 400;
+}
+
+/* Edited indicator */
+.tg-edited {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.35);
+    font-style: italic;
+}
+
+/* Status badges */
+.tg-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
+.tg-badge-spam {
+    background-color: rgba(239, 83, 80, 0.2);
+    color: #ef5350;
+}
+
+.tg-badge-ham {
+    background-color: rgba(102, 187, 106, 0.2);
+    color: #66bb6a;
+}
+
+.tg-badge-deleted {
+    background-color: rgba(255, 152, 0, 0.2);
+    color: #ffa726;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* Phase 4.20: Translation badge */
+.tg-badge-translation {
+    background-color: rgba(33, 150, 243, 0.2);
+    color: #42a5f5;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.3px;
+}
+
+/* Phase 4.20: Translation toggle button */
+.tg-translate-toggle {
+    margin-left: 4px;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 0.2s ease;
+}
+
+.tg-translate-toggle:hover {
+    color: #42a5f5;
+    background-color: rgba(33, 150, 243, 0.1);
+}
+
+/* Phase 4.20: Translated text styling */
+.tg-text-translated {
+    font-style: italic;
+    opacity: 0.95;
+    border-left: 2px solid rgba(33, 150, 243, 0.3);
+    padding-left: 8px;
+    margin-left: -2px;
+}
+
+/* Content */
+.tg-content {
+    margin: 0;
+}
+
+.tg-text {
+    font-size: 14.5px;
+    line-height: 1.31;
+    color: rgba(255, 255, 255, 0.95);
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    margin-bottom: 2px;
+}
+
+.tg-image {
+    max-width: 400px;
+    max-height: 400px;
+    border-radius: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: opacity 0.1s;
+}
+
+.tg-image:hover {
+    opacity: 0.9;
+}
+
+/* Media attachments (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote, Document) */
+.tg-media {
+    max-width: 400px;
+    max-height: 400px;
+    border-radius: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+/* GIF animations - autoplay, loop, no controls */
+.tg-animation {
+    cursor: pointer;
+}
+
+/* Videos - show controls */
+.tg-video {
+    background: #1a1a1a;
+}
+
+/* Audio player container */
+.tg-audio-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.tg-audio-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.tg-audio {
+    flex: 1;
+    height: 32px;
+}
+
+/* Voice message container - more compact than audio */
+.tg-voice-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 6px 10px;
+    background: rgba(100, 181, 246, 0.15);
+    border-radius: 18px;
+}
+
+.tg-voice-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.tg-voice {
+    flex: 1;
+    height: 28px;
+}
+
+.tg-voice-duration {
+    font-size: 11px;
+    color: #999;
+    white-space: nowrap;
+}
+
+/* Stickers - larger, no border radius */
+.tg-sticker {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 0;
+}
+
+/* Video notes (circular videos) - circular display */
+.tg-videonote {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* Document container - horizontal layout with icon + info */
+.tg-document-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border-left: 3px solid #64b5f6;
+}
+
+.tg-document-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.tg-document-info {
+    flex: 1;
+    min-width: 0; /* Enable text truncation */
+}
+
+.tg-document-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e0e0e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tg-document-size {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+}
+
+/* Actions menu - compact icon button on right side of bubble */
+.tg-actions-menu {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.tg-message:hover .tg-actions-menu {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Menu button styling */
+.tg-menu-btn {
+    background: rgba(0, 0, 0, 0.4) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+}
+
+.tg-menu-btn:hover {
+    background: rgba(0, 0, 0, 0.6) !important;
+    color: white !important;
+}
+
+/* Popover content */
+.tg-actions-list {
+    padding: 4px 0;
+    min-width: 180px;
+}
+
+/* Menu items */
+.tg-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 14px;
+}
+
+.tg-menu-item-danger {
+    color: #ef5350 !important;
+}
+
+.tg-menu-item-success {
+    color: #66bb6a !important;
+}
+
+.tg-menu-item-warning {
+    color: #ff9800 !important;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+    .tg-message {
+        padding: 0 8px;
+    }
+
+    .tg-avatar-container {
+        width: 34px;
+        height: 34px;
+    }
+
+    .tg-avatar,
+    .tg-avatar-fallback {
+        width: 34px;
+        height: 34px;
+    }
+
+    .tg-avatar-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .tg-bubble-wrapper {
+        max-width: 80%;
+    }
+
+    .tg-user-name {
+        font-size: 13px;
+    }
+
+    .tg-timestamp {
+        font-size: 10px;
+    }
+
+    .tg-text {
+        font-size: 13.5px;
+    }
+
+    .tg-image {
+        max-width: 280px;
+        max-height: 280px;
+    }
+
+    .tg-btn {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .tg-btn-icon {
+        width: 12px;
+        height: 12px;
+    }
+}
+
+/* Highlight animation for scroll-to-message */
+.message-highlight {
+    animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+    0% {
+        background-color: rgba(100, 181, 246, 0.2);
+    }
+    50% {
+        background-color: rgba(100, 181, 246, 0.1);
+    }
+    100% {
+        background-color: rgba(255, 255, 255, 0.02);
+    }
+}
+
+/* Phase 4.12: User tags and notes display in message header */
+/* Tag chips inline with timestamp */
+::deep .tg-user-tag {
+    margin-left: 4px;
+    height: 20px;
+    font-size: 11px;
+    padding: 0 6px;
+}
+
+/* Notes icon button */
+::deep .tg-notes-icon {
+    margin-left: 4px;
+    width: 24px;
+    height: 24px;
+    padding: 2px;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 0.2s ease;
+}
+
+::deep .tg-notes-icon:hover {
+    color: rgba(255, 255, 255, 1);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* URL Preview Cards - Telegram-style rich previews */
+.tg-url-previews {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.tg-url-preview-card {
+    background: rgba(0, 0, 0, 0.2);
+    border-left: 3px solid #3390ec;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: background-color 0.2s ease;
+}
+
+.tg-url-preview-card:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.tg-preview-url {
+    color: #3390ec;
+    font-size: 12px;
+    margin-bottom: 4px;
+    word-break: break-all;
+    text-decoration: none;
+    display: block;
+    transition: color 0.2s ease;
+}
+
+.tg-preview-url:hover {
+    color: #5fb3f6;
+    text-decoration: underline;
+}
+
+.tg-preview-title {
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: rgba(255, 255, 255, 0.95);
+    line-height: 1.3;
+}
+
+.tg-preview-description {
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.4;
+    margin-bottom: 2px;
+}
+
+.tg-preview-og-title {
+    font-weight: 500;
+    margin-bottom: 2px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.tg-preview-og-description {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    line-height: 1.3;
+}

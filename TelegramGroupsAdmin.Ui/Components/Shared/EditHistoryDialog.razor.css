@@ -1,0 +1,50 @@
+.diff-container {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
+.diff-line {
+    padding: 2px 8px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.diff-marker {
+    display: inline-block;
+    width: 20px;
+    font-weight: bold;
+    user-select: none;
+}
+
+.diff-text {
+    margin-left: 4px;
+}
+
+.diff-deleted {
+    background-color: rgba(244, 67, 54, 0.15);
+    color: var(--mud-palette-error);
+}
+
+.diff-deleted .diff-marker {
+    color: var(--mud-palette-error);
+}
+
+.diff-inserted {
+    background-color: rgba(76, 175, 80, 0.15);
+    color: var(--mud-palette-success);
+}
+
+.diff-inserted .diff-marker {
+    color: var(--mud-palette-success);
+}
+
+.diff-modified {
+    background-color: rgba(255, 152, 0, 0.15);
+    color: var(--mud-palette-warning);
+}
+
+.diff-modified .diff-marker {
+    color: var(--mud-palette-warning);
+}

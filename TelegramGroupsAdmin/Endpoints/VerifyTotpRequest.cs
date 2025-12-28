@@ -1,3 +1,3 @@
 namespace TelegramGroupsAdmin.Endpoints;
 
-public record VerifyTotpRequest(string UserId, string Code, string IntermediateToken);
+public record VerifyTotpRequest(string Code, string IntermediateToken);

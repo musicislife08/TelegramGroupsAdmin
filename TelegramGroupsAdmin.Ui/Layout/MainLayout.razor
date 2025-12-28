@@ -1,0 +1,65 @@
+@inherits LayoutComponentBase
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudThemeProvider Theme="@_theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(_ => DrawerToggle())" />
+        <MudText Typo="Typo.h6">Telegram Groups Admin</MudText>
+        <MudSpacer />
+        @if (!string.IsNullOrEmpty(_userEmail))
+        {
+            <MudText Typo="Typo.body2" Class="mr-4 ml-2">@_userEmail</MudText>
+        }
+    </MudAppBar>
+    <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private string? _userEmail;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = Colors.Blue.Default,
+            AppbarBackground = Colors.Blue.Default,
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = Colors.Blue.Lighten1,
+            AppbarBackground = Colors.Gray.Darken4,
+            Background = Colors.Gray.Darken4,
+            Surface = Colors.Gray.Darken3,
+            DrawerBackground = Colors.Gray.Darken4,
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated ?? false)
+        {
+            _userEmail = user.Identity.Name;
+        }
+    }
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}

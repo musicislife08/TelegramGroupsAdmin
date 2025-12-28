@@ -1,0 +1,226 @@
+@page "/login/setup-2fa"
+@using TelegramGroupsAdmin.Ui.Api
+@layout LoginLayout
+@inject NavigationManager Navigation
+@inject IHttpClientFactory HttpFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
+
+<PageTitle>Setup Two-Factor Authentication - Telegram Groups Admin</PageTitle>
+
+<div class="setup-container">
+    <h1 class="setup-title">Two-Factor Authentication Required</h1>
+    <p class="setup-subtitle">Protect your account with an extra layer of security</p>
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert-error">@_errorMessage</div>
+    }
+
+    @if (_isLoading && _setupData == null)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Setting up 2FA...</p>
+        </div>
+    }
+    @* Phase 2: Uncomment this section to show recovery codes after 2FA setup
+    else if (_showRecoveryCodes)
+    {
+        <div class="recovery-codes-section">
+            <h3>Save Your Recovery Codes</h3>
+            <p class="warning-text">
+                <strong>Save these codes now!</strong> You'll need them if you lose access to your authenticator app.
+                Each code can only be used once.
+            </p>
+            <div class="recovery-codes">
+                @foreach (var recoveryCode in _recoveryCodes)
+                {
+                    <div class="recovery-code">@recoveryCode</div>
+                }
+            </div>
+            <button class="btn-primary" @onclick="ContinueToHome">
+                I've Saved My Codes - Continue
+            </button>
+        </div>
+    }
+    *@
+    else if (_setupData != null)
+    {
+        <div class="setup-steps">
+            <div class="step">
+                <h3>Step 1: Install an Authenticator App</h3>
+                <p>You'll need an authenticator app on your phone. We recommend these free, open-source options:</p>
+                <div class="app-recommendations">
+                    <div class="app-card">
+                        <strong>Aegis Authenticator</strong>
+                        <span class="app-platform">(Android)</span>
+                        <p>🔓 Open source, encrypted vault, offline backup</p>
+                    </div>
+                    <div class="app-card">
+                        <strong>Raivo OTP</strong>
+                        <span class="app-platform">(iOS)</span>
+                        <p>🔓 Open source, encrypted, iCloud sync</p>
+                    </div>
+                    <div class="app-card">
+                        <strong>2FAS</strong>
+                        <span class="app-platform">(Android, iOS)</span>
+                        <p>🔓 Open source, cloud backup, browser extension</p>
+                    </div>
+                    <div class="app-card">
+                        <strong>Google Authenticator</strong>
+                        <span class="app-platform">(Android, iOS)</span>
+                        <p>Simple, widely supported</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3>Step 2: Scan the QR Code</h3>
+                <p>Open your authenticator app and scan this code:</p>
+                <div class="qr-container">
+                    <img src="@_qrCodeDataUrl" alt="QR Code" class="qr-code" />
+                </div>
+                <div class="manual-entry">
+                    <p>Can't scan? Enter this code manually:</p>
+                    <div class="secret-code">@_setupData.ManualEntryKey</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3>Step 3: Verify Your Code</h3>
+                <form @onsubmit="HandleVerify" @onsubmit:preventDefault>
+                    <div class="form-group">
+                        <label class="form-label" for="code">Enter the 6-digit code from your app:</label>
+                        <input type="text"
+                               id="code"
+                               class="form-input code-input"
+                               @bind="_code"
+                               @bind:event="oninput"
+                               placeholder="000000"
+                               maxlength="6"
+                               pattern="[0-9]*"
+                               inputmode="numeric"
+                               required
+                               autofocus />
+                    </div>
+                    <button type="submit" class="btn-primary">Verify and Continue</button>
+                </form>
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
+    private bool _isLoading = true;
+    private string _code = string.Empty;
+    private string? _errorMessage;
+    private SetupTotpResponse? _setupData;
+    private string _qrCodeDataUrl = string.Empty;
+
+    // Phase 2: Uncomment these fields when enabling recovery codes display
+    // private bool _showRecoveryCodes;
+    // private IReadOnlyList<string> _recoveryCodes = [];
+
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(Token))
+        {
+            // Security: Redirect to login if no valid token (matches Blazor Server behavior)
+            Navigation.NavigateTo("/login", forceLoad: false);
+            return;
+        }
+
+        await LoadSetupDataAsync();
+    }
+
+    private async Task LoadSetupDataAsync()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Routes.Auth.SetupTotp, new SetupTotpRequest(Token!));
+            var result = await response.Content.ReadFromJsonAsync<SetupTotpResponse>();
+
+            if (result?.Success == true)
+            {
+                _setupData = result;
+                _qrCodeDataUrl = await GenerateQrCodeAsync(result.QrCodeUri!);
+            }
+            else
+            {
+                // Security: Redirect to login on invalid/expired token (matches Blazor Server behavior)
+                Navigation.NavigateTo("/login", forceLoad: false);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "Unable to connect to the server. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task<string> GenerateQrCodeAsync(string uri)
+    {
+        return await JS.InvokeAsync<string>("generateQrCode", uri);
+    }
+
+    private async Task HandleVerify()
+    {
+        _errorMessage = null;
+        _isLoading = true;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Routes.Auth.VerifySetupTotp, new VerifySetupTotpRequest(_code, Token!));
+            var result = await response.Content.ReadFromJsonAsync<VerifySetupTotpResponse>();
+
+            if (result?.Success == true)
+            {
+                // Phase 2: Uncomment to show recovery codes instead of navigating directly
+                // _recoveryCodes = result.RecoveryCodes ?? [];
+                // _showRecoveryCodes = true;
+
+                if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+                {
+                    wasmAuth.NotifyAuthenticationStateChanged();
+                }
+
+                // Navigate directly to home (matches old app behavior)
+                Navigation.NavigateTo("/", forceLoad: false);
+            }
+            else
+            {
+                _errorMessage = result?.Error ?? "Invalid verification code. Please try again.";
+                _code = string.Empty;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "Unable to connect to the server. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    // Phase 2: Uncomment when enabling recovery codes display
+    // private void ContinueToHome()
+    // {
+    //     Navigation.NavigateTo("/", forceLoad: false);
+    // }
+
+    private record SetupTotpRequest(string IntermediateToken);
+    private record SetupTotpResponse(bool Success, string? Error = null, string? QrCodeUri = null, string? ManualEntryKey = null);
+    private record VerifySetupTotpRequest(string Code, string IntermediateToken);
+    private record VerifySetupTotpResponse(bool Success, string? Error = null, IReadOnlyList<string>? RecoveryCodes = null);
+}

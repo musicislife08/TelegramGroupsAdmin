@@ -1,0 +1,984 @@
+@using TelegramGroupsAdmin.Ui.Services
+@using TelegramGroupsAdmin.Ui.Models
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <div class="d-flex justify-center align-center pa-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (_userDetail == null)
+        {
+            <MudAlert Severity="Severity.Error">User not found</MudAlert>
+        }
+        else
+        {
+            <MudContainer Style="max-height: 70vh; overflow-y: auto;">
+                <!-- User Profile Header -->
+                <MudPaper Elevation="0" Class="pa-4 mb-4">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                        @if (!string.IsNullOrEmpty(_userDetail.UserPhotoPath))
+                        {
+                            <img src="@($"/media/{_userDetail.UserPhotoPath}")"
+                                 alt="@_userDetail.DisplayName"
+                                 style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <MudAvatar Size="Size.Large" Color="Color.Secondary">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
+                            </MudAvatar>
+                        }
+
+                        <div style="flex: 1;">
+                            <MudText Typo="Typo.h6">@_userDetail.DisplayName</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                @if (!string.IsNullOrEmpty(_userDetail.Username))
+                                {
+                                    <text>@@@_userDetail.Username · </text>
+                                }
+                                ID: @_userDetail.TelegramUserId
+                            </MudText>
+                        </div>
+
+                        <MudChip T="string" Color="@GetStatusColor(_userDetail.Status)" Size="Size.Medium">
+                            @GetStatusIcon(_userDetail.Status) @_userDetail.Status.ToString()
+                        </MudChip>
+                    </MudStack>
+                </MudPaper>
+
+                <!-- Quick Stats -->
+                <MudGrid Class="mb-4">
+                    <MudItem xs="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.h6">@_userDetail.ChatMemberships.Count</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Chats</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.h6">@_userDetail.ChatMemberships.Sum(c => c.MessageCount)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Messages</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.h6">@GetActiveWarningCount()</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Warnings</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudIcon Icon="@(_userDetail.BotDmEnabled ? Icons.Material.Filled.MarkEmailRead : Icons.Material.Filled.MarkEmailUnread)"
+                                     Color="@(_userDetail.BotDmEnabled ? Color.Success : Color.Default)"
+                                     Size="Size.Large" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Bot DMs</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <!-- Timeline Info -->
+                <MudPaper Elevation="1" Class="pa-3 mb-4">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" Color="Color.Success" />
+                            <MudText Typo="Typo.body2">First seen: <span class="local-timestamp" data-utc="@_userDetail.FirstSeenAt.ToString("o")">@_userDetail.FirstSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span></MudText>
+                        </MudStack>
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Info" />
+                            <MudText Typo="Typo.body2">Last seen: <span class="local-timestamp" data-utc="@_userDetail.LastSeenAt.ToString("o")">@_userDetail.LastSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span></MudText>
+                        </MudStack>
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@(_userDetail.BotDmEnabled ? Icons.Material.Filled.MarkEmailRead : Icons.Material.Filled.MarkEmailUnread)"
+                                     Size="Size.Small"
+                                     Color="@(_userDetail.BotDmEnabled ? Color.Success : Color.Default)" />
+                            <MudText Typo="Typo.body2">
+                                Bot DMs: @(_userDetail.BotDmEnabled ? "✅ Enabled" : "❌ Disabled")
+                                @if (!_userDetail.BotDmEnabled)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(User must send /start to bot)</MudText>
+                                }
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+
+                <!-- Quick Actions -->
+                <MudPaper Elevation="1" Class="pa-3 mb-4">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Quick Actions</MudText>
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="@(_userDetail.IsTrusted ? Color.Default : Color.Success)"
+                                   StartIcon="@(_userDetail.IsTrusted ? Icons.Material.Filled.PersonOff : Icons.Material.Filled.VerifiedUser)"
+                                   OnClick="@ToggleTrust"
+                                   Size="Size.Small">
+                            @(_userDetail.IsTrusted ? "Remove Trust" : "Trust User")
+                        </MudButton>
+
+                        @if (!_userDetail.IsBanned)
+                        {
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Error"
+                                       StartIcon="@Icons.Material.Filled.Block"
+                                       OnClick="@BanUser"
+                                       Size="Size.Small">
+                                Ban
+                            </MudButton>
+
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Warning"
+                                       StartIcon="@Icons.Material.Filled.AccessTime"
+                                       OnClick="@TempBanUser"
+                                       Size="Size.Small">
+                                Temp Ban
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Success"
+                                       StartIcon="@Icons.Material.Filled.CheckCircle"
+                                       OnClick="@UnbanUser"
+                                       Size="Size.Small">
+                                Unban
+                            </MudButton>
+                        }
+
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Message"
+                                   OnClick="@ViewMessages"
+                                   Size="Size.Small">
+                            View Messages
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <!-- Chat Memberships -->
+                @if (_userDetail.ChatMemberships.Any())
+                {
+                    <MudPaper Elevation="1" Class="pa-3 mb-4">
+                        <MudText Typo="Typo.subtitle2" Class="mb-3">Chat Memberships (@_userDetail.ChatMemberships.Count)</MudText>
+                        <MudList T="string" Dense="true">
+                            @foreach (var membership in _userDetail.ChatMemberships.OrderByDescending(c => c.LastActivityAt))
+                            {
+                                <MudListItem T="string">
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Style="width: 100%;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Forum"
+                                                 Size="Size.Small"
+                                                 Color="@(membership.IsBanned ? Color.Error : Color.Default)" />
+                                        <div style="flex: 1;">
+                                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                <MudText Typo="Typo.body2"
+                                                         Style="@(membership.IsBanned ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                                    @(membership.ChatName ?? $"Chat {membership.ChatId}")
+                                                </MudText>
+                                                @if (membership.IsBanned)
+                                                {
+                                                    <MudChip T="string"
+                                                             Size="Size.Small"
+                                                             Color="Color.Error"
+                                                             Variant="Variant.Text"
+                                                             Icon="@Icons.Material.Filled.Block">
+                                                        Banned
+                                                    </MudChip>
+                                                }
+                                            </MudStack>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @membership.MessageCount messages • Last: <span class="local-timestamp" data-utc="@membership.LastActivityAt.ToString("o")">@membership.LastActivityAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                            </MudText>
+                                        </div>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </MudPaper>
+                }
+
+                <!-- Action History Timeline -->
+                @if (_userDetail.Actions.Any())
+                {
+                    <MudPaper Elevation="1" Class="pa-3 mb-4">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudText Typo="Typo.subtitle2">Action History (@GetActiveActionsCount())</MudText>
+                            @if (GetActiveActionsCount() > TimelineShowCount)
+                            {
+                                <MudButton Variant="Variant.Text"
+                                           Size="Size.Small"
+                                           OnClick="@ToggleTimelineExpanded">
+                                    @(_timelineExpanded ? "Show Less" : $"Show All ({GetActiveActionsCount()})")
+                                </MudButton>
+                            }
+                        </MudStack>
+
+                        <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
+                            @foreach (var group in GetGroupedActions())
+                            {
+                                @if (!string.IsNullOrEmpty(group.DateLabel))
+                                {
+                                    <MudTimelineItem Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                                        <ItemOpposite>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@group.DateLabel</MudText>
+                                        </ItemOpposite>
+                                        <ItemContent>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">━━━━━━━━━━━━━━━━</MudText>
+                                        </ItemContent>
+                                    </MudTimelineItem>
+                                }
+
+                                @foreach (var action in group.Actions)
+                                {
+                                    <MudTimelineItem Size="Size.Small"
+                                                     Color="@GetActionColor(action.ActionType)"
+                                                     Icon="@GetActionIcon(action.ActionType)">
+                                        <ItemOpposite>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                <span class="local-timestamp" data-utc="@action.IssuedAt.ToString("o")">@action.IssuedAt.ToLocalTime().ToString("h:mm tt")</span>
+                                            </MudText>
+                                        </ItemOpposite>
+                                        <ItemContent>
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Style="width: 100%;">
+                                                <MudStack Spacing="0" Class="ml-2" Style="flex: 1;">
+                                                    <MudText Typo="Typo.body2">
+                                                        <strong>@FormatActionType(action.ActionType)</strong>
+                                                    </MudText>
+                                                    @if (!string.IsNullOrEmpty(action.Reason))
+                                                    {
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                            @action.Reason
+                                                        </MudText>
+                                                    }
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        by @FormatIssuedBy(action.IssuedBy)
+                                                    </MudText>
+                                                </MudStack>
+                                                @if (action.ActionType == UserActionType.Warn)
+                                                {
+                                                    <MudTooltip Text="Remove warning">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                       Size="Size.Small"
+                                                                       Color="Color.Error"
+                                                                       OnClick="@(() => RemoveWarning(action))" />
+                                                    </MudTooltip>
+                                                }
+                                            </MudStack>
+                                        </ItemContent>
+                                    </MudTimelineItem>
+                                }
+                            }
+                        </MudTimeline>
+                    </MudPaper>
+                }
+
+                <!-- Admin Notes (Phase 4.12) -->
+                <MudPaper Elevation="1" Class="pa-3 mb-4">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudText Typo="Typo.subtitle2">Admin Notes (@_userDetail.Notes.Count)</MudText>
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Add"
+                                   Size="Size.Small"
+                                   OnClick="@AddNote">
+                            Add Note
+                        </MudButton>
+                    </MudStack>
+
+                    @if (_userDetail.Notes.Any())
+                    {
+                        <MudList T="string" Dense="true">
+                            @foreach (var note in _userDetail.Notes)
+                            {
+                                <MudListItem T="string">
+                                    <MudStack Spacing="1" Style="width: 100%;">
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                            <div style="flex: 1;">
+                                                <MudText Typo="Typo.body2">@note.NoteText</MudText>
+                                            </div>
+                                            <MudStack Row="true" Spacing="1">
+                                                <MudTooltip Text="@(note.IsPinned ? "Unpin" : "Pin")">
+                                                    <MudIconButton Icon="@(note.IsPinned ? Icons.Material.Filled.PushPin : Icons.Material.Outlined.PushPin)"
+                                                                   Size="Size.Small"
+                                                                   Color="@(note.IsPinned ? Color.Warning : Color.Default)"
+                                                                   OnClick="@(() => ToggleNotePin(note))" />
+                                                </MudTooltip>
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                               Size="Size.Small"
+                                                               Color="Color.Error"
+                                                               OnClick="@(() => DeleteNote(note))" />
+                                            </MudStack>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            By @note.CreatedBy • <span class="local-timestamp" data-utc="@note.CreatedAt.ToString("o")">@note.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                            @if (note.UpdatedAt.HasValue)
+                                            {
+                                                <text> (edited <span class="local-timestamp" data-utc="@note.UpdatedAt.Value.ToString("o")">@note.UpdatedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>)</text>
+                                            }
+                                        </MudText>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">No notes yet</MudText>
+                    }
+                </MudPaper>
+
+                <!-- User Tags (Phase 4.12) -->
+                <MudPaper Elevation="1" Class="pa-3 mb-4">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudText Typo="Typo.subtitle2">Tags (@_userDetail.Tags.Count)</MudText>
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Add"
+                                   Size="Size.Small"
+                                   OnClick="@AddTag">
+                            Add Tag
+                        </MudButton>
+                    </MudStack>
+
+                    @if (_userDetail.Tags.Any())
+                    {
+                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                            @foreach (var tag in _userDetail.Tags)
+                            {
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="@GetTagColor(tag.TagName)"
+                                         OnClose="@(() => DeleteTag(tag))">
+                                    @tag.TagName
+                                </MudChip>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">No tags yet</MudText>
+                    }
+                </MudPaper>
+
+                <!-- Detection History -->
+                @if (_userDetail.DetectionHistory.Any())
+                {
+                    <MudPaper Elevation="1" Class="pa-3">
+                        <MudText Typo="Typo.subtitle2" Class="mb-3">
+                            Detection History (@_userDetail.DetectionHistory.Count(d => d.IsSpam) spam / @_userDetail.DetectionHistory.Count total)
+                        </MudText>
+                        <MudList T="string" Dense="true">
+                            @foreach (var detection in _userDetail.DetectionHistory.OrderByDescending(d => d.DetectedAt).Take(10))
+                            {
+                                <MudListItem T="string">
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Style="width: 100%;">
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="@(detection.IsSpam ? Color.Error : Color.Success)">
+                                            @(detection.IsSpam ? "SPAM" : "HAM")
+                                        </MudChip>
+                                        <div style="flex: 1;">
+                                            <MudText Typo="Typo.body2">Confidence: @detection.Confidence%</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @detection.DetectionMethod • <span class="local-timestamp" data-utc="@detection.DetectedAt.ToString("o")">@detection.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                            </MudText>
+                                        </div>
+                                    </MudStack>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </MudPaper>
+                }
+            </MudContainer>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public long UserId { get; set; }
+
+    private TelegramUserDetail? _userDetail;
+    private bool _loading = true;
+    private Dictionary<string, TagColor> _tagColorMap = new();
+
+    // Timeline state
+    private bool _timelineExpanded;
+    private const int TimelineShowCount = 5;
+
+    private HttpClient Http => HttpClientFactory.CreateClient(Api.HttpClientNames.Api);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserDataAsync();
+    }
+
+    /// <summary>
+    /// Single HTTP call to load all user detail data including tag colors.
+    /// Uses the aggregate endpoint pattern to minimize network round-trips.
+    /// </summary>
+    private async Task LoadUserDataAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<UserDetailDialogResponse>($"/api/pages/users/{UserId}");
+            if (response != null)
+            {
+                _userDetail = response.UserDetail;
+                _tagColorMap = response.TagColors;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading user detail: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleTrust()
+    {
+        if (_userDetail == null) return;
+
+        var action = _userDetail.IsTrusted ? "remove trust from" : "trust";
+
+        try
+        {
+            var response = await Http.PostAsync($"/api/users/{_userDetail.TelegramUserId}/trust", null);
+            var result = await response.Content.ReadFromJsonAsync<UserActionResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add($"Successfully {action}ed {_userDetail.DisplayName}", Severity.Success);
+                await LoadUserDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to {action} {_userDetail.DisplayName}: {result?.Error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error toggling trust: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void BanUser()
+    {
+        // TODO: Implement ban functionality
+        Snackbar.Add("Ban functionality - Coming soon", Severity.Info);
+    }
+
+    private async Task UnbanUser()
+    {
+        if (_userDetail == null) return;
+
+        // Show confirmation dialog
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Unban",
+            $"Are you sure you want to unban {_userDetail.DisplayName}?",
+            yesText: "Unban",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            var response = await Http.PostAsync($"/api/users/{_userDetail.TelegramUserId}/unban", null);
+            var result = await response.Content.ReadFromJsonAsync<UserActionResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add($"Successfully unbanned {_userDetail.DisplayName} from {result.ChatsAffected} chat(s)", Severity.Success);
+                await LoadUserDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to unban user: {result?.Error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error unbanning user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task TempBanUser()
+    {
+        if (_userDetail == null) return;
+
+        // Show temp ban dialog
+        var parameters = new DialogParameters<TempBanDialog>
+        {
+            { x => x.UserId, _userDetail.TelegramUserId },
+            { x => x.Username, _userDetail.DisplayName }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TempBanDialog>("Temporary Ban", parameters, options);
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult == null || dialogResult.Canceled || dialogResult.Data is not TempBanDialog.TempBanResult tempBanResult)
+            return;
+
+        try
+        {
+            var request = new UserTempBanRequest(tempBanResult.Duration, tempBanResult.Reason);
+            var response = await Http.PostAsJsonAsync($"/api/users/{_userDetail.TelegramUserId}/temp-ban", request);
+            var result = await response.Content.ReadFromJsonAsync<UserActionResponse>();
+
+            if (result?.Success == true)
+            {
+                var expiryTime = result.BannedUntil?.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? "unknown";
+                Snackbar.Add(
+                    $"User temporarily banned for {FormatDuration(tempBanResult.Duration)} from {result.ChatsAffected} chat(s). Auto-unban at {expiryTime}.",
+                    Severity.Success);
+
+                await LoadUserDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to temp ban user: {result?.Error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error temp banning user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes < 60)
+            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes == 1 ? "" : "s")}";
+
+        if (duration.TotalHours < 24)
+            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours == 1 ? "" : "s")}";
+
+        var days = (int)duration.TotalDays;
+        var hours = duration.Hours;
+
+        if (hours == 0)
+            return $"{days} day{(days == 1 ? "" : "s")}";
+
+        return $"{days} day{(days == 1 ? "" : "s")} {hours} hour{(hours == 1 ? "" : "s")}";
+    }
+
+    private void ViewMessages()
+    {
+        if (_userDetail == null) return;
+        Navigation.NavigateTo($"/messages?userId={_userDetail.TelegramUserId}");
+        MudDialog.Close();
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private static Color GetStatusColor(TelegramUserStatus status) => status switch
+    {
+        TelegramUserStatus.Trusted => Color.Success,
+        TelegramUserStatus.Banned => Color.Error,
+        TelegramUserStatus.Warned => Color.Warning,
+        TelegramUserStatus.Tagged => Color.Warning,
+        TelegramUserStatus.Clean => Color.Info,
+        _ => Color.Default
+    };
+
+    private static string GetStatusIcon(TelegramUserStatus status) => status switch
+    {
+        TelegramUserStatus.Trusted => "🟢",
+        TelegramUserStatus.Banned => "🔴",
+        TelegramUserStatus.Warned => "🟠",
+        TelegramUserStatus.Tagged => "🟡",
+        TelegramUserStatus.Clean => "🔵",
+        _ => ""
+    };
+
+    private static string GetActionIcon(UserActionType actionType) => actionType switch
+    {
+        UserActionType.Ban => Icons.Material.Filled.Block,
+        UserActionType.Warn => Icons.Material.Filled.Warning,
+        UserActionType.Trust => Icons.Material.Filled.VerifiedUser,
+        UserActionType.Unban => Icons.Material.Filled.CheckCircle,
+        UserActionType.Mute => Icons.Material.Filled.VolumeOff,
+        _ => Icons.Material.Filled.Info
+    };
+
+    private static Color GetActionColor(UserActionType actionType) => actionType switch
+    {
+        UserActionType.Ban => Color.Error,
+        UserActionType.Warn => Color.Warning,
+        UserActionType.Trust => Color.Success,
+        UserActionType.Unban => Color.Success,
+        UserActionType.Mute => Color.Warning,
+        _ => Color.Default
+    };
+
+    /// <summary>
+    /// Format actor for display in timeline (Phase 4.19: Actor system)
+    /// </summary>
+    private static string FormatIssuedBy(Actor actor)
+    {
+        return actor.DisplayName ?? "System";
+    }
+
+    /// <summary>
+    /// Get count of active (non-expired) warnings
+    /// </summary>
+    private int GetActiveWarningCount()
+    {
+        if (_userDetail == null)
+            return 0;
+
+        var now = DateTimeOffset.UtcNow;
+        return _userDetail.Actions.Count(a =>
+            a.ActionType == UserActionType.Warn &&
+            (a.ExpiresAt == null || a.ExpiresAt > now));
+    }
+
+    /// <summary>
+    /// Get count of active (non-expired) actions for timeline display
+    /// </summary>
+    private int GetActiveActionsCount()
+    {
+        if (_userDetail == null)
+            return 0;
+
+        var now = DateTimeOffset.UtcNow;
+        return _userDetail.Actions.Count(a => a.ExpiresAt == null || a.ExpiresAt > now);
+    }
+
+    // ============================================================================
+    // Action Timeline Methods
+    // ============================================================================
+
+    private void ToggleTimelineExpanded()
+    {
+        _timelineExpanded = !_timelineExpanded;
+    }
+
+    private IEnumerable<ActionGroup> GetGroupedActions()
+    {
+        if (_userDetail == null || !_userDetail.Actions.Any())
+            return [];
+
+        var nowUtc = DateTimeOffset.UtcNow;
+
+        // Filter out expired warnings (ExpiresAt != null && ExpiresAt <= now)
+        var activeActions = _userDetail.Actions
+            .Where(a => a.ExpiresAt == null || a.ExpiresAt > nowUtc)
+            .OrderByDescending(a => a.IssuedAt)
+            .Take(_timelineExpanded ? int.MaxValue : TimelineShowCount)
+            .ToList();
+
+        var nowLocal = DateTimeOffset.Now.ToLocalTime();
+        var groups = new List<ActionGroup>();
+        string? currentDateLabel = null;
+
+        foreach (var action in activeActions)
+        {
+            var actionDate = action.IssuedAt.ToLocalTime();
+            var dateLabel = GetDateLabel(actionDate, nowLocal);
+
+            // Add date separator if the date label changed
+            if (dateLabel != currentDateLabel)
+            {
+                groups.Add(new ActionGroup
+                {
+                    DateLabel = dateLabel,
+                    Actions = [action]
+                });
+                currentDateLabel = dateLabel;
+            }
+            else
+            {
+                // Add to current group
+                groups[^1].Actions.Add(action);
+            }
+        }
+
+        return groups;
+    }
+
+    private static string GetDateLabel(DateTimeOffset actionDate, DateTimeOffset now)
+    {
+        if (actionDate.Date == now.Date)
+            return "Today";
+        if (actionDate.Date == now.AddDays(-1).Date)
+            return "Yesterday";
+        if (actionDate.Date >= now.AddDays(-7).Date)
+            return actionDate.ToString("dddd"); // Day name (Monday, Tuesday, etc.)
+        if (actionDate.Year == now.Year)
+            return actionDate.ToString("MMMM dd"); // Month Day (January 15)
+        return actionDate.ToString("MMMM dd, yyyy"); // Month Day, Year (January 15, 2024)
+    }
+
+    private static string FormatActionType(UserActionType actionType)
+    {
+        return actionType switch
+        {
+            UserActionType.Ban => "Banned",
+            UserActionType.Warn => "Warned",
+            UserActionType.Trust => "Trusted",
+            UserActionType.Unban => "Unbanned",
+            UserActionType.Mute => "Muted",
+            _ => actionType.ToString()
+        };
+    }
+
+    // Helper class for grouping actions by date
+    private class ActionGroup
+    {
+        public string DateLabel { get; init; } = string.Empty;
+        public List<UserActionRecord> Actions { get; init; } = [];
+    }
+
+    // ============================================================================
+    // Admin Notes Methods (Phase 4.12)
+    // ============================================================================
+
+    private async Task AddNote()
+    {
+        var parameters = new DialogParameters
+        {
+            { "Title", "Add Note" },
+            { "Label", "Note Text" },
+            { "MaxLength", 1000 },
+            { "Lines", 5 }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TextInputDialog>("Add Note", parameters, options);
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult is { Canceled: false, Data: string noteText } && !string.IsNullOrWhiteSpace(noteText))
+        {
+            try
+            {
+                var request = new AddNoteRequest(noteText.Trim());
+                var response = await Http.PostAsJsonAsync($"/api/users/{UserId}/notes", request);
+                var result = await response.Content.ReadFromJsonAsync<ApiResponse>();
+
+                if (result?.Success == true)
+                {
+                    Snackbar.Add("Note added successfully", Severity.Success);
+                    await LoadUserDataAsync();
+                }
+                else
+                {
+                    Snackbar.Add($"Failed to add note: {result?.Error}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error adding note: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ToggleNotePin(AdminNote note)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/users/{UserId}/notes/{note.Id}/pin", null);
+            var result = await response.Content.ReadFromJsonAsync<ApiResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add(note.IsPinned ? "Note unpinned" : "Note pinned", Severity.Info);
+                await LoadUserDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to toggle pin: {result?.Error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error toggling pin: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteNote(AdminNote note)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", "Are you sure you want to delete this note?" },
+            { "ButtonText", "Delete" },
+            { "Color", Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Note", parameters);
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult is { Canceled: false })
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"/api/users/{UserId}/notes/{note.Id}");
+                var result = await response.Content.ReadFromJsonAsync<ApiResponse>();
+
+                if (result?.Success == true)
+                {
+                    Snackbar.Add("Note deleted", Severity.Success);
+                    await LoadUserDataAsync();
+                }
+                else
+                {
+                    Snackbar.Add($"Failed to delete note: {result?.Error}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting note: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // ============================================================================
+    // User Tags Methods (Phase 4.12)
+    // ============================================================================
+
+    private async Task AddTag()
+    {
+        if (_userDetail == null) return;
+
+        // Get the user's currently assigned tags to exclude from selection
+        var userAssignedTags = _userDetail.Tags.Select(t => t.TagName).ToList();
+
+        var parameters = new DialogParameters
+        {
+            { "UserAssignedTags", userAssignedTags }
+        };
+
+        var dialog = await DialogService.ShowAsync<TagSelectionDialog>("Add Tags", parameters);
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult is { Canceled: false, Data: TagSelectionDialog.TagSelectionResult tagResult })
+        {
+            try
+            {
+                var request = new AddTagsRequest(tagResult.SelectedTags);
+                var response = await Http.PostAsJsonAsync($"/api/users/{UserId}/tags", request);
+                var result = await response.Content.ReadFromJsonAsync<ApiResponse>();
+
+                if (result?.Success == true)
+                {
+                    var message = tagResult.SelectedTags.Count == 1
+                        ? $"Tag '{tagResult.SelectedTags[0]}' added successfully"
+                        : $"{tagResult.SelectedTags.Count} tags added successfully";
+                    Snackbar.Add(message, Severity.Success);
+                    await LoadUserDataAsync(); // Reloads both user detail and tag colors
+                }
+                else
+                {
+                    Snackbar.Add($"Failed to add tags: {result?.Error}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error adding tags: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteTag(UserTag tag)
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/users/{UserId}/tags/{tag.Id}");
+            var result = await response.Content.ReadFromJsonAsync<ApiResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add("Tag removed", Severity.Success);
+                await LoadUserDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to remove tag: {result?.Error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error removing tag: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Color GetTagColor(string tagName)
+    {
+        // Look up color from tag definitions, fall back to default
+        if (_tagColorMap.TryGetValue(tagName, out var tagColor))
+        {
+            return tagColor.ToMudColor();
+        }
+
+        // Default color if tag definition doesn't exist
+        return Color.Primary;
+    }
+
+    // ============================================================================
+    // Warning Removal (Phase 4.11)
+    // ============================================================================
+
+    private async Task RemoveWarning(UserActionRecord action)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"Are you sure you want to remove this warning? Reason: {action.Reason ?? "No reason specified"}" },
+            { "ButtonText", "Remove" },
+            { "Color", Color.Warning }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Remove Warning", parameters);
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult is { Canceled: false })
+        {
+            try
+            {
+                var response = await Http.PostAsync($"/api/users/{UserId}/actions/{action.Id}/expire", null);
+                var result = await response.Content.ReadFromJsonAsync<ApiResponse>();
+
+                if (result?.Success == true)
+                {
+                    Snackbar.Add("Warning removed successfully", Severity.Success);
+                    await LoadUserDataAsync(); // Refresh to update warning count
+                }
+                else
+                {
+                    Snackbar.Add($"Failed to remove warning: {result?.Error}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error removing warning: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

@@ -38,4 +38,14 @@ public interface IIntermediateAuthService
     /// <param name="userId">The user ID that must match the token</param>
     /// <returns>True if token is valid and matches userId, false otherwise</returns>
     bool ValidateAndConsumeToken(string token, string userId);
+
+    /// <summary>
+    /// Validates and consumes a temporary authentication token, extracting the userId from the token.
+    /// This is more secure than accepting userId from the client, as it prevents userId manipulation.
+    /// Token can only be used once - it is removed after successful validation.
+    /// </summary>
+    /// <param name="token">The token to validate</param>
+    /// <param name="userId">Output: The user ID associated with this token</param>
+    /// <returns>True if token is valid and not expired, false otherwise</returns>
+    bool ValidateAndConsumeToken(string token, out string? userId);
 }

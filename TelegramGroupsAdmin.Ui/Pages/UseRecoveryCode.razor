@@ -1,0 +1,135 @@
+@page "/use-recovery-code"
+@using TelegramGroupsAdmin.Ui.Api
+@layout LoginLayout
+@inject NavigationManager Navigation
+@inject IHttpClientFactory HttpFactory
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Use Recovery Code - Telegram Groups Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16">
+    <MudCard Elevation="4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5" Align="Align.Center">Use Recovery Code</MudText>
+                <MudText Typo="Typo.subtitle1" Align="Align.Center" Color="Color.Secondary">
+                    Enter one of your recovery codes to sign in
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            @if (string.IsNullOrEmpty(Token))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">
+                    Invalid authentication session. Please log in again.
+                </MudAlert>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Href="/login">
+                    Back to Login
+                </MudButton>
+            }
+            else
+            {
+                <MudForm @ref="_form" @bind-IsValid="@_formIsValid">
+                    <MudAlert Severity="Severity.Warning" Class="mb-4">
+                        Recovery codes are single-use. After using this code, it will no longer be valid.
+                    </MudAlert>
+
+                    <MudTextField
+                        @bind-Value="_recoveryCode"
+                        Label="Recovery Code"
+                        Variant="Variant.Outlined"
+                        InputType="InputType.Text"
+                        Placeholder="XXXX-XXXX-XXXX"
+                        Required="true"
+                        RequiredError="Recovery code is required"
+                        Immediate="true"
+                        Class="mb-4"
+                        Style="font-family: monospace; font-size: 1.2rem; text-align: center; letter-spacing: 0.2rem;" />
+
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+                    }
+
+                    <MudButton
+                        Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        FullWidth="true"
+                        OnClick="@HandleVerify"
+                        Disabled="@(!_formIsValid || _isLoading)">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Verify
+                    </MudButton>
+                </MudForm>
+            }
+        </MudCardContent>
+        <MudCardActions Class="justify-center pb-4 flex-column">
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                Have access to your authenticator?
+            </MudText>
+            <MudLink Href="@($"/verify-totp?token={Token}")">Use Authenticator App</MudLink>
+            <MudDivider Class="my-2" />
+            <MudLink Href="/login">Back to Login</MudLink>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
+    private MudForm _form = null!;
+    private bool _formIsValid;
+    private bool _isLoading;
+    private string _recoveryCode = string.Empty;
+    private string? _errorMessage;
+
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    private async Task HandleVerify()
+    {
+        _errorMessage = null;
+        _isLoading = true;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Routes.Auth.VerifyRecoveryCode, new VerifyRecoveryCodeRequest(
+                RecoveryCode: _recoveryCode.Trim().Replace("-", "").Replace(" ", ""),
+                IntermediateToken: Token!
+            ));
+
+            var result = await response.Content.ReadFromJsonAsync<VerifyRecoveryCodeResponse>();
+
+            if (result?.Success == true)
+            {
+                // Notify auth state provider to refresh
+                if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+                {
+                    wasmAuth.NotifyAuthenticationStateChanged();
+                }
+
+                // Navigate to home
+                Navigation.NavigateTo("/", forceLoad: false);
+            }
+            else
+            {
+                _errorMessage = result?.Error ?? "Invalid recovery code. Please try again.";
+                _recoveryCode = string.Empty;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "Unable to connect to the server. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private record VerifyRecoveryCodeRequest(string RecoveryCode, string IntermediateToken);
+    private record VerifyRecoveryCodeResponse(bool Success, string? Error = null);
+}

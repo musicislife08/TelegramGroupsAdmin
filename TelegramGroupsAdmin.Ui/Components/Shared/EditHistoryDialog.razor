@@ -1,0 +1,190 @@
+@using DiffPlex
+@using DiffPlex.DiffBuilder
+@using DiffPlex.DiffBuilder.Model
+@inject IMessageEditService MessageEditService
+@inject IMessageTranslationService MessageTranslationService
+@inject ILogger<EditHistoryDialog> Logger
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+            <MudText Align="Align.Center">Loading edit history...</MudText>
+        }
+        else if (_edits.Any())
+        {
+            <MudStack Spacing="3">
+                @* Message Info *@
+                <MudPaper Class="pa-3" Elevation="0">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudAvatar Color="Color.Primary" Size="Size.Small">
+                            @GetUserInitials()
+                        </MudAvatar>
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                                @(Message.UserName ?? $"User {Message.UserId}")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Message ID: @Message.MessageId
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+
+                @* Edit List *@
+                <MudText Typo="Typo.h6">@_edits.Count @(_edits.Count == 1 ? "Edit" : "Edits")</MudText>
+
+                @foreach (var edit in _edits)
+                {
+                    var diff = GetDiff(edit.OldText ?? "", edit.NewText ?? "");
+
+                    <MudPaper Class="pa-3" Elevation="2">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    <b>Edited:</b> <span class="local-timestamp" data-utc="@edit.EditDate.ToString("o")">@edit.EditDate.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                </MudText>
+                                <MudStack Row="true" Spacing="1">
+                                    @* Phase 4.20: Translation badge *@
+                                    @if (_editTranslations.TryGetValue(edit.Id, out var translation))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Translate">
+                                            @translation.DetectedLanguage.ToUpper()→EN
+                                        </MudChip>
+                                    }
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">
+                                        Edit #@_edits.IndexOf(edit)
+                                    </MudChip>
+                                </MudStack>
+                            </MudStack>
+
+                            @* Phase 4.20: Translation display *@
+                            @if (_editTranslations.TryGetValue(edit.Id, out var translation1))
+                            {
+                                <MudPaper Class="pa-2" Elevation="0" Style="background-color: rgba(33, 150, 243, 0.1); border-left: 3px solid #42a5f5;">
+                                    <MudText Typo="Typo.caption" Color="Color.Info" Style="font-weight: 600; margin-bottom: 4px;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" /> English Translation:
+                                    </MudText>
+                                    <MudText Typo="Typo.body2" Style="font-style: italic;">
+                                        @translation1.TranslatedText
+                                    </MudText>
+                                </MudPaper>
+                            }
+
+                            @* Diff View *@
+                            <MudPaper Class="pa-2 diff-container" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                                @foreach (var line in diff.Lines)
+                                {
+                                    <div class="diff-line @GetDiffLineClass(line.Type)">
+                                        <span class="diff-marker">@GetDiffMarker(line.Type)</span>
+                                        <span class="diff-text">@(string.IsNullOrEmpty(line.Text) ? " " : line.Text)</span>
+                                    </div>
+                                }
+                            </MudPaper>
+
+                            @* Summary *@
+                            <MudStack Row="true" Spacing="3">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text">
+                                    @diff.Lines.Count(l => l.Type == ChangeType.Deleted) removed
+                                </MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">
+                                    @diff.Lines.Count(l => l.Type == ChangeType.Inserted) added
+                                </MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text">
+                                    @diff.Lines.Count(l => l.Type == ChangeType.Unchanged) unchanged
+                                </MudChip>
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">
+                No edit history found for this message.
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="@Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public MessageRecord Message { get; set; } = null!;
+
+    private List<MessageEditRecord> _edits = [];
+    private readonly Dictionary<long, MessageTranslation> _editTranslations = new(); // Phase 4.20: Translations for each edit
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _edits = await MessageEditService.GetEditsForMessageAsync(Message.MessageId);
+
+            // Phase 4.20: Load translations for each edit
+            foreach (var edit in _edits)
+            {
+                var translation = await MessageTranslationService.GetTranslationForEditAsync(edit.Id);
+                if (translation != null)
+                {
+                    _editTranslations[edit.Id] = translation;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error loading edit history for message {MessageId}", Message.MessageId);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private DiffPaneModel GetDiff(string oldText, string newText)
+    {
+        var differ = new InlineDiffBuilder(new Differ());
+        return differ.BuildDiffModel(oldText, newText);
+    }
+
+    private string GetDiffLineClass(ChangeType type)
+    {
+        return type switch
+        {
+            ChangeType.Deleted => "diff-deleted",
+            ChangeType.Inserted => "diff-inserted",
+            ChangeType.Modified => "diff-modified",
+            _ => ""
+        };
+    }
+
+    private string GetDiffMarker(ChangeType type)
+    {
+        return type switch
+        {
+            ChangeType.Deleted => "- ",
+            ChangeType.Inserted => "+ ",
+            ChangeType.Modified => "~ ",
+            _ => "  "
+        };
+    }
+
+    private string GetUserInitials()
+    {
+        var name = Message.UserName ?? $"U{Message.UserId}";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+}

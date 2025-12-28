@@ -1,0 +1,180 @@
+/* Telegram Desktop Clone Layout */
+
+/* Ensure all elements use border-box sizing to prevent overflow */
+::deep * {
+    box-sizing: border-box;
+}
+
+.telegram-layout {
+    display: flex;
+    height: calc(100vh - 64px - 48px); /* Account for app header (64px) and container margin (my-4 = 48px) */
+    background: #0e1621;
+    overflow: hidden;
+}
+
+/* Left Sidebar - Chat List (pierces into ChatSidebar component) */
+::deep .telegram-sidebar {
+    width: 380px;
+    flex-shrink: 0;
+    background: #17212b;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+::deep .sidebar-header {
+    padding: 12px 16px;
+    background: #17212b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+::deep .sidebar-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 8px;
+}
+
+::deep .sidebar-search {
+    width: 100%;
+    padding: 8px 12px;
+    background: #0e1621;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    color: white;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+::deep .sidebar-search:focus {
+    border-color: #64b5f6;
+}
+
+::deep .sidebar-search::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Main Chat View (pierces into MessageListView component) */
+::deep .telegram-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0e1621;
+    overflow: hidden;
+    min-height: 0; /* Allow flex item to shrink below content size */
+}
+
+/* Empty State (no chat selected or no messages) */
+::deep .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.4);
+    gap: 12px;
+}
+
+::deep .empty-state-icon {
+    width: 120px;
+    height: 120px;
+    opacity: 0.3;
+}
+
+::deep .empty-state-text {
+    font-size: 18px;
+    font-weight: 500;
+}
+
+::deep .empty-state-subtext {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .telegram-layout {
+        height: calc(100vh - 56px - 48px); /* Smaller header on mobile (56px) and container margin (48px) */
+    }
+
+    ::deep .telegram-sidebar {
+        width: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 10;
+        transition: transform 0.3s ease;
+    }
+
+    ::deep .telegram-sidebar.has-selection {
+        transform: translateX(-100%);
+    }
+
+    ::deep .telegram-main {
+        width: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    }
+
+    ::deep .telegram-main.active {
+        transform: translateX(0);
+    }
+}
+
+/* Scrollbar Styling (Telegram-like) */
+::deep .messages-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+::deep .messages-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::deep .messages-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+::deep .messages-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Messages Container - newest at bottom like Telegram */
+::deep .messages-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px;
+    background: #0e1621;
+    display: flex;
+    flex-direction: column-reverse; /* Reverse so newest messages appear at bottom */
+    box-sizing: border-box; /* Include padding in flex calculation to prevent overflow */
+    min-height: 0; /* Allow flex item to shrink below content size */
+}
+
+/* Load More Container */
+::deep .load-more-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: #0e1621;
+}
+
+::deep .loading-text {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+}
+
+/* Scroll Sentinel - invisible element that triggers loading when visible */
+::deep .scroll-sentinel {
+    height: 20px;
+    width: 100%;
+}

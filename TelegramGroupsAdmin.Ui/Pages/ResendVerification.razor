@@ -1,0 +1,76 @@
+@page "/resend-verification"
+@using TelegramGroupsAdmin.Ui.Api
+@layout LoginLayout
+@inject NavigationManager Navigation
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>Resend Verification Email - Telegram Groups Admin</PageTitle>
+
+<div class="container">
+    <h1 class="title">Resend Verification Email</h1>
+    <p class="subtitle">Enter your email to receive a new verification link</p>
+
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="alert-success">@_successMessage</div>
+    }
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert-error">@_errorMessage</div>
+    }
+
+    <form @onsubmit="HandleResendAsync" @onsubmit:preventDefault>
+        <div class="form-group">
+            <label class="form-label" for="email">Email</label>
+            <input type="email"
+                   id="email"
+                   class="form-input"
+                   @bind="_email"
+                   @bind:event="oninput"
+                   placeholder="your.email@example.com"
+                   required />
+        </div>
+
+        <button type="submit" class="btn-primary">Send Verification Email</button>
+    </form>
+
+    <div class="divider"></div>
+
+    <p class="text-center">
+        <a href="/login">Back to Login</a>
+    </p>
+</div>
+
+@code {
+    private string _email = string.Empty;
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    private async Task HandleResendAsync()
+    {
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/resend-verification", new { Email = _email });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _successMessage = "Verification email sent! Please check your inbox.";
+                _email = string.Empty;
+            }
+            else
+            {
+                _errorMessage = "Unable to send verification email. Email may already be verified or invalid.";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "An error occurred. Please try again.";
+        }
+    }
+}

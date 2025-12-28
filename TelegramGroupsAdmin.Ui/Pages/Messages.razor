@@ -1,0 +1,722 @@
+@page "/messages"
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Components.Messages
+@using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Services
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+@inject SseService SseService
+@inject ILogger<Messages> Logger
+@attribute [Authorize]
+@implements IAsyncDisposable
+
+<PageTitle>Messages - TelegramGroupsAdmin</PageTitle>
+
+@* Telegram Desktop Clone Layout *@
+<div class="telegram-layout">
+    @* Left Sidebar - Chat List *@
+    <ChatSidebar Chats="_chats"
+                 SelectedChatId="_selectedChatId"
+                 SearchText="@_chatSearchText"
+                 OnChatSelected="HandleChatSelected"
+                 OnSearchTextChanged="HandleChatSearchChanged" />
+
+    @* Main Chat View *@
+    <MessageListView Messages="_filteredMessages"
+                     SelectedChat="_selectedChat"
+                     Loading="_loading"
+                     LoadingMore="_loadingMore"
+                     HasMore="_hasMore"
+                     UserPermissionLevel="_userPermissionLevel"
+                     UserTelegramIds="_userTelegramIds"
+                     BotUserId="_botUserId"
+                     IsFeatureAvailable="_isFeatureAvailable"
+                     LinkedUsername="@_linkedUsername"
+                     FeatureUnavailableReason="@_featureUnavailableReason"
+                     EditingMessageId="_editingMessageId"
+                     ReplyToMessageId="_replyToMessageId"
+                     EditingOriginalText="@_editingOriginalText"
+                     OnBackClicked="HandleBackToChats"
+                     OnReplyClick="HandleReplyClick"
+                     OnLoadMoreMessages="LoadMoreMessagesAsync"
+                     OnMarkAsSpam="HandleMarkAsSpam"
+                     OnMarkAsHam="HandleMarkAsHam"
+                     OnDeleteMessage="HandleDeleteMessage"
+                     OnViewEdits="HandleViewEdits"
+                     OnViewDetections="HandleViewDetections"
+                     OnViewImage="HandleViewImage"
+                     OnViewUserDetail="HandleViewUserDetail"
+                     OnFilterByChat="HandleFilterByChat"
+                     OnTempBan="HandleTempBan"
+                     OnTranslateMessage="HandleTranslateMessage"
+                     OnSendMessage="HandleSendMessage"
+                     OnEditMessage="HandleEditMessage"
+                     OnCancelEdit="HandleCancelEdit"
+                     OnCancelReply="HandleCancelReply"
+                     OnReplyToMessage="HandleReplyToMessage"
+                     OnEditMessageClick="HandleEditMessageClick" />
+</div>
+
+@code {
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    // ========================================================================
+    // Chat State
+    // ========================================================================
+
+    private List<ChatSummary> _chats = [];
+    private long? _selectedChatId;
+    private string _chatSearchText = "";
+
+    private ChatSummary? _selectedChat => _selectedChatId.HasValue
+        ? _chats.FirstOrDefault(c => c.ChatId == _selectedChatId.Value)
+        : null;
+
+    // ========================================================================
+    // Message State
+    // ========================================================================
+
+    private List<MessageWithMetadata> _messages = [];
+    private List<MessageWithMetadata> _filteredMessages = [];
+    private bool _loading;
+    private bool _loadingMore;
+    private bool _hasMore = true;
+
+    // ========================================================================
+    // User State
+    // ========================================================================
+
+    private PermissionLevel _userPermissionLevel = PermissionLevel.Admin;
+    private HashSet<long> _userTelegramIds = [];
+
+    // ========================================================================
+    // Bot Messaging State
+    // ========================================================================
+
+    private bool _isFeatureAvailable;
+    private long? _botUserId;
+    private string? _linkedUsername;
+    private string? _featureUnavailableReason;
+    private long? _editingMessageId;
+    private long? _replyToMessageId;
+    private string? _editingOriginalText;
+
+    // ========================================================================
+    // Navigation State
+    // ========================================================================
+
+    private long? _highlightMessageId;
+    private bool _isAutoScrolling;
+    private bool _highlightMessageEnsured;
+
+    // ========================================================================
+    // Lifecycle
+    // ========================================================================
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to SSE events
+        SseService.OnMessageEvent += HandleSseMessage;
+
+        // Load initial data
+        await LoadInitialDataAsync();
+
+        // Parse query string for initial chat selection
+        ApplyQueryStringFilters();
+
+        // If a chat was auto-selected, load its messages
+        if (_selectedChatId.HasValue)
+        {
+            await LoadChatMessagesAsync(_selectedChatId.Value);
+        }
+
+        // Connect to SSE for real-time updates
+        await SseService.ConnectAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        SseService.OnMessageEvent -= HandleSseMessage;
+        await SseService.DisconnectAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Handle auto-scroll to highlighted message
+        if (_highlightMessageId.HasValue && !_loading && _isAutoScrolling)
+        {
+            try
+            {
+                var targetMessageId = _highlightMessageId.Value;
+                _highlightMessageId = null;
+
+                await Js.InvokeVoidAsync("scrollToMessage", targetMessageId);
+
+                await Task.Delay(2000);
+                _isAutoScrolling = false;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to auto-scroll to highlighted message");
+                _highlightMessageId = null;
+                _isAutoScrolling = false;
+            }
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    // ========================================================================
+    // Data Loading
+    // ========================================================================
+
+    private async Task LoadInitialDataAsync()
+    {
+        try
+        {
+            // Load chats first to populate sidebar
+            var chats = await Http.GetFromJsonAsync<List<ChatSummary>>(Routes.Messages.Chats);
+
+            if (chats != null)
+            {
+                _chats = chats;
+            }
+
+            // User context will be populated when the first page response is loaded
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load initial data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadChatMessagesAsync(long chatId)
+    {
+        _loading = true;
+        _hasMore = true;
+        _messages.Clear();
+        _filteredMessages.Clear();
+        _highlightMessageEnsured = false;
+
+        try
+        {
+            var url = Routes.Pages.Messages(chatId);
+            var response = await Http.GetFromJsonAsync<MessagesPageResponse>(url);
+
+            if (response != null)
+            {
+                _messages = response.Messages;
+                _hasMore = response.Pagination.HasMore;
+
+                // Extract user context from page response
+                if (response.UserContext != null)
+                {
+                    _userPermissionLevel = (PermissionLevel)response.UserContext.PermissionLevel;
+                    _userTelegramIds = response.UserContext.LinkedTelegramIds.ToHashSet();
+                    _isFeatureAvailable = response.UserContext.CanSendAsBot;
+                    _linkedUsername = response.UserContext.LinkedUsername;
+                    _botUserId = response.UserContext.BotUserId;
+                    _featureUnavailableReason = response.UserContext.BotFeatureUnavailableReason;
+                }
+
+                ApplyMessageFilter();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load messages: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+
+            if (_highlightMessageId.HasValue)
+            {
+                _isAutoScrolling = true;
+                await EnsureHighlightedMessageLoadedAsync(_highlightMessageId.Value);
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public async Task LoadMoreMessagesAsync()
+    {
+        if (_isAutoScrolling || _loadingMore || !_hasMore || !_selectedChatId.HasValue)
+            return;
+
+        _loadingMore = true;
+
+        try
+        {
+            var oldestMessage = _messages.LastOrDefault();
+            if (oldestMessage == null)
+            {
+                _hasMore = false;
+                return;
+            }
+
+            var url = Routes.Pages.MessagesBefore(_selectedChatId.Value, oldestMessage.Message.Timestamp);
+            var response = await Http.GetFromJsonAsync<MessagesPageResponse>(url);
+
+            if (response?.Messages.Any() == true)
+            {
+                _messages.AddRange(response.Messages);
+                _hasMore = response.Pagination.HasMore;
+                ApplyMessageFilter();
+            }
+            else
+            {
+                _hasMore = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load more messages: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingMore = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyMessageFilter()
+    {
+        // For now, no filtering - show all messages
+        // TODO: Add filter UI if needed
+        _filteredMessages = _messages.ToList();
+    }
+
+    // ========================================================================
+    // Chat Event Handlers
+    // ========================================================================
+
+    private async Task HandleChatSelected(long chatId)
+    {
+        _selectedChatId = chatId;
+        await LoadChatMessagesAsync(chatId);
+    }
+
+    private void HandleChatSearchChanged(string searchText)
+    {
+        _chatSearchText = searchText;
+    }
+
+    private void HandleBackToChats()
+    {
+        _selectedChatId = null;
+        _messages.Clear();
+        _filteredMessages.Clear();
+    }
+
+    // ========================================================================
+    // Message Action Handlers
+    // ========================================================================
+
+    private async Task HandleMarkAsSpam(MessageRecord message)
+    {
+        try
+        {
+            var response = await Http.PostAsync(Routes.Messages.Spam(message.MessageId), null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Message marked as spam", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to mark as spam: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleMarkAsHam(MessageRecord message)
+    {
+        try
+        {
+            var response = await Http.PostAsync(Routes.Messages.Ham(message.MessageId), null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Message marked as ham", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to mark as ham: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleDeleteMessage(MessageRecord message)
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Delete Message",
+            "Are you sure you want to delete this message?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        try
+        {
+            var response = await Http.PostAsync(Routes.Messages.Delete(message.MessageId), null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Message deleted", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to delete: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleViewUserDetail(long userId)
+    {
+        var parameters = new DialogParameters<UserDetailDialog> { { x => x.UserId, userId } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true, CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
+    }
+
+    private async Task HandleViewEdits(MessageRecord message)
+    {
+        var parameters = new DialogParameters<EditHistoryDialog> { { x => x.Message, message } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<EditHistoryDialog>("Edit History", parameters, options);
+    }
+
+    private async Task HandleViewDetections(MessageRecord message)
+    {
+        try
+        {
+            var detail = await Http.GetFromJsonAsync<MessageDetailResponse>(Routes.Pages.MessageDetail(message.MessageId));
+
+            if (detail != null)
+            {
+                var parameters = new DialogParameters<DetectionHistoryDialog>
+                {
+                    { x => x.Message, message },
+                    { x => x.DetectionResults, detail.DetectionHistory }
+                };
+                var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+                await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters, options);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load detection history: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleViewImage(MessageRecord message)
+    {
+        var parameters = new DialogParameters<ImageViewerDialog> { { x => x.Message, message } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseButton = true };
+        await DialogService.ShowAsync<ImageViewerDialog>("Image Viewer", parameters, options);
+    }
+
+    private void HandleFilterByChat(long chatId)
+    {
+        // Navigate to the selected chat
+        _selectedChatId = chatId;
+        _ = LoadChatMessagesAsync(chatId);
+    }
+
+    private async Task HandleTempBan(MessageRecord message)
+    {
+        var parameters = new DialogParameters<TempBanDialog>
+        {
+            { x => x.UserId, message.UserId },
+            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+
+        var dialog = await DialogService.ShowAsync<TempBanDialog>("Temporary Ban", parameters, options);
+        var result = await dialog.Result;
+
+        if (result == null || result.Canceled || result.Data is not TempBanDialog.TempBanResult tempBanResult)
+            return;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                Routes.Messages.TempBan(message.MessageId),
+                new { Duration = tempBanResult.Duration, Reason = tempBanResult.Reason });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var expiryTime = DateTimeOffset.UtcNow.Add(tempBanResult.Duration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
+                Snackbar.Add($"User temporarily banned until {expiryTime}", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to temp ban: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Task HandleTranslateMessage(MessageRecord message)
+    {
+        // TODO: Implement translation via API
+        Snackbar.Add("Translation feature coming soon", Severity.Info);
+        return Task.CompletedTask;
+    }
+
+    // ========================================================================
+    // Bot Messaging Handlers
+    // ========================================================================
+
+    private async Task HandleSendMessage(string text)
+    {
+        if (!_selectedChatId.HasValue) return;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Routes.Messages.Send, new
+            {
+                ChatId = _selectedChatId.Value,
+                Text = text,
+                ReplyToMessageId = _replyToMessageId
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _replyToMessageId = null;
+                Snackbar.Add("Message sent", Severity.Success);
+                await LoadChatMessagesAsync(_selectedChatId.Value);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to send: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleEditMessage(string text)
+    {
+        if (!_editingMessageId.HasValue || !_selectedChatId.HasValue) return;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                Routes.Messages.Edit(_editingMessageId.Value),
+                new { Text = text });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _editingMessageId = null;
+                _editingOriginalText = null;
+                Snackbar.Add("Message edited", Severity.Success);
+                await LoadChatMessagesAsync(_selectedChatId.Value);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to edit: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void HandleCancelEdit()
+    {
+        _editingMessageId = null;
+        _editingOriginalText = null;
+    }
+
+    private void HandleCancelReply()
+    {
+        _replyToMessageId = null;
+    }
+
+    private void HandleReplyToMessage(long messageId)
+    {
+        _replyToMessageId = messageId;
+    }
+
+    private void HandleEditMessageClick((long MessageId, string Text) args)
+    {
+        _editingMessageId = args.MessageId;
+        _editingOriginalText = args.Text;
+    }
+
+    // ========================================================================
+    // Navigation Handlers
+    // ========================================================================
+
+    private async Task HandleReplyClick(long targetMessageId)
+    {
+        try
+        {
+            var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+
+            if (targetMessage == null)
+            {
+                var message = await Http.GetFromJsonAsync<MessageDetailResponse>(Routes.Pages.MessageDetail(targetMessageId));
+
+                if (message == null)
+                {
+                    Snackbar.Add("Message not found", Severity.Warning);
+                    return;
+                }
+
+                var wrapper = new MessageWithMetadata(
+                    message.Message,
+                    message.EditHistory.Count,
+                    null,
+                    message.DetectionHistory,
+                    message.UserTags,
+                    message.UserNotes);
+
+                _messages.Add(wrapper);
+                ApplyMessageFilter();
+                StateHasChanged();
+            }
+
+            await Js.InvokeVoidAsync("scrollToMessage", targetMessageId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to navigate to message: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void ApplyQueryStringFilters()
+    {
+        try
+        {
+            var uri = new Uri(NavigationManager.Uri);
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+            if (query.TryGetValue("chat", out var chatIdStr) && long.TryParse(chatIdStr, out var chatIdFilter))
+            {
+                _selectedChatId = chatIdFilter;
+            }
+
+            if (query.TryGetValue("highlight", out var highlightStr) && long.TryParse(highlightStr, out var highlightId))
+            {
+                _highlightMessageId = highlightId;
+            }
+            else if (query.TryGetValue("messageId", out var messageIdStr) && long.TryParse(messageIdStr, out var messageId))
+            {
+                _highlightMessageId = messageId;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error parsing query string: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task EnsureHighlightedMessageLoadedAsync(long targetMessageId)
+    {
+        if (_highlightMessageEnsured) return;
+
+        try
+        {
+            var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+
+            if (targetMessage == null)
+            {
+                var detail = await Http.GetFromJsonAsync<MessageDetailResponse>(Routes.Pages.MessageDetail(targetMessageId));
+
+                if (detail == null)
+                {
+                    Snackbar.Add("Highlighted message not found", Severity.Warning);
+                    _highlightMessageId = null;
+                    return;
+                }
+
+                var wrapper = new MessageWithMetadata(
+                    detail.Message,
+                    detail.EditHistory.Count,
+                    null,
+                    detail.DetectionHistory,
+                    detail.UserTags,
+                    detail.UserNotes);
+
+                var insertIndex = _messages.FindIndex(mw => mw.Message.Timestamp < detail.Message.Timestamp);
+                if (insertIndex >= 0)
+                    _messages.Insert(insertIndex, wrapper);
+                else
+                    _messages.Add(wrapper);
+
+                ApplyMessageFilter();
+            }
+
+            _highlightMessageEnsured = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load highlighted message: {ex.Message}", Severity.Error);
+            _highlightMessageId = null;
+            _highlightMessageEnsured = true;
+        }
+    }
+
+    // ========================================================================
+    // SSE Handler
+    // ========================================================================
+
+    private void HandleSseMessage(SseEvent evt)
+    {
+        var messageData = evt.GetData<SseMessageData>();
+
+        if (!_selectedChatId.HasValue || messageData?.ChatId != _selectedChatId.Value)
+            return;
+
+        InvokeAsync(async () =>
+        {
+            switch (evt.Type)
+            {
+                case "message.new":
+                case "message.edited":
+                case "message.deleted":
+                case "detection.result":
+                    Logger.LogDebug("SSE event {EventType} for message {MessageId}", evt.Type, messageData?.MessageId);
+                    await LoadChatMessagesAsync(_selectedChatId.Value);
+                    break;
+            }
+        });
+    }
+
+    // ========================================================================
+    // Types
+    // ========================================================================
+
+    private record SseMessageData(long MessageId, long ChatId, string? EventType = null);
+}

@@ -1,0 +1,264 @@
+@using System.Text.Json
+@using TelegramGroupsAdmin.Ui.Api
+@inject IHttpClientFactory HttpFactory
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">Restore System from Backup</MudText>
+
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            <MudText Typo="Typo.body2">
+                This will restore all users, settings, and data from a backup file.
+                If your account no longer exists after restore, you'll need to log in with credentials from the backup.
+            </MudText>
+        </MudAlert>
+
+        @if (_metadata != null)
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Information</MudText>
+                <MudText Typo="Typo.body2"><strong>Created:</strong> <span class="local-timestamp" data-utc="@_metadata.CreatedAt.ToString("o")">@_metadata.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></MudText>
+                <MudText Typo="Typo.body2"><strong>Version:</strong> @_metadata.Version | <strong>Tables:</strong> @_metadata.TableCount</MudText>
+                <MudText Typo="Typo.body2"><strong>App Version:</strong> @_metadata.AppVersion</MudText>
+            </MudPaper>
+        }
+
+        <MudFileUpload T="IBrowserFile" FilesChanged="@OnFileSelected" Accept=".tar.gz,.gz">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Upload"
+                           Disabled="@_isRestoring"
+                           FullWidth="true">
+                    Select Backup File
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+
+        @if (_selectedFile != null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2">
+                Selected: <strong>@_selectedFile.Name</strong> (@FormatBytes(_selectedFile.Size))
+            </MudText>
+        }
+
+        @if (_isRestoring)
+        {
+            <MudProgressLinear Indeterminate="true" Class="mt-4" />
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                Restoring system... This may take a few minutes.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel" Disabled="@_isRestoring">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="@RestoreBackup"
+                   Disabled="@(_metadata == null || _isRestoring)">
+            Restore
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    private IBrowserFile? _selectedFile;
+    private BackupMetadataDto? _metadata;
+    private bool _isRestoring;
+    private string? _backupBase64;
+    private string? _passphrase;
+
+    private async Task OnFileSelected(IBrowserFile? file)
+    {
+        _selectedFile = file;
+        _metadata = null;
+        _passphrase = null;
+        StateHasChanged();
+
+        if (file == null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Read file (500MB max)
+            await using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var backupBytes = ms.ToArray();
+            _backupBase64 = Convert.ToBase64String(backupBytes);
+
+            // Check if backup is encrypted via API
+            var checkResponse = await Http.PostAsJsonAsync(Routes.Backup.CheckEncrypted, new { BackupBase64 = _backupBase64 });
+            var checkResult = await checkResponse.Content.ReadFromJsonAsync<JsonElement>();
+
+            if (!checkResult.TryGetProperty("success", out var success) || !success.GetBoolean())
+            {
+                var error = checkResult.TryGetProperty("error", out var e) ? e.GetString() ?? "Failed to check backup" : "Failed to check backup";
+                Snackbar.Add(error, Severity.Error);
+                _selectedFile = null;
+                _backupBase64 = null;
+                StateHasChanged();
+                return;
+            }
+
+            var isEncrypted = checkResult.TryGetProperty("isEncrypted", out var enc) && enc.GetBoolean();
+
+            if (isEncrypted)
+            {
+                // Prompt user for passphrase
+                var passphraseDialog = await DialogService.ShowAsync<PassphrasePromptDialog>(
+                    "Enter Backup Passphrase",
+                    new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+
+                var result = await passphraseDialog.Result;
+
+                if (result is null || result.Canceled)
+                {
+                    Snackbar.Add("Passphrase required to read encrypted backup", Severity.Warning);
+                    _selectedFile = null;
+                    _backupBase64 = null;
+                    StateHasChanged();
+                    return;
+                }
+
+                _passphrase = result.Data as string;
+
+                if (string.IsNullOrWhiteSpace(_passphrase))
+                {
+                    Snackbar.Add("Invalid passphrase", Severity.Error);
+                    _selectedFile = null;
+                    _backupBase64 = null;
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            // Get metadata via API (use passphrase if backup is encrypted)
+            try
+            {
+                var metadataResponse = await Http.PostAsJsonAsync(Routes.Backup.Metadata, new
+                {
+                    BackupBase64 = _backupBase64,
+                    Passphrase = _passphrase
+                });
+                var metadataResult = await metadataResponse.Content.ReadFromJsonAsync<JsonElement>();
+
+                if (!metadataResult.TryGetProperty("success", out var metaSuccess) || !metaSuccess.GetBoolean())
+                {
+                    var error = metadataResult.TryGetProperty("error", out var e) ? e.GetString() ?? "Failed to read backup metadata" : "Failed to read backup metadata";
+                    Snackbar.Add($"Failed to read backup metadata: {error}", Severity.Error);
+                    _selectedFile = null;
+                    _backupBase64 = null;
+                    _passphrase = null;
+                    StateHasChanged();
+                    return;
+                }
+
+                if (metadataResult.TryGetProperty("metadata", out var metadata))
+                {
+                    _metadata = new BackupMetadataDto
+                    {
+                        Version = metadata.TryGetProperty("version", out var v) ? v.GetString() ?? "1.0" : "1.0",
+                        CreatedAt = metadata.TryGetProperty("createdAt", out var c) ? c.GetDateTimeOffset() : DateTimeOffset.UtcNow,
+                        AppVersion = metadata.TryGetProperty("appVersion", out var a) ? a.GetString() ?? "1.0.0" : "1.0.0",
+                        TableCount = metadata.TryGetProperty("tableCount", out var t) ? t.GetInt32() : 0
+                    };
+                }
+
+                Snackbar.Add(isEncrypted ? "Encrypted backup file loaded successfully" : "Backup file loaded successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to read backup metadata: {ex.Message}", Severity.Error);
+                _selectedFile = null;
+                _backupBase64 = null;
+                _passphrase = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to read backup file: {ex.Message}", Severity.Error);
+            _selectedFile = null;
+            _backupBase64 = null;
+            _passphrase = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RestoreBackup()
+    {
+        if (_backupBase64 == null)
+            return;
+
+        _isRestoring = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Routes.Backup.Restore, new
+            {
+                BackupBase64 = _backupBase64,
+                Passphrase = _passphrase
+            });
+
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+            if (!result.TryGetProperty("success", out var success) || !success.GetBoolean())
+            {
+                var error = result.TryGetProperty("error", out var e) ? e.GetString() ?? "Restore failed" : "Restore failed";
+                Snackbar.Add($"Restore failed: {error}", Severity.Error);
+                _isRestoring = false;
+                StateHasChanged();
+                return;
+            }
+
+            // Close dialog and force page reload to re-evaluate auth state
+            // If user's account no longer exists, auth middleware will redirect to login
+            MudDialog.Close(DialogResult.Ok(true));
+            Navigation.NavigateTo("/settings/backup", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error);
+            _isRestoring = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = ["B", "KB", "MB", "GB"];
+        double len = bytes;
+        var order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len /= 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+
+    // DTO for metadata received from API
+    private class BackupMetadataDto
+    {
+        public string Version { get; set; } = "1.0";
+        public DateTimeOffset CreatedAt { get; set; }
+        public string AppVersion { get; set; } = "1.0.0";
+        public int TableCount { get; set; }
+    }
+}

@@ -1,0 +1,43 @@
+@using TelegramGroupsAdmin.Ui.Models
+
+<div class="telegram-sidebar @(SelectedChatId.HasValue ? "has-selection" : "")">
+    <div class="sidebar-header">
+        <div class="sidebar-title">Chats</div>
+        <input type="text"
+               class="sidebar-search"
+               placeholder="Search chats..."
+               value="@SearchText"
+               @oninput="OnSearchInput" />
+    </div>
+
+    <ChatList Chats="FilteredChats"
+              SelectedChatId="SelectedChatId"
+              OnChatSelected="OnChatSelected" />
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public List<ChatSummary> Chats { get; set; } = [];
+
+    [Parameter]
+    public long? SelectedChatId { get; set; }
+
+    [Parameter]
+    public string SearchText { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<long> OnChatSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnSearchTextChanged { get; set; }
+
+    private List<ChatSummary> FilteredChats => string.IsNullOrWhiteSpace(SearchText)
+        ? Chats
+        : Chats.Where(c => c.ChatName?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) == true).ToList();
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        var newText = e.Value?.ToString() ?? "";
+        await OnSearchTextChanged.InvokeAsync(newText);
+    }
+}

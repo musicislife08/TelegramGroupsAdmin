@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Services;
+using BlazorServerProgram = TelegramGroupsAdmin.Program;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
@@ -27,7 +28,7 @@ namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 ///
 /// See: https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.mvc.testing.webapplicationfactory-1.usekestrel
 /// </summary>
-public class TestWebApplicationFactory : WebApplicationFactory<Program>
+public class TestWebApplicationFactory : WebApplicationFactory<BlazorServerProgram>
 {
     private readonly string _databaseName;
     private readonly TestEmailService _testEmailService;

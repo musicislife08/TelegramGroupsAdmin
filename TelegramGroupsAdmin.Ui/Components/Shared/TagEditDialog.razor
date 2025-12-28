@@ -1,0 +1,125 @@
+@using TelegramGroupsAdmin.Ui.Helpers
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!IsEdit)
+            {
+                <MudTextField @bind-Value="_tagName"
+                             Label="Tag Name"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., translator, regional-admin, vip"
+                             HelperText="Lowercase letters, numbers, and hyphens only"
+                             Required="true"
+                             MaxLength="50" />
+            }
+            else
+            {
+                <MudTextField Value="@TagName"
+                             Label="Tag Name"
+                             Variant="Variant.Outlined"
+                             Disabled="true"
+                             HelperText="Tag name cannot be changed" />
+            }
+
+            <MudSelect @bind-Value="_selectedColor"
+                      Label="Color"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      HelperText="Select a color for this tag">
+                @foreach (TagColor color in Enum.GetValues(typeof(TagColor)))
+                {
+                    <MudSelectItem Value="@color">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Small" Color="@GetMudColor(color)">Sample</MudChip>
+                            <MudText>@color.GetDisplayName()</MudText>
+                        </MudStack>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (!IsEdit)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Tags are auto-created when first used. This creates a color preference in advance.
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@Submit" Disabled="@(!IsValid())">
+            @(IsEdit ? "Update" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public string TagName { get; set; } = string.Empty;
+    [Parameter] public TagColor CurrentColor { get; set; } = TagColor.Primary;
+
+    private string _tagName = string.Empty;
+    private TagColor _selectedColor = TagColor.Primary;
+
+    protected override void OnInitialized()
+    {
+        if (IsEdit)
+        {
+            _tagName = TagName;
+            _selectedColor = CurrentColor;
+        }
+        else
+        {
+            _selectedColor = TagColor.Primary; // Default color
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (!IsEdit)
+        {
+            var normalizedTag = _tagName.Trim().ToLowerInvariant();
+
+            // Validate tag name format
+            if (!System.Text.RegularExpressions.Regex.IsMatch(normalizedTag, @"^[a-z0-9][a-z0-9-]*$"))
+            {
+                Snackbar.Add("Tag name must contain only lowercase letters, numbers, and hyphens", Severity.Error);
+                return;
+            }
+
+            _tagName = normalizedTag;
+        }
+
+        var result = new TagEditResult
+        {
+            TagName = IsEdit ? TagName : _tagName,
+            Color = _selectedColor
+        };
+
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    private bool IsValid()
+    {
+        if (IsEdit)
+        {
+            return true; // Only editing color, always valid
+        }
+
+        return !string.IsNullOrWhiteSpace(_tagName);
+    }
+
+    private static Color GetMudColor(TagColor tagColor) => tagColor.ToMudColor();
+
+    public class TagEditResult
+    {
+        public string TagName { get; set; } = string.Empty;
+        public TagColor Color { get; set; }
+    }
+}

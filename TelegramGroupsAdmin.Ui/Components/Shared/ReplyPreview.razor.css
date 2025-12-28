@@ -1,0 +1,46 @@
+/* Telegram-style reply preview */
+
+.reply-preview {
+    display: flex;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.reply-preview:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.reply-bar {
+    width: 3px;
+    min-width: 3px;
+    border-radius: 2px;
+    background-color: #64b5f6;
+    flex-shrink: 0;
+}
+
+.reply-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.reply-user {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64b5f6;
+}
+
+.reply-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
