@@ -1,7 +1,9 @@
-@page "/register"
+@* @page - Route defined in PageRoutes.Auth.Register *@
+@attribute [Route(PageRoutes.Auth.Register)]
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
 @using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Navigation
 @layout LoginLayout
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Navigation
@@ -118,7 +120,7 @@
 
         <MudText Typo="Typo.body2" Align="Align.Center">
             Already have an account?
-            <MudLink Href="/login" Color="Color.Primary">Sign In</MudLink>
+            <MudLink Href="@PageRoutes.Auth.Login" Color="Color.Primary">Sign In</MudLink>
         </MudText>
     </MudPaper>
 </MudContainer>
@@ -244,7 +246,7 @@
             await Task.Delay(2000);
 
             // Always redirect to login - no auto-login
-            Navigation.NavigateTo("/login", forceLoad: true);
+            Navigation.NavigateTo(PageRoutes.Auth.Login, forceLoad: true);
         }
         catch (Exception)
         {

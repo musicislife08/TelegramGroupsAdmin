@@ -1,7 +1,9 @@
-@page "/login/verify"
+@* @page - Route defined in PageRoutes.Auth.VerifyTotpPage *@
+@attribute [Route(PageRoutes.Auth.VerifyTotpPage)]
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
 @using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Navigation
 @layout LoginLayout
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
@@ -40,7 +42,7 @@
 
     <p class="text-center">
         Lost access to your authenticator? Contact your administrator to reset 2FA.<br />
-        <a href="/login">Back to Login</a>
+        <a href="@PageRoutes.Auth.Login">Back to Login</a>
     </p>
 </div>
 
@@ -58,7 +60,7 @@
         if (string.IsNullOrEmpty(Token))
         {
             // Security: Redirect to login if no valid token (matches Blazor Server behavior)
-            Navigation.NavigateTo("/login", forceLoad: false);
+            Navigation.NavigateTo(PageRoutes.Auth.Login, forceLoad: false);
         }
     }
 
@@ -88,7 +90,7 @@
             }
 
             // Navigate to home
-            Navigation.NavigateTo("/", forceLoad: false);
+            Navigation.NavigateTo(PageRoutes.App.Home, forceLoad: false);
         }
         catch (HttpRequestException)
         {

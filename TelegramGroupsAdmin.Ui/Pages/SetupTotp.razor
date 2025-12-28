@@ -1,7 +1,9 @@
-@page "/login/setup-2fa"
+@* @page - Route defined in PageRoutes.Auth.SetupTotpPage *@
+@attribute [Route(PageRoutes.Auth.SetupTotpPage)]
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
 @using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Navigation
 @layout LoginLayout
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
@@ -135,7 +137,7 @@
         if (string.IsNullOrEmpty(Token))
         {
             // Security: Redirect to login if no valid token (matches Blazor Server behavior)
-            Navigation.NavigateTo("/login", forceLoad: false);
+            Navigation.NavigateTo(PageRoutes.Auth.Login, forceLoad: false);
             return;
         }
 
@@ -152,7 +154,7 @@
             if (!result.IsSuccess)
             {
                 // Security: Redirect to login on invalid/expired token (matches Blazor Server behavior)
-                Navigation.NavigateTo("/login", forceLoad: false);
+                Navigation.NavigateTo(PageRoutes.Auth.Login, forceLoad: false);
                 return;
             }
 
@@ -201,7 +203,7 @@
             }
 
             // Navigate directly to home (matches old app behavior)
-            Navigation.NavigateTo("/", forceLoad: false);
+            Navigation.NavigateTo(PageRoutes.App.Home, forceLoad: false);
         }
         catch (HttpRequestException)
         {

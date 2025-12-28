@@ -1,6 +1,8 @@
-@page "/resend-verification"
+@* @page - Route defined in PageRoutes.Auth.ResendVerification *@
+@attribute [Route(PageRoutes.Auth.ResendVerification)]
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Navigation
 @layout LoginLayout
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
@@ -39,7 +41,7 @@
     <div class="divider"></div>
 
     <p class="text-center">
-        <a href="/login">Back to Login</a>
+        <a href="@PageRoutes.Auth.Login">Back to Login</a>
     </p>
 </div>
 

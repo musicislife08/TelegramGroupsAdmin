@@ -11,9 +11,10 @@ public static class AuthenticationConstants
     public const string CookieName = "Tga.Auth";
 
     /// <summary>
-    /// Authentication cookie expiration time (30 days).
+    /// Authentication cookie expiration time (7 days).
+    /// Sliding expiration keeps sessions active during use.
     /// </summary>
-    public static readonly TimeSpan CookieExpiration = TimeSpan.FromDays(30);
+    public static readonly TimeSpan CookieExpiration = TimeSpan.FromDays(7);
 
     /// <summary>
     /// Intermediate authentication token lifetime (5 minutes) for TOTP/recovery code flows.

@@ -1,8 +1,10 @@
-@page "/login"
+@* @page - Route defined in PageRoutes.Auth.Login *@
+@attribute [Route(PageRoutes.Auth.Login)]
 @layout LoginLayout
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
 @using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Navigation
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
 @inject AuthenticationStateProvider AuthStateProvider
@@ -58,8 +60,8 @@
     <div class="divider"></div>
 
     <p class="text-center">
-        <span><a href="/forgot-password" style="color: #594ae2;">Forgot your password?</a><br /></span>
-        <span>Need to verify your email? <a href="/resend-verification" style="color: #594ae2;">Resend verification email</a><br /></span>
+        <span><a href="@PageRoutes.Auth.ForgotPassword" style="color: #594ae2;">Forgot your password?</a><br /></span>
+        <span>Need to verify your email? <a href="@PageRoutes.Auth.ResendVerification" style="color: #594ae2;">Resend verification email</a><br /></span>
         Need an invite? Contact your administrator.
     </p>
 </div>
@@ -111,16 +113,14 @@
             // Handle TOTP verification required
             if (login.RequiresTotp)
             {
-                // URL-encode the token - Base64 contains +/= which must be escaped
-                Navigation.NavigateTo($"/login/verify?token={Uri.EscapeDataString(login.IntermediateToken!)}", forceLoad: false);
+                Navigation.NavigateTo(PageRoutes.Auth.VerifyTotp(login.IntermediateToken!), forceLoad: false);
                 return;
             }
 
             // Handle TOTP setup required
             if (login.RequiresTotpSetup)
             {
-                // URL-encode the token - Base64 contains +/= which must be escaped
-                Navigation.NavigateTo($"/login/setup-2fa?token={Uri.EscapeDataString(login.IntermediateToken!)}", forceLoad: false);
+                Navigation.NavigateTo(PageRoutes.Auth.SetupTotp(login.IntermediateToken!), forceLoad: false);
                 return;
             }
 
@@ -131,7 +131,7 @@
             }
 
             // Navigate to home
-            Navigation.NavigateTo("/", forceLoad: false);
+            Navigation.NavigateTo(PageRoutes.App.Home, forceLoad: false);
         }
         catch (HttpRequestException)
         {

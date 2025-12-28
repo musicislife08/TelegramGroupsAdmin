@@ -1,22 +1,23 @@
+@using TelegramGroupsAdmin.Ui.Navigation
 @inject AuthenticationStateProvider AuthStateProvider
 
 <MudNavMenu>
     @if (_isAuthenticated)
     {
         <!-- Main Navigation (all authenticated users) -->
-        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Home</MudNavLink>
-        <MudNavLink Href="/messages" Icon="@Icons.Material.Filled.Message">Messages</MudNavLink>
+        <MudNavLink Href="@PageRoutes.App.Home" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Home</MudNavLink>
+        <MudNavLink Href="@PageRoutes.App.Messages" Icon="@Icons.Material.Filled.Message">Messages</MudNavLink>
 
         @if (_isGlobalAdminOrOwner)
         {
             <!-- GlobalAdmin/Owner only -->
-            <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+            <MudNavLink Href="@PageRoutes.Settings.Index" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
         }
 
         <!-- User Section (Bottom) -->
         <MudSpacer />
         <MudDivider Class="my-2" />
-        <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
+        <MudNavLink Href="@PageRoutes.App.Profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
         <MudNavLink OnClick="@LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudNavLink>
     }
 </MudNavMenu>
@@ -49,6 +50,6 @@
 
     private void LogoutAsync()
     {
-        Navigation.NavigateTo("/logout", forceLoad: true);
+        Navigation.NavigateTo(PageRoutes.Auth.Logout, forceLoad: true);
     }
 }

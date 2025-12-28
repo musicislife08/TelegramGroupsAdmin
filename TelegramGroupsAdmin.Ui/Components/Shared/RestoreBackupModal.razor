@@ -1,5 +1,6 @@
 @using System.Text.Json
 @using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Navigation
 @inject IHttpClientFactory HttpFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -225,7 +226,7 @@
             // Close dialog and force page reload to re-evaluate auth state
             // If user's account no longer exists, auth middleware will redirect to login
             MudDialog.Close(DialogResult.Ok(true));
-            Navigation.NavigateTo("/settings/backup", forceLoad: true);
+            Navigation.NavigateTo(PageRoutes.Settings.Backup, forceLoad: true);
         }
         catch (Exception ex)
         {

@@ -1,7 +1,9 @@
-@page "/"
+@* @page - Route defined in PageRoutes.App.Home *@
+@attribute [Route(PageRoutes.App.Home)]
 @using System.Net.Http.Json
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Navigation
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.ContentDetection.Models
@@ -26,7 +28,7 @@
         <MudAlert Severity="Severity.Info" Class="mb-4" Variant="Variant.Outlined">
             <MudText>
                 <strong>@_pendingRecommendationsCount threshold recommendation(s)</strong> pending review.
-                <MudLink Href="/settings/threshold-recommendations" Underline="Underline.Always">Review now</MudLink>
+                <MudLink Href="@PageRoutes.Settings.ThresholdRecommendations" Underline="Underline.Always">Review now</MudLink>
             </MudText>
         </MudAlert>
     }
@@ -122,13 +124,13 @@
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.Message"
-                               Href="/messages">
+                               Href="@PageRoutes.App.Messages">
                         View Messages
                     </MudButton>
                     <MudButton Variant="Variant.Outlined"
                                Color="Color.Warning"
                                StartIcon="@Icons.Material.Filled.Report"
-                               Href="/reports"
+                               Href="@PageRoutes.App.Reports"
                                Disabled="_pendingReportsCount == 0">
                         Review Reports (@_pendingReportsCount)
                     </MudButton>
@@ -170,7 +172,7 @@
                     </MudList>
                     @if (_recentActions.Count > 5)
                     {
-                        <MudLink Href="/moderation" Typo="Typo.caption" Class="mt-2">
+                        <MudLink Href="@PageRoutes.App.Moderation" Typo="Typo.caption" Class="mt-2">
                             View all @_recentActions.Count actions →
                         </MudLink>
                     }
@@ -218,7 +220,7 @@
                 // Check for first run (no users exist yet)
                 if (response.IsFirstRun)
                 {
-                    Navigation.NavigateTo("/register", replace: true);
+                    Navigation.NavigateTo(PageRoutes.Auth.Register, replace: true);
                     return;
                 }
 
@@ -244,7 +246,7 @@
 
     private void NavigateToReports()
     {
-        Navigation.NavigateTo("/reports");
+        Navigation.NavigateTo(PageRoutes.App.Reports);
     }
 
     private string GetTimeRangeDisplay()

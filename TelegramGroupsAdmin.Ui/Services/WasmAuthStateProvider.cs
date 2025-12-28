@@ -69,27 +69,35 @@ public class WasmAuthStateProvider : AuthenticationStateProvider
         try
         {
             // Call the /api/auth/me endpoint to get current user info
+            // Returns 200 with user data if authenticated, 200 with empty body if not
             var response = await Http.GetAsync(Routes.Auth.Me);
 
             if (response.IsSuccessStatusCode)
             {
-                var userInfo = await response.Content.ReadFromJsonAsync<AuthMeResponse>();
-
-                if (userInfo != null)
+                // Check if response has content (empty = not authenticated)
+                var content = await response.Content.ReadAsStringAsync();
+                if (!string.IsNullOrWhiteSpace(content))
                 {
-                    var claims = new List<Claim>
+                    var userInfo = System.Text.Json.JsonSerializer.Deserialize<AuthMeResponse>(
+                        content,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                    if (userInfo != null)
                     {
-                        new(ClaimTypes.NameIdentifier, userInfo.UserId),
-                        new(ClaimTypes.Name, userInfo.Email),
-                        new(ClaimTypes.Email, userInfo.Email),
-                        new("permission_level", userInfo.PermissionLevel.ToString())
-                    };
+                        var claims = new List<Claim>
+                        {
+                            new(ClaimTypes.NameIdentifier, userInfo.UserId),
+                            new(ClaimTypes.Name, userInfo.Email),
+                            new(ClaimTypes.Email, userInfo.Email),
+                            new("permission_level", userInfo.PermissionLevel.ToString())
+                        };
 
-                    var identity = new ClaimsIdentity(claims, "cookie");
-                    var principal = new ClaimsPrincipal(identity);
+                        var identity = new ClaimsIdentity(claims, "cookie");
+                        var principal = new ClaimsPrincipal(identity);
 
-                    _cachedAuthState = new AuthenticationState(principal);
-                    return _cachedAuthState;
+                        _cachedAuthState = new AuthenticationState(principal);
+                        return _cachedAuthState;
+                    }
                 }
             }
         }
@@ -98,7 +106,7 @@ public class WasmAuthStateProvider : AuthenticationStateProvider
             // API not available or network error - treat as unauthenticated
         }
 
-        // Not authenticated - cache this state too to prevent repeated 401s
+        // Not authenticated - cache this state too to prevent repeated API calls
         _cachedAuthState = new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
         return _cachedAuthState;
     }

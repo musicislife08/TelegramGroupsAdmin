@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using TelegramGroupsAdmin.Ui.Navigation;
 
 namespace TelegramGroupsAdmin.Ui.Services;
 
@@ -39,7 +40,7 @@ public sealed class HttpErrorInterceptor : DelegatingHandler
             case 401:
                 // Session expired or not authenticated - redirect to login
                 // Use forceLoad to ensure clean state
-                _navigation.NavigateTo("/login", forceLoad: true);
+                _navigation.NavigateTo(PageRoutes.Auth.Login, forceLoad: true);
                 break;
 
             case 403:

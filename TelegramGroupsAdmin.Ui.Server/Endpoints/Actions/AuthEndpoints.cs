@@ -16,13 +16,15 @@ public static class AuthEndpoints
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
         // GET /api/auth/me - Returns current user info for WASM auth state
+        // Returns 200 with user data if authenticated, 200 with empty body if not
+        // (empty response avoids 401 which would trigger redirect interceptors)
         endpoints.MapGet("/api/auth/me", (HttpContext httpContext) =>
         {
             var user = httpContext.User;
 
             if (user.Identity?.IsAuthenticated != true)
             {
-                return Results.Unauthorized();
+                return Results.Ok();
             }
 
             var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -31,7 +33,7 @@ public static class AuthEndpoints
 
             if (userId == null || email == null)
             {
-                return Results.Unauthorized();
+                return Results.Ok();
             }
 
             var permissionLevel = 0;
@@ -45,7 +47,7 @@ public static class AuthEndpoints
                 Email: email,
                 PermissionLevel: permissionLevel
             ));
-        }).RequireAuthorization();
+        }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/login", async (
             [FromBody] LoginRequest request,
