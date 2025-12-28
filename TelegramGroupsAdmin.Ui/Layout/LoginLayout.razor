@@ -1,4 +1,8 @@
 @inherits LayoutComponentBase
+@using TelegramGroupsAdmin.Ui.Services
+@inject HttpErrorNotificationService ErrorNotificationService
+@inject ISnackbar Snackbar
+@implements IDisposable
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -28,4 +32,24 @@
             DrawerBackground = Colors.Gray.Darken4,
         }
     };
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to global HTTP error notifications (primarily for 5xx errors on login pages)
+        ErrorNotificationService.OnError += HandleHttpError;
+    }
+
+    private void HandleHttpError(HttpErrorEvent error)
+    {
+        InvokeAsync(() =>
+        {
+            var severity = error.StatusCode >= 500 ? Severity.Error : Severity.Warning;
+            Snackbar.Add(error.Message, severity);
+        });
+    }
+
+    public void Dispose()
+    {
+        ErrorNotificationService.OnError -= HandleHttpError;
+    }
 }

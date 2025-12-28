@@ -1,5 +1,9 @@
 @inherits LayoutComponentBase
+@using TelegramGroupsAdmin.Ui.Services
 @inject AuthenticationStateProvider AuthStateProvider
+@inject HttpErrorNotificationService ErrorNotificationService
+@inject ISnackbar Snackbar
+@implements IDisposable
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -49,6 +53,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Subscribe to global HTTP error notifications
+        ErrorNotificationService.OnError += HandleHttpError;
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
@@ -58,8 +65,29 @@
         }
     }
 
+    private void HandleHttpError(HttpErrorEvent error)
+    {
+        // InvokeAsync ensures we're on the UI thread for Snackbar
+        InvokeAsync(() =>
+        {
+            var severity = error.StatusCode switch
+            {
+                403 => Severity.Warning,
+                >= 500 => Severity.Error,
+                _ => Severity.Error
+            };
+
+            Snackbar.Add(error.Message, severity);
+        });
+    }
+
     private void DrawerToggle()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    public void Dispose()
+    {
+        ErrorNotificationService.OnError -= HandleHttpError;
     }
 }

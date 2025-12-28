@@ -10,6 +10,10 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+// Global HTTP error handling - intercepts 401/403/5xx responses
+builder.Services.AddScoped<HttpErrorNotificationService>();
+builder.Services.AddTransient<HttpErrorInterceptor>();
+
 // Named HttpClient via IHttpClientFactory - configured once, used everywhere
 // Pages inject IHttpClientFactory and call CreateClient(HttpClientNames.Api)
 //
@@ -20,7 +24,7 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddHttpClient(HttpClientNames.Api, client =>
 {
     client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress);
-});
+}).AddHttpMessageHandler<HttpErrorInterceptor>();
 
 // MudBlazor UI components
 builder.Services.AddMudServices();
