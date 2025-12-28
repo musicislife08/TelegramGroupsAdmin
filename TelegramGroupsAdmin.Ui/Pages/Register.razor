@@ -1,6 +1,7 @@
 @page "/register"
 @using TelegramGroupsAdmin.Ui.Api
-@using System.Text.Json
+@using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Models
 @layout LoginLayout
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Navigation
@@ -172,25 +173,22 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if this is first run (no users exist)
+        // Load page initialization data (first-run status, email verification config)
         try
         {
-            var response = await Http.GetAsync(Routes.Auth.FirstRun);
-            if (response.IsSuccessStatusCode)
+            var pageData = await Http.GetFromJsonAsync<RegisterPageResponse>(Routes.Pages.Register);
+            if (pageData != null)
             {
-                var result = await response.Content.ReadFromJsonAsync<JsonElement>();
-                _isFirstRun = result.TryGetProperty("isFirstRun", out var prop) && prop.GetBoolean();
+                _isFirstRun = pageData.IsFirstRun;
+                _isEmailVerificationEnabled = pageData.IsEmailVerificationEnabled;
             }
         }
         catch
         {
-            // Default to non-first-run on error
+            // Default to non-first-run and email enabled on error
             _isFirstRun = false;
+            _isEmailVerificationEnabled = true;
         }
-
-        // TODO: Check if email verification is enabled via API
-        // For now, default to true (assume enabled)
-        _isEmailVerificationEnabled = true;
 
         if (!string.IsNullOrEmpty(InviteQueryParam))
         {
@@ -227,38 +225,18 @@
                 return;
             }
 
-            var response = await Http.PostAsJsonAsync(Routes.Auth.Register, new
-            {
-                Email = _email,
-                Password = _password,
-                InviteToken = _inviteToken
-            });
+            var response = await Http.PostAsJsonAsync(Routes.Auth.Register, new RegisterRequest(_email, _password, _inviteToken));
+            var result = await response.ReadApiResponseAsync<RegisterResponse>();
 
-            // Check if response has content and is JSON
-            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength == 0)
+            if (!result.IsSuccess)
             {
-                var errorBody = await response.Content.ReadAsStringAsync();
-                _errorMessage = string.IsNullOrEmpty(errorBody)
-                    ? $"Server error: {response.StatusCode}"
-                    : "Registration failed. Please check the server logs for details.";
-                return;
-            }
-
-            var result = await response.Content.ReadFromJsonAsync<JsonElement>();
-
-            if (result.ValueKind == JsonValueKind.Undefined || !result.GetProperty("success").GetBoolean())
-            {
-                _errorMessage = result.ValueKind != JsonValueKind.Undefined && result.TryGetProperty("error", out var error)
-                    ? error.GetString()
-                    : "Registration failed";
+                _errorMessage = result.Error;
                 return;
             }
 
             // Registration successful - show message and redirect to login
             // The login flow handles all verification: email, TOTP setup, TOTP verify
-            _successMessage = result.TryGetProperty("message", out var msg)
-                ? msg.GetString()
-                : "Account created successfully! Please log in.";
+            _successMessage = result.Value!.Message ?? "Account created successfully! Please log in.";
             _registrationSuccess = true;
             StateHasChanged();
 

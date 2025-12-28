@@ -1,6 +1,8 @@
 @page "/login"
 @layout LoginLayout
 @using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Models
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
 @inject AuthenticationStateProvider AuthStateProvider
@@ -96,39 +98,40 @@
         try
         {
             var response = await Http.PostAsJsonAsync(Routes.Auth.Login, new LoginRequest(_email, _password));
-            var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            var result = await response.ReadApiResponseAsync<LoginResponse>();
 
-            if (result?.Success == true)
+            if (!result.IsSuccess)
             {
-                // Handle TOTP verification required
-                if (result.RequiresTotp)
-                {
-                    // URL-encode the token - Base64 contains +/= which must be escaped
-                    Navigation.NavigateTo($"/login/verify?token={Uri.EscapeDataString(result.IntermediateToken!)}", forceLoad: false);
-                    return;
-                }
-
-                // Handle TOTP setup required
-                if (result.RequiresTotpSetup)
-                {
-                    // URL-encode the token - Base64 contains +/= which must be escaped
-                    Navigation.NavigateTo($"/login/setup-2fa?token={Uri.EscapeDataString(result.IntermediateToken!)}", forceLoad: false);
-                    return;
-                }
-
-                // Notify auth state provider to refresh
-                if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
-                {
-                    wasmAuth.NotifyAuthenticationStateChanged();
-                }
-
-                // Navigate to home
-                Navigation.NavigateTo("/", forceLoad: false);
+                _errorMessage = result.Error;
+                return;
             }
-            else
+
+            var login = result.Value!;
+
+            // Handle TOTP verification required
+            if (login.RequiresTotp)
             {
-                _errorMessage = result?.Error ?? "Login failed. Please check your credentials.";
+                // URL-encode the token - Base64 contains +/= which must be escaped
+                Navigation.NavigateTo($"/login/verify?token={Uri.EscapeDataString(login.IntermediateToken!)}", forceLoad: false);
+                return;
             }
+
+            // Handle TOTP setup required
+            if (login.RequiresTotpSetup)
+            {
+                // URL-encode the token - Base64 contains +/= which must be escaped
+                Navigation.NavigateTo($"/login/setup-2fa?token={Uri.EscapeDataString(login.IntermediateToken!)}", forceLoad: false);
+                return;
+            }
+
+            // Notify auth state provider to refresh
+            if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+            {
+                wasmAuth.NotifyAuthenticationStateChanged();
+            }
+
+            // Navigate to home
+            Navigation.NavigateTo("/", forceLoad: false);
         }
         catch (HttpRequestException)
         {
@@ -139,13 +142,4 @@
             _isLoading = false;
         }
     }
-
-    private record LoginRequest(string Email, string Password);
-    private record LoginResponse(
-        bool Success,
-        string? Error = null,
-        bool RequiresTotp = false,
-        bool RequiresTotpSetup = false,
-        string? UserId = null,
-        string? IntermediateToken = null);
 }

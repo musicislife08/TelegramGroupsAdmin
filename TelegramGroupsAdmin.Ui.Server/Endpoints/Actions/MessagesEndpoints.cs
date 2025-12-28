@@ -6,7 +6,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Extensions;
 
-namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
+namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Actions;
 
 /// <summary>
 /// Focused action endpoints for message operations.
@@ -66,10 +66,9 @@ public static class MessagesEndpoints
                 reason: "Deleted via web UI",
                 ct);
 
-            return Results.Ok(new MessageActionResponse(
-                result.Success,
-                result.ErrorMessage,
-                result.MessageDeleted));
+            return result.Success
+                ? Results.Ok(MessageActionResponse.Ok(messageDeleted: result.MessageDeleted))
+                : Results.BadRequest(MessageActionResponse.Fail(result.ErrorMessage!));
         });
 
         // POST /api/messages/{messageId}/spam - Mark as spam and ban
@@ -101,11 +100,9 @@ public static class MessagesEndpoints
                 telegramMessage: null,
                 ct);
 
-            return Results.Ok(new MessageActionResponse(
-                result.Success,
-                result.ErrorMessage,
-                result.MessageDeleted,
-                result.ChatsAffected));
+            return result.Success
+                ? Results.Ok(MessageActionResponse.Ok(messageDeleted: result.MessageDeleted, chatsAffected: result.ChatsAffected))
+                : Results.BadRequest(MessageActionResponse.Fail(result.ErrorMessage!));
         });
 
         // POST /api/messages/{messageId}/ham - Mark as not spam (unban + restore trust)
@@ -135,17 +132,15 @@ public static class MessagesEndpoints
                 restoreTrust: true,
                 ct);
 
-            return Results.Ok(new MessageActionResponse(
-                result.Success,
-                result.ErrorMessage,
-                ChatsAffected: result.ChatsAffected,
-                TrustRestored: result.TrustRestored));
+            return result.Success
+                ? Results.Ok(MessageActionResponse.Ok(chatsAffected: result.ChatsAffected, trustRestored: result.TrustRestored))
+                : Results.BadRequest(MessageActionResponse.Fail(result.ErrorMessage!));
         });
 
         // POST /api/messages/{messageId}/temp-ban - Temporarily ban user
         group.MapPost("/{messageId:long}/temp-ban", async (
             long messageId,
-            [FromBody] TempBanRequest request,
+            [FromBody] UserTempBanRequest request,
             [FromServices] IManagedChatsRepository chatsRepo,
             [FromServices] IMessageHistoryRepository messagesRepo,
             [FromServices] ModerationOrchestrator moderationOrchestrator,
@@ -171,10 +166,9 @@ public static class MessagesEndpoints
                 duration: request.Duration,
                 ct);
 
-            return Results.Ok(new TempBanResponse(
-                result.Success,
-                result.ErrorMessage,
-                result.Success ? DateTimeOffset.UtcNow.Add(request.Duration) : null));
+            return result.Success
+                ? Results.Ok(TempBanResponse.Ok(DateTimeOffset.UtcNow.Add(request.Duration)))
+                : Results.BadRequest(TempBanResponse.Fail(result.ErrorMessage!));
         });
 
         // POST /api/messages/send - Send a new message as bot
@@ -195,7 +189,7 @@ public static class MessagesEndpoints
             var managedChat = await chatsRepo.GetByChatIdAsync(request.ChatId, ct);
             if (managedChat == null)
             {
-                return Results.BadRequest(new SendMessageResponse(false, "Target chat is not a managed chat"));
+                return Results.BadRequest(SendMessageResponse.Fail("Target chat is not a managed chat"));
             }
 
             var result = await botMessagingService.SendMessageAsync(
@@ -205,11 +199,9 @@ public static class MessagesEndpoints
                 request.ReplyToMessageId,
                 ct);
 
-            if (result.Success)
-            {
-                return Results.Ok(new SendMessageResponse(true, MessageId: result.Message?.MessageId));
-            }
-            return Results.BadRequest(new SendMessageResponse(false, result.ErrorMessage));
+            return result.Success
+                ? Results.Ok(SendMessageResponse.Ok(result.Message?.MessageId))
+                : Results.BadRequest(SendMessageResponse.Fail(result.ErrorMessage!));
         });
 
         // POST /api/messages/{messageId}/edit - Edit a bot message
@@ -241,15 +233,10 @@ public static class MessagesEndpoints
                 ct);
 
             return result.Success
-                ? Results.Ok(new ApiResponse(true))
-                : Results.BadRequest(new ApiResponse(false, result.ErrorMessage));
+                ? Results.Ok(ApiResponse.Ok())
+                : Results.BadRequest(ApiResponse.Fail(result.ErrorMessage!));
         });
 
         return endpoints;
     }
-
-    // Request DTOs (private to this endpoint class)
-    private record TempBanRequest(TimeSpan Duration, string? Reason);
-    private record SendMessageRequest(long ChatId, string Text, long? ReplyToMessageId);
-    private record EditMessageRequest(string Text);
 }

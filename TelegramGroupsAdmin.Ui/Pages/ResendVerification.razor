@@ -1,5 +1,6 @@
 @page "/resend-verification"
 @using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Models
 @layout LoginLayout
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
@@ -56,7 +57,7 @@
 
         try
         {
-            var response = await Http.PostAsJsonAsync("/resend-verification", new { Email = _email });
+            var response = await Http.PostAsJsonAsync("/resend-verification", new ResendVerificationRequest(_email));
 
             if (response.IsSuccessStatusCode)
             {

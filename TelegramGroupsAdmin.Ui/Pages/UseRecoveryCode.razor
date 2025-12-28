@@ -1,5 +1,7 @@
 @page "/use-recovery-code"
 @using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Models
 @layout LoginLayout
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
@@ -100,25 +102,23 @@
                 RecoveryCode: _recoveryCode.Trim().Replace("-", "").Replace(" ", ""),
                 IntermediateToken: Token!
             ));
+            var result = await response.ReadApiResponseAsync<ApiResponse>("Invalid recovery code. Please try again.");
 
-            var result = await response.Content.ReadFromJsonAsync<VerifyRecoveryCodeResponse>();
-
-            if (result?.Success == true)
+            if (!result.IsSuccess)
             {
-                // Notify auth state provider to refresh
-                if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
-                {
-                    wasmAuth.NotifyAuthenticationStateChanged();
-                }
-
-                // Navigate to home
-                Navigation.NavigateTo("/", forceLoad: false);
-            }
-            else
-            {
-                _errorMessage = result?.Error ?? "Invalid recovery code. Please try again.";
+                _errorMessage = result.Error;
                 _recoveryCode = string.Empty;
+                return;
             }
+
+            // Notify auth state provider to refresh
+            if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+            {
+                wasmAuth.NotifyAuthenticationStateChanged();
+            }
+
+            // Navigate to home
+            Navigation.NavigateTo("/", forceLoad: false);
         }
         catch (HttpRequestException)
         {
@@ -129,7 +129,4 @@
             _isLoading = false;
         }
     }
-
-    private record VerifyRecoveryCodeRequest(string RecoveryCode, string IntermediateToken);
-    private record VerifyRecoveryCodeResponse(bool Success, string? Error = null);
 }

@@ -1,3 +1,3 @@
-namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
+namespace TelegramGroupsAdmin.Ui.Models;
 
 public record LoginRequest(string Email, string Password);

@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
+using TelegramGroupsAdmin.Ui.Models;
 
-namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
+namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Actions;
 
 public static class BackupEndpoints
 {
@@ -96,9 +97,4 @@ public static class BackupEndpoints
 
         return endpoints;
     }
-
-    // Request DTOs
-    private record BackupFileRequest(string BackupBase64);
-    private record BackupMetadataRequest(string BackupBase64, string? Passphrase = null);
-    private record BackupRestoreRequest(string BackupBase64, string? Passphrase = null);
 }

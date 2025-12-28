@@ -1,11 +1,12 @@
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Repositories;
 using TelegramGroupsAdmin.Ui.Server.Services;
 using TelegramGroupsAdmin.Ui.Server.Services.Auth;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
+namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Actions;
 
 public static class EmailVerificationEndpoints
 {
@@ -117,5 +118,3 @@ public static class EmailVerificationEndpoints
         return Results.BadRequest("Unable to send verification email. Email may already be verified or invalid.");
     }
 }
-
-public record ResendVerificationRequest(string Email);

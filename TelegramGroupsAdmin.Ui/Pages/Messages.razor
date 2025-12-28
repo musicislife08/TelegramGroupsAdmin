@@ -462,7 +462,7 @@
         {
             var response = await Http.PostAsJsonAsync(
                 Routes.Messages.TempBan(message.MessageId),
-                new { Duration = tempBanResult.Duration, Reason = tempBanResult.Reason });
+                new UserTempBanRequest(tempBanResult.Duration, tempBanResult.Reason));
 
             if (response.IsSuccessStatusCode)
             {
@@ -498,12 +498,8 @@
 
         try
         {
-            var response = await Http.PostAsJsonAsync(Routes.Messages.Send, new
-            {
-                ChatId = _selectedChatId.Value,
-                Text = text,
-                ReplyToMessageId = _replyToMessageId
-            });
+            var response = await Http.PostAsJsonAsync(Routes.Messages.Send,
+                new SendMessageRequest(_selectedChatId.Value, text, _replyToMessageId));
 
             if (response.IsSuccessStatusCode)
             {
@@ -531,7 +527,7 @@
         {
             var response = await Http.PostAsJsonAsync(
                 Routes.Messages.Edit(_editingMessageId.Value),
-                new { Text = text });
+                new EditMessageRequest(text));
 
             if (response.IsSuccessStatusCode)
             {

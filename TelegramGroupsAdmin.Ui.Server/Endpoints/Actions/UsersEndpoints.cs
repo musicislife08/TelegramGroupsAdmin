@@ -7,7 +7,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Extensions;
 
-namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
+namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Actions;
 
 /// <summary>
 /// User-related API endpoints for the UserDetailDialog and user management.
@@ -78,7 +78,9 @@ public static class UsersEndpoints
             var executor = Actor.FromWebUser(webUserId);
             var success = await userService.ToggleTrustAsync(userId, executor, ct);
 
-            return Results.Ok(new UserActionResponse(success, success ? null : "Failed to toggle trust status"));
+            return success
+                ? Results.Ok(UserActionResponse.Ok())
+                : Results.BadRequest(UserActionResponse.Fail("Failed to toggle trust status"));
         });
 
         // ============================================================================
@@ -106,11 +108,9 @@ public static class UsersEndpoints
                 restoreTrust: false,
                 ct);
 
-            return Results.Ok(new UserActionResponse(
-                result.Success,
-                result.ErrorMessage,
-                result.ChatsAffected,
-                result.TrustRestored));
+            return result.Success
+                ? Results.Ok(UserActionResponse.Ok(chatsAffected: result.ChatsAffected, trustRestored: result.TrustRestored))
+                : Results.BadRequest(UserActionResponse.Fail(result.ErrorMessage!));
         });
 
         // POST /api/users/{userId}/temp-ban - Temporarily ban user
@@ -136,11 +136,9 @@ public static class UsersEndpoints
                 duration: request.Duration,
                 ct);
 
-            return Results.Ok(new UserActionResponse(
-                result.Success,
-                result.ErrorMessage,
-                result.ChatsAffected,
-                BannedUntil: result.Success ? DateTimeOffset.UtcNow.Add(request.Duration) : null));
+            return result.Success
+                ? Results.Ok(UserActionResponse.Ok(chatsAffected: result.ChatsAffected, bannedUntil: DateTimeOffset.UtcNow.Add(request.Duration)))
+                : Results.BadRequest(UserActionResponse.Fail(result.ErrorMessage!));
         });
 
         // ============================================================================
@@ -162,7 +160,7 @@ public static class UsersEndpoints
             if (permissionLevel < PermissionLevel.Admin) return Results.Forbid();
 
             if (string.IsNullOrWhiteSpace(request.NoteText))
-                return Results.BadRequest(new ApiResponse(false, "Note text is required"));
+                return Results.BadRequest(ApiResponse.Fail("Note text is required"));
 
             var actor = Actor.FromWebUser(webUserId);
             var note = new AdminNote
@@ -175,7 +173,7 @@ public static class UsersEndpoints
             };
 
             await notesRepo.AddNoteAsync(note, ct);
-            return Results.Ok(new ApiResponse(true));
+            return Results.Ok(ApiResponse.Ok());
         });
 
         // DELETE /api/users/{userId}/notes/{noteId} - Delete a note
@@ -194,7 +192,7 @@ public static class UsersEndpoints
 
             var actor = Actor.FromWebUser(webUserId);
             await notesRepo.DeleteNoteAsync(noteId, actor, ct);
-            return Results.Ok(new ApiResponse(true));
+            return Results.Ok(ApiResponse.Ok());
         });
 
         // POST /api/users/{userId}/notes/{noteId}/pin - Toggle note pin
@@ -213,7 +211,7 @@ public static class UsersEndpoints
 
             var actor = Actor.FromWebUser(webUserId);
             await notesRepo.TogglePinAsync(noteId, actor, ct);
-            return Results.Ok(new ApiResponse(true));
+            return Results.Ok(ApiResponse.Ok());
         });
 
         // ============================================================================
@@ -235,7 +233,7 @@ public static class UsersEndpoints
             if (permissionLevel < PermissionLevel.Admin) return Results.Forbid();
 
             if (request.TagNames == null || request.TagNames.Count == 0)
-                return Results.BadRequest(new ApiResponse(false, "At least one tag is required"));
+                return Results.BadRequest(ApiResponse.Fail("At least one tag is required"));
 
             var actor = Actor.FromWebUser(webUserId);
 
@@ -251,7 +249,7 @@ public static class UsersEndpoints
                 await tagsRepo.AddTagAsync(tag, ct);
             }
 
-            return Results.Ok(new ApiResponse(true));
+            return Results.Ok(ApiResponse.Ok());
         });
 
         // DELETE /api/users/{userId}/tags/{tagId} - Delete a tag
@@ -270,7 +268,7 @@ public static class UsersEndpoints
 
             var actor = Actor.FromWebUser(webUserId);
             await tagsRepo.DeleteTagAsync(tagId, actor, ct);
-            return Results.Ok(new ApiResponse(true));
+            return Results.Ok(ApiResponse.Ok());
         });
 
         // ============================================================================
@@ -293,7 +291,7 @@ public static class UsersEndpoints
 
             var actor = Actor.FromWebUser(webUserId);
             await actionsRepo.ExpireActionAsync(actionId, actor, ct);
-            return Results.Ok(new ApiResponse(true));
+            return Results.Ok(ApiResponse.Ok());
         });
 
         return endpoints;

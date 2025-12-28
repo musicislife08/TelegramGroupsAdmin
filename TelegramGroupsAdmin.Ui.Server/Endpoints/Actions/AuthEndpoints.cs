@@ -9,19 +9,12 @@ using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Services;
 using TelegramGroupsAdmin.Ui.Server.Services.Auth;
 
-namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
+namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Actions;
 
 public static class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        // GET /api/auth/first-run - Returns whether this is first run (no users exist)
-        endpoints.MapGet("/api/auth/first-run", async ([FromServices] IAuthService authService) =>
-        {
-            var isFirstRun = await authService.IsFirstRunAsync();
-            return Results.Json(new { isFirstRun });
-        }).AllowAnonymous();
-
         // GET /api/auth/me - Returns current user info for WASM auth state
         endpoints.MapGet("/api/auth/me", (HttpContext httpContext) =>
         {
@@ -66,11 +59,7 @@ public static class AuthEndpoints
             var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Email, "login");
             if (!rateLimitCheck.IsAllowed)
             {
-                return Results.Json(new
-                {
-                    success = false,
-                    error = $"Too many login attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
-                });
+                return Results.BadRequest(LoginResponse.Fail($"Too many login attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
             }
 
             // Record attempt for rate limiting
@@ -80,21 +69,14 @@ public static class AuthEndpoints
 
             if (!result.Success)
             {
-                return Results.Json(new { success = false, error = result.ErrorMessage });
+                return Results.BadRequest(LoginResponse.Fail(result.ErrorMessage!));
             }
 
             if (result.RequiresTotp)
             {
                 // Generate intermediate authentication token (valid for 5 minutes)
                 var intermediateToken = intermediateAuthService.CreateToken(result.UserId!);
-
-                return Results.Json(new
-                {
-                    success = true,
-                    requiresTotp = true,
-                    userId = result.UserId,
-                    intermediateToken = intermediateToken
-                });
+                return Results.Ok(LoginResponse.MustVerifyTotp(result.UserId!, intermediateToken));
             }
 
             // Check if user needs to set up TOTP (TotpEnabled=true but no secret yet)
@@ -102,14 +84,7 @@ public static class AuthEndpoints
             {
                 // Generate intermediate authentication token for TOTP setup flow
                 var intermediateToken = intermediateAuthService.CreateToken(result.UserId!);
-
-                return Results.Json(new
-                {
-                    success = true,
-                    requiresTotpSetup = true,
-                    userId = result.UserId,
-                    intermediateToken = intermediateToken
-                });
+                return Results.Ok(LoginResponse.MustSetupTotp(result.UserId!, intermediateToken));
             }
 
             // Sign in the user with cookie authentication (TOTP disabled by owner)
@@ -123,7 +98,7 @@ public static class AuthEndpoints
                 return Results.Redirect("/");
             }
 
-            return Results.Json(new { success = true });
+            return Results.Ok(LoginResponse.Ok());
         }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/register", async (
@@ -137,11 +112,7 @@ public static class AuthEndpoints
             var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Email, "register");
             if (!rateLimitCheck.IsAllowed)
             {
-                return Results.Json(new
-                {
-                    success = false,
-                    error = $"Too many registration attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
-                });
+                return Results.BadRequest(RegisterResponse.Fail($"Too many registration attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
             }
 
             // Record attempt for rate limiting
@@ -153,26 +124,26 @@ public static class AuthEndpoints
 
                 if (!result.Success)
                 {
-                    return Results.Json(new { success = false, error = result.ErrorMessage });
+                    return Results.BadRequest(RegisterResponse.Fail(result.ErrorMessage!));
                 }
 
                 // Registration successful - always redirect to login page
                 // The login flow handles: email verification, TOTP setup, TOTP verification
                 // No cookies are set here - authentication only happens through the login flow
                 logger.LogInformation("Registration succeeded for {Email}, redirecting to login", request.Email);
-                return Results.Json(new { success = true, message = "Account created successfully! Please log in." });
+                return Results.Ok(RegisterResponse.Ok("Account created successfully! Please log in."));
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
-                return Results.Json(new { success = false, error = "An unexpected error occurred during registration" });
+                return Results.BadRequest(RegisterResponse.Fail("An unexpected error occurred during registration"));
             }
         }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/logout", async (HttpContext httpContext) =>
         {
             await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Results.Json(new { success = true });
+            return Results.Ok(ApiResponse.Ok());
         }).RequireAuthorization();
 
         endpoints.MapPost("/api/auth/verify-totp", async (
@@ -186,18 +157,14 @@ public static class AuthEndpoints
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
             if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId == null)
             {
-                return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
+                return Results.BadRequest(ApiResponse.Fail("Invalid or expired authentication session"));
             }
 
             // Rate limiting (SECURITY-5) - use userId as identifier for TOTP verification
             var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "totp_verify");
             if (!rateLimitCheck.IsAllowed)
             {
-                return Results.Json(new
-                {
-                    success = false,
-                    error = $"Too many TOTP verification attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
-                });
+                return Results.BadRequest(ApiResponse.Fail($"Too many TOTP verification attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
             }
 
             // Record attempt for rate limiting
@@ -207,7 +174,7 @@ public static class AuthEndpoints
 
             if (!result.Success)
             {
-                return Results.Json(new { success = false, error = result.ErrorMessage });
+                return Results.BadRequest(ApiResponse.Fail(result.ErrorMessage!));
             }
 
             // Sign in the user with cookie authentication
@@ -221,7 +188,7 @@ public static class AuthEndpoints
                 return Results.Redirect("/");
             }
 
-            return Results.Json(new { success = true });
+            return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/verify-recovery-code", async (
@@ -235,18 +202,14 @@ public static class AuthEndpoints
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
             if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId == null)
             {
-                return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
+                return Results.BadRequest(ApiResponse.Fail("Invalid or expired authentication session"));
             }
 
             // Rate limiting (SECURITY-5) - use userId as identifier for recovery code verification
             var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "recovery_code");
             if (!rateLimitCheck.IsAllowed)
             {
-                return Results.Json(new
-                {
-                    success = false,
-                    error = $"Too many recovery code attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
-                });
+                return Results.BadRequest(ApiResponse.Fail($"Too many recovery code attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
             }
 
             // Record attempt for rate limiting
@@ -256,7 +219,7 @@ public static class AuthEndpoints
 
             if (!result.Success)
             {
-                return Results.Json(new { success = false, error = result.ErrorMessage });
+                return Results.BadRequest(ApiResponse.Fail(result.ErrorMessage!));
             }
 
             // Sign in the user with cookie authentication
@@ -270,7 +233,7 @@ public static class AuthEndpoints
                 return Results.Redirect("/");
             }
 
-            return Results.Json(new { success = true });
+            return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/setup-totp", async (
@@ -281,23 +244,18 @@ public static class AuthEndpoints
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
             if (!intermediateAuthService.TryGetUserId(request.IntermediateToken, out var userId) || userId == null)
             {
-                return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
+                return Results.BadRequest(SetupTotpResponse.Fail("Invalid or expired authentication session"));
             }
 
             try
             {
                 var result = await authService.EnableTotpAsync(userId);
 
-                return Results.Json(new
-                {
-                    success = true,
-                    qrCodeUri = result.QrCodeUri,
-                    manualEntryKey = result.ManualEntryKey
-                });
+                return Results.Ok(SetupTotpResponse.Ok(result.QrCodeUri, result.ManualEntryKey));
             }
             catch (Exception)
             {
-                return Results.Json(new { success = false, error = "Failed to setup two-factor authentication" });
+                return Results.BadRequest(SetupTotpResponse.Fail("Failed to setup two-factor authentication"));
             }
         }).AllowAnonymous();
 
@@ -312,18 +270,14 @@ public static class AuthEndpoints
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
             if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId == null)
             {
-                return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
+                return Results.BadRequest(VerifySetupTotpResponse.Fail("Invalid or expired authentication session"));
             }
 
             // Rate limiting
             var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "totp_setup");
             if (!rateLimitCheck.IsAllowed)
             {
-                return Results.Json(new
-                {
-                    success = false,
-                    error = $"Too many TOTP setup attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
-                });
+                return Results.BadRequest(VerifySetupTotpResponse.Fail($"Too many TOTP setup attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
             }
 
             await rateLimitService.RecordAttemptAsync(userId, "totp_setup");
@@ -332,7 +286,7 @@ public static class AuthEndpoints
 
             if (!result.Success)
             {
-                return Results.Json(new { success = false, error = result.ErrorMessage ?? "Invalid verification code" });
+                return Results.BadRequest(VerifySetupTotpResponse.Fail(result.ErrorMessage ?? "Invalid verification code"));
             }
 
             // Generate recovery codes for the user
@@ -341,11 +295,7 @@ public static class AuthEndpoints
             // Sign in the user with cookie authentication
             await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
-            return Results.Json(new
-            {
-                success = true,
-                recoveryCodes = recoveryCodes
-            });
+            return Results.Ok(VerifySetupTotpResponse.Ok(recoveryCodes));
         }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/forgot-password", async (
@@ -358,7 +308,7 @@ public static class AuthEndpoints
             if (!rateLimitCheck.IsAllowed)
             {
                 // Still return success to prevent email enumeration
-                return Results.Json(new { success = true });
+                return Results.Ok(ApiResponse.Ok());
             }
 
             await rateLimitService.RecordAttemptAsync(request.Email, "forgot_password");
@@ -366,7 +316,7 @@ public static class AuthEndpoints
             // Always return success to prevent email enumeration
             await authService.RequestPasswordResetAsync(request.Email);
 
-            return Results.Json(new { success = true });
+            return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/reset-password", async (
@@ -378,11 +328,7 @@ public static class AuthEndpoints
             var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Token, "reset_password");
             if (!rateLimitCheck.IsAllowed)
             {
-                return Results.Json(new
-                {
-                    success = false,
-                    error = $"Too many reset attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
-                });
+                return Results.BadRequest(ApiResponse.Fail($"Too many reset attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
             }
 
             await rateLimitService.RecordAttemptAsync(request.Token, "reset_password");
@@ -390,17 +336,17 @@ public static class AuthEndpoints
             // Validate password length
             if (string.IsNullOrEmpty(request.NewPassword) || request.NewPassword.Length < 8)
             {
-                return Results.Json(new { success = false, error = "Password must be at least 8 characters" });
+                return Results.BadRequest(ApiResponse.Fail("Password must be at least 8 characters"));
             }
 
             var success = await authService.ResetPasswordAsync(request.Token, request.NewPassword);
 
             if (!success)
             {
-                return Results.Json(new { success = false, error = "Invalid or expired reset token. Please request a new password reset link." });
+                return Results.BadRequest(ApiResponse.Fail("Invalid or expired reset token. Please request a new password reset link."));
             }
 
-            return Results.Json(new { success = true });
+            return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
         return endpoints;

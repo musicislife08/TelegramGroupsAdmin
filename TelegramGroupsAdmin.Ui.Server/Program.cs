@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Ui.Server;
 using TelegramGroupsAdmin.Ui.Server.Constants;
 using TelegramGroupsAdmin.Ui.Server.Endpoints;
+using TelegramGroupsAdmin.Ui.Server.Endpoints.Actions;
 using TelegramGroupsAdmin.Ui.Server.Endpoints.Pages;
 using TelegramGroupsAdmin.Ui.Server.Services;
 using HumanCron;
@@ -259,8 +260,9 @@ app.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.Healt
 app.MapAuthEndpoints();
 app.MapEmailVerificationEndpoints();
 app.MapSseEndpoints();
-app.MapPagesEndpoints();
+app.MapMessagesPageEndpoints();
 app.MapDashboardEndpoints();
+app.MapRegisterPageEndpoints();
 app.MapMessagesEndpoints();
 app.MapUsersEndpoints();
 app.MapBackupEndpoints();

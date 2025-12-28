@@ -1,5 +1,7 @@
 @page "/login/verify"
 @using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Models
 @layout LoginLayout
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
@@ -70,32 +72,27 @@
                 Code: _code,
                 IntermediateToken: Token!
             ));
+            var result = await response.ReadApiResponseAsync<ApiResponse>("Invalid verification code. Please try again.");
 
-            var result = await response.Content.ReadFromJsonAsync<VerifyTotpResponse>();
-
-            if (result?.Success == true)
+            if (!result.IsSuccess)
             {
-                // Notify auth state provider to refresh
-                if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
-                {
-                    wasmAuth.NotifyAuthenticationStateChanged();
-                }
-
-                // Navigate to home
-                Navigation.NavigateTo("/", forceLoad: false);
-            }
-            else
-            {
-                _errorMessage = result?.Error ?? "Invalid verification code. Please try again.";
+                _errorMessage = result.Error;
                 _code = string.Empty; // Clear the code field for retry
+                return;
             }
+
+            // Notify auth state provider to refresh
+            if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+            {
+                wasmAuth.NotifyAuthenticationStateChanged();
+            }
+
+            // Navigate to home
+            Navigation.NavigateTo("/", forceLoad: false);
         }
         catch (HttpRequestException)
         {
             _errorMessage = "Unable to connect to the server. Please try again.";
         }
     }
-
-    private record VerifyTotpRequest(string Code, string IntermediateToken);
-    private record VerifyTotpResponse(bool Success, string? Error = null);
 }

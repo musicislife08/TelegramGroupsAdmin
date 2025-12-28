@@ -1,5 +1,7 @@
 @page "/login/setup-2fa"
 @using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Models
 @layout LoginLayout
 @inject NavigationManager Navigation
 @inject IHttpClientFactory HttpFactory
@@ -145,18 +147,17 @@
         try
         {
             var response = await Http.PostAsJsonAsync(Routes.Auth.SetupTotp, new SetupTotpRequest(Token!));
-            var result = await response.Content.ReadFromJsonAsync<SetupTotpResponse>();
+            var result = await response.ReadApiResponseAsync<SetupTotpResponse>();
 
-            if (result?.Success == true)
-            {
-                _setupData = result;
-                _qrCodeDataUrl = await GenerateQrCodeAsync(result.QrCodeUri!);
-            }
-            else
+            if (!result.IsSuccess)
             {
                 // Security: Redirect to login on invalid/expired token (matches Blazor Server behavior)
                 Navigation.NavigateTo("/login", forceLoad: false);
+                return;
             }
+
+            _setupData = result.Value;
+            _qrCodeDataUrl = await GenerateQrCodeAsync(result.Value!.QrCodeUri!);
         }
         catch (HttpRequestException)
         {
@@ -181,27 +182,26 @@
         try
         {
             var response = await Http.PostAsJsonAsync(Routes.Auth.VerifySetupTotp, new VerifySetupTotpRequest(_code, Token!));
-            var result = await response.Content.ReadFromJsonAsync<VerifySetupTotpResponse>();
+            var result = await response.ReadApiResponseAsync<VerifySetupTotpResponse>("Invalid verification code. Please try again.");
 
-            if (result?.Success == true)
+            if (!result.IsSuccess)
             {
-                // Phase 2: Uncomment to show recovery codes instead of navigating directly
-                // _recoveryCodes = result.RecoveryCodes ?? [];
-                // _showRecoveryCodes = true;
-
-                if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
-                {
-                    wasmAuth.NotifyAuthenticationStateChanged();
-                }
-
-                // Navigate directly to home (matches old app behavior)
-                Navigation.NavigateTo("/", forceLoad: false);
-            }
-            else
-            {
-                _errorMessage = result?.Error ?? "Invalid verification code. Please try again.";
+                _errorMessage = result.Error;
                 _code = string.Empty;
+                return;
             }
+
+            // Phase 2: Uncomment to show recovery codes instead of navigating directly
+            // _recoveryCodes = result.Value!.RecoveryCodes ?? [];
+            // _showRecoveryCodes = true;
+
+            if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+            {
+                wasmAuth.NotifyAuthenticationStateChanged();
+            }
+
+            // Navigate directly to home (matches old app behavior)
+            Navigation.NavigateTo("/", forceLoad: false);
         }
         catch (HttpRequestException)
         {
@@ -218,9 +218,4 @@
     // {
     //     Navigation.NavigateTo("/", forceLoad: false);
     // }
-
-    private record SetupTotpRequest(string IntermediateToken);
-    private record SetupTotpResponse(bool Success, string? Error = null, string? QrCodeUri = null, string? ManualEntryKey = null);
-    private record VerifySetupTotpRequest(string Code, string IntermediateToken);
-    private record VerifySetupTotpResponse(bool Success, string? Error = null, IReadOnlyList<string>? RecoveryCodes = null);
 }

@@ -6,16 +6,16 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Extensions;
 
-namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
+namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Pages;
 
 /// <summary>
-/// Aggregate "page-oriented" endpoints that bundle all data needed for a UI page in a single HTTP call.
-/// These endpoints reduce HTTP round trips by returning everything a page needs to render.
-/// Route pattern: /api/pages/{resource}
+/// Aggregate endpoint for the Messages page.
+/// Bundles all data needed for the Messages UI in a single HTTP call.
+/// Route pattern: /api/pages/messages
 /// </summary>
-public static class PagesEndpoints
+public static class MessagesPageEndpoints
 {
-    public static IEndpointRouteBuilder MapPagesEndpoints(this IEndpointRouteBuilder endpoints)
+    public static IEndpointRouteBuilder MapMessagesPageEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/pages")
             .RequireAuthorization();

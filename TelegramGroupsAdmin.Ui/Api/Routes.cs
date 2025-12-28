@@ -16,7 +16,6 @@ public static class Routes
         private const string Base = "/api/auth";
 
         public static string Me => $"{Base}/me";
-        public static string FirstRun => $"{Base}/first-run";
         public static string Login => $"{Base}/login";
         public static string Register => $"{Base}/register";
         public static string Logout => $"{Base}/logout";
@@ -64,6 +63,11 @@ public static class Routes
         /// Get all data for the message detail modal: message, user, detection history, edit history.
         /// </summary>
         public static string MessageDetail(long messageId) => $"{Base}/messages/{messageId}";
+
+        /// <summary>
+        /// Get initialization data for the Register page: first-run status, email verification config.
+        /// </summary>
+        public static string Register => $"{Base}/register";
     }
 
     /// <summary>
