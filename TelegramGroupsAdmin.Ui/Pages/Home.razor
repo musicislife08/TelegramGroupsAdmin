@@ -1,28 +1,292 @@
 @page "/"
+@using System.Net.Http.Json
+@using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.ContentDetection.Models
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Navigation
+@inject ILogger<Home> Logger
 @attribute [Authorize]
 
-<PageTitle>Dashboard - Telegram Groups Admin</PageTitle>
+<PageTitle>Home - TelegramGroupsAdmin</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Chat Health Dashboard</MudText>
 
-<MudAlert Severity="Severity.Info" Class="mb-4">
-    This is the Blazor WebAssembly UI proof-of-concept.
-    Currently implementing: Auth flow + Messages page with SSE.
-</MudAlert>
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
 
-<MudGrid>
-    <MudItem xs="12" md="6">
-        <MudCard>
-            <MudCardHeader>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Quick Links</MudText>
-                </CardHeaderContent>
-            </MudCardHeader>
-            <MudCardContent>
-                <MudNavLink Href="/messages" Icon="@Icons.Material.Filled.Message">
-                    View Messages
-                </MudNavLink>
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-</MudGrid>
+    @* Alerts Section *@
+    @if (_pendingRecommendationsCount > 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4" Variant="Variant.Outlined">
+            <MudText>
+                <strong>@_pendingRecommendationsCount threshold recommendation(s)</strong> pending review.
+                <MudLink Href="/settings/threshold-recommendations" Underline="Underline.Always">Review now</MudLink>
+            </MudText>
+        </MudAlert>
+    }
+
+    @* Stats Summary *@
+    @if (_stats != null)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-3">Overview</MudText>
+            <MudGrid>
+                @* Row 1: Core message stats *@
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Large" Color="Color.Primary" />
+                        <MudText Typo="Typo.h5">@_stats.TotalMessages</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Messages</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h5">@_stats.UniqueUsers</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Unique Users</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Large" Color="Color.Info" />
+                        <MudText Typo="Typo.h5">@_stats.PhotoCount</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Images</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Large" Color="Color.Tertiary" />
+                        <MudText Typo="Typo.h5">@GetTimeRangeDisplay()</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Data Range</MudText>
+                    </MudStack>
+                </MudItem>
+
+                @* Row 2: Detection and moderation stats *@
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
+                        <MudText Typo="Typo.h5">@(_detectionStats?.Last24hSpam ?? 0)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Spam (24h)</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Large" Color="Color.Error" />
+                        <MudText Typo="Typo.h5">@_activeBansCount</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Active Bans</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Large" Color="Color.Success" />
+                        <MudText Typo="Typo.h5">@_trustedUsersCount</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Trusted Users</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Class="cursor-pointer"
+                             @onclick="NavigateToReports"
+                             Style="@(_pendingReportsCount > 0 ? "border-left: 4px solid var(--mud-palette-warning);" : "")">
+                        <MudCardContent Class="pa-2">
+                            <MudStack AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.ReportProblem"
+                                         Size="Size.Large"
+                                         Color="@(_pendingReportsCount > 0 ? Color.Warning : Color.Default)" />
+                                <MudText Typo="Typo.h5" Color="@(_pendingReportsCount > 0 ? Color.Warning : Color.Default)">
+                                    @_pendingReportsCount
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Pending Reports</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-center">
+                                    @(_pendingReportsCount > 0 ? "Click to review" : "View all reports")
+                                </MudText>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+    @* Quick Actions and Recent Activity side by side *@
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 mb-4" Elevation="2" Style="height: 100%;">
+                <MudText Typo="Typo.h6" Class="mb-3">Quick Actions</MudText>
+                <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Message"
+                               Href="/messages">
+                        View Messages
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.Report"
+                               Href="/reports"
+                               Disabled="_pendingReportsCount == 0">
+                        Review Reports (@_pendingReportsCount)
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="@LoadDashboardDataAsync"
+                               Disabled="_loading">
+                        Refresh
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4 mb-4" Elevation="2" Style="height: 100%;">
+                <MudText Typo="Typo.h6" Class="mb-3">Recent Activity</MudText>
+                @if (_recentActions == null || _recentActions.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No recent moderation activity</MudText>
+                }
+                else
+                {
+                    <MudList T="RecentActivityItem" Dense="true">
+                        @foreach (var action in _recentActions.Take(5))
+                        {
+                            <MudListItem Icon="@GetActionIcon(action.ActionType)"
+                                         IconColor="@GetActionColor(action.ActionType)">
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.body2">
+                                        <strong>@action.ActionType</strong> @action.TargetDisplayName
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @DateTimeUtilities.FormatRelativeTimeCompact(action.IssuedAt) by @action.IssuedByDisplayName
+                                    </MudText>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                    @if (_recentActions.Count > 5)
+                    {
+                        <MudLink Href="/moderation" Typo="Typo.caption" Class="mt-2">
+                            View all @_recentActions.Count actions →
+                        </MudLink>
+                    }
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (_stats is { TotalMessages: 0 })
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            HistoryBot hasn't cached any messages yet. Make sure the bot is running and connected to your Telegram chat.
+        </MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    private DashboardStats? _stats;
+    private DetectionStats? _detectionStats;
+    private List<RecentActivityItem>? _recentActions;
+    private int _pendingReportsCount;
+    private int _pendingRecommendationsCount;
+    private int _activeBansCount;
+    private int _trustedUsersCount;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardDataAsync();
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<DashboardPageResponse>(Routes.Pages.Dashboard);
+
+            if (response != null)
+            {
+                // Check for first run (no users exist yet)
+                if (response.IsFirstRun)
+                {
+                    Navigation.NavigateTo("/register", replace: true);
+                    return;
+                }
+
+                _stats = response.Stats;
+                _detectionStats = response.DetectionStats;
+                _pendingReportsCount = response.PendingReportsCount;
+                _pendingRecommendationsCount = response.PendingRecommendationsCount;
+                _activeBansCount = response.ActiveBansCount;
+                _trustedUsersCount = response.TrustedUsersCount;
+                _recentActions = response.RecentActivity;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error loading dashboard data");
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NavigateToReports()
+    {
+        Navigation.NavigateTo("/reports");
+    }
+
+    private string GetTimeRangeDisplay()
+    {
+        if (_stats == null || !_stats.OldestTimestamp.HasValue || !_stats.NewestTimestamp.HasValue)
+            return "N/A";
+
+        var oldest = _stats.OldestTimestamp.Value;
+        var newest = _stats.NewestTimestamp.Value;
+        var span = newest - oldest;
+
+        if (span.TotalHours < 1)
+            return $"{(int)span.TotalMinutes}m";
+        else if (span.TotalDays < 1)
+            return $"{(int)span.TotalHours}h";
+        else
+            return $"{(int)span.TotalDays}d";
+    }
+
+    private static string GetActionIcon(UserActionType actionType) => actionType switch
+    {
+        UserActionType.Ban => Icons.Material.Filled.Block,
+        UserActionType.Unban => Icons.Material.Filled.CheckCircle,
+        UserActionType.Warn => Icons.Material.Filled.Warning,
+        UserActionType.RemoveWarning => Icons.Material.Filled.RemoveCircle,
+        UserActionType.Mute => Icons.Material.Filled.VolumeOff,
+        UserActionType.Trust => Icons.Material.Filled.VerifiedUser,
+        UserActionType.Untrust => Icons.Material.Filled.RemoveCircle,
+        UserActionType.Delete => Icons.Material.Filled.Delete,
+        _ => Icons.Material.Filled.Info
+    };
+
+    private static Color GetActionColor(UserActionType actionType) => actionType switch
+    {
+        UserActionType.Ban => Color.Error,
+        UserActionType.Unban => Color.Success,
+        UserActionType.Warn => Color.Warning,
+        UserActionType.RemoveWarning => Color.Secondary,
+        UserActionType.Mute => Color.Warning,
+        UserActionType.Trust => Color.Success,
+        UserActionType.Untrust => Color.Secondary,
+        UserActionType.Delete => Color.Error,
+        _ => Color.Default
+    };
+}

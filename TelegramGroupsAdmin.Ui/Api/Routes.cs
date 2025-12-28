@@ -37,6 +37,11 @@ public static class Routes
         private const string Base = "/api/pages";
 
         /// <summary>
+        /// Get all data for the Dashboard page: stats, detection stats, recent activity.
+        /// </summary>
+        public static string Dashboard => $"{Base}/dashboard";
+
+        /// <summary>
         /// Get all data for the Messages page: chats sidebar, messages list, pagination.
         /// </summary>
         public static string Messages(long? chatId = null, int page = 1, int pageSize = 50)

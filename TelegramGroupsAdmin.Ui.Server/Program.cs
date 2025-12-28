@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Ui.Server;
 using TelegramGroupsAdmin.Ui.Server.Constants;
 using TelegramGroupsAdmin.Ui.Server.Endpoints;
+using TelegramGroupsAdmin.Ui.Server.Endpoints.Pages;
 using TelegramGroupsAdmin.Ui.Server.Services;
 using HumanCron;
 
@@ -259,6 +260,7 @@ app.MapAuthEndpoints();
 app.MapEmailVerificationEndpoints();
 app.MapSseEndpoints();
 app.MapPagesEndpoints();
+app.MapDashboardEndpoints();
 app.MapMessagesEndpoints();
 app.MapUsersEndpoints();
 app.MapBackupEndpoints();

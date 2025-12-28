@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -25,7 +26,8 @@ public class HomePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Use DOMContentLoaded instead of NetworkIdle - SSE keeps connections open in WASM
+        await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
     /// <summary>
@@ -34,11 +36,10 @@ public class HomePage
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
         // Wait for loading indicator to disappear
-        await _page.Locator(LoadingIndicator).WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Hidden,
-            Timeout = timeoutMs
-        });
+        await Expect(_page.Locator(LoadingIndicator)).ToBeHiddenAsync(new() { Timeout = timeoutMs });
+
+        // Wait for stats grid to be visible (ensures async data has loaded)
+        await Expect(_page.Locator(".mud-paper .mud-grid").First).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
 
     /// <summary>
