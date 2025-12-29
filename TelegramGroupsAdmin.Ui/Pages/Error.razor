@@ -1,0 +1,41 @@
+@page "/error"
+@using TelegramGroupsAdmin.Ui.Navigation
+@inject NavigationManager Navigation
+
+<PageTitle>Error - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8" Elevation="2">
+        <MudStack AlignItems="AlignItems.Center" Spacing="4">
+            <MudIcon Icon="@Icons.Material.Filled.Error"
+                     Color="Color.Error"
+                     Size="Size.Large"
+                     Style="font-size: 4rem;" />
+
+            <MudText Typo="Typo.h4" Color="Color.Error">
+                Something went wrong
+            </MudText>
+
+            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                An unexpected error occurred while processing your request.
+                Please try again or return to the home page.
+            </MudText>
+
+            <MudStack Row="true" Spacing="2" Class="mt-4">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Home"
+                           Href="@PageRoutes.App.Home">
+                    Return to Home
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="@(() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true))">
+                    Refresh Page
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</MudContainer>

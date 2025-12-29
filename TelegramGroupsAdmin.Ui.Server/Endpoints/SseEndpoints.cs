@@ -10,6 +10,7 @@ public static class SseEndpoints
         endpoints.MapGet("/api/events/stream", async (
             HttpContext context,
             SseConnectionManager sseManager,
+            IHostApplicationLifetime appLifetime,
             CancellationToken ct) =>
         {
             var userId = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -26,18 +27,21 @@ public static class SseEndpoints
             // Register client connection
             var connectionId = sseManager.AddClient(userId, context.Response);
 
+            // Link request CT with app shutdown CT for fast shutdown
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, appLifetime.ApplicationStopping);
+
             try
             {
                 // Send initial connection event
-                await context.Response.WriteAsync($"event: connected\ndata: {{\"connectionId\":\"{connectionId}\"}}\n\n", ct);
-                await context.Response.Body.FlushAsync(ct);
+                await context.Response.WriteAsync($"event: connected\ndata: {{\"connectionId\":\"{connectionId}\"}}\n\n", linkedCts.Token);
+                await context.Response.Body.FlushAsync(linkedCts.Token);
 
-                // Keep connection open until client disconnects
-                await Task.Delay(Timeout.Infinite, ct);
+                // Keep connection open until client disconnects OR app shuts down
+                await Task.Delay(Timeout.Infinite, linkedCts.Token);
             }
             catch (OperationCanceledException)
             {
-                // Client disconnected - expected behavior
+                // Client disconnected or app shutting down - expected behavior
             }
             finally
             {
