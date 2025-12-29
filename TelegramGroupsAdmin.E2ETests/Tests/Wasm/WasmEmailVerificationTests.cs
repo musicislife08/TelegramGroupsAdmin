@@ -290,7 +290,15 @@ public class WasmEmailVerificationTests : WasmSharedE2ETestBase
     [Test]
     public async Task ResendVerification_BackToLoginLink_NavigatesToLogin()
     {
-        // Arrange
+        // Arrange - create a user so Login page doesn't redirect to first-run Register
+        await new WasmTestUserBuilder(SharedFactory.Services)
+            .WithEmail(TestCredentials.GenerateEmail("wasm-back-to-login"))
+            .WithPassword(TestCredentials.GeneratePassword())
+            .WithEmailVerified()
+            .WithTotpDisabled()
+            .AsOwner()
+            .BuildAsync();
+
         await _resendPage.NavigateAsync();
         await _resendPage.WaitForPageAsync();
 
