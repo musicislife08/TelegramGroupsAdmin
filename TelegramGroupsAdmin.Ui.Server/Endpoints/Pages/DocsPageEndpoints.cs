@@ -48,7 +48,7 @@ public static class DocsPageEndpoints
                 if (firstDoc?.Href != null)
                 {
                     // Return redirect info so client can navigate
-                    return Results.Ok(new { redirect = firstDoc.Href });
+                    return Results.Ok(new DocsRedirectResponse { RedirectPath = firstDoc.Href });
                 }
                 return Results.NotFound(new { error = "No documentation available" });
             }

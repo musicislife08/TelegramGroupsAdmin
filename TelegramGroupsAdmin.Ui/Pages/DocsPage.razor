@@ -179,10 +179,10 @@
                 var response = await Http.GetAsync(Routes.Pages.DocsDefault);
                 if (response.IsSuccessStatusCode)
                 {
-                    var json = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
-                    if (json?.TryGetValue("redirect", out var redirectPath) == true && !string.IsNullOrEmpty(redirectPath))
+                    var redirectResponse = await response.Content.ReadFromJsonAsync<DocsRedirectResponse>();
+                    if (!string.IsNullOrEmpty(redirectResponse?.RedirectPath))
                     {
-                        Navigation.NavigateTo(redirectPath, replace: true);
+                        Navigation.NavigateTo(redirectResponse.RedirectPath, replace: true);
                         return;
                     }
                 }
