@@ -15,7 +15,7 @@ public static class RegisterPageEndpoints
             var isFirstRun = await authService.IsFirstRunAsync();
             var isEmailVerificationEnabled = await featureService.IsEmailVerificationEnabledAsync();
 
-            return Results.Ok(new RegisterPageResponse(isFirstRun, isEmailVerificationEnabled));
+            return Results.Ok(RegisterPageResponse.Ok(isFirstRun, isEmailVerificationEnabled));
         }).AllowAnonymous();
 
         return endpoints;

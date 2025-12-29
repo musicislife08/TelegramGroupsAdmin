@@ -18,5 +18,6 @@ public record HttpErrorEvent(int StatusCode, string Message)
 {
     public static HttpErrorEvent Unauthorized() => new(401, "Your session has expired. Please log in again.");
     public static HttpErrorEvent Forbidden() => new(403, "You don't have permission to perform this action.");
+    public static HttpErrorEvent NotFound() => new(404, "The requested resource was not found.");
     public static HttpErrorEvent ServerError() => new(500, "An unexpected server error occurred. Please try again later.");
 }

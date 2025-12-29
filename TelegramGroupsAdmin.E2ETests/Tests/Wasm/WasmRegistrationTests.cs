@@ -73,7 +73,7 @@ public class WasmRegistrationTests : WasmSharedE2ETestBase
             "Should show TOTP setup page title");
 
         // Verify no verification emails were sent (owner is auto-verified)
-        var verificationEmails = EmailService.GetEmailsByTemplate(EmailTemplate.EmailVerification).ToList();
+        var verificationEmails = EmailService.GetEmailsByTemplate<EmailTemplateData.EmailVerification>().ToList();
         Assert.That(verificationEmails, Is.Empty,
             "First-run owner should not receive verification email (auto-verified)");
     }

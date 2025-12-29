@@ -34,17 +34,29 @@ public static class PageRoutes
         /// <summary>
         /// TOTP verification page (step 2 of login for users with 2FA enabled).
         /// </summary>
-        public static string VerifyTotp(string token) => $"{VerifyTotpPage}?token={Uri.EscapeDataString(token)}";
+        public static string VerifyTotp(string token, string? returnUrl = null)
+        {
+            var url = $"{VerifyTotpPage}?token={Uri.EscapeDataString(token)}";
+            return string.IsNullOrEmpty(returnUrl) ? url : $"{url}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        }
 
         /// <summary>
         /// TOTP setup page (for users who need to configure 2FA).
         /// </summary>
-        public static string SetupTotp(string token) => $"{SetupTotpPage}?token={Uri.EscapeDataString(token)}";
+        public static string SetupTotp(string token, string? returnUrl = null)
+        {
+            var url = $"{SetupTotpPage}?token={Uri.EscapeDataString(token)}";
+            return string.IsNullOrEmpty(returnUrl) ? url : $"{url}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        }
 
         /// <summary>
         /// Recovery code page with intermediate token.
         /// </summary>
-        public static string UseRecoveryCodeWithToken(string token) => $"{UseRecoveryCode}?token={Uri.EscapeDataString(token)}";
+        public static string UseRecoveryCodeWithToken(string token, string? returnUrl = null)
+        {
+            var url = $"{UseRecoveryCode}?token={Uri.EscapeDataString(token)}";
+            return string.IsNullOrEmpty(returnUrl) ? url : $"{url}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        }
 
         /// <summary>
         /// Reset password page with token.

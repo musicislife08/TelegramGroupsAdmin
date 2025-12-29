@@ -8,6 +8,7 @@
 @using TelegramGroupsAdmin.Ui.Components.Messages
 @using TelegramGroupsAdmin.Ui.Models
 @using TelegramGroupsAdmin.Ui.Services
+@using TelegramGroupsAdmin.Ui.Extensions
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager NavigationManager
 @inject IDialogService DialogService
@@ -16,7 +17,7 @@
 @inject SseService SseService
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
-@implements IAsyncDisposable
+@implements IDisposable
 
 <PageTitle>Messages - TelegramGroupsAdmin</PageTitle>
 
@@ -30,7 +31,7 @@
                  OnSearchTextChanged="HandleChatSearchChanged" />
 
     @* Main Chat View *@
-    <MessageListView Messages="_filteredMessages"
+    <MessageListView Messages="_messages"
                      SelectedChat="_selectedChat"
                      Loading="_loading"
                      LoadingMore="_loadingMore"
@@ -85,7 +86,6 @@
     // ========================================================================
 
     private List<MessageWithMetadata> _messages = [];
-    private List<MessageWithMetadata> _filteredMessages = [];
     private bool _loading;
     private bool _loadingMore;
     private bool _hasMore = true;
@@ -123,7 +123,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Subscribe to SSE events
+        // Subscribe to SSE events (connection managed by MainLayout)
         SseService.OnMessageEvent += HandleSseMessage;
 
         // Load initial data
@@ -137,15 +137,11 @@
         {
             await LoadChatMessagesAsync(_selectedChatId.Value);
         }
-
-        // Connect to SSE for real-time updates
-        await SseService.ConnectAsync();
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
         SseService.OnMessageEvent -= HandleSseMessage;
-        await SseService.DisconnectAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -203,32 +199,35 @@
         _loading = true;
         _hasMore = true;
         _messages.Clear();
-        _filteredMessages.Clear();
         _highlightMessageEnsured = false;
 
         try
         {
             var url = Routes.Pages.Messages(chatId);
-            var response = await Http.GetFromJsonAsync<MessagesPageResponse>(url);
+            var httpResponse = await Http.GetAsync(url);
+            var result = await httpResponse.ReadApiResponseAsync<MessagesPageResponse>("Failed to load messages");
 
-            if (response != null)
+            if (!result.IsSuccess)
             {
-                _messages = response.Messages;
-                _hasMore = response.Pagination.HasMore;
-
-                // Extract user context from page response
-                if (response.UserContext != null)
-                {
-                    _userPermissionLevel = (PermissionLevel)response.UserContext.PermissionLevel;
-                    _userTelegramIds = response.UserContext.LinkedTelegramIds.ToHashSet();
-                    _isFeatureAvailable = response.UserContext.CanSendAsBot;
-                    _linkedUsername = response.UserContext.LinkedUsername;
-                    _botUserId = response.UserContext.BotUserId;
-                    _featureUnavailableReason = response.UserContext.BotFeatureUnavailableReason;
-                }
-
-                ApplyMessageFilter();
+                Snackbar.Add(result.Error!, Severity.Error);
+                return;
             }
+
+            var response = result.Value!;
+            _messages = response.Messages ?? [];
+            _hasMore = response.Pagination?.HasMore ?? false;
+
+            // Extract user context from page response
+            if (response.UserContext != null)
+            {
+                _userPermissionLevel = (PermissionLevel)response.UserContext.PermissionLevel;
+                _userTelegramIds = response.UserContext.LinkedTelegramIds.ToHashSet();
+                _isFeatureAvailable = response.UserContext.CanSendAsBot;
+                _linkedUsername = response.UserContext.LinkedUsername;
+                _botUserId = response.UserContext.BotUserId;
+                _featureUnavailableReason = response.UserContext.BotFeatureUnavailableReason;
+            }
+
         }
         catch (Exception ex)
         {
@@ -266,13 +265,20 @@
             }
 
             var url = Routes.Pages.MessagesBefore(_selectedChatId.Value, oldestMessage.Message.Timestamp);
-            var response = await Http.GetFromJsonAsync<MessagesPageResponse>(url);
+            var httpResponse = await Http.GetAsync(url);
+            var result = await httpResponse.ReadApiResponseAsync<MessagesPageResponse>("Failed to load more messages");
 
-            if (response?.Messages.Any() == true)
+            if (!result.IsSuccess)
+            {
+                Snackbar.Add(result.Error!, Severity.Error);
+                return;
+            }
+
+            var response = result.Value!;
+            if (response.Messages?.Any() == true)
             {
                 _messages.AddRange(response.Messages);
-                _hasMore = response.Pagination.HasMore;
-                ApplyMessageFilter();
+                _hasMore = response.Pagination?.HasMore ?? false;
             }
             else
             {
@@ -288,13 +294,6 @@
             _loadingMore = false;
             StateHasChanged();
         }
-    }
-
-    private void ApplyMessageFilter()
-    {
-        // For now, no filtering - show all messages
-        // TODO: Add filter UI if needed
-        _filteredMessages = _messages.ToList();
     }
 
     // ========================================================================
@@ -316,7 +315,6 @@
     {
         _selectedChatId = null;
         _messages.Clear();
-        _filteredMessages.Clear();
     }
 
     // ========================================================================
@@ -438,11 +436,18 @@
         await DialogService.ShowAsync<ImageViewerDialog>("Image Viewer", parameters, options);
     }
 
-    private void HandleFilterByChat(long chatId)
+    private async Task HandleFilterByChat(long chatId)
     {
-        // Navigate to the selected chat
         _selectedChatId = chatId;
-        _ = LoadChatMessagesAsync(chatId);
+        try
+        {
+            await LoadChatMessagesAsync(chatId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading chat messages for chat {ChatId}", chatId);
+            Snackbar.Add("Failed to load messages. Please try again.", Severity.Error);
+        }
     }
 
     private async Task HandleTempBan(MessageRecord message)
@@ -483,11 +488,52 @@
         }
     }
 
-    private Task HandleTranslateMessage(MessageRecord message)
+    private async Task HandleTranslateMessage(MessageRecord message)
     {
-        // TODO: Implement translation via API
-        Snackbar.Add("Translation feature coming soon", Severity.Info);
-        return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(message.MessageText))
+        {
+            Snackbar.Add("Cannot translate: message has no text", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            var response = await Http.PostAsync(Routes.Messages.Translate(message.MessageId), null);
+            var result = await response.Content.ReadFromJsonAsync<TranslateMessageResponse>();
+
+            if (result?.Success != true)
+            {
+                Snackbar.Add(result?.Error ?? "Translation failed", Severity.Info);
+                return;
+            }
+
+            // Create translation record from API response
+            var translation = new MessageTranslation(
+                Id: 0,
+                MessageId: message.MessageId,
+                EditId: null,
+                TranslatedText: result.TranslatedText!,
+                DetectedLanguage: result.DetectedLanguage!,
+                Confidence: null,
+                TranslatedAt: DateTimeOffset.UtcNow
+            );
+
+            // Update the message in memory with the translation
+            var index = _messages.FindIndex(mw => mw.Message.MessageId == message.MessageId);
+            if (index >= 0)
+            {
+                var wrapper = _messages[index];
+                var updatedMessage = wrapper.Message with { Translation = translation };
+                _messages[index] = wrapper with { Message = updatedMessage };
+                StateHasChanged();
+            }
+
+            Snackbar.Add($"Translated from {result.DetectedLanguage}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Translation error: {ex.Message}", Severity.Error);
+        }
     }
 
     // ========================================================================
@@ -580,7 +626,7 @@
     {
         try
         {
-            var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+            var targetMessage = _messages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
 
             if (targetMessage == null)
             {
@@ -601,7 +647,6 @@
                     message.UserNotes);
 
                 _messages.Add(wrapper);
-                ApplyMessageFilter();
                 StateHasChanged();
             }
 
@@ -646,7 +691,7 @@
 
         try
         {
-            var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+            var targetMessage = _messages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
 
             if (targetMessage == null)
             {
@@ -672,8 +717,6 @@
                     _messages.Insert(insertIndex, wrapper);
                 else
                     _messages.Add(wrapper);
-
-                ApplyMessageFilter();
             }
 
             _highlightMessageEnsured = true;
@@ -693,28 +736,63 @@
     private void HandleSseMessage(SseEvent evt)
     {
         var messageData = evt.GetData<SseMessageData>();
-
-        if (!_selectedChatId.HasValue || messageData?.ChatId != _selectedChatId.Value)
-            return;
+        if (messageData == null) return;
 
         InvokeAsync(async () =>
         {
             switch (evt.Type)
             {
                 case "message.new":
+                    Logger.LogDebug("SSE message.new for message {MessageId} in chat {ChatId}", messageData.MessageId, messageData.ChatId);
+                    UpdateChatPreview(messageData);
+
+                    // Reload messages if this is the selected chat
+                    if (_selectedChatId == messageData.ChatId)
+                        await LoadChatMessagesAsync(messageData.ChatId);
+                    break;
+
                 case "message.edited":
                 case "message.deleted":
                 case "detection.result":
-                    Logger.LogDebug("SSE event {EventType} for message {MessageId}", evt.Type, messageData?.MessageId);
-                    await LoadChatMessagesAsync(_selectedChatId.Value);
+                    Logger.LogDebug("SSE event {EventType} for message {MessageId}", evt.Type, messageData.MessageId);
+
+                    // Reload messages if this is the selected chat
+                    if (_selectedChatId == messageData.ChatId)
+                        await LoadChatMessagesAsync(messageData.ChatId);
                     break;
             }
         });
+    }
+
+    /// <summary>
+    /// Updates the chat sidebar preview when a new message arrives via SSE.
+    /// </summary>
+    private void UpdateChatPreview(SseMessageData messageData)
+    {
+        var chat = _chats.FirstOrDefault(c => c.ChatId == messageData.ChatId);
+        if (chat == null) return;
+
+        // Replace the chat in the list with updated preview
+        var index = _chats.IndexOf(chat);
+        if (index >= 0)
+        {
+            _chats[index] = chat with
+            {
+                LastMessageAt = messageData.Timestamp,
+                LastMessagePreview = messageData.PreviewText
+            };
+            StateHasChanged();
+        }
     }
 
     // ========================================================================
     // Types
     // ========================================================================
 
-    private record SseMessageData(long MessageId, long ChatId, string? EventType = null);
+    private record SseMessageData(
+        long MessageId,
+        long ChatId,
+        string? EventType = null,
+        DateTimeOffset? Timestamp = null,
+        string? PreviewText = null);
 }

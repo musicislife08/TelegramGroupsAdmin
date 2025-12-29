@@ -3,6 +3,7 @@
 @layout LoginLayout
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Helpers
 @using TelegramGroupsAdmin.Ui.Models
 @using TelegramGroupsAdmin.Ui.Navigation
 @inject NavigationManager Navigation
@@ -11,75 +12,100 @@
 
 <PageTitle>Login - Telegram Groups Admin</PageTitle>
 
-<div class="login-container">
-    <h1 class="login-title">Telegram Groups Admin</h1>
-    <p class="login-subtitle">Sign in to your account</p>
-
-    @if (!string.IsNullOrEmpty(_successMessage))
-    {
-        <div class="alert-success">@_successMessage</div>
-    }
-
-    @if (!string.IsNullOrEmpty(_errorMessage))
-    {
-        <div class="alert-error">@_errorMessage</div>
-    }
-
-    <form @onsubmit="HandleLogin" @onsubmit:preventDefault>
-        <div class="form-group">
-            <label class="form-label" for="email">Email</label>
-            <input type="email"
-                   id="email"
-                   class="form-input"
-                   @bind="_email"
-                   placeholder="your.email@example.com"
-                   required />
+@if (!_isInitialized)
+{
+    <div class="login-container">
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading...</p>
         </div>
+    </div>
+}
+else
+{
+    <div class="login-container">
+        <h1 class="login-title">Telegram Groups Admin</h1>
+        <p class="login-subtitle">Sign in to your account</p>
 
-        <div class="form-group">
-            <label class="form-label" for="password">Password</label>
-            <input type="password"
-                   id="password"
-                   class="form-input"
-                   @bind="_password"
-                   required />
-        </div>
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="alert-success">@_successMessage</div>
+        }
 
-        <button type="submit" class="btn-primary" disabled="@_isLoading">
-            @if (_isLoading)
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert-error">@_errorMessage</div>
+        }
+
+        <form @onsubmit="HandleLogin" @onsubmit:preventDefault>
+            <div class="form-group">
+                <label class="form-label" for="email">Email</label>
+                <input type="email"
+                       id="email"
+                       class="form-input"
+                       data-testid="login-email"
+                       @bind="_email"
+                       placeholder="your.email@example.com"
+                       required />
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password"
+                       id="password"
+                       class="form-input"
+                       data-testid="login-password"
+                       @bind="_password"
+                       required />
+            </div>
+
+            <button type="submit" class="btn-primary" data-testid="login-submit" disabled="@_isLoading">
+                @if (_isLoading)
+                {
+                    <span>Signing In...</span>
+                }
+                else
+                {
+                    <span>Sign In</span>
+                }
+            </button>
+        </form>
+
+        <div class="divider"></div>
+
+        <p class="text-center">
+            @if (_emailEnabled)
             {
-                <span>Signing In...</span>
+                <span><a href="@PageRoutes.Auth.ForgotPassword" style="color: #594ae2;">Forgot your password?</a><br /></span>
             }
-            else
-            {
-                <span>Sign In</span>
-            }
-        </button>
-    </form>
-
-    <div class="divider"></div>
-
-    <p class="text-center">
-        <span><a href="@PageRoutes.Auth.ForgotPassword" style="color: #594ae2;">Forgot your password?</a><br /></span>
-        <span>Need to verify your email? <a href="@PageRoutes.Auth.ResendVerification" style="color: #594ae2;">Resend verification email</a><br /></span>
-        Need an invite? Contact your administrator.
-    </p>
-</div>
+            Need an invite? Contact your administrator.
+        </p>
+    </div>
+}
 
 @code {
     [SupplyParameterFromQuery(Name = "verified")]
     public string? Verified { get; set; }
 
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
     private bool _isLoading;
+    private bool _isInitialized;
+    private bool _emailEnabled;
     private string _email = string.Empty;
     private string _password = string.Empty;
     private string? _errorMessage;
     private string? _successMessage;
+    private string _safeReturnUrl = PageRoutes.App.Home;
 
     private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Validate returnUrl to prevent open redirect attacks
+        _safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+
         // Handle email verification status messages
         if (!string.IsNullOrEmpty(Verified))
         {
@@ -90,6 +116,30 @@
                 _ => null
             };
         }
+
+        // Check first-run status and email configuration
+        try
+        {
+            var response = await Http.GetFromJsonAsync<RegisterPageResponse>(Routes.Pages.Register);
+            if (response is { Success: true })
+            {
+                // First run: redirect to Register page (no users exist yet)
+                if (response.IsFirstRun)
+                {
+                    Navigation.NavigateTo(PageRoutes.Auth.Register, forceLoad: false);
+                    return;
+                }
+
+                _emailEnabled = response.IsEmailVerificationEnabled;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // If we can't reach the API, show the login form anyway
+            // User will see an error when they try to log in
+        }
+
+        _isInitialized = true;
     }
 
     private async Task HandleLogin()
@@ -113,14 +163,14 @@
             // Handle TOTP verification required
             if (login.RequiresTotp)
             {
-                Navigation.NavigateTo(PageRoutes.Auth.VerifyTotp(login.IntermediateToken!), forceLoad: false);
+                Navigation.NavigateTo(PageRoutes.Auth.VerifyTotp(login.IntermediateToken!, _safeReturnUrl), forceLoad: false);
                 return;
             }
 
             // Handle TOTP setup required
             if (login.RequiresTotpSetup)
             {
-                Navigation.NavigateTo(PageRoutes.Auth.SetupTotp(login.IntermediateToken!), forceLoad: false);
+                Navigation.NavigateTo(PageRoutes.Auth.SetupTotp(login.IntermediateToken!, _safeReturnUrl), forceLoad: false);
                 return;
             }
 
@@ -130,8 +180,8 @@
                 wasmAuth.NotifyAuthenticationStateChanged();
             }
 
-            // Navigate to home
-            Navigation.NavigateTo(PageRoutes.App.Home, forceLoad: false);
+            // Navigate to returnUrl (validated on init) or home
+            Navigation.NavigateTo(_safeReturnUrl, forceLoad: false);
         }
         catch (HttpRequestException)
         {

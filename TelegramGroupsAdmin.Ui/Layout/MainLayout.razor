@@ -1,14 +1,19 @@
 @inherits LayoutComponentBase
 @using TelegramGroupsAdmin.Ui.Services
+@using TelegramGroupsAdmin.Ui.Components.Shared
 @inject AuthenticationStateProvider AuthStateProvider
 @inject HttpErrorNotificationService ErrorNotificationService
+@inject SseService SseService
 @inject ISnackbar Snackbar
-@implements IDisposable
+@implements IAsyncDisposable
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
+
+@* SSE Connection Status Overlay *@
+<SseConnectionOverlay />
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -62,6 +67,9 @@
         if (user.Identity?.IsAuthenticated ?? false)
         {
             _userEmail = user.Identity.Name;
+
+            // Connect SSE for real-time updates (session-scoped, not per-component)
+            await SseService.ConnectAsync();
         }
     }
 
@@ -86,8 +94,11 @@
         _drawerOpen = !_drawerOpen;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         ErrorNotificationService.OnError -= HandleHttpError;
+
+        // Disconnect SSE when leaving authenticated area (logout, session end)
+        await SseService.DisconnectAsync();
     }
 }

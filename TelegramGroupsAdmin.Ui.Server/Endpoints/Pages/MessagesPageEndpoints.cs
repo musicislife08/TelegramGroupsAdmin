@@ -32,13 +32,16 @@ public static class MessagesPageEndpoints
             [FromServices] IMessageEditService editService,
             [FromServices] ITelegramUserMappingRepository mappingRepo,
             [FromServices] IWebBotMessagingService botMessagingService,
+            [FromServices] IUserTagsRepository tagsRepo,
+            [FromServices] IAdminNotesRepository notesRepo,
             HttpContext httpContext,
             CancellationToken ct) =>
         {
             var userId = httpContext.GetUserId();
             var permissionLevel = httpContext.GetPermissionLevel();
 
-            if (userId == null) return Results.Unauthorized();
+            if (userId == null)
+                return Results.Ok(MessagesPageResponse.Fail("User not authenticated"));
 
             pageSize = Math.Clamp(pageSize, 10, 100);
 
@@ -53,8 +56,12 @@ public static class MessagesPageEndpoints
             var botAvailability = await botAvailabilityTask;
             var chats = await chatsTask;
 
+            // Get last message previews for all chats (for sidebar display)
+            var chatIds = chats.Select(c => c.ChatId).ToList();
+            var lastMessagePreviews = await queryService.GetLastMessagePreviewsAsync(chatIds, ct);
+
             var linkedTelegramIds = mappings.Select(m => m.TelegramId).ToList();
-            var chatSummaries = chats.ToChatSummaries();
+            var chatSummaries = chats.ToChatSummaries(lastMessagePreviews);
 
             var userContext = new MessagesPageUserContext(
                 (int)permissionLevel,
@@ -70,32 +77,38 @@ public static class MessagesPageEndpoints
             List<MessageWithMetadata> messages = [];
             var totalCount = 0;
 
-            if (selectedChatId.HasValue)
+            if (selectedChatId is { } activeChatId)
             {
                 var hasAccess = permissionLevel >= PermissionLevel.GlobalAdmin ||
-                    chats.Any(c => c.ChatId == selectedChatId.Value);
+                    chats.Any(c => c.ChatId == activeChatId);
 
                 if (!hasAccess)
                 {
-                    return Results.Forbid();
+                    return Results.Ok(MessagesPageResponse.Fail("You don't have access to this chat"));
                 }
 
                 // Get messages with cursor-based pagination
                 var messageRecords = await queryService.GetMessagesWithDetectionHistoryAsync(
-                    selectedChatId.Value,
+                    activeChatId,
                     pageSize,
                     beforeTimestamp: before,
                     ct);
 
                 // Get metadata in batch
                 var messageIds = messageRecords.Select(m => m.Message.MessageId).ToList();
+                var userIds = messageRecords.Select(m => m.Message.UserId).Distinct().ToList();
+
                 var editCounts = await editService.GetEditCountsForMessagesAsync(messageIds, ct);
                 var contentChecks = await queryService.GetContentChecksForMessagesAsync(messageIds, ct);
+                var userTags = await tagsRepo.GetTagsByUserIdsAsync(userIds, ct);
+                var userNotes = await notesRepo.GetNotesByUserIdsAsync(userIds, ct);
 
                 messages = messageRecords.Select(m =>
                 {
                     editCounts.TryGetValue(m.Message.MessageId, out var editCount);
                     contentChecks.TryGetValue(m.Message.MessageId, out var check);
+                    userTags.TryGetValue(m.Message.UserId, out var tags);
+                    userNotes.TryGetValue(m.Message.UserId, out var notes);
 
                     ContentCheckSummary? checkSummary = null;
                     if (check != null)
@@ -108,13 +121,13 @@ public static class MessagesPageEndpoints
                         );
                     }
 
-                    return new MessageWithMetadata(m.Message, editCount, checkSummary);
+                    return new MessageWithMetadata(m.Message, editCount, checkSummary, UserTags: tags, UserNotes: notes);
                 }).ToList();
 
                 totalCount = await messagesRepo.GetMessageCountByChatIdAsync(selectedChatId.Value, ct);
             }
 
-            return Results.Ok(new MessagesPageResponse(
+            return Results.Ok(MessagesPageResponse.Ok(
                 chatSummaries,
                 messages,
                 new PaginationInfo(page, pageSize, totalCount, messages.Count == pageSize),
@@ -131,6 +144,8 @@ public static class MessagesPageEndpoints
             [FromServices] IMessageEditService editService,
             [FromServices] IDetectionResultsRepository detectionRepo,
             [FromServices] ITelegramUserRepository userRepo,
+            [FromServices] IUserTagsRepository tagsRepo,
+            [FromServices] IAdminNotesRepository notesRepo,
             HttpContext httpContext,
             CancellationToken ct) =>
         {
@@ -153,13 +168,17 @@ public static class MessagesPageEndpoints
             // Get edit history
             var editHistory = await editService.GetEditsForMessageAsync(messageId, ct);
 
+            // Get user tags and admin notes
+            var userTags = await tagsRepo.GetTagsByUserIdAsync(message.UserId, ct);
+            var userNotes = await notesRepo.GetNotesByUserIdAsync(message.UserId, ct);
+
             return Results.Ok(new MessageDetailResponse(
                 message,
                 telegramUser,
                 detectionHistory,
                 editHistory,
-                null, // TODO: UserTags
-                null  // TODO: UserNotes
+                userTags,
+                userNotes
             ));
         });
 

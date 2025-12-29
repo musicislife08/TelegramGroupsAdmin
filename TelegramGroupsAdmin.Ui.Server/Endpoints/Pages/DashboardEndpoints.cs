@@ -77,7 +77,7 @@ public static class DashboardEndpoints
                     a.IssuedAt))
                 .ToList();
 
-            return Results.Ok(new DashboardPageResponse(
+            return Results.Ok(DashboardPageResponse.Ok(
                 isFirstRun,
                 dashboardStats,
                 detectionStats,

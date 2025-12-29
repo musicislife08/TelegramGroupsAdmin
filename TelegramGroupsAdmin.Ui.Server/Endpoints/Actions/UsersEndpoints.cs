@@ -87,6 +87,33 @@ public static class UsersEndpoints
         // Ban Actions
         // ============================================================================
 
+        // POST /api/users/{userId}/ban - Permanently ban user
+        usersGroup.MapPost("/{userId:long}/ban", async (
+            long userId,
+            [FromBody] UserBanRequest request,
+            [FromServices] ModerationOrchestrator moderationService,
+            HttpContext httpContext,
+            CancellationToken ct) =>
+        {
+            var webUserId = httpContext.GetUserId();
+            var permissionLevel = httpContext.GetPermissionLevel();
+
+            if (webUserId == null) return Results.Unauthorized();
+            if (permissionLevel < PermissionLevel.GlobalAdmin) return Results.Forbid();
+
+            var executor = Actor.FromWebUser(webUserId);
+            var result = await moderationService.BanUserAsync(
+                userId: userId,
+                messageId: null,
+                executor: executor,
+                reason: request.Reason ?? "Banned from user detail dialog",
+                ct);
+
+            return result.Success
+                ? Results.Ok(UserActionResponse.Ok(chatsAffected: result.ChatsAffected))
+                : Results.BadRequest(UserActionResponse.Fail(result.ErrorMessage!));
+        });
+
         // POST /api/users/{userId}/unban - Unban user
         usersGroup.MapPost("/{userId:long}/unban", async (
             long userId,

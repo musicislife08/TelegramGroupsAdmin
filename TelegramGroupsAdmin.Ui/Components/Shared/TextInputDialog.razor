@@ -11,7 +11,12 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="@Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@Submit" Disabled="@string.IsNullOrWhiteSpace(_inputText)">Submit</MudButton>
+        <MudButton Color="@SubmitButtonColor"
+                   Variant="Variant.Filled"
+                   OnClick="@Submit"
+                   Disabled="@(!AllowEmpty && string.IsNullOrWhiteSpace(_inputText))">
+            @SubmitButtonText
+        </MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -22,6 +27,9 @@
     [Parameter] public string Label { get; set; } = "Text";
     [Parameter] public int MaxLength { get; set; } = 500;
     [Parameter] public int Lines { get; set; } = 1;
+    [Parameter] public string SubmitButtonText { get; set; } = "Submit";
+    [Parameter] public Color SubmitButtonColor { get; set; } = Color.Primary;
+    [Parameter] public bool AllowEmpty { get; set; }
 
     private string _inputText = string.Empty;
 

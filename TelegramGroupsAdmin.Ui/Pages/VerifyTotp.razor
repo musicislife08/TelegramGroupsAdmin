@@ -2,6 +2,7 @@
 @attribute [Route(PageRoutes.Auth.VerifyTotpPage)]
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Helpers
 @using TelegramGroupsAdmin.Ui.Models
 @using TelegramGroupsAdmin.Ui.Navigation
 @layout LoginLayout
@@ -41,7 +42,8 @@
         <div class="divider"></div>
 
     <p class="text-center">
-        Lost access to your authenticator? Contact your administrator to reset 2FA.<br />
+        Lost access to your authenticator?
+        <a href="@PageRoutes.Auth.UseRecoveryCodeWithToken(Token ?? "", _safeReturnUrl)">Use a recovery code</a><br />
         <a href="@PageRoutes.Auth.Login">Back to Login</a>
     </p>
 </div>
@@ -50,13 +52,20 @@
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
     private string _code = string.Empty;
     private string? _errorMessage;
+    private string _safeReturnUrl = PageRoutes.App.Home;
 
     private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
 
     protected override void OnInitialized()
     {
+        // Validate returnUrl to prevent open redirect attacks
+        _safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+
         if (string.IsNullOrEmpty(Token))
         {
             // Security: Redirect to login if no valid token (matches Blazor Server behavior)
@@ -89,8 +98,8 @@
                 wasmAuth.NotifyAuthenticationStateChanged();
             }
 
-            // Navigate to home
-            Navigation.NavigateTo(PageRoutes.App.Home, forceLoad: false);
+            // Navigate to returnUrl (validated on init) or home
+            Navigation.NavigateTo(_safeReturnUrl, forceLoad: false);
         }
         catch (HttpRequestException)
         {

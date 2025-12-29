@@ -132,4 +132,38 @@ public class AdminNotesRepository : IAdminNotesRepository
         await _context.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    public async Task<Dictionary<long, List<AdminNote>>> GetNotesByUserIdsAsync(IEnumerable<long> telegramUserIds, CancellationToken cancellationToken = default)
+    {
+        var userIdList = telegramUserIds.ToList();
+        if (userIdList.Count == 0)
+            return [];
+
+        var notes = await _context.AdminNotes
+            .Where(n => userIdList.Contains(n.TelegramUserId))
+            .OrderByDescending(n => n.IsPinned)
+            .ThenByDescending(n => n.CreatedAt)
+            .Select(n => new
+            {
+                Note = n,
+                WebUserEmail = n.ActorWebUserId != null
+                    ? _context.Users.Where(u => u.Id == n.ActorWebUserId).Select(u => u.Email).FirstOrDefault()
+                    : null,
+                TelegramUser = n.ActorTelegramUserId != null
+                    ? _context.TelegramUsers.Where(t => t.TelegramUserId == n.ActorTelegramUserId).FirstOrDefault()
+                    : null
+            })
+            .ToListAsync(cancellationToken);
+
+        return notes
+            .GroupBy(n => n.Note.TelegramUserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(n => n.Note.ToModel(
+                    webUserEmail: n.WebUserEmail,
+                    telegramUsername: n.TelegramUser?.Username,
+                    telegramFirstName: n.TelegramUser?.FirstName,
+                    telegramLastName: n.TelegramUser?.LastName
+                )).ToList());
+    }
 }

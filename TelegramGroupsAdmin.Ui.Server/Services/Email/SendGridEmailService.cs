@@ -1,3 +1,4 @@
+using System.Net;
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using TelegramGroupsAdmin.Configuration.Repositories;
@@ -94,9 +95,9 @@ public class SendGridEmailService : IEmailService
         }
     }
 
-    public async Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken cancellationToken = default)
+    public async Task SendTemplatedEmailAsync(string to, EmailTemplateData templateData, CancellationToken cancellationToken = default)
     {
-        var (subject, body) = GetTemplate(template, parameters);
+        var (subject, body) = RenderTemplate(templateData);
         await SendEmailAsync(to, subject, body, isHtml: true, cancellationToken);
     }
 
@@ -139,56 +140,46 @@ public class SendGridEmailService : IEmailService
         }
     }
 
-    private (string Subject, string Body) GetTemplate(EmailTemplate template, Dictionary<string, string> parameters)
+    internal static (string Subject, string Body) RenderTemplate(EmailTemplateData templateData) => templateData switch
     {
-        return template switch
-        {
-            EmailTemplate.PasswordReset => GetPasswordResetTemplate(parameters),
-            EmailTemplate.EmailVerification => GetEmailVerificationTemplate(parameters),
-            EmailTemplate.WelcomeEmail => GetWelcomeEmailTemplate(parameters),
-            EmailTemplate.InviteCreated => GetInviteCreatedTemplate(parameters),
-            EmailTemplate.AccountDisabled => GetAccountDisabledTemplate(parameters),
-            EmailTemplate.AccountLocked => GetAccountLockedTemplate(parameters),
-            EmailTemplate.AccountUnlocked => GetAccountUnlockedTemplate(parameters),
-            _ => throw new ArgumentException($"Unknown email template: {template}")
-        };
-    }
+        EmailTemplateData.PasswordReset data => RenderPasswordReset(data),
+        EmailTemplateData.EmailVerification data => RenderEmailVerification(data),
+        EmailTemplateData.WelcomeEmail data => RenderWelcomeEmail(data),
+        EmailTemplateData.InviteCreated data => RenderInviteCreated(data),
+        EmailTemplateData.AccountDisabled data => RenderAccountDisabled(data),
+        EmailTemplateData.AccountLocked data => RenderAccountLocked(data),
+        EmailTemplateData.AccountUnlocked data => RenderAccountUnlocked(data),
+        _ => throw new ArgumentException($"Unknown email template type: {templateData.GetType().Name}")
+    };
 
-    private (string Subject, string Body) GetPasswordResetTemplate(Dictionary<string, string> parameters)
+    private static (string Subject, string Body) RenderPasswordReset(EmailTemplateData.PasswordReset data) =>
+    (
+        "Password Reset Request",
+        $"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <h2>Password Reset Request</h2>
+            <p>You requested to reset your password. Click the button below to reset it:</p>
+            <p style="margin: 30px 0;">
+                <a href="{data.ResetLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                    Reset Password
+                </a>
+            </p>
+            <p>This link will expire in {data.ExpiryMinutes} minutes.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
+        </body>
+        </html>
+        """
+    );
+
+    private static (string Subject, string Body) RenderEmailVerification(EmailTemplateData.EmailVerification data)
     {
-        var resetLink = parameters.GetValueOrDefault("resetLink", "#");
-        var expiryMinutes = parameters.GetValueOrDefault("expiryMinutes", "15");
-
-        var subject = "Password Reset Request";
-        var body = $"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2>Password Reset Request</h2>
-                <p>You requested to reset your password. Click the button below to reset it:</p>
-                <p style="margin: 30px 0;">
-                    <a href="{resetLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                        Reset Password
-                    </a>
-                </p>
-                <p>This link will expire in {expiryMinutes} minutes.</p>
-                <p>If you didn't request this, please ignore this email.</p>
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
-            </body>
-            </html>
-            """;
-
-        return (subject, body);
-    }
-
-    private (string Subject, string Body) GetEmailVerificationTemplate(Dictionary<string, string> parameters)
-    {
-        var verificationToken = parameters.GetValueOrDefault("VerificationToken", "");
-        var baseUrl = parameters.GetValueOrDefault("BaseUrl", "http://localhost:5161");
-        var verificationLink = $"{baseUrl}/verify-email?token={verificationToken}";
-
-        var subject = "Verify Your Email Address";
-        var body = $"""
+        var verificationLink = $"{data.BaseUrl}/verify-email?token={data.VerificationToken}";
+        return (
+            "Verify Your Email Address",
+            $"""
             <html>
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                 <h2>Verify Your Email Address</h2>
@@ -203,139 +194,112 @@ public class SendGridEmailService : IEmailService
                 <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin</p>
             </body>
             </html>
-            """;
-
-        return (subject, body);
+            """
+        );
     }
 
-    private (string Subject, string Body) GetWelcomeEmailTemplate(Dictionary<string, string> parameters)
-    {
-        var email = parameters.GetValueOrDefault("email", "");
-        var loginUrl = parameters.GetValueOrDefault("loginUrl", "#");
+    private static (string Subject, string Body) RenderWelcomeEmail(EmailTemplateData.WelcomeEmail data) =>
+    (
+        "Welcome to TelegramGroupsAdmin",
+        $"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <h2>Welcome to TelegramGroupsAdmin!</h2>
+            <p>Your account has been successfully created.</p>
+            <p><strong>Email:</strong> {WebUtility.HtmlEncode(data.Email)}</p>
+            <p style="margin: 30px 0;">
+                <a href="{data.LoginUrl}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                    Login Now
+                </a>
+            </p>
+            <p>We recommend enabling Two-Factor Authentication (2FA) in your profile settings for enhanced security.</p>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin</p>
+        </body>
+        </html>
+        """
+    );
 
-        var subject = "Welcome to TelegramGroupsAdmin";
-        var body = $"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2>Welcome to TelegramGroupsAdmin!</h2>
-                <p>Your account has been successfully created.</p>
-                <p><strong>Email:</strong> {email}</p>
-                <p style="margin: 30px 0;">
-                    <a href="{loginUrl}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                        Login Now
-                    </a>
-                </p>
-                <p>We recommend enabling Two-Factor Authentication (2FA) in your profile settings for enhanced security.</p>
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin</p>
-            </body>
-            </html>
-            """;
+    private static (string Subject, string Body) RenderInviteCreated(EmailTemplateData.InviteCreated data) =>
+    (
+        "You've Been Invited to TelegramGroupsAdmin",
+        $"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <h2>You've Been Invited!</h2>
+            <p>You've been invited by {WebUtility.HtmlEncode(data.InvitedBy)} to join TelegramGroupsAdmin.</p>
+            <p style="margin: 30px 0;">
+                <a href="{data.InviteLink}" style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                    Accept Invitation
+                </a>
+            </p>
+            <p>This invitation will expire in {data.ExpiryDays} days.</p>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin</p>
+        </body>
+        </html>
+        """
+    );
 
-        return (subject, body);
-    }
+    private static (string Subject, string Body) RenderAccountDisabled(EmailTemplateData.AccountDisabled data) =>
+    (
+        "Account Disabled",
+        $"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <h2>Account Disabled</h2>
+            <p>Your account ({WebUtility.HtmlEncode(data.Email)}) has been disabled due to: {WebUtility.HtmlEncode(data.Reason)}</p>
+            <p>If you believe this is an error, please contact your administrator.</p>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
+        </body>
+        </html>
+        """
+    );
 
-    private (string Subject, string Body) GetInviteCreatedTemplate(Dictionary<string, string> parameters)
-    {
-        var inviteLink = parameters.GetValueOrDefault("inviteLink", "#");
-        var invitedBy = parameters.GetValueOrDefault("invitedBy", "an administrator");
-        var expiryDays = parameters.GetValueOrDefault("expiryDays", "7");
+    private static (string Subject, string Body) RenderAccountLocked(EmailTemplateData.AccountLocked data) =>
+    (
+        "Account Locked - Security Alert",
+        $"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <h2 style="color: #dc3545;">Account Locked - Security Alert</h2>
+            <p>Your account ({WebUtility.HtmlEncode(data.Email)}) has been temporarily locked due to {data.Attempts} failed login attempts.</p>
+            <p><strong>Locked Until:</strong> {data.LockedUntil:yyyy-MM-dd HH:mm:ss UTC}</p>
+            <p>This is an automated security measure to protect your account from unauthorized access.</p>
+            <h3>What you can do:</h3>
+            <ul>
+                <li>Wait until the lockout period expires and try logging in again</li>
+                <li>Contact an administrator if you need immediate access</li>
+                <li>If you didn't attempt to log in, change your password immediately after the lockout expires</li>
+            </ul>
+            <p style="color: #dc3545;"><strong>If these login attempts were not from you, your account may be compromised. Please contact your administrator immediately.</strong></p>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
+        </body>
+        </html>
+        """
+    );
 
-        var subject = "You've Been Invited to TelegramGroupsAdmin";
-        var body = $"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2>You've Been Invited!</h2>
-                <p>You've been invited by {invitedBy} to join TelegramGroupsAdmin.</p>
-                <p style="margin: 30px 0;">
-                    <a href="{inviteLink}" style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                        Accept Invitation
-                    </a>
-                </p>
-                <p>This invitation will expire in {expiryDays} days.</p>
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin</p>
-            </body>
-            </html>
-            """;
-
-        return (subject, body);
-    }
-
-    private (string Subject, string Body) GetAccountDisabledTemplate(Dictionary<string, string> parameters)
-    {
-        var email = parameters.GetValueOrDefault("email", "");
-        var reason = parameters.GetValueOrDefault("reason", "administrative action");
-
-        var subject = "Account Disabled";
-        var body = $"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2>Account Disabled</h2>
-                <p>Your account ({email}) has been disabled due to: {reason}</p>
-                <p>If you believe this is an error, please contact your administrator.</p>
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
-            </body>
-            </html>
-            """;
-
-        return (subject, body);
-    }
-
-    private (string Subject, string Body) GetAccountLockedTemplate(Dictionary<string, string> parameters)
-    {
-        var email = parameters.GetValueOrDefault("email", "");
-        var lockedUntil = parameters.GetValueOrDefault("lockedUntil", "");
-        var attempts = parameters.GetValueOrDefault("attempts", "");
-
-        var subject = "Account Locked - Security Alert";
-        var body = $"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="color: #dc3545;">Account Locked - Security Alert</h2>
-                <p>Your account ({email}) has been temporarily locked due to {attempts} failed login attempts.</p>
-                <p><strong>Locked Until:</strong> {lockedUntil}</p>
-                <p>This is an automated security measure to protect your account from unauthorized access.</p>
-                <h3>What you can do:</h3>
-                <ul>
-                    <li>Wait until the lockout period expires and try logging in again</li>
-                    <li>Contact an administrator if you need immediate access</li>
-                    <li>If you didn't attempt to log in, change your password immediately after the lockout expires</li>
-                </ul>
-                <p style="color: #dc3545;"><strong>If these login attempts were not from you, your account may be compromised. Please contact your administrator immediately.</strong></p>
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
-            </body>
-            </html>
-            """;
-
-        return (subject, body);
-    }
-
-    private (string Subject, string Body) GetAccountUnlockedTemplate(Dictionary<string, string> parameters)
-    {
-        var email = parameters.GetValueOrDefault("email", "");
-
-        var subject = "Account Unlocked";
-        var body = $"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="color: #28a745;">Account Unlocked</h2>
-                <p>Your account ({email}) has been unlocked by an administrator.</p>
-                <p>You can now log in normally.</p>
-                <p>For your security, we recommend:</p>
-                <ul>
-                    <li>Changing your password if you suspect it may be compromised</li>
-                    <li>Enabling Two-Factor Authentication (2FA) for enhanced security</li>
-                    <li>Reviewing recent account activity</li>
-                </ul>
-                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
-            </body>
-            </html>
-            """;
-
-        return (subject, body);
-    }
+    private static (string Subject, string Body) RenderAccountUnlocked(EmailTemplateData.AccountUnlocked data) =>
+    (
+        "Account Unlocked",
+        $"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <h2 style="color: #28a745;">Account Unlocked</h2>
+            <p>Your account ({WebUtility.HtmlEncode(data.Email)}) has been unlocked by an administrator.</p>
+            <p>You can now log in normally.</p>
+            <p>For your security, we recommend:</p>
+            <ul>
+                <li>Changing your password if you suspect it may be compromised</li>
+                <li>Enabling Two-Factor Authentication (2FA) for enhanced security</li>
+                <li>Reviewing recent account activity</li>
+            </ul>
+            <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
+        </body>
+        </html>
+        """
+    );
 }

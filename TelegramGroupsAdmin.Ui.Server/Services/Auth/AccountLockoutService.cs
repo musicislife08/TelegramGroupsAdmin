@@ -67,13 +67,7 @@ public class AccountLockoutService : IAccountLockoutService
                 {
                     await _emailService.SendTemplatedEmailAsync(
                         user.Email,
-                        EmailTemplate.AccountLocked,
-                        new Dictionary<string, string>
-                        {
-                            ["email"] = user.Email,
-                            ["lockedUntil"] = lockedUntil.ToString("yyyy-MM-dd HH:mm:ss UTC"),
-                            ["attempts"] = user.FailedLoginAttempts.ToString()
-                        },
+                        new EmailTemplateData.AccountLocked(user.Email, lockedUntil, user.FailedLoginAttempts),
                         cancellationToken);
                 }
                 catch (Exception ex)
@@ -121,11 +115,7 @@ public class AccountLockoutService : IAccountLockoutService
             {
                 await _emailService.SendTemplatedEmailAsync(
                     user.Email,
-                    EmailTemplate.AccountUnlocked,
-                    new Dictionary<string, string>
-                    {
-                        ["email"] = user.Email
-                    },
+                    new EmailTemplateData.AccountUnlocked(user.Email),
                     cancellationToken);
             }
             catch (Exception ex)

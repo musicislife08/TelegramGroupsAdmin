@@ -37,4 +37,9 @@ public interface IUserTagsRepository
     /// Check if a user has a specific tag name
     /// </summary>
     Task<bool> UserHasTagAsync(long telegramUserId, string tagName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get all tags for multiple users (for batch loading in message lists)
+    /// </summary>
+    Task<Dictionary<long, List<UserTag>>> GetTagsByUserIdsAsync(IEnumerable<long> telegramUserIds, CancellationToken cancellationToken = default);
 }

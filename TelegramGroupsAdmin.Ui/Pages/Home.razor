@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Models
 @using TelegramGroupsAdmin.Ui.Navigation
+@using TelegramGroupsAdmin.Ui.Extensions
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.ContentDetection.Models
@@ -213,25 +214,31 @@
 
         try
         {
-            var response = await Http.GetFromJsonAsync<DashboardPageResponse>(Routes.Pages.Dashboard);
+            var httpResponse = await Http.GetAsync(Routes.Pages.Dashboard);
+            var result = await httpResponse.ReadApiResponseAsync<DashboardPageResponse>("Failed to load dashboard");
 
-            if (response != null)
+            if (!result.IsSuccess)
             {
-                // Check for first run (no users exist yet)
-                if (response.IsFirstRun)
-                {
-                    Navigation.NavigateTo(PageRoutes.Auth.Register, replace: true);
-                    return;
-                }
-
-                _stats = response.Stats;
-                _detectionStats = response.DetectionStats;
-                _pendingReportsCount = response.PendingReportsCount;
-                _pendingRecommendationsCount = response.PendingRecommendationsCount;
-                _activeBansCount = response.ActiveBansCount;
-                _trustedUsersCount = response.TrustedUsersCount;
-                _recentActions = response.RecentActivity;
+                Logger.LogWarning("Dashboard load failed: {Error}", result.Error);
+                return;
             }
+
+            var response = result.Value!;
+
+            // Check for first run (no users exist yet)
+            if (response.IsFirstRun)
+            {
+                Navigation.NavigateTo(PageRoutes.Auth.Register, replace: true);
+                return;
+            }
+
+            _stats = response.Stats;
+            _detectionStats = response.DetectionStats;
+            _pendingReportsCount = response.PendingReportsCount;
+            _pendingRecommendationsCount = response.PendingRecommendationsCount;
+            _activeBansCount = response.ActiveBansCount;
+            _trustedUsersCount = response.TrustedUsersCount;
+            _recentActions = response.RecentActivity;
         }
         catch (Exception ex)
         {
