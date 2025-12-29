@@ -85,13 +85,16 @@
 
     private static string GetLastMessagePreview(ChatSummary chat)
     {
-        // LastMessageAt is available but we don't have preview text in the current API response
-        // TODO: Add last message preview to ChatSummary if needed
+        if (!string.IsNullOrEmpty(chat.LastMessagePreview))
+        {
+            return chat.LastMessagePreview;
+        }
+
         if (chat.LastMessageAt.HasValue)
         {
-            var timeAgo = GetTimeAgo(chat.LastMessageAt.Value);
-            return timeAgo;
+            return GetTimeAgo(chat.LastMessageAt.Value);
         }
+
         return "No messages yet";
     }
 

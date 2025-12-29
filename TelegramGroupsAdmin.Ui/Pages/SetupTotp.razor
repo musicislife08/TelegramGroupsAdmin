@@ -2,6 +2,7 @@
 @attribute [Route(PageRoutes.Auth.SetupTotpPage)]
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Helpers
 @using TelegramGroupsAdmin.Ui.Models
 @using TelegramGroupsAdmin.Ui.Navigation
 @layout LoginLayout
@@ -120,11 +121,15 @@
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
     private bool _isLoading = true;
     private string _code = string.Empty;
     private string? _errorMessage;
     private SetupTotpResponse? _setupData;
     private string _qrCodeDataUrl = string.Empty;
+    private string _safeReturnUrl = PageRoutes.App.Home;
 
     // Phase 2: Uncomment these fields when enabling recovery codes display
     // private bool _showRecoveryCodes;
@@ -134,6 +139,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Validate returnUrl to prevent open redirect attacks
+        _safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+
         if (string.IsNullOrEmpty(Token))
         {
             // Security: Redirect to login if no valid token (matches Blazor Server behavior)
@@ -202,8 +210,8 @@
                 wasmAuth.NotifyAuthenticationStateChanged();
             }
 
-            // Navigate directly to home (matches old app behavior)
-            Navigation.NavigateTo(PageRoutes.App.Home, forceLoad: false);
+            // Navigate to returnUrl (validated on init) or home
+            Navigation.NavigateTo(_safeReturnUrl, forceLoad: false);
         }
         catch (HttpRequestException)
         {

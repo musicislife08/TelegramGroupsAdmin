@@ -239,11 +239,25 @@ app.UseHttpsRedirection();
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
-// Configure static file serving for media
-ConfigureMediaStaticFiles(app);
-
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Media files require authentication - middleware runs after auth
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/media"))
+    {
+        if (context.User?.Identity?.IsAuthenticated != true)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+    }
+    await next();
+});
+
+// Configure static file serving for media (now behind auth)
+ConfigureMediaStaticFiles(app);
 
 // Health check endpoints
 app.MapHealthChecks("/healthz/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
@@ -299,7 +313,8 @@ static void ConfigureMediaStaticFiles(WebApplication app)
         RequestPath = "/media",
         OnPrepareResponse = ctx =>
         {
-            ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
+            // Private: prevents CDN/proxy caching of authenticated content
+            ctx.Context.Response.Headers.Append("Cache-Control", "private,max-age=86400");
         }
     });
 

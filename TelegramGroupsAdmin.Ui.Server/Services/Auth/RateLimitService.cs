@@ -7,12 +7,18 @@ namespace TelegramGroupsAdmin.Ui.Server.Services.Auth;
 /// <summary>
 /// In-memory rate limiting service for authentication endpoints
 /// Thread-safe implementation suitable for single-instance deployments
+/// Uses per-key locking to avoid global contention across different users
 /// </summary>
 public class RateLimitService : IRateLimitService
 {
     private readonly ILogger<RateLimitService> _logger;
-    private readonly ConcurrentDictionary<string, List<DateTimeOffset>> _attempts = new();
-    private readonly Lock _lock = new();
+
+    /// <summary>
+    /// Per-key storage with embedded lock to avoid global contention.
+    /// Each user/endpoint combination gets its own lock, preventing
+    /// rate limit checks for user A from blocking checks for user B.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, (Lock Lock, List<DateTimeOffset> Attempts)> _attempts = new();
 
     // Rate limit configurations (attempts / time window)
     private static readonly Dictionary<string, (int MaxAttempts, TimeSpan Window)> RateLimits = new()
@@ -44,11 +50,11 @@ public class RateLimitService : IRateLimitService
             var key = GetKey(identifier, endpointKey);
             var now = DateTimeOffset.UtcNow;
 
-            // Get or create attempt list
-            var attempts = _attempts.GetOrAdd(key, _ => new List<DateTimeOffset>());
+            // Get or create per-key storage with its own lock
+            var (keyLock, attempts) = _attempts.GetOrAdd(key, _ => (new Lock(), new List<DateTimeOffset>()));
 
-            // Thread-safe cleanup and check using C# 13 Lock.EnterScope()
-            using (_lock.EnterScope())
+            // Thread-safe cleanup and check using per-key lock (not global)
+            using (keyLock.EnterScope())
             {
                 // Remove expired attempts
                 attempts.RemoveAll(a => a < now - limit.Window);
@@ -93,9 +99,10 @@ public class RateLimitService : IRateLimitService
             var key = GetKey(identifier, endpointKey);
             var now = DateTimeOffset.UtcNow;
 
-            var attempts = _attempts.GetOrAdd(key, _ => new List<DateTimeOffset>());
+            // Get or create per-key storage with its own lock
+            var (keyLock, attempts) = _attempts.GetOrAdd(key, _ => (new Lock(), new List<DateTimeOffset>()));
 
-            using (_lock.EnterScope())
+            using (keyLock.EnterScope())
             {
                 attempts.Add(now);
             }

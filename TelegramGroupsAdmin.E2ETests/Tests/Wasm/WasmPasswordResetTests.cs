@@ -90,12 +90,13 @@ public class WasmPasswordResetTests : WasmSharedE2ETestBase
         await _forgotPage.WaitForSuccessAsync();
 
         // Assert - email was sent with reset link
-        var emails = EmailService.GetEmailsByTemplate(EmailTemplate.PasswordReset).ToList();
+        var emails = EmailService.GetEmailsByTemplate<EmailTemplateData.PasswordReset>().ToList();
         Assert.That(emails, Has.Count.EqualTo(1), "Should send exactly one reset email");
 
         var email = emails[0];
         Assert.That(email.To, Does.Contain(user.Email), "Email should be sent to correct address");
-        Assert.That(email.Parameters, Does.ContainKey("resetLink"), "Email should contain reset link");
+        var templateData = email.TemplateData as EmailTemplateData.PasswordReset;
+        Assert.That(templateData?.ResetLink, Is.Not.Null.And.Not.Empty, "Email should contain reset link");
     }
 
     [Test]
@@ -279,12 +280,12 @@ public class WasmPasswordResetTests : WasmSharedE2ETestBase
     private string? GetResetLinkFromEmail(string email)
     {
         var emails = EmailService.GetEmailsTo(email)
-            .Where(e => e.Template == EmailTemplate.PasswordReset)
+            .Where(e => e.TemplateData is EmailTemplateData.PasswordReset)
             .ToList();
 
         if (emails.Count == 0)
             return null;
 
-        return emails[0].Parameters?.GetValueOrDefault("resetLink");
+        return (emails[0].TemplateData as EmailTemplateData.PasswordReset)?.ResetLink;
     }
 }

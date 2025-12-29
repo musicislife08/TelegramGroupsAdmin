@@ -1,16 +1,21 @@
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using TelegramGroupsAdmin.Ui.Api;
+using TelegramGroupsAdmin.Ui.Models;
 
 namespace TelegramGroupsAdmin.Ui.Services;
 
 /// <summary>
 /// Authentication state provider for Blazor WebAssembly.
 /// Calls GET /api/auth/me to determine if user is authenticated.
+/// Implements IDisposable to properly clean up the SemaphoreSlim.
 /// </summary>
-public class WasmAuthStateProvider : AuthenticationStateProvider
+public class WasmAuthStateProvider : AuthenticationStateProvider, IDisposable
 {
+    private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     private readonly IHttpClientFactory _httpClientFactory;
 
     // Cache the auth state to avoid repeated API calls
@@ -78,9 +83,7 @@ public class WasmAuthStateProvider : AuthenticationStateProvider
                 var content = await response.Content.ReadAsStringAsync();
                 if (!string.IsNullOrWhiteSpace(content))
                 {
-                    var userInfo = System.Text.Json.JsonSerializer.Deserialize<AuthMeResponse>(
-                        content,
-                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var userInfo = JsonSerializer.Deserialize<AuthMeResponse>(content, s_jsonOptions);
 
                     if (userInfo != null)
                     {
@@ -128,14 +131,13 @@ public class WasmAuthStateProvider : AuthenticationStateProvider
         _cachedAuthState = new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
         NotifyAuthenticationStateChanged(Task.FromResult(_cachedAuthState));
     }
-}
 
-/// <summary>
-/// Response from GET /api/auth/me endpoint.
-/// </summary>
-public record AuthMeResponse(
-    string UserId,
-    string Email,
-    int PermissionLevel,
-    string? DisplayName = null
-);
+    /// <summary>
+    /// Disposes the SemaphoreSlim used for concurrent auth state checks.
+    /// </summary>
+    public void Dispose()
+    {
+        _semaphore.Dispose();
+        GC.SuppressFinalize(this);
+    }
+}

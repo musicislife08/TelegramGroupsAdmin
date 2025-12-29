@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @using TelegramGroupsAdmin.Ui.Services
+@using TelegramGroupsAdmin.Ui.Components.Shared
 @inject AuthenticationStateProvider AuthStateProvider
 @inject HttpErrorNotificationService ErrorNotificationService
 @inject ISnackbar Snackbar
@@ -9,6 +10,9 @@
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
+
+@* SSE Connection Status Overlay *@
+<SseConnectionOverlay />
 
 <MudLayout>
     <MudAppBar Elevation="1">

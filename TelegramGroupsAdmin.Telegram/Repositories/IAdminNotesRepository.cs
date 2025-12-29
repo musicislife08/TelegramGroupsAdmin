@@ -42,4 +42,9 @@ public interface IAdminNotesRepository
     /// Toggle pin status for a note
     /// </summary>
     Task<bool> TogglePinAsync(long noteId, Actor toggledBy, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get all notes for multiple users (for batch loading in message lists)
+    /// </summary>
+    Task<Dictionary<long, List<AdminNote>>> GetNotesByUserIdsAsync(IEnumerable<long> telegramUserIds, CancellationToken cancellationToken = default);
 }

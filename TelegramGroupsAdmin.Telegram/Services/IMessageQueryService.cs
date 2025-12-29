@@ -72,4 +72,12 @@ public interface IMessageQueryService
         long userId,
         long chatId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get last message preview for multiple chats (for sidebar display).
+    /// Returns a dictionary of chatId -> preview data.
+    /// </summary>
+    Task<Dictionary<long, UiModels.ChatMessagePreview>> GetLastMessagePreviewsAsync(
+        IEnumerable<long> chatIds,
+        CancellationToken cancellationToken = default);
 }

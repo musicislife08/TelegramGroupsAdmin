@@ -8,5 +8,6 @@ public record ChatSummary(
     string ChatName,
     string? ChatIconPath,
     int MessageCount,
-    DateTimeOffset? LastMessageAt
+    DateTimeOffset? LastMessageAt,
+    string? LastMessagePreview
 );

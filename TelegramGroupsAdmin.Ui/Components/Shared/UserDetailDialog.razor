@@ -477,10 +477,56 @@
         }
     }
 
-    private void BanUser()
+    private async Task BanUser()
     {
-        // TODO: Implement ban functionality
-        Snackbar.Add("Ban functionality - Coming soon", Severity.Info);
+        if (_userDetail == null) return;
+
+        // Show confirmation dialog with optional reason input
+        var parameters = new DialogParameters<TextInputDialog>
+        {
+            { x => x.Label, "Reason (optional)" },
+            { x => x.MaxLength, 500 },
+            { x => x.Lines, 3 },
+            { x => x.SubmitButtonText, "Ban User" },
+            { x => x.SubmitButtonColor, Color.Error },
+            { x => x.AllowEmpty, true }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TextInputDialog>("Permanent Ban", parameters, options);
+        var dialogResult = await dialog.Result;
+
+        // Allow empty reason (optional)
+        if (dialogResult is { Canceled: true })
+            return;
+
+        var reason = dialogResult?.Data as string;
+
+        try
+        {
+            var request = new UserBanRequest(string.IsNullOrWhiteSpace(reason) ? null : reason.Trim());
+            var response = await Http.PostAsJsonAsync($"/api/users/{_userDetail.TelegramUserId}/ban", request);
+            var result = await response.Content.ReadFromJsonAsync<UserActionResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add($"User banned from {result.ChatsAffected} chat(s)", Severity.Success);
+                await LoadUserDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to ban user: {result?.Error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error banning user: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task UnbanUser()

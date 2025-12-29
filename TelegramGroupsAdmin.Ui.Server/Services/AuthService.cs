@@ -313,21 +313,23 @@ public class AuthService(
         }
 
         var invite = await userRepository.GetInviteByTokenAsync(inviteToken, cancellationToken);
-        if (invite == null)
+        if (invite is null)
         {
             return (false, "Invalid invite token", null, default);
         }
 
-        switch (invite.Status)
+        // Validate invite status
+        var statusError = invite.Status switch
         {
-            case InviteStatus.Used:
-                return (false, "Invite token already used", null, default);
-            case InviteStatus.Revoked:
-                return (false, "Invite token has been revoked", null, default);
-            case InviteStatus.Pending:
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
+            InviteStatus.Used => "Invite token already used",
+            InviteStatus.Revoked => "Invite token has been revoked",
+            InviteStatus.Pending => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(invite.Status), invite.Status, "Unknown invite status")
+        };
+
+        if (statusError is not null)
+        {
+            return (false, statusError, null, default);
         }
 
         if (invite.ExpiresAt < DateTimeOffset.UtcNow)
@@ -491,12 +493,7 @@ public class AuthService(
 
             await emailService.SendTemplatedEmailAsync(
                 email,
-                EmailTemplate.EmailVerification,
-                new Dictionary<string, string>
-                {
-                    { "VerificationToken", tokenString },
-                    { "BaseUrl", _appOptions.BaseUrl }
-                },
+                new EmailTemplateData.EmailVerification(tokenString, _appOptions.BaseUrl),
                 cancellationToken);
 
             logger.LogInformation("Sent verification email to {Email}", email);
@@ -553,12 +550,7 @@ public class AuthService(
 
             await emailService.SendTemplatedEmailAsync(
                 email,
-                EmailTemplate.EmailVerification,
-                new Dictionary<string, string>
-                {
-                    { "VerificationToken", tokenString },
-                    { "BaseUrl", _appOptions.BaseUrl }
-                },
+                new EmailTemplateData.EmailVerification(tokenString, _appOptions.BaseUrl),
                 cancellationToken);
 
             logger.LogInformation("Resent verification email to {Email}", email);
@@ -611,12 +603,7 @@ public class AuthService(
 
             await emailService.SendTemplatedEmailAsync(
                 email,
-                EmailTemplate.PasswordReset,
-                new Dictionary<string, string>
-                {
-                    { "resetLink", resetLink },
-                    { "expiryMinutes", "60" }
-                },
+                new EmailTemplateData.PasswordReset(resetLink, ExpiryMinutes: 60),
                 cancellationToken);
 
             logger.LogInformation("Password reset email sent to {Email}", email);

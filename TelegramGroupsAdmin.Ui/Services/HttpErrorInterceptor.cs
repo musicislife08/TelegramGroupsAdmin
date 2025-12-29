@@ -48,6 +48,11 @@ public sealed class HttpErrorInterceptor : DelegatingHandler
                 _errorService.NotifyError(HttpErrorEvent.Forbidden());
                 break;
 
+            case 404:
+                // Not found - requested resource doesn't exist
+                _errorService.NotifyError(HttpErrorEvent.NotFound());
+                break;
+
             case >= 500:
                 // Server error - notify UI
                 _errorService.NotifyError(HttpErrorEvent.ServerError());

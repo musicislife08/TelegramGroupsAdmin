@@ -26,12 +26,12 @@ public class WasmTestEmailService : IEmailService
         return Task.CompletedTask;
     }
 
-    public Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken cancellationToken = default)
+    public Task SendTemplatedEmailAsync(string to, EmailTemplateData templateData, CancellationToken cancellationToken = default)
     {
-        // Store template info as subject for easy test verification
-        var subject = $"[Template:{template}]";
-        var body = string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"));
-        SentEmails.Add(new WasmSentEmail([to], subject, body, true, template, parameters));
+        // Store template type name as subject for easy test verification
+        var subject = $"[Template:{templateData.GetType().Name}]";
+        var body = templateData.ToString() ?? "";
+        SentEmails.Add(new WasmSentEmail([to], subject, body, true, templateData));
         return Task.CompletedTask;
     }
 
@@ -51,8 +51,8 @@ public class WasmTestEmailService : IEmailService
     /// <summary>
     /// Gets emails with a specific template type.
     /// </summary>
-    public IEnumerable<WasmSentEmail> GetEmailsByTemplate(EmailTemplate template) =>
-        SentEmails.Where(e => e.Template == template);
+    public IEnumerable<WasmSentEmail> GetEmailsByTemplate<T>() where T : EmailTemplateData =>
+        SentEmails.Where(e => e.TemplateData is T);
 }
 
 /// <summary>
@@ -63,5 +63,4 @@ public record WasmSentEmail(
     string Subject,
     string Body,
     bool IsHtml,
-    EmailTemplate? Template = null,
-    Dictionary<string, string>? Parameters = null);
+    EmailTemplateData? TemplateData = null);

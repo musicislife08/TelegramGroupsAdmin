@@ -58,8 +58,41 @@ public class SseEventBridgeService : IHostedService
             messageId = message.MessageId,
             chatId = message.ChatId,
             userId = message.UserId,
-            timestamp = message.Timestamp
+            timestamp = message.Timestamp,
+            previewText = FormatMessagePreview(message)
         });
+    }
+
+    /// <summary>
+    /// Format message text for sidebar preview display.
+    /// Truncates long messages and shows media type indicator for media-only messages.
+    /// </summary>
+    private static string FormatMessagePreview(MessageRecord message)
+    {
+        const int maxLength = 50;
+
+        if (!string.IsNullOrWhiteSpace(message.MessageText))
+        {
+            var cleaned = message.MessageText.ReplaceLineEndings(" ").Trim();
+            return cleaned.Length <= maxLength ? cleaned : cleaned[..maxLength] + "…";
+        }
+
+        // No text - check for photo first (stored separately from MediaType)
+        if (!string.IsNullOrEmpty(message.PhotoFileId))
+            return "📷 Photo";
+
+        // Show media type indicator
+        return message.MediaType switch
+        {
+            MediaType.Animation => "🎬 GIF",
+            MediaType.Video => "🎥 Video",
+            MediaType.Audio => "🎵 Audio",
+            MediaType.Voice => "🎤 Voice message",
+            MediaType.VideoNote => "📹 Video message",
+            MediaType.Sticker => "🎨 Sticker",
+            MediaType.Document => "📎 Document",
+            _ => "📎 Attachment"
+        };
     }
 
     private void HandleMessageEdited(MessageEditRecord edit)

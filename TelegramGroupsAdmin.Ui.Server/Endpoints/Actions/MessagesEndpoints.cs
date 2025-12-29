@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -235,6 +236,57 @@ public static class MessagesEndpoints
             return result.Success
                 ? Results.Ok(ApiResponse.Ok())
                 : Results.BadRequest(ApiResponse.Fail(result.ErrorMessage!));
+        });
+
+        // POST /api/messages/{messageId}/translate - Manually translate a message
+        group.MapPost("/{messageId:long}/translate", async (
+            long messageId,
+            [FromServices] IManagedChatsRepository chatsRepo,
+            [FromServices] IMessageHistoryRepository messagesRepo,
+            [FromServices] IAITranslationService translationService,
+            [FromServices] IMessageTranslationService messageTranslationService,
+            HttpContext httpContext,
+            CancellationToken ct) =>
+        {
+            var userId = httpContext.GetUserId();
+            var permissionLevel = httpContext.GetPermissionLevel();
+
+            if (userId == null) return Results.Unauthorized();
+            if (permissionLevel < PermissionLevel.Admin) return Results.Forbid();
+
+            var (message, error) = await messagesRepo.GetMessageWithAccessCheckAsync(
+                chatsRepo, messageId, userId, permissionLevel, ct);
+            if (error != null) return error;
+
+            if (string.IsNullOrWhiteSpace(message!.MessageText))
+            {
+                return Results.BadRequest(TranslateMessageResponse.Fail("Message has no text to translate"));
+            }
+
+            // Call AI translation service
+            var translationResult = await translationService.TranslateToEnglishAsync(message.MessageText, ct);
+
+            if (translationResult == null || !translationResult.WasTranslated)
+            {
+                return Results.Ok(TranslateMessageResponse.Fail("Message is already in English or translation failed"));
+            }
+
+            // Save translation to database
+            var translation = new MessageTranslation(
+                Id: 0,
+                MessageId: messageId,
+                EditId: null,
+                TranslatedText: translationResult.TranslatedText,
+                DetectedLanguage: translationResult.DetectedLanguage,
+                Confidence: null,
+                TranslatedAt: DateTimeOffset.UtcNow
+            );
+
+            await messageTranslationService.InsertTranslationAsync(translation, ct);
+
+            return Results.Ok(TranslateMessageResponse.Ok(
+                translationResult.TranslatedText,
+                translationResult.DetectedLanguage));
         });
 
         return endpoints;

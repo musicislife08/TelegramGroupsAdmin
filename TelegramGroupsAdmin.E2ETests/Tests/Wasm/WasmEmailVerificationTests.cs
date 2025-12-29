@@ -216,7 +216,7 @@ public class WasmEmailVerificationTests : WasmSharedE2ETestBase
             "Should show success message after requesting resend");
 
         // Verify email was actually sent
-        var verificationEmails = EmailService.GetEmailsByTemplate(EmailTemplate.EmailVerification).ToList();
+        var verificationEmails = EmailService.GetEmailsByTemplate<EmailTemplateData.EmailVerification>().ToList();
         Assert.That(verificationEmails, Has.Count.EqualTo(1), "Should send exactly one verification email");
         Assert.That(verificationEmails[0].To, Does.Contain(user.Email), "Email should be sent to correct address");
     }
@@ -323,13 +323,12 @@ public class WasmEmailVerificationTests : WasmSharedE2ETestBase
 
         // Assert - email contains verification token
         var emails = EmailService.GetEmailsTo(user.Email)
-            .Where(e => e.Template == EmailTemplate.EmailVerification)
+            .Where(e => e.TemplateData is EmailTemplateData.EmailVerification)
             .ToList();
 
         Assert.That(emails, Has.Count.EqualTo(1), "Should send exactly one verification email");
-        Assert.That(emails[0].Parameters, Does.ContainKey("VerificationToken"),
-            "Email should contain verification token");
-        Assert.That(emails[0].Parameters?["VerificationToken"], Is.Not.Null.And.Not.Empty,
+        var templateData = emails[0].TemplateData as EmailTemplateData.EmailVerification;
+        Assert.That(templateData?.VerificationToken, Is.Not.Null.And.Not.Empty,
             "Verification token should not be empty");
     }
 

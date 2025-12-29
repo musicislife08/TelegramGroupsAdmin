@@ -147,9 +147,6 @@ public static class ServiceCollectionExtensions
             // Prompt builder service (Phase 4.X: AI-powered prompt generation)
             services.AddScoped<IPromptBuilderService, PromptBuilderService>();
 
-            // Backup services (replaces old UserDataExportService)
-            services.AddBackupServices();
-
             // Email service (SendGrid)
             services.AddScoped<IEmailService, SendGridEmailService>();
 
@@ -337,25 +334,5 @@ file sealed class RejectedRateLimitLease : RateLimitLease
     {
         metadata = null;
         return false;
-    }
-}
-
-/// <summary>
-/// Extension methods for registering backup services
-/// Used by both main app and tests to ensure consistent registration
-/// </summary>
-public static class BackupServiceCollectionExtensions
-{
-    extension(IServiceCollection services)
-    {
-        /// <summary>
-        /// Add backup services and handlers to DI container
-        /// </summary>
-        public IServiceCollection AddBackupServices()
-        {
-            // Note: Backup services are now registered by AddBackgroundJobs() in BackgroundJobs library
-
-            return services;
-        }
     }
 }

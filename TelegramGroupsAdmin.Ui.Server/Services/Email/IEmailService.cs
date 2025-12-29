@@ -18,7 +18,7 @@ public interface IEmailService
     /// <summary>
     /// Sends a templated email (for password reset, email verification, etc.)
     /// </summary>
-    Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken cancellationToken = default);
+    Task SendTemplatedEmailAsync(string to, EmailTemplateData templateData, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Verifies SMTP connection is working

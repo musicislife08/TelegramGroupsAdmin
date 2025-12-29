@@ -90,4 +90,22 @@ public class UserTagsRepository : IUserTagsRepository
         return await _context.UserTags
             .AnyAsync(t => t.TelegramUserId == telegramUserId && t.TagName == normalizedTag && t.RemovedAt == null, cancellationToken);
     }
+
+    public async Task<Dictionary<long, List<UserTag>>> GetTagsByUserIdsAsync(IEnumerable<long> telegramUserIds, CancellationToken cancellationToken = default)
+    {
+        var userIdList = telegramUserIds.ToList();
+        if (userIdList.Count == 0)
+            return [];
+
+        var tags = await _context.UserTags
+            .Where(t => userIdList.Contains(t.TelegramUserId) && t.RemovedAt == null)
+            .OrderBy(t => t.TagName)
+            .ToListAsync(cancellationToken);
+
+        return tags
+            .GroupBy(t => t.TelegramUserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(t => t.ToModel()).ToList());
+    }
 }

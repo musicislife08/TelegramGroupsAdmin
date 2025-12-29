@@ -12,8 +12,11 @@ using UiModels = TelegramGroupsAdmin.Telegram.Models;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Service for complex message queries with JOINs and enrichment
-/// Extracted from MessageHistoryRepository (REFACTOR-3)
+/// Service for complex message queries with JOINs and enrichment.
+/// Extracted from MessageHistoryRepository (REFACTOR-3).
+///
+/// WARNING: This class violates repository pattern by directly accessing DbContext.
+/// See https://github.com/musicislife08/TelegramGroupsAdmin/issues/215 for refactoring plan.
 /// </summary>
 public class MessageQueryService : IMessageQueryService
 {
@@ -438,6 +441,7 @@ public class MessageQueryService : IMessageQueryService
         // Map detection_results fields to ContentCheckRecord for backward compatibility
         // Note: Returns only the LATEST detection result per message for quick display
         // Full detection history is available via GetByMessageIdAsync in DetectionResultsRepository
+        // NetConfidence is included in initial projection to avoid a second database query
         var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => messageIdArray.Contains(dr.MessageId))
@@ -453,6 +457,7 @@ public class MessageQueryService : IMessageQueryService
                     m.ContentHash,
                     dr.IsSpam,
                     dr.Confidence,
+                    dr.NetConfidence,
                     Reason = dr.Reason ?? $"{dr.DetectionMethod}: Spam detected",
                     CheckType = dr.DetectionMethod,
                     MatchedMessageId = dr.MessageId
@@ -465,21 +470,6 @@ public class MessageQueryService : IMessageQueryService
             .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
             .ToList();
 
-        // Get net_confidence values for all these messages (need fresh query to include net_confidence)
-        var latestMessageIds = latestResults.Select(r => r.MessageId).Distinct().ToArray();
-        var netConfidenceResults = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => latestMessageIds.Contains(dr.MessageId))
-            .Select(dr => new { dr.MessageId, dr.NetConfidence, dr.DetectedAt })
-            .ToListAsync(cancellationToken);
-
-        // Group detection results by message and take latest net_confidence
-        var latestNetConfidence = netConfidenceResults
-            .GroupBy(dr => dr.MessageId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(dr => dr.DetectedAt).First().NetConfidence);
-
         // Build final result with absolute net_confidence as display confidence
         return latestResults
             .Select(r => new UiModels.ContentCheckRecord(
@@ -488,7 +478,7 @@ public class MessageQueryService : IMessageQueryService
                 UserId: r.UserId,
                 ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: Math.Abs(latestNetConfidence.GetValueOrDefault(r.MessageId, 0)), // Use absolute net_confidence for display
+                Confidence: Math.Abs(r.NetConfidence), // Use absolute net_confidence for display (from initial query)
                 Reason: r.Reason,
                 CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))
@@ -549,5 +539,77 @@ public class MessageQueryService : IMessageQueryService
             FileId: entity.PhotoFileId!,
             MessageText: entity.MessageText,
             Timestamp: entity.Timestamp);
+    }
+
+    public async Task<Dictionary<long, UiModels.ChatMessagePreview>> GetLastMessagePreviewsAsync(
+        IEnumerable<long> chatIds,
+        CancellationToken cancellationToken = default)
+    {
+        var chatIdArray = chatIds.ToArray();
+        if (chatIdArray.Length == 0)
+            return [];
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Use a subquery to get the latest message per chat efficiently
+        // This avoids N+1 queries by using a correlated subquery pattern that PostgreSQL optimizes well
+        var results = await (
+            from m in context.Messages
+            where chatIdArray.Contains(m.ChatId)
+               && m.Timestamp == context.Messages
+                   .Where(m2 => m2.ChatId == m.ChatId)
+                   .Max(m2 => m2.Timestamp)
+            select new
+            {
+                m.ChatId,
+                m.Timestamp,
+                m.MessageText,
+                m.MediaType,
+                m.PhotoFileId
+            })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return results.ToDictionary(
+            r => r.ChatId,
+            r => new UiModels.ChatMessagePreview(
+                r.Timestamp,
+                FormatMessagePreview(r.MessageText, r.MediaType, r.PhotoFileId)));
+    }
+
+    /// <summary>
+    /// Format message text for sidebar preview display.
+    /// Truncates long messages and shows media type indicator for media-only messages.
+    /// </summary>
+    /// <param name="messageText">The message text content</param>
+    /// <param name="mediaType">Media type enum (Animation, Video, etc.)</param>
+    /// <param name="photoFileId">Photo file ID - photos are stored separately from MediaType enum</param>
+    private static string FormatMessagePreview(string? messageText, Data.Models.MediaType? mediaType, string? photoFileId)
+    {
+        const int maxLength = 50;
+
+        if (!string.IsNullOrWhiteSpace(messageText))
+        {
+            // Truncate and clean up the text
+            var cleaned = messageText.ReplaceLineEndings(" ").Trim();
+            return cleaned.Length <= maxLength ? cleaned : cleaned[..maxLength] + "…";
+        }
+
+        // No text - check for photo first (stored separately from MediaType)
+        if (!string.IsNullOrEmpty(photoFileId))
+            return "📷 Photo";
+
+        // Show media type indicator
+        return mediaType switch
+        {
+            Data.Models.MediaType.Animation => "🎬 GIF",
+            Data.Models.MediaType.Video => "🎥 Video",
+            Data.Models.MediaType.Audio => "🎵 Audio",
+            Data.Models.MediaType.Voice => "🎤 Voice message",
+            Data.Models.MediaType.VideoNote => "📹 Video message",
+            Data.Models.MediaType.Sticker => "🎨 Sticker",
+            Data.Models.MediaType.Document => "📎 Document",
+            _ => "📎 Attachment"
+        };
     }
 }

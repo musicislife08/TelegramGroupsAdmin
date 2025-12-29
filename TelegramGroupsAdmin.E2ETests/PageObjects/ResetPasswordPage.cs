@@ -56,14 +56,15 @@ public class ResetPasswordPage
     }
 
     /// <summary>
-    /// Gets locator for the first password input (New Password).
+    /// Gets locator for the new password input.
+    /// MudBlazor wraps inputs in nested divs - use label-based selector for reliability.
     /// </summary>
-    private ILocator NewPasswordInput => _page.Locator("input.mud-input-slot").First;
+    private ILocator NewPasswordInput => _page.Locator(".mud-input-control:has(label.mud-input-label:text-is('New Password')) input.mud-input-slot");
 
     /// <summary>
-    /// Gets locator for the second password input (Confirm Password).
+    /// Gets locator for the confirm password input.
     /// </summary>
-    private ILocator ConfirmPasswordInput => _page.Locator("input.mud-input-slot").Nth(1);
+    private ILocator ConfirmPasswordInput => _page.Locator(".mud-input-control:has(label.mud-input-label:text-is('Confirm Password')) input.mud-input-slot");
 
     /// <summary>
     /// Waits for the form to be visible (token was valid).
@@ -105,10 +106,11 @@ public class ResetPasswordPage
 
     /// <summary>
     /// Clicks the submit button.
+    /// MudButton renders with text visible - use role-based selector.
     /// </summary>
     public async Task SubmitAsync()
     {
-        await _page.GetByRole(AriaRole.Button, new() { Name = "Reset Password" }).ClickAsync();
+        await _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Reset Password" }).ClickAsync();
     }
 
     /// <summary>

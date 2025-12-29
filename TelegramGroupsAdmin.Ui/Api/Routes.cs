@@ -111,6 +111,29 @@ public static class Routes
         /// Edit an existing bot message.
         /// </summary>
         public static string Edit(long messageId) => $"{Base}/{messageId}/edit";
+
+        /// <summary>
+        /// Manually translate a message.
+        /// </summary>
+        public static string Translate(long messageId) => $"{Base}/{messageId}/translate";
+    }
+
+    /// <summary>
+    /// User action endpoints (moderation, profile).
+    /// </summary>
+    public static class Users
+    {
+        private const string Base = "/api/users";
+
+        /// <summary>
+        /// Get user details.
+        /// </summary>
+        public static string Detail(long telegramUserId) => $"{Base}/{telegramUserId}";
+
+        /// <summary>
+        /// Permanently ban a user from all managed chats.
+        /// </summary>
+        public static string Ban(long telegramUserId) => $"{Base}/{telegramUserId}/ban";
     }
 
     public static class Events

@@ -2,6 +2,7 @@
 @attribute [Route(PageRoutes.Auth.UseRecoveryCode)]
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Extensions
+@using TelegramGroupsAdmin.Ui.Helpers
 @using TelegramGroupsAdmin.Ui.Models
 @using TelegramGroupsAdmin.Ui.Navigation
 @layout LoginLayout
@@ -74,7 +75,7 @@
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                 Have access to your authenticator?
             </MudText>
-            <MudLink Href="@PageRoutes.Auth.VerifyTotp(Token!)">Use Authenticator App</MudLink>
+            <MudLink Href="@PageRoutes.Auth.VerifyTotp(Token ?? "", _safeReturnUrl)">Use Authenticator App</MudLink>
             <MudDivider Class="my-2" />
             <MudLink Href="@PageRoutes.Auth.Login">Back to Login</MudLink>
         </MudCardActions>
@@ -85,13 +86,23 @@
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
     private MudForm _form = null!;
     private bool _formIsValid;
     private bool _isLoading;
     private string _recoveryCode = string.Empty;
     private string? _errorMessage;
+    private string _safeReturnUrl = PageRoutes.App.Home;
 
     private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    protected override void OnInitialized()
+    {
+        // Validate returnUrl to prevent open redirect attacks
+        _safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+    }
 
     private async Task HandleVerify()
     {
@@ -119,8 +130,8 @@
                 wasmAuth.NotifyAuthenticationStateChanged();
             }
 
-            // Navigate to home
-            Navigation.NavigateTo(PageRoutes.App.Home, forceLoad: false);
+            // Navigate to returnUrl (validated on init) or home
+            Navigation.NavigateTo(_safeReturnUrl, forceLoad: false);
         }
         catch (HttpRequestException)
         {

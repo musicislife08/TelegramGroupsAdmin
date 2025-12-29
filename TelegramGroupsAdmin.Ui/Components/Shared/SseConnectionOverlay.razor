@@ -1,0 +1,104 @@
+@using TelegramGroupsAdmin.Ui.Services
+@inject SseService SseService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+@* Only show overlay when reconnecting or failed *@
+@if (_showOverlay)
+{
+    <div class="sse-connection-overlay">
+        <div class="sse-connection-card">
+            @if (_connectionState == SseConnectionState.Reconnecting)
+            {
+                <MudProgressCircular Color="Color.Primary" Size="Size.Medium" Indeterminate="true" Class="mb-3" />
+                <MudText Typo="Typo.h6">Reconnecting...</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                    Attempt @_reconnectAttempt of @MaxAttempts
+                </MudText>
+            }
+            else if (_connectionState == SseConnectionState.Failed)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.CloudOff" Size="Size.Large" Color="Color.Error" Class="mb-3" />
+                <MudText Typo="Typo.h6">Connection Lost</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2 mb-4">
+                    Unable to connect to the server after @MaxAttempts attempts.
+                </MudText>
+                <MudStack Row="true" Spacing="2" Justify="Justify.Center">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="HandleRetry">
+                        Try Again
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.Replay"
+                               OnClick="HandleReload">
+                        Reload Page
+                    </MudButton>
+                </MudStack>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .sse-connection-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    .sse-connection-card {
+        background-color: var(--mud-palette-surface);
+        border-radius: 8px;
+        padding: 32px 48px;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        max-width: 400px;
+    }
+</style>
+
+@code {
+    private const int MaxAttempts = 5;
+
+    private SseConnectionState _connectionState = SseConnectionState.Disconnected;
+    private int _reconnectAttempt;
+    private bool _showOverlay => _connectionState is SseConnectionState.Reconnecting or SseConnectionState.Failed;
+
+    protected override void OnInitialized()
+    {
+        SseService.OnReconnectionStateChanged += HandleConnectionStateChanged;
+        _connectionState = SseService.ConnectionState;
+        _reconnectAttempt = SseService.CurrentReconnectAttempt;
+    }
+
+    private void HandleConnectionStateChanged(SseConnectionState state, int attempt)
+    {
+        _connectionState = state;
+        _reconnectAttempt = attempt;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleRetry()
+    {
+        await SseService.RetryConnectionAsync();
+    }
+
+    private void HandleReload()
+    {
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        SseService.OnReconnectionStateChanged -= HandleConnectionStateChanged;
+    }
+}

@@ -68,6 +68,7 @@
                           @bind-Value="_inviteToken"
                           Variant="Variant.Outlined"
                           Class="mb-4"
+                          data-testid="register-invite-code"
                           Disabled="@(_isLoading || _registrationSuccess)" />
         }
 
@@ -77,6 +78,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       InputType="InputType.Email"
+                      data-testid="register-email"
                       Disabled="@(_isLoading || _registrationSuccess)" />
 
         <MudTextField T="string"
@@ -85,6 +87,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       InputType="InputType.Password"
+                      data-testid="register-password"
                       Disabled="@(_isLoading || _registrationSuccess)"
                       HelperText="Minimum 8 characters with uppercase, lowercase, and number"
                       Validation="@(new Func<string, string?>(ValidatePassword))"
@@ -96,6 +99,7 @@
                       Variant="Variant.Outlined"
                       Class="mb-6"
                       InputType="InputType.Password"
+                      data-testid="register-confirm-password"
                       Disabled="@(_isLoading || _registrationSuccess)"
                       Validation="@(new Func<string, string?>(ValidateConfirmPassword))"
                       Immediate="true" />
@@ -104,6 +108,7 @@
                    Color="Color.Primary"
                    FullWidth="true"
                    OnClick="@(async () => await HandleRegisterAsync())"
+                   data-testid="register-submit"
                    Disabled="@(_isLoading || _registrationSuccess)">
             @if (_isLoading)
             {
@@ -178,11 +183,19 @@
         // Load page initialization data (first-run status, email verification config)
         try
         {
-            var pageData = await Http.GetFromJsonAsync<RegisterPageResponse>(Routes.Pages.Register);
-            if (pageData != null)
+            var httpResponse = await Http.GetAsync(Routes.Pages.Register);
+            var result = await httpResponse.ReadApiResponseAsync<RegisterPageResponse>("Failed to load registration page");
+
+            if (result.IsSuccess)
             {
-                _isFirstRun = pageData.IsFirstRun;
-                _isEmailVerificationEnabled = pageData.IsEmailVerificationEnabled;
+                _isFirstRun = result.Value!.IsFirstRun;
+                _isEmailVerificationEnabled = result.Value.IsEmailVerificationEnabled;
+            }
+            else
+            {
+                // Default to non-first-run and email enabled on error
+                _isFirstRun = false;
+                _isEmailVerificationEnabled = true;
             }
         }
         catch

@@ -31,13 +31,13 @@ public static class AuthEndpoints
             var email = user.FindFirst(ClaimTypes.Email)?.Value ?? user.Identity.Name;
             var permissionLevelClaim = user.FindFirst("permission_level")?.Value;
 
-            if (userId == null || email == null)
+            if (userId is null || email is null)
             {
                 return Results.Ok();
             }
 
             var permissionLevel = 0;
-            if (permissionLevelClaim != null && int.TryParse(permissionLevelClaim, out var level))
+            if (permissionLevelClaim is not null && int.TryParse(permissionLevelClaim, out var level))
             {
                 permissionLevel = level;
             }
@@ -91,14 +91,6 @@ public static class AuthEndpoints
 
             // Sign in the user with cookie authentication (TOTP disabled by owner)
             await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
-
-            // Check if this is a browser request (has Accept: text/html)
-            var acceptHeader = httpContext.Request.Headers.Accept.ToString();
-            if (acceptHeader.Contains("text/html"))
-            {
-                // Browser request - redirect to homepage
-                return Results.Redirect("/");
-            }
 
             return Results.Ok(LoginResponse.Ok());
         }).AllowAnonymous();
@@ -157,7 +149,7 @@ public static class AuthEndpoints
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
-            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId == null)
+            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId is null)
             {
                 return Results.BadRequest(ApiResponse.Fail("Invalid or expired authentication session"));
             }
@@ -182,14 +174,6 @@ public static class AuthEndpoints
             // Sign in the user with cookie authentication
             await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
-            // Check if this is a browser request (has Accept: text/html)
-            var acceptHeader = httpContext.Request.Headers.Accept.ToString();
-            if (acceptHeader.Contains("text/html"))
-            {
-                // Browser request - redirect to homepage
-                return Results.Redirect("/");
-            }
-
             return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
@@ -202,7 +186,7 @@ public static class AuthEndpoints
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
-            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId == null)
+            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId is null)
             {
                 return Results.BadRequest(ApiResponse.Fail("Invalid or expired authentication session"));
             }
@@ -227,14 +211,6 @@ public static class AuthEndpoints
             // Sign in the user with cookie authentication
             await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
-            // Check if this is a browser request (has Accept: text/html)
-            var acceptHeader = httpContext.Request.Headers.Accept.ToString();
-            if (acceptHeader.Contains("text/html"))
-            {
-                // Browser request - redirect to homepage
-                return Results.Redirect("/");
-            }
-
             return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
@@ -244,7 +220,7 @@ public static class AuthEndpoints
             [FromServices] IIntermediateAuthService intermediateAuthService) =>
         {
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
-            if (!intermediateAuthService.TryGetUserId(request.IntermediateToken, out var userId) || userId == null)
+            if (!intermediateAuthService.TryGetUserId(request.IntermediateToken, out var userId) || userId is null)
             {
                 return Results.BadRequest(SetupTotpResponse.Fail("Invalid or expired authentication session"));
             }
@@ -270,7 +246,7 @@ public static class AuthEndpoints
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token and get userId from token (not from client)
-            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId == null)
+            if (!intermediateAuthService.ValidateAndConsumeToken(request.IntermediateToken, out var userId) || userId is null)
             {
                 return Results.BadRequest(VerifySetupTotpResponse.Fail("Invalid or expired authentication session"));
             }

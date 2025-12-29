@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using TelegramGroupsAdmin.Ui.Navigation;
 using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Wasm;
@@ -37,9 +38,13 @@ public class WasmAuthSecurityTests : WasmSharedE2ETestBase
         // Wait for network to stabilize (SignalR connection for Blazor Server)
         await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
+        // Build regex from constants - ensures tests stay in sync with route definitions
+        var loginPattern = Regex.Escape(PageRoutes.Auth.Login);
+        var registerPattern = Regex.Escape(PageRoutes.Auth.Register);
+
         // Use Playwright's auto-retry assertion for URL matching
         await Expect(Page).ToHaveURLAsync(
-            new Regex(@".*/(?:login|register).*"),
+            new Regex($@".*({loginPattern}|{registerPattern}).*"),
             new() { Timeout = timeoutMs });
     }
 
@@ -49,7 +54,7 @@ public class WasmAuthSecurityTests : WasmSharedE2ETestBase
         // Arrange - no authentication
 
         // Act - try to access protected home page directly
-        await Page.GotoAsync($"{BaseUrl}/");
+        await Page.GotoAsync($"{BaseUrl}{PageRoutes.App.Home}");
 
         // Assert - should redirect to login (or register if first-run)
         await AssertOnAuthPageAsync("Protected pages should redirect unauthenticated users");
@@ -61,13 +66,13 @@ public class WasmAuthSecurityTests : WasmSharedE2ETestBase
         // Arrange - no intermediate token, try direct navigation
 
         // Act - try to access TOTP setup page directly without valid intermediate token
-        await Page.GotoAsync($"{BaseUrl}/login/setup-2fa");
+        await Page.GotoAsync($"{BaseUrl}{PageRoutes.Auth.SetupTotpPage}");
 
         // Assert - should redirect to login or register (first-run goes to register)
         await AssertOnAuthPageAsync("Should be redirected to auth page");
 
-        // Verify we're NOT on /login/setup-2fa (the redirect happened)
-        Assert.That(Page.Url, Does.Not.Contain("/setup-2fa"),
+        // Verify we're NOT on TOTP setup page (the redirect happened)
+        Assert.That(Page.Url, Does.Not.Contain(PageRoutes.Auth.SetupTotpPage),
             "TOTP setup page should redirect without valid intermediate token");
     }
 
@@ -77,14 +82,18 @@ public class WasmAuthSecurityTests : WasmSharedE2ETestBase
         // Arrange - craft URL with invalid userId and token
 
         // Act - try to access TOTP setup with fake credentials
-        await Page.GotoAsync($"{BaseUrl}/login/setup-2fa?userId=fake-user-id&token=fake-token");
+        await Page.GotoAsync($"{BaseUrl}{PageRoutes.Auth.SetupTotpPage}?userId=fake-user-id&token=fake-token");
 
-        // Assert - should redirect to login or register (not stay on setup-2fa)
-        await AssertOnAuthPageAsync("Should be redirected to auth page");
+        // Assert - wait for redirect away from setup-2fa (API validates token, redirects on failure)
+        // Build pattern from constants - match login or register but NOT setup-2fa or verify
+        var setupPattern = Regex.Escape(PageRoutes.Auth.SetupTotpPage);
+        var verifyPattern = Regex.Escape(PageRoutes.Auth.VerifyTotpPage);
+        var loginPattern = Regex.Escape(PageRoutes.Auth.Login);
+        var registerPattern = Regex.Escape(PageRoutes.Auth.Register);
 
-        // Verify we're NOT on setup-2fa (the redirect happened)
-        Assert.That(Page.Url, Does.Not.Contain("/setup-2fa"),
-            "TOTP setup page should reject invalid userId and token");
+        await Expect(Page).ToHaveURLAsync(
+            new Regex($@".*({loginPattern}|{registerPattern})(?!.*({setupPattern}|{verifyPattern})).*"),
+            new() { Timeout = 10000 });
     }
 
     [Test]
@@ -92,15 +101,16 @@ public class WasmAuthSecurityTests : WasmSharedE2ETestBase
     {
         // Arrange - no intermediate token
 
-        // Act - try to access TOTP verify page directly (route is /login/verify)
-        await Page.GotoAsync($"{BaseUrl}/login/verify");
+        // Act - try to access TOTP verify page directly
+        await Page.GotoAsync($"{BaseUrl}{PageRoutes.Auth.VerifyTotpPage}");
 
         // Assert - should redirect to login or register (not stay on verify page)
         await AssertOnAuthPageAsync("Should be redirected to auth page");
 
-        // Verify we're NOT on /login/verify (could be on /login or /register, but not /login/verify)
+        // Verify we're NOT on TOTP verify page (could be on /login or /register, but not /login/verify)
         var url = Page.Url;
-        var isOnVerifyPage = url.EndsWith("/login/verify") || url.Contains("/login/verify?");
+        var isOnVerifyPage = url.EndsWith(PageRoutes.Auth.VerifyTotpPage) ||
+                             url.Contains($"{PageRoutes.Auth.VerifyTotpPage}?");
         Assert.That(isOnVerifyPage, Is.False,
             $"TOTP verify page should redirect without valid intermediate token, but URL is: {url}");
     }
@@ -115,24 +125,28 @@ public class WasmAuthSecurityTests : WasmSharedE2ETestBase
         // First-run registration
         await _registerPage.NavigateAsync();
         await _registerPage.RegisterAsync(email, password);
-        await Page.WaitForURLAsync("**/login", new() { Timeout = 10000 });
+        await Page.WaitForURLAsync($"**{PageRoutes.Auth.Login}", new() { Timeout = 10000 });
 
         // Login with password (gets intermediate token, redirects to TOTP setup)
         await _loginPage.LoginAsync(email, password);
-        await Page.WaitForURLAsync("**/login/setup-2fa**", new() { Timeout = 10000 });
+        await Page.WaitForURLAsync($"**{PageRoutes.Auth.SetupTotpPage}**", new() { Timeout = 10000 });
 
         // Capture current URL to verify we're in TOTP setup
         var totpSetupUrl = Page.Url;
-        Assert.That(totpSetupUrl, Does.Contain("/login/setup-2fa"),
+        Assert.That(totpSetupUrl, Does.Contain(PageRoutes.Auth.SetupTotpPage),
             "Should be on TOTP setup page after password login");
 
         // Act - try to navigate to home page directly (bypassing TOTP)
-        await Page.GotoAsync($"{BaseUrl}/");
+        await Page.GotoAsync($"{BaseUrl}{PageRoutes.App.Home}");
 
         // Assert - should redirect back to login (intermediate token doesn't grant access)
-        // User exists so should go to /login not /register
+        // Build pattern from constants - match login but NOT setup-2fa or verify
+        var loginPattern = Regex.Escape(PageRoutes.Auth.Login);
+        var setupPattern = Regex.Escape(PageRoutes.Auth.SetupTotpPage);
+        var verifyPattern = Regex.Escape(PageRoutes.Auth.VerifyTotpPage);
+
         await Expect(Page).ToHaveURLAsync(
-            new Regex(@".*/login(?!\/(setup-2fa|verify)).*"),
+            new Regex($@".*{loginPattern}(?!.*({setupPattern}|{verifyPattern})).*"),
             new() { Timeout = 10000 });
     }
 
@@ -146,20 +160,21 @@ public class WasmAuthSecurityTests : WasmSharedE2ETestBase
         // First-run registration and login
         await _registerPage.NavigateAsync();
         await _registerPage.RegisterAsync(email, password);
-        await Page.WaitForURLAsync("**/login", new() { Timeout = 10000 });
+        await Page.WaitForURLAsync($"**{PageRoutes.Auth.Login}", new() { Timeout = 10000 });
 
         await _loginPage.LoginAsync(email, password);
-        await Page.WaitForURLAsync("**/login/setup-2fa**", new() { Timeout = 10000 });
+        await Page.WaitForURLAsync($"**{PageRoutes.Auth.SetupTotpPage}**", new() { Timeout = 10000 });
 
         // Act - try to access settings page while in intermediate state
-        await Page.GotoAsync($"{BaseUrl}/settings");
+        await Page.GotoAsync($"{BaseUrl}{PageRoutes.Settings.Index}");
 
         // Assert - should redirect to login (not stay on settings)
+        var loginPattern = Regex.Escape(PageRoutes.Auth.Login);
         await Expect(Page).ToHaveURLAsync(
-            new Regex(@".*/login.*"),
+            new Regex($@".*{loginPattern}.*"),
             new() { Timeout = 10000 });
 
-        Assert.That(Page.Url, Does.Not.Contain("/settings"),
+        Assert.That(Page.Url, Does.Not.Contain(PageRoutes.Settings.Index),
             "Settings page should not be accessible with only intermediate token");
     }
 }
