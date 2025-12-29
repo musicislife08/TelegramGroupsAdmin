@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- WASM Client Project -->
     <ProjectReference Include="..\TelegramGroupsAdmin.Ui\TelegramGroupsAdmin.Ui.csproj" />
 

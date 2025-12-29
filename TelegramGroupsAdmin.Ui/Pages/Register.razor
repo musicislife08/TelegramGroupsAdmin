@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Ui.Extensions
 @using TelegramGroupsAdmin.Ui.Models
 @using TelegramGroupsAdmin.Ui.Navigation
+@using TelegramGroupsAdmin.Ui.Validation
 @layout LoginLayout
 @inject IHttpClientFactory HttpFactory
 @inject NavigationManager Navigation
@@ -89,8 +90,8 @@
                       InputType="InputType.Password"
                       data-testid="register-password"
                       Disabled="@(_isLoading || _registrationSuccess)"
-                      HelperText="Minimum 8 characters with uppercase, lowercase, and number"
-                      Validation="@(new Func<string, string?>(ValidatePassword))"
+                      HelperText="@PasswordValidator.RequirementsHelperText"
+                      Validation="@(new Func<string, string?>(PasswordValidator.Validate))"
                       Immediate="true" />
 
         <MudTextField T="string"
@@ -101,7 +102,7 @@
                       InputType="InputType.Password"
                       data-testid="register-confirm-password"
                       Disabled="@(_isLoading || _registrationSuccess)"
-                      Validation="@(new Func<string, string?>(ValidateConfirmPassword))"
+                      Validation="@(new Func<string, string?>(p => PasswordValidator.ValidateConfirmation(p, _password)))"
                       Immediate="true" />
 
         <MudButton Variant="Variant.Filled"
@@ -146,37 +147,6 @@
 
     [SupplyParameterFromQuery(Name = "invite")]
     private string? InviteQueryParam { get; set; }
-
-    private string? ValidatePassword(string password)
-    {
-        if (string.IsNullOrEmpty(password))
-            return "Password is required";
-
-        if (password.Length < 8)
-            return "Password must be at least 8 characters";
-
-        if (!password.Any(char.IsUpper))
-            return "Password must contain at least one uppercase letter";
-
-        if (!password.Any(char.IsLower))
-            return "Password must contain at least one lowercase letter";
-
-        if (!password.Any(char.IsDigit))
-            return "Password must contain at least one number";
-
-        return null;
-    }
-
-    private string? ValidateConfirmPassword(string confirmPassword)
-    {
-        if (string.IsNullOrEmpty(confirmPassword))
-            return "Please confirm your password";
-
-        if (confirmPassword != _password)
-            return "Passwords do not match";
-
-        return null;
-    }
 
     protected override async Task OnInitializedAsync()
     {

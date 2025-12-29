@@ -209,19 +209,42 @@ public class EmailTemplateRenderingTests
         }
     }
 
+    [Test]
+    public void UserControlledData_IsHtmlEncoded()
+    {
+        // Arrange - use HTML/script injection attempts in user-controlled fields
+        var maliciousEmail = "<script>alert('xss')</script>@test.com";
+        var maliciousReason = "<img src=x onerror=alert('xss')>";
+        var maliciousInviter = "<b>Hacker</b>";
+
+        var templates = new (EmailTemplateData Template, string MaliciousInput)[]
+        {
+            (new EmailTemplateData.WelcomeEmail(maliciousEmail, "https://safe.com"), maliciousEmail),
+            (new EmailTemplateData.InviteCreated("https://safe.com", maliciousInviter, 7), maliciousInviter),
+            (new EmailTemplateData.AccountDisabled(maliciousEmail, maliciousReason), maliciousEmail),
+            (new EmailTemplateData.AccountDisabled("safe@test.com", maliciousReason), maliciousReason),
+            (new EmailTemplateData.AccountLocked(maliciousEmail, DateTimeOffset.UtcNow, 3), maliciousEmail),
+            (new EmailTemplateData.AccountUnlocked(maliciousEmail), maliciousEmail)
+        };
+
+        foreach (var (template, maliciousInput) in templates)
+        {
+            // Act
+            var (_, body) = RenderTemplate(template);
+
+            // Assert - raw malicious input should NOT appear (it should be encoded)
+            Assert.That(body, Does.Not.Contain(maliciousInput),
+                $"{template.GetType().Name} should HTML-encode user data to prevent XSS");
+
+            // Verify the encoded version IS present (< becomes &lt;)
+            Assert.That(body, Does.Contain("&lt;").Or.Contain("&gt;"),
+                $"{template.GetType().Name} should contain HTML-encoded characters");
+        }
+    }
+
     /// <summary>
-    /// Uses reflection to call the private RenderTemplate method for testing.
-    /// This allows us to test the rendering logic without needing to mock SendGrid.
+    /// Calls the internal RenderTemplate method directly via InternalsVisibleTo.
     /// </summary>
     private static (string Subject, string Body) RenderTemplate(EmailTemplateData templateData)
-    {
-        var method = typeof(SendGridEmailService)
-            .GetMethod("RenderTemplate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
-        if (method == null)
-            throw new InvalidOperationException("RenderTemplate method not found");
-
-        var result = method.Invoke(null, [templateData]);
-        return ((string Subject, string Body))result!;
-    }
+        => SendGridEmailService.RenderTemplate(templateData);
 }

@@ -1,3 +1,4 @@
+using System.Net;
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using TelegramGroupsAdmin.Configuration.Repositories;
@@ -139,7 +140,7 @@ public class SendGridEmailService : IEmailService
         }
     }
 
-    private static (string Subject, string Body) RenderTemplate(EmailTemplateData templateData) => templateData switch
+    internal static (string Subject, string Body) RenderTemplate(EmailTemplateData templateData) => templateData switch
     {
         EmailTemplateData.PasswordReset data => RenderPasswordReset(data),
         EmailTemplateData.EmailVerification data => RenderEmailVerification(data),
@@ -205,7 +206,7 @@ public class SendGridEmailService : IEmailService
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
             <h2>Welcome to TelegramGroupsAdmin!</h2>
             <p>Your account has been successfully created.</p>
-            <p><strong>Email:</strong> {data.Email}</p>
+            <p><strong>Email:</strong> {WebUtility.HtmlEncode(data.Email)}</p>
             <p style="margin: 30px 0;">
                 <a href="{data.LoginUrl}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
                     Login Now
@@ -226,7 +227,7 @@ public class SendGridEmailService : IEmailService
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
             <h2>You've Been Invited!</h2>
-            <p>You've been invited by {data.InvitedBy} to join TelegramGroupsAdmin.</p>
+            <p>You've been invited by {WebUtility.HtmlEncode(data.InvitedBy)} to join TelegramGroupsAdmin.</p>
             <p style="margin: 30px 0;">
                 <a href="{data.InviteLink}" style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
                     Accept Invitation
@@ -247,7 +248,7 @@ public class SendGridEmailService : IEmailService
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
             <h2>Account Disabled</h2>
-            <p>Your account ({data.Email}) has been disabled due to: {data.Reason}</p>
+            <p>Your account ({WebUtility.HtmlEncode(data.Email)}) has been disabled due to: {WebUtility.HtmlEncode(data.Reason)}</p>
             <p>If you believe this is an error, please contact your administrator.</p>
             <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
             <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
@@ -263,7 +264,7 @@ public class SendGridEmailService : IEmailService
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
             <h2 style="color: #dc3545;">Account Locked - Security Alert</h2>
-            <p>Your account ({data.Email}) has been temporarily locked due to {data.Attempts} failed login attempts.</p>
+            <p>Your account ({WebUtility.HtmlEncode(data.Email)}) has been temporarily locked due to {data.Attempts} failed login attempts.</p>
             <p><strong>Locked Until:</strong> {data.LockedUntil:yyyy-MM-dd HH:mm:ss UTC}</p>
             <p>This is an automated security measure to protect your account from unauthorized access.</p>
             <h3>What you can do:</h3>
@@ -287,7 +288,7 @@ public class SendGridEmailService : IEmailService
         <html>
         <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
             <h2 style="color: #28a745;">Account Unlocked</h2>
-            <p>Your account ({data.Email}) has been unlocked by an administrator.</p>
+            <p>Your account ({WebUtility.HtmlEncode(data.Email)}) has been unlocked by an administrator.</p>
             <p>You can now log in normally.</p>
             <p>For your security, we recommend:</p>
             <ul>

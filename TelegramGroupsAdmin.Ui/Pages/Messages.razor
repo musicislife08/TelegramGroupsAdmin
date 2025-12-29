@@ -17,7 +17,7 @@
 @inject SseService SseService
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
-@implements IAsyncDisposable
+@implements IDisposable
 
 <PageTitle>Messages - TelegramGroupsAdmin</PageTitle>
 
@@ -123,7 +123,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Subscribe to SSE events
+        // Subscribe to SSE events (connection managed by MainLayout)
         SseService.OnMessageEvent += HandleSseMessage;
 
         // Load initial data
@@ -137,15 +137,11 @@
         {
             await LoadChatMessagesAsync(_selectedChatId.Value);
         }
-
-        // Connect to SSE for real-time updates
-        await SseService.ConnectAsync();
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
         SseService.OnMessageEvent -= HandleSseMessage;
-        await SseService.DisconnectAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

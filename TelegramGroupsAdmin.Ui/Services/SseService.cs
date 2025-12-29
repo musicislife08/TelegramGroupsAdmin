@@ -296,8 +296,11 @@ public record SseEvent(string Type, string RawData)
         {
             return JsonSerializer.Deserialize<T>(RawData, s_jsonOptions);
         }
-        catch
+        catch (JsonException ex)
         {
+            // Log to browser console for debugging SSE deserialization issues
+            Console.WriteLine($"[SSE] Failed to deserialize event '{Type}' to {typeof(T).Name}: {ex.Message}");
+            Console.WriteLine($"[SSE] Raw data: {RawData[..Math.Min(200, RawData.Length)]}...");
             return default;
         }
     }
