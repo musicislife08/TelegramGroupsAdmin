@@ -130,6 +130,7 @@
     private bool _showNav = false;
     private bool _isInitialized = true;
     private bool _navTreeLoaded = false;
+    private bool _hasMermaidDiagrams = false;
     private List<DocsNavItemResponse> _navTree = [];
     private List<BreadcrumbItem> _mudBreadcrumbs = [];
 
@@ -200,6 +201,10 @@
                     _mudBreadcrumbs = _document.Breadcrumbs
                         .Select(b => new BreadcrumbItem(b.Text, b.Href, b.Disabled))
                         .ToList();
+
+                    // Cache mermaid detection to avoid string scanning on every render
+                    _hasMermaidDiagrams = _document.HtmlContent.Contains("language-mermaid", StringComparison.Ordinal) ||
+                                          _document.HtmlContent.Contains("class=\"mermaid\"", StringComparison.Ordinal);
                 }
             }
             else
@@ -221,11 +226,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Only initialize mermaid when document contains diagrams
-        // Check for mermaid code blocks (language-mermaid) or mermaid divs
-        if (_document?.HtmlContent is { } content &&
-            (content.Contains("language-mermaid", StringComparison.Ordinal) ||
-             content.Contains("class=\"mermaid\"", StringComparison.Ordinal)))
+        // Only initialize mermaid when document contains diagrams (uses cached detection result)
+        if (_hasMermaidDiagrams)
         {
             try
             {
