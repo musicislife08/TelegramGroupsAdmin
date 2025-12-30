@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Services;
 
@@ -11,7 +12,7 @@ public static class BackupEndpoints
     {
         // POST /api/backup/check-encrypted - Check if backup file is encrypted
         // Only allowed during first-run (no users exist) for restore functionality
-        endpoints.MapPost("/api/backup/check-encrypted", async (
+        endpoints.MapPost(Routes.Backup.CheckEncrypted, async (
             [FromBody] BackupFileRequest request,
             [FromServices] IBackupService backupService,
             [FromServices] IAuthService authService,
@@ -37,7 +38,7 @@ public static class BackupEndpoints
 
         // POST /api/backup/metadata - Get backup metadata
         // Only allowed during first-run (no users exist) for restore functionality
-        endpoints.MapPost("/api/backup/metadata", async (
+        endpoints.MapPost(Routes.Backup.Metadata, async (
             [FromBody] BackupMetadataRequest request,
             [FromServices] IBackupService backupService,
             [FromServices] IAuthService authService,
@@ -84,7 +85,7 @@ public static class BackupEndpoints
 
         // POST /api/backup/restore - Restore from backup
         // Only allowed during first-run (no users exist) for restore functionality
-        endpoints.MapPost("/api/backup/restore", async (
+        endpoints.MapPost(Routes.Backup.Restore, async (
             [FromBody] BackupRestoreRequest request,
             [FromServices] IBackupService backupService,
             [FromServices] IAuthService authService,

@@ -1,0 +1,483 @@
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Models
+@using Microsoft.JSInterop
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h6" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.Notifications" Class="mr-2" />
+        Notification Preferences
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_config != null)
+    {
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+            @foreach (var channel in Enum.GetValues<NotificationChannel>())
+            {
+                var isConfigured = IsChannelConfigured(channel);
+                <MudTabPanel Text="@GetChannelDisplayName(channel)"
+                             Icon="@GetChannelIcon(channel)"
+                             Disabled="@(!isConfigured)"
+                             ToolTip="@(isConfigured ? null : GetSetupTooltip(channel))">
+                    @if (!isConfigured)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mt-2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText>This channel is not configured.</MudText>
+                                <MudLink Href="@GetSetupLink(channel)">Set it up</MudLink>
+                            </MudStack>
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-3">
+                            Select which events should send notifications via @GetChannelDisplayName(channel):
+                        </MudText>
+
+                        <MudStack Spacing="1">
+                            @foreach (var eventType in GetVisibleEventTypes())
+                            {
+                                var channelPref = GetOrCreateChannel(channel);
+                                var isEnabled = channelPref.EnabledEvents.Contains(eventType);
+                                <MudCheckBox T="bool"
+                                             Value="@isEnabled"
+                                             ValueChanged="@(enabled => ToggleEvent(channel, eventType, enabled))"
+                                             Label="@GetEventDisplayName(eventType)"
+                                             Color="@GetEventColor(eventType)"
+                                             Dense="true" />
+                            }
+                        </MudStack>
+
+                        @* Email-specific: digest interval *@
+                        @if (channel == NotificationChannel.Email)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudNumericField T="int"
+                                             Value="@GetDigestMinutes()"
+                                             ValueChanged="@SetDigestMinutes"
+                                             Label="Digest Interval (minutes)"
+                                             Variant="Variant.Outlined"
+                                             Min="0"
+                                             Max="1440"
+                                             HelperText="0 = send immediately, otherwise batch notifications" />
+                        }
+
+                        @* WebPush-specific: browser notification subscription *@
+                        @if (channel == NotificationChannel.WebPush)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">Browser Push Notifications</MudText>
+
+                            @if (!_pushSupported)
+                            {
+                                <MudAlert Severity="Severity.Warning" Dense="true">
+                                    Your browser does not support push notifications.
+                                </MudAlert>
+                            }
+                            else if (_pushPermission == "denied")
+                            {
+                                <MudAlert Severity="Severity.Error" Dense="true">
+                                    Push notifications are blocked. Please enable them in your browser settings.
+                                </MudAlert>
+                            }
+                            else if (_pushSubscribed)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                    <MudText Color="Color.Success">Browser notifications enabled</MudText>
+                                    <MudButton Variant="Variant.Text"
+                                               Color="Color.Error"
+                                               Size="Size.Small"
+                                               OnClick="UnsubscribeFromPushAsync"
+                                               Disabled="_pushLoading">
+                                        Disable
+                                    </MudButton>
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.NotificationsActive"
+                                               OnClick="SubscribeToPushAsync"
+                                               Disabled="_pushLoading">
+                                        @if (_pushLoading)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                            <span>Enabling...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Enable Browser Notifications</span>
+                                        }
+                                    </MudButton>
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                    Your browser will ask for permission to show notifications.
+                                </MudText>
+                            }
+                        }
+                    }
+                </MudTabPanel>
+            }
+        </MudTabs>
+
+        @* Save Button *@
+        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="@SavePreferences"
+                       Disabled="@_saving">
+                @if (_saving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Save" Class="mr-2" />
+                    <span>Save Preferences</span>
+                }
+            </MudButton>
+        </MudStack>
+
+        @* Info Alert *@
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+            <strong>Note:</strong> Chat-specific events (spam, bans, reports) notify admins of those specific chats.
+            System events (backup failures, health warnings) notify Owners only.
+        </MudAlert>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public int UserPermissionLevel { get; set; }
+
+    private HttpClient Http => HttpClientFactory.CreateClient(HttpClientNames.Api);
+
+    private List<ChannelPreference> _config = [];
+    private bool _hasTelegramLinked;
+    private bool _loading = true;
+    private bool _saving;
+
+    // WebPush state
+    private IJSObjectReference? _pushModule;
+    private bool _pushSupported;
+    private string _pushPermission = "default";
+    private bool _pushSubscribed;
+    private bool _pushLoading;
+    private string? _currentEndpoint;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPreferences();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadPushStateAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadPushStateAsync()
+    {
+        try
+        {
+            _pushModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/push-notifications.js");
+            _pushSupported = await _pushModule.InvokeAsync<bool>("isPushSupported");
+            _pushPermission = await _pushModule.InvokeAsync<string>("getPermissionState");
+
+            // Check if we have a saved subscription
+            _currentEndpoint = await _pushModule.InvokeAsync<string?>("getCurrentSubscriptionEndpoint");
+            _pushSubscribed = !string.IsNullOrEmpty(_currentEndpoint);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load push state: {ex.Message}");
+            _pushSupported = false;
+        }
+    }
+
+    private async Task LoadPreferences()
+    {
+        try
+        {
+            _loading = true;
+            var response = await Http.GetFromJsonAsync<NotificationPreferencesResponse>(Routes.Profile.Notifications);
+
+            if (response?.Success == true)
+            {
+                _config = response.Channels;
+                _hasTelegramLinked = response.HasTelegramLinked;
+            }
+            else
+            {
+                Snackbar.Add(response?.Error ?? "Failed to load notification preferences", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load notification preferences: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private ChannelPreference GetOrCreateChannel(NotificationChannel channel)
+    {
+        var pref = _config.FirstOrDefault(c => c.Channel == channel);
+        if (pref == null)
+        {
+            pref = new ChannelPreference { Channel = channel };
+            _config.Add(pref);
+        }
+        return pref;
+    }
+
+    private void ToggleEvent(NotificationChannel channel, NotificationEventType eventType, bool enabled)
+    {
+        var channelPref = GetOrCreateChannel(channel);
+        if (enabled && !channelPref.EnabledEvents.Contains(eventType))
+        {
+            channelPref.EnabledEvents.Add(eventType);
+        }
+        else if (!enabled)
+        {
+            channelPref.EnabledEvents.Remove(eventType);
+        }
+    }
+
+    private int GetDigestMinutes()
+    {
+        var emailPref = _config.FirstOrDefault(c => c.Channel == NotificationChannel.Email);
+        return emailPref?.DigestMinutes ?? 0;
+    }
+
+    private void SetDigestMinutes(int value)
+    {
+        var emailPref = GetOrCreateChannel(NotificationChannel.Email);
+        emailPref.DigestMinutes = value;
+    }
+
+    private async Task SavePreferences()
+    {
+        try
+        {
+            _saving = true;
+            var request = new NotificationPreferencesRequest(_config);
+            var response = await Http.PostAsJsonAsync(Routes.Profile.Notifications, request);
+            var result = await response.Content.ReadFromJsonAsync<SaveNotificationPreferencesResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add("Notification preferences saved successfully!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Failed to save preferences", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save preferences: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private bool IsChannelConfigured(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => _hasTelegramLinked,
+        NotificationChannel.Email => true,  // Always available (uses account email)
+        NotificationChannel.WebPush => true,  // Always available (in-app)
+        _ => false
+    };
+
+    private string GetSetupLink(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => "/profile",
+        _ => "#"
+    };
+
+    private string GetSetupTooltip(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => "Link your Telegram account in Profile to enable",
+        _ => null
+    } ?? "";
+
+    private static string GetChannelDisplayName(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => "Telegram DM",
+        NotificationChannel.Email => "Email",
+        NotificationChannel.WebPush => "In-App",
+        _ => channel.ToString()
+    };
+
+    private static string GetChannelIcon(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => Icons.Custom.Brands.Telegram,
+        NotificationChannel.Email => Icons.Material.Filled.Email,
+        NotificationChannel.WebPush => Icons.Material.Filled.Notifications,
+        _ => Icons.Material.Filled.QuestionMark
+    };
+
+    private IEnumerable<NotificationEventType> GetVisibleEventTypes()
+    {
+        foreach (var eventType in Enum.GetValues<NotificationEventType>())
+        {
+            // Owner-only events hidden for non-owners
+            if (IsOwnerOnlyEvent(eventType) && UserPermissionLevel < 2)
+                continue;
+            yield return eventType;
+        }
+    }
+
+    private static bool IsOwnerOnlyEvent(NotificationEventType eventType)
+        => eventType is NotificationEventType.BackupFailed
+                     or NotificationEventType.ChatHealthWarning
+                     or NotificationEventType.ChatAdminChanged;
+
+    private static string GetEventDisplayName(NotificationEventType eventType) => eventType switch
+    {
+        NotificationEventType.SpamDetected => "Spam Detected",
+        NotificationEventType.SpamAutoDeleted => "Spam Auto-Deleted",
+        NotificationEventType.UserBanned => "User Banned",
+        NotificationEventType.MessageReported => "Message Reported",
+        NotificationEventType.MalwareDetected => "Malware Detected",
+        NotificationEventType.ChatAdminChanged => "Chat Admin Changed (Owners)",
+        NotificationEventType.ChatHealthWarning => "Chat Health Warning (Owners)",
+        NotificationEventType.BackupFailed => "Backup Failed (Owners)",
+        _ => eventType.ToString()
+    };
+
+    private static Color GetEventColor(NotificationEventType eventType) => eventType switch
+    {
+        NotificationEventType.SpamDetected => Color.Warning,
+        NotificationEventType.SpamAutoDeleted => Color.Warning,
+        NotificationEventType.UserBanned => Color.Error,
+        NotificationEventType.MessageReported => Color.Info,
+        NotificationEventType.MalwareDetected => Color.Error,
+        NotificationEventType.ChatAdminChanged => Color.Info,
+        NotificationEventType.ChatHealthWarning => Color.Warning,
+        NotificationEventType.BackupFailed => Color.Error,
+        _ => Color.Default
+    };
+
+    #region WebPush Subscription
+
+    private async Task SubscribeToPushAsync()
+    {
+        if (_pushModule == null) return;
+
+        try
+        {
+            _pushLoading = true;
+            StateHasChanged();
+
+            // Get VAPID public key from server
+            var vapidResponse = await Http.GetFromJsonAsync<VapidKeyResponse>(Routes.Profile.VapidKey);
+            if (vapidResponse?.Success != true || string.IsNullOrEmpty(vapidResponse.VapidPublicKey))
+            {
+                Snackbar.Add("Push notifications are not configured on the server.", Severity.Warning);
+                return;
+            }
+
+            // Subscribe in browser (will prompt for permission if needed)
+            var subscription = await _pushModule.InvokeAsync<PushSubscriptionData?>("subscribeToPush", vapidResponse.VapidPublicKey);
+            if (subscription == null)
+            {
+                _pushPermission = await _pushModule.InvokeAsync<string>("getPermissionState");
+                if (_pushPermission == "denied")
+                {
+                    Snackbar.Add("Push notifications were blocked. Please enable them in your browser settings.", Severity.Warning);
+                }
+                else
+                {
+                    Snackbar.Add("Failed to enable push notifications.", Severity.Error);
+                }
+                return;
+            }
+
+            // Save subscription to server
+            var request = new PushSubscriptionRequest(subscription.Endpoint, subscription.P256dh, subscription.Auth);
+            var response = await Http.PostAsJsonAsync(Routes.Profile.PushSubscribe, request);
+            var result = await response.Content.ReadFromJsonAsync<PushSubscriptionResponse>();
+
+            if (result?.Success == true)
+            {
+                _pushSubscribed = true;
+                _pushPermission = "granted";
+                _currentEndpoint = subscription.Endpoint;
+                Snackbar.Add("Browser notifications enabled!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Failed to save push subscription", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to enable push notifications: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _pushLoading = false;
+        }
+    }
+
+    private async Task UnsubscribeFromPushAsync()
+    {
+        if (_pushModule == null) return;
+
+        try
+        {
+            _pushLoading = true;
+            StateHasChanged();
+
+            // Unsubscribe in browser
+            var success = await _pushModule.InvokeAsync<bool>("unsubscribeFromPush");
+            if (!success)
+            {
+                Snackbar.Add("Failed to disable push notifications in browser.", Severity.Warning);
+            }
+
+            // Remove all subscriptions from server (global disable)
+            await Http.DeleteAsync(Routes.Profile.PushUnsubscribe);
+
+            _pushSubscribed = false;
+            _currentEndpoint = null;
+            Snackbar.Add("Browser notifications disabled.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to disable push notifications: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _pushLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// DTO for JS interop - matches the object returned by subscribeToPush()
+    /// </summary>
+    private record PushSubscriptionData(string Endpoint, string P256dh, string Auth);
+
+    #endregion
+}

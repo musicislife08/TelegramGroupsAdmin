@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -107,7 +108,7 @@ public partial class CommandRouter
                 else
                 {
                     // Linked user without sufficient permission level
-                    permissionMessage = $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
+                    permissionMessage = $"❌ Insufficient permissions. This command requires {((PermissionLevel)command.MinPermissionLevel).ToStringFast()} level.";
                 }
 
                 return new CommandResult(permissionMessage, true); // Auto-delete permission denied messages
@@ -198,12 +199,4 @@ public partial class CommandRouter
         _logger.LogDebug("User {TelegramId} has no permissions in chat {ChatId}", telegramId, chatId);
         return -1;
     }
-
-    private static string GetPermissionName(int level) => level switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
-    };
 }

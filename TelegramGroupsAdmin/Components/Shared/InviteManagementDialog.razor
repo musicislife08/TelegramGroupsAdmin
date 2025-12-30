@@ -1,3 +1,4 @@
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services
 @using Microsoft.AspNetCore.Components.Authorization
 @inject IInviteService InviteService
@@ -47,7 +48,7 @@
                     <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
                     <MudTd DataLabel="Permission">
                         <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor((int)context.PermissionLevel)">
-                            @GetPermissionName((int)context.PermissionLevel)
+                            @context.PermissionLevel.ToString()
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Expires">@FormatDate(context.ExpiresAt)</MudTd>
@@ -225,14 +226,6 @@
     {
         MudDialog?.Close(DialogResult.Ok(true));
     }
-
-    private static string GetPermissionName(int level) => level switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
-    };
 
     private static Color GetPermissionColor(int level) => level switch
     {

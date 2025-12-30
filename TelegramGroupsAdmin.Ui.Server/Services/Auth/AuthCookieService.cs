@@ -31,9 +31,9 @@ public class AuthCookieService : IAuthCookieService
     /// Signs in a user by setting the authentication cookie via HttpContext.
     /// Use this in the running application where HttpContext is available.
     /// </summary>
-    public async Task SignInAsync(HttpContext context, string userId, string email, PermissionLevel permissionLevel)
+    public async Task SignInAsync(HttpContext context, string userId, string email, PermissionLevel permissionLevel, string securityStamp)
     {
-        var principal = CreateClaimsPrincipal(userId, email, permissionLevel);
+        var principal = CreateClaimsPrincipal(userId, email, permissionLevel, securityStamp);
 
         await context.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
@@ -49,11 +49,11 @@ public class AuthCookieService : IAuthCookieService
     /// Generates an encrypted cookie value without requiring HttpContext.
     /// Use this in tests to create valid auth cookies programmatically.
     /// </summary>
-    public string GenerateCookieValue(string userId, string email, PermissionLevel permissionLevel)
+    public string GenerateCookieValue(string userId, string email, PermissionLevel permissionLevel, string securityStamp)
     {
         var options = _cookieOptions.Get(CookieAuthenticationDefaults.AuthenticationScheme);
 
-        var principal = CreateClaimsPrincipal(userId, email, permissionLevel);
+        var principal = CreateClaimsPrincipal(userId, email, permissionLevel, securityStamp);
 
         var ticket = new AuthenticationTicket(
             principal,
@@ -73,14 +73,15 @@ public class AuthCookieService : IAuthCookieService
     /// Creates a ClaimsPrincipal with the standard claims used for authentication.
     /// This is the single source of truth for what claims are included in auth cookies.
     /// </summary>
-    private static ClaimsPrincipal CreateClaimsPrincipal(string userId, string email, PermissionLevel permissionLevel)
+    private static ClaimsPrincipal CreateClaimsPrincipal(string userId, string email, PermissionLevel permissionLevel, string securityStamp)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId),
             new(ClaimTypes.Email, email),
             new(ClaimTypes.Role, GetRoleName(permissionLevel)),
-            new(CustomClaimTypes.PermissionLevel, ((int)permissionLevel).ToString())
+            new(CustomClaimTypes.PermissionLevel, ((int)permissionLevel).ToString()),
+            new(CustomClaimTypes.SecurityStamp, securityStamp)
         };
 
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);

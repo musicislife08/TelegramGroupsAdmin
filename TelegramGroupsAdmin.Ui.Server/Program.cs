@@ -298,6 +298,7 @@ app.MapMessagesEndpoints();
 app.MapUsersEndpoints();
 app.MapBackupEndpoints();
 app.MapDocsPageEndpoints();
+app.MapProfilePageEndpoints();
 
 // Prometheus metrics endpoint (if OpenTelemetry enabled)
 if (!string.IsNullOrEmpty(otlpEndpoint))

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Models.Docs;
 using TelegramGroupsAdmin.Ui.Server.Services.Docs;
@@ -13,7 +14,7 @@ public static class DocsPageEndpoints
 {
     public static IEndpointRouteBuilder MapDocsPageEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api/pages/docs")
+        var group = endpoints.MapGroup(Routes.Pages.DocsBase)
             .RequireAuthorization();
 
         // GET /api/pages/docs/nav - Navigation tree for sidebar

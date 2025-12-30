@@ -1,5 +1,6 @@
 using System.Text;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -78,7 +79,7 @@ public class HelpCommand : IBotCommand
             }
         }
 
-        sb.AppendLine($"\n_Permission: {GetPermissionName(userPermissionLevel)}_");
+        sb.AppendLine($"\n_Permission: {((PermissionLevel)userPermissionLevel).ToStringFast()}_");
 
         return Task.FromResult(new CommandResult(sb.ToString(), DeleteCommandMessage, DeleteResponseAfterSeconds));
     }
@@ -96,13 +97,5 @@ public class HelpCommand : IBotCommand
         "unban" => "🔓",
         "warn" => "⚠️",
         _ => "🔹"
-    };
-
-    private static string GetPermissionName(int level) => level switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
     };
 }

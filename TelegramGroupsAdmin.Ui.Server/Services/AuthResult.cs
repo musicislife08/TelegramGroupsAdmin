@@ -5,6 +5,7 @@ public record AuthResult(
     string? UserId,
     string? Email,
     int? PermissionLevel,
+    string? SecurityStamp,
     bool TotpEnabled,
     bool RequiresTotp,
     string? ErrorMessage

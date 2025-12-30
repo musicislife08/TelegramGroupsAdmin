@@ -45,7 +45,15 @@ public class AuthService(
                 value: $"Non-existent email: {email}",
                 cancellationToken: cancellationToken);
 
-            return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Invalid email or password");
         }
 
         // SECURITY-6: Check if account is locked
@@ -63,8 +71,15 @@ public class AuthService(
                 value: $"Account locked until {user.LockedUntil:yyyy-MM-dd HH:mm:ss UTC}",
                 cancellationToken: cancellationToken);
 
-            return new AuthResult(false, null, null, null, false, false,
-                $"Account is temporarily locked due to multiple failed login attempts. Please try again in {Math.Ceiling(timeRemaining.TotalMinutes)} minutes.");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: $"Account is temporarily locked due to multiple failed login attempts. Please try again in {Math.Ceiling(timeRemaining.TotalMinutes)} minutes.");
         }
 
         // Check user status (Disabled = 2, Deleted = 3)
@@ -81,7 +96,15 @@ public class AuthService(
                 value: "Account disabled",
                 cancellationToken: cancellationToken);
 
-            return new AuthResult(false, null, null, null, false, false, "Account has been disabled. Please contact an administrator.");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Account has been disabled. Please contact an administrator.");
         }
 
         if (user.Status == UserStatus.Deleted)
@@ -97,7 +120,15 @@ public class AuthService(
                 value: "Account deleted",
                 cancellationToken: cancellationToken);
 
-            return new AuthResult(false, null, null, null, false, false, "Account has been deleted. Please contact an administrator.");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Account has been deleted. Please contact an administrator.");
         }
 
         if (!passwordHasher.VerifyPassword(password, user.PasswordHash))
@@ -116,7 +147,15 @@ public class AuthService(
             // SECURITY-6: Handle failed login attempt (may lock account)
             await accountLockoutService.HandleFailedLoginAsync(user.Id, cancellationToken);
 
-            return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Invalid email or password");
         }
 
         // Check if email is verified
@@ -133,7 +172,15 @@ public class AuthService(
                 value: "Email not verified",
                 cancellationToken: cancellationToken);
 
-            return new AuthResult(false, null, null, null, false, false, "Please verify your email before logging in. Check your inbox for the verification link.");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Please verify your email before logging in. Check your inbox for the verification link.");
         }
 
         // SECURITY-6: Reset lockout state on successful password verification
@@ -157,19 +204,43 @@ public class AuthService(
             {
                 // Admin enabled TOTP but user needs to set it up (forced setup)
                 // TotpEnabled=true, RequiresTotp=false → Login.razor redirects to setup
-                return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
+                return new AuthResult(
+                    Success: true,
+                    UserId: user.Id,
+                    Email: user.Email,
+                    PermissionLevel: user.PermissionLevelInt,
+                    SecurityStamp: user.SecurityStamp,
+                    TotpEnabled: true,
+                    RequiresTotp: false,
+                    ErrorMessage: null);
             }
             else
             {
                 // Normal 2FA verification required
                 // TotpEnabled=true, RequiresTotp=true → Login.razor redirects to verify
-                return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, true, null);
+                return new AuthResult(
+                    Success: true,
+                    UserId: user.Id,
+                    Email: user.Email,
+                    PermissionLevel: user.PermissionLevelInt,
+                    SecurityStamp: user.SecurityStamp,
+                    TotpEnabled: true,
+                    RequiresTotp: true,
+                    ErrorMessage: null);
             }
         }
 
         // TOTP disabled (either never set up or admin disabled for bypass)
         // TotpEnabled=false, RequiresTotp=false → Normal login
-        return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, false, false, null);
+        return new AuthResult(
+            Success: true,
+            UserId: user.Id,
+            Email: user.Email,
+            PermissionLevel: user.PermissionLevelInt,
+            SecurityStamp: user.SecurityStamp,
+            TotpEnabled: false,
+            RequiresTotp: false,
+            ErrorMessage: null);
     }
 
     public async Task<AuthResult> VerifyTotpAsync(string userId, string code, CancellationToken cancellationToken = default)
@@ -177,17 +248,41 @@ public class AuthService(
         var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return new AuthResult(false, null, null, null, false, false, "User not found");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "User not found");
         }
 
         var isValid = await totpService.VerifyTotpCodeAsync(userId, code, cancellationToken);
         if (!isValid)
         {
-            return new AuthResult(false, null, null, null, false, false, "Invalid verification code");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Invalid verification code");
         }
 
         await userRepository.UpdateLastLoginAsync(userId, cancellationToken);
-        return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
+        return new AuthResult(
+            Success: true,
+            UserId: user.Id,
+            Email: user.Email,
+            PermissionLevel: user.PermissionLevelInt,
+            SecurityStamp: user.SecurityStamp,
+            TotpEnabled: true,
+            RequiresTotp: false,
+            ErrorMessage: null);
     }
 
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
@@ -371,7 +466,8 @@ public class AuthService(
         {
             UserId = user.Id,
             Email = user.Email,
-            PermissionLevel = user.PermissionLevelInt
+            PermissionLevel = user.PermissionLevelInt,
+            SecurityStamp = user.SecurityStamp
         };
     }
 
@@ -400,19 +496,43 @@ public class AuthService(
         var user = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (user is null)
         {
-            return new AuthResult(false, null, null, null, false, false, "Invalid recovery code");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Invalid recovery code");
         }
 
         var isValid = await totpService.UseRecoveryCodeAsync(userId, code, cancellationToken);
 
         if (!isValid)
         {
-            return new AuthResult(false, null, null, null, false, false, "Invalid recovery code");
+            return new AuthResult(
+                Success: false,
+                UserId: null,
+                Email: null,
+                PermissionLevel: null,
+                SecurityStamp: null,
+                TotpEnabled: false,
+                RequiresTotp: false,
+                ErrorMessage: "Invalid recovery code");
         }
 
         await userRepository.UpdateLastLoginAsync(userId, cancellationToken);
 
-        return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
+        return new AuthResult(
+            Success: true,
+            UserId: user.Id,
+            Email: user.Email,
+            PermissionLevel: user.PermissionLevelInt,
+            SecurityStamp: user.SecurityStamp,
+            TotpEnabled: true,
+            RequiresTotp: false,
+            ErrorMessage: null);
     }
 
     public async Task LogoutAsync(string userId, CancellationToken cancellationToken = default)

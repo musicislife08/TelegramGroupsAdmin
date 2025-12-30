@@ -23,12 +23,12 @@ public interface IPushSubscriptionsRepository
     Task<PushSubscription> UpsertAsync(PushSubscription subscription, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete a subscription by endpoint (when user unsubscribes)
+    /// Delete a subscription by endpoint (for cleanup when endpoint becomes invalid).
     /// </summary>
     Task<bool> DeleteByEndpointAsync(string endpoint, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete all subscriptions for a user
+    /// Delete all subscriptions for a user (global disable).
     /// </summary>
     Task<int> DeleteByUserIdAsync(string userId, CancellationToken cancellationToken = default);
 }

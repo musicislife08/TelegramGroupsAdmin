@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Server.Services;
 
 namespace TelegramGroupsAdmin.Ui.Server.Endpoints;
@@ -7,7 +8,7 @@ public static class SseEndpoints
 {
     public static IEndpointRouteBuilder MapSseEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/events/stream", async (
+        endpoints.MapGet(Routes.Events.Stream, async (
             HttpContext context,
             SseConnectionManager sseManager,
             IHostApplicationLifetime appLifetime,

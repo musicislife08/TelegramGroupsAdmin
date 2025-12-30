@@ -300,4 +300,5 @@ public record WasmTestUser(
     public string Id => Record.Id;
     public string Email => Record.Email;
     public PermissionLevel PermissionLevel => Record.PermissionLevel;
+    public string SecurityStamp => Record.SecurityStamp;
 }

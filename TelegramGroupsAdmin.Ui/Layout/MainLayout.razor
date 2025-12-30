@@ -1,7 +1,9 @@
 @inherits LayoutComponentBase
 @using TelegramGroupsAdmin.Ui.Services
 @using TelegramGroupsAdmin.Ui.Components.Shared
+@using TelegramGroupsAdmin.Ui.Navigation
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
 @inject HttpErrorNotificationService ErrorNotificationService
 @inject SseService SseService
 @inject ISnackbar Snackbar
@@ -22,7 +24,20 @@
         <MudSpacer />
         @if (!string.IsNullOrEmpty(_userEmail))
         {
-            <MudText Typo="Typo.body2" Class="mr-4 ml-2">@_userEmail</MudText>
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <ActivatorContent>
+                    <MudButton Color="Color.Inherit" Class="px-2">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Class="mr-2" />
+                        <MudText Typo="Typo.body2">@_userEmail</MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" />
+                    </MudButton>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem Href="@PageRoutes.App.Profile" Icon="@Icons.Material.Filled.Person">Profile</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem OnClick="@LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
         }
     </MudAppBar>
     <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
@@ -92,6 +107,11 @@
     private void DrawerToggle()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    private void LogoutAsync()
+    {
+        Navigation.NavigateTo(PageRoutes.Auth.Logout, forceLoad: true);
     }
 
     public async ValueTask DisposeAsync()

@@ -6,5 +6,6 @@ public record TotpVerificationResult(
     string? ErrorMessage,
     string? UserId = null,
     string? Email = null,
-    int? PermissionLevel = null
+    int? PermissionLevel = null,
+    string? SecurityStamp = null
 );

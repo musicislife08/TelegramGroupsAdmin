@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Services;
 
@@ -17,7 +18,7 @@ public static class DashboardEndpoints
 
     public static IEndpointRouteBuilder MapDashboardEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api/pages")
+        var group = endpoints.MapGroup(Routes.Pages.Base)
             .RequireAuthorization();
 
         // GET /api/pages/dashboard - Full page data for Dashboard

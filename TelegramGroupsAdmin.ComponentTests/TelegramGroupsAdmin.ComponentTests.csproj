@@ -30,6 +30,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TelegramGroupsAdmin\TelegramGroupsAdmin.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Core\TelegramGroupsAdmin.Core.csproj" />
+    <ProjectReference Include="..\TelegramGroupsAdmin.Ui\TelegramGroupsAdmin.Ui.csproj" />
   </ItemGroup>
 
 </Project>

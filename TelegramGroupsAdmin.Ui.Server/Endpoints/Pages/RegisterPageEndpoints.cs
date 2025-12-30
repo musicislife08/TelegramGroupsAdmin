@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Services;
 using TelegramGroupsAdmin.Ui.Server.Services.Auth;
@@ -8,7 +9,7 @@ public static class RegisterPageEndpoints
 {
     public static IEndpointRouteBuilder MapRegisterPageEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/pages/register", async (
+        endpoints.MapGet(Routes.Pages.Register, async (
             IAuthService authService,
             IFeatureAvailabilityService featureService) =>
         {

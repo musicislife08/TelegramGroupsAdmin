@@ -81,21 +81,8 @@ public class InviteService : IInviteService
         // Escalation prevention: Users cannot create invites for permission levels above their own
         if (permissionLevel > creatorPermissionLevel)
         {
-            var creatorPermissionName = creatorPermissionLevel switch
-            {
-                0 => "Admin",
-                1 => "GlobalAdmin",
-                2 => "Owner",
-                _ => creatorPermissionLevel.ToString()
-            };
-
-            var requestedPermissionName = permissionLevel switch
-            {
-                0 => "Admin",
-                1 => "GlobalAdmin",
-                2 => "Owner",
-                _ => permissionLevel.ToString()
-            };
+            var creatorPermissionName = ((PermissionLevel)creatorPermissionLevel).ToStringFast();
+            var requestedPermissionName = ((PermissionLevel)permissionLevel).ToStringFast();
 
             throw new UnauthorizedAccessException(
                 $"Cannot create invite with permission level {requestedPermissionName} (your level: {creatorPermissionName})");

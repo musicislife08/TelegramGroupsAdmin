@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Extensions;
 
@@ -19,11 +20,11 @@ public static class UsersEndpoints
     public static IEndpointRouteBuilder MapUsersEndpoints(this IEndpointRouteBuilder endpoints)
     {
         // Aggregate page endpoint
-        var pagesGroup = endpoints.MapGroup("/api/pages/users")
+        var pagesGroup = endpoints.MapGroup(Routes.Pages.UsersBase)
             .RequireAuthorization();
 
         // Action endpoints
-        var usersGroup = endpoints.MapGroup("/api/users")
+        var usersGroup = endpoints.MapGroup(Routes.Users.Base)
             .RequireAuthorization();
 
         // ============================================================================
