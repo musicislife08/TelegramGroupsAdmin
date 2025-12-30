@@ -68,6 +68,21 @@ public static class Routes
         /// Get initialization data for the Register page: first-run status, email verification config.
         /// </summary>
         public static string Register => $"{Base}/register";
+
+        /// <summary>
+        /// Get navigation tree for the Docs page sidebar.
+        /// </summary>
+        public static string DocsNav => $"{Base}/docs/nav";
+
+        /// <summary>
+        /// Get a documentation page by path (e.g., "algorithms/similarity").
+        /// </summary>
+        public static string DocsDocument(string path) => $"{Base}/docs/{path}";
+
+        /// <summary>
+        /// Get the first/default documentation page.
+        /// </summary>
+        public static string DocsDefault => $"{Base}/docs/";
     }
 
     /// <summary>

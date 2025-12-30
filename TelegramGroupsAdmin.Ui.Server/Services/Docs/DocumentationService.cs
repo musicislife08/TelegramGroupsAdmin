@@ -26,10 +26,10 @@ public partial class DocumentationService : IDocumentationService
         _logger = logger;
 
         // Reuse same Markdig pipeline as Help system
+        // Note: UseGenericAttributes() intentionally omitted - it allows XSS via markdown attribute injection
         _markdownPipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()
             .UseAutoIdentifiers()
-            .UseGenericAttributes()
             .UseDiagrams() // Mermaid diagram support (renders to <div class="mermaid">)
             .Build();
     }
@@ -60,9 +60,14 @@ public partial class DocumentationService : IDocumentationService
     {
         var folderInfo = new DirectoryInfo(folderPath);
         var (order, displayName) = ParseNumericPrefix(folderInfo.Name);
-        var slug = string.IsNullOrEmpty(parentSlug)
-            ? Slugify(folderInfo.Name)
-            : $"{parentSlug}/{Slugify(folderInfo.Name)}";
+
+        // Root folder should have empty slug (avoid /docs/docs/... paths)
+        var isRootFolder = folderPath == baseDirectory;
+        var slug = isRootFolder
+            ? string.Empty
+            : string.IsNullOrEmpty(parentSlug)
+                ? Slugify(folderInfo.Name)
+                : $"{parentSlug}/{Slugify(folderInfo.Name)}";
 
         var folder = new DocFolder
         {
@@ -154,7 +159,7 @@ public partial class DocumentationService : IDocumentationService
         return null;
     }
 
-    private (int order, string displayName) ParseNumericPrefix(string name)
+    internal (int order, string displayName) ParseNumericPrefix(string name)
     {
         var match = NumericPrefixRegex().Match(name);
         if (match.Success)
@@ -168,14 +173,16 @@ public partial class DocumentationService : IDocumentationService
         return (int.MaxValue, FormatDisplayName(name));
     }
 
-    private string FormatDisplayName(string name)
+    internal string FormatDisplayName(string name)
     {
         // Convert "spam-detection" or "spam_detection" to "Spam Detection"
-        return string.Join(" ", name.Split(new[] { '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(word => char.ToUpper(word[0]) + word[1..]));
+        return string.Join(" ", name.Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(word => word.Length == 1
+                ? char.ToUpper(word[0]).ToString()
+                : char.ToUpper(word[0]) + word[1..]));
     }
 
-    private string Slugify(string name)
+    internal string Slugify(string name)
     {
         // Remove numeric prefix and convert to lowercase slug
         var match = NumericPrefixRegex().Match(name);
@@ -183,7 +190,7 @@ public partial class DocumentationService : IDocumentationService
         return cleanName.ToLowerInvariant().Replace('_', '-');
     }
 
-    private List<DocBreadcrumb> GenerateBreadcrumbs(string relativePath)
+    internal List<DocBreadcrumb> GenerateBreadcrumbs(string relativePath)
     {
         var breadcrumbs = new List<DocBreadcrumb>
         {

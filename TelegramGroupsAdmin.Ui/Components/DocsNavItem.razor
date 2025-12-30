@@ -1,0 +1,28 @@
+@using TelegramGroupsAdmin.Ui.Models
+
+@* Recursive nav item component for documentation navigation *@
+
+@if (Item.IsFolder)
+{
+    <MudNavGroup Title="@Item.Title"
+                 Icon="@Icons.Material.Filled.Folder"
+                 Expanded="@Item.IsExpanded">
+        @foreach (var child in Item.Children)
+        {
+            <DocsNavItem Item="child" />
+        }
+    </MudNavGroup>
+}
+else
+{
+    <MudNavLink Href="@Item.Href"
+                Icon="@Icons.Material.Filled.Description"
+                Match="NavLinkMatch.All">
+        @Item.Title
+    </MudNavLink>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public DocsNavItemResponse Item { get; set; } = null!;
+}

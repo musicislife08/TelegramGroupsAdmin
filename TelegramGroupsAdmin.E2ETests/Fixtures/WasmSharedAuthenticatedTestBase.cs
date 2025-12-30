@@ -1,10 +1,13 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.E2ETests.Helpers;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using TelegramGroupsAdmin.Ui.Navigation;
 using TelegramGroupsAdmin.Ui.Server.Services.Auth;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests;
 
@@ -141,10 +144,16 @@ public abstract class WasmSharedAuthenticatedTestBase : WasmSharedE2ETestBase
 
     /// <summary>
     /// Logs out the current user by navigating to the logout endpoint.
+    /// Waits for the redirect to /login to complete before returning.
     /// </summary>
     protected async Task LogoutAsync()
     {
-        await NavigateToAsync("/logout");
+        await NavigateToAsync(PageRoutes.Auth.Logout);
+
+        // Wait for the logout redirect to /login to complete
+        // The Logout page calls the API then navigates with forceLoad: true
+        await Expect(Page).ToHaveURLAsync(new Regex(Regex.Escape(PageRoutes.Auth.Login)), new() { Timeout = 10000 });
+
         CurrentUser = null;
     }
 

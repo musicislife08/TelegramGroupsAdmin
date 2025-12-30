@@ -1,6 +1,8 @@
+using System.IO.Compression;
 using System.Reflection;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
@@ -150,6 +152,18 @@ builder.Services.AddHealthChecks()
         name: "postgresql",
         tags: ["ready", "db"]);
 
+// Response compression (Brotli preferred, gzip fallback)
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Optimal;
+});
+
 // OpenTelemetry Observability (optional)
 var otlpEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
 var serviceName = builder.Configuration["OTEL_SERVICE_NAME"] ?? "TelegramGroupsAdmin.Ui.Server";
@@ -227,6 +241,9 @@ forwardedHeadersOptions.KnownIPNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
+// Response compression (Brotli/gzip for API and static files)
+app.UseResponseCompression();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
@@ -280,6 +297,7 @@ app.MapRegisterPageEndpoints();
 app.MapMessagesEndpoints();
 app.MapUsersEndpoints();
 app.MapBackupEndpoints();
+app.MapDocsPageEndpoints();
 
 // Prometheus metrics endpoint (if OpenTelemetry enabled)
 if (!string.IsNullOrEmpty(otlpEndpoint))

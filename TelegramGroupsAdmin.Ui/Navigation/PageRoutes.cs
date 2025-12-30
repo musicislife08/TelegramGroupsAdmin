@@ -74,6 +74,8 @@ public static class PageRoutes
         public const string Reports = "/reports";
         public const string Moderation = "/moderation";
         public const string Profile = "/profile";
+        public const string Error = "/error";
+        public const string Docs = "/docs";
 
         /// <summary>
         /// Messages page filtered to a specific chat.
@@ -85,6 +87,11 @@ public static class PageRoutes
         /// </summary>
         public static string MessagesWithHighlight(long chatId, long messageId) =>
             $"{Messages}?chat={chatId}&highlight={messageId}";
+
+        /// <summary>
+        /// Documentation page with optional path.
+        /// </summary>
+        public static string DocsWithPath(string path) => $"{Docs}/{path}";
     }
 
     /// <summary>

@@ -1,0 +1,45 @@
+@page "/logout"
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Navigation
+@using TelegramGroupsAdmin.Ui.Services
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Logging out...</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Class="pa-8" Elevation="2">
+        <MudStack AlignItems="AlignItems.Center" Spacing="4">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.h5">Signing out...</MudText>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Call the logout API to clear server-side cookies
+            await Http.PostAsync(Routes.Auth.Logout, null);
+        }
+        catch
+        {
+            // Ignore errors - we still want to clear client state and redirect
+        }
+
+        // Clear WASM auth state
+        if (AuthStateProvider is WasmAuthStateProvider wasmAuth)
+        {
+            wasmAuth.NotifyUserLoggedOut();
+        }
+
+        // Redirect to login with force reload to ensure clean state
+        Navigation.NavigateTo(PageRoutes.Auth.Login, forceLoad: true);
+    }
+}

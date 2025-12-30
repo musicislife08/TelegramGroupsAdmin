@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -66,6 +67,11 @@
     <PackageReference Include="DiffPlex" Version="1.9.0" />
     <PackageReference Include="ByteSize" Version="2.1.2" />
     <PackageReference Include="AngleSharp" Version="1.4.0" />
+  </ItemGroup>
+
+  <!-- Copy Docs directory to output for documentation system -->
+  <ItemGroup>
+    <None Include="Docs\**\*.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
