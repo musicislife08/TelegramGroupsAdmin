@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Services;
 using TelegramGroupsAdmin.Ui.Server.Services.Auth;
@@ -18,7 +19,7 @@ public static class AuthEndpoints
         // GET /api/auth/me - Returns current user info for WASM auth state
         // Returns 200 with user data if authenticated, 200 with empty body if not
         // (empty response avoids 401 which would trigger redirect interceptors)
-        endpoints.MapGet("/api/auth/me", (HttpContext httpContext) =>
+        endpoints.MapGet(Routes.Auth.Me, (HttpContext httpContext) =>
         {
             var user = httpContext.User;
 
@@ -49,7 +50,7 @@ public static class AuthEndpoints
             ));
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/login", async (
+        endpoints.MapPost(Routes.Auth.Login, async (
             [FromBody] LoginRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
@@ -95,7 +96,7 @@ public static class AuthEndpoints
             return Results.Ok(LoginResponse.Ok());
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/register", async (
+        endpoints.MapPost(Routes.Auth.Register, async (
             [FromBody] RegisterRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IRateLimitService rateLimitService,
@@ -134,13 +135,13 @@ public static class AuthEndpoints
             }
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/logout", async (HttpContext httpContext) =>
+        endpoints.MapPost(Routes.Auth.Logout, async (HttpContext httpContext) =>
         {
             await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.Ok(ApiResponse.Ok());
         }).RequireAuthorization();
 
-        endpoints.MapPost("/api/auth/verify-totp", async (
+        endpoints.MapPost(Routes.Auth.VerifyTotp, async (
             [FromBody] VerifyTotpRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
@@ -177,7 +178,7 @@ public static class AuthEndpoints
             return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/verify-recovery-code", async (
+        endpoints.MapPost(Routes.Auth.VerifyRecoveryCode, async (
             [FromBody] VerifyRecoveryCodeRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
@@ -214,7 +215,7 @@ public static class AuthEndpoints
             return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/setup-totp", async (
+        endpoints.MapPost(Routes.Auth.SetupTotp, async (
             [FromBody] SetupTotpRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService) =>
@@ -237,7 +238,7 @@ public static class AuthEndpoints
             }
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/verify-setup-totp", async (
+        endpoints.MapPost(Routes.Auth.VerifySetupTotp, async (
             [FromBody] VerifySetupTotpRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
@@ -276,7 +277,7 @@ public static class AuthEndpoints
             return Results.Ok(VerifySetupTotpResponse.Ok(recoveryCodes));
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/forgot-password", async (
+        endpoints.MapPost(Routes.Auth.ForgotPassword, async (
             [FromBody] ForgotPasswordRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IRateLimitService rateLimitService) =>
@@ -297,7 +298,7 @@ public static class AuthEndpoints
             return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
 
-        endpoints.MapPost("/api/auth/reset-password", async (
+        endpoints.MapPost(Routes.Auth.ResetPassword, async (
             [FromBody] ResetPasswordRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IRateLimitService rateLimitService) =>

@@ -1,10 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using NetEscapades.EnumGenerators;
 
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// User permission level hierarchy (core domain concept for application authorization)
 /// </summary>
+[EnumExtensions]
 public enum PermissionLevel
 {
     /// <summary>Chat-scoped moderation - Can view/moderate only chats they're Telegram admin in, read-only global settings, edit per-chat overrides</summary>

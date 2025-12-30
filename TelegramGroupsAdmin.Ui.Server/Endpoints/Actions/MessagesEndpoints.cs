@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Extensions;
 
@@ -20,7 +21,7 @@ public static class MessagesEndpoints
 {
     public static IEndpointRouteBuilder MapMessagesEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api/messages")
+        var group = endpoints.MapGroup(Routes.Messages.Base)
             .RequireAuthorization();
 
         // GET /api/messages/chats - Get accessible chats for sidebar

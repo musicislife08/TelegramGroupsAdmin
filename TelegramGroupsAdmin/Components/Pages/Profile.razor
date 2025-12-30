@@ -1,5 +1,6 @@
 @page "/profile"
 @using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Services
 @using QRCoder
@@ -30,7 +31,7 @@
                     <MudText Typo="Typo.h6" Class="mb-3">Account Information</MudText>
                     <MudStack Spacing="2">
                         <MudTextField Label="Email" Value="@_user.Email" ReadOnly="true" Variant="Variant.Outlined" />
-                        <MudTextField Label="Permission Level" Value="@GetPermissionName(_user.PermissionLevelInt)" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Permission Level" Value="@(((PermissionLevel)_user.PermissionLevelInt).ToString())" ReadOnly="true" Variant="Variant.Outlined" />
                         <MudTextField Label="Account Created" Value="@FormatDate(_user.CreatedAt)" ReadOnly="true" Variant="Variant.Outlined" />
                         <MudTextField Label="Last Login" Value="@FormatDate(_user.LastLoginAt)" ReadOnly="true" Variant="Variant.Outlined" />
                     </MudStack>
@@ -498,14 +499,6 @@
         var base64 = Convert.ToBase64String(qrCodeBytes);
         return $"data:image/png;base64,{base64}";
     }
-
-    private static string GetPermissionName(int level) => level switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Unknown"
-    };
 
     private static string FormatDate(DateTimeOffset? timestamp)
     {

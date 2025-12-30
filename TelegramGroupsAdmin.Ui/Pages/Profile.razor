@@ -1,0 +1,581 @@
+@page "/profile"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Authorization
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Ui.Api
+@using TelegramGroupsAdmin.Ui.Components
+@using TelegramGroupsAdmin.Ui.Models
+@inject IHttpClientFactory HttpFactory
+@inject ISnackbar Snackbar
+@inject IJSRuntime JsRuntime
+@inject ILogger<Profile> Logger
+@attribute [Authorize]
+
+<PageTitle>Profile - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Profile Settings</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    else if (_profileData != null && _profileData.Success)
+    {
+        <MudGrid>
+            <!-- Account Information -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Account Information</MudText>
+                    <MudStack Spacing="2">
+                        <MudTextField Label="Email" Value="@_profileData.Email" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Permission Level" Value="@(((PermissionLevel)_profileData.PermissionLevel).ToString())" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Account Created" Value="@FormatDate(_profileData.CreatedAt)" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Last Login" Value="@FormatDate(_profileData.LastLoginAt)" ReadOnly="true" Variant="Variant.Outlined" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Change Password -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Change Password</MudText>
+                    <MudForm @ref="_passwordForm">
+                        <MudStack Spacing="3">
+                            <MudTextField @bind-Value="_currentPassword"
+                                         Label="Current Password"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudTextField @bind-Value="_newPassword"
+                                         Label="New Password"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudTextField @bind-Value="_confirmPassword"
+                                         Label="Confirm New Password"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudButton Variant="Variant.Filled"
+                                      Color="Color.Primary"
+                                      FullWidth="true"
+                                      OnClick="@ChangePassword"
+                                      Disabled="@_changingPassword">
+                                @if (_changingPassword)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Changing Password...</span>
+                                }
+                                else
+                                {
+                                    <span>Change Password</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    </MudForm>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Two-Factor Authentication -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Two-Factor Authentication (TOTP)</MudText>
+
+                    @if (_profileData.TotpEnabled)
+                    {
+                        <MudAlert Severity="Severity.Success" Class="mb-3">2FA is currently enabled</MudAlert>
+                        <MudStack Spacing="3">
+                            <MudTextField @bind-Value="_resetTotpPassword"
+                                         Label="Enter Password to Reset 2FA"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudButton Variant="Variant.Filled"
+                                      Color="Color.Warning"
+                                      FullWidth="true"
+                                      OnClick="@ResetTotp"
+                                      Disabled="@_togglingTotp">
+                                @if (_togglingTotp)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Resetting 2FA...</span>
+                                }
+                                else
+                                {
+                                    <span>Reset 2FA</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Warning" Class="mb-3">2FA is not enabled. Enable it for enhanced security.</MudAlert>
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Success"
+                                  FullWidth="true"
+                                  OnClick="@EnableTotp"
+                                  Disabled="@_togglingTotp">
+                            @if (_togglingTotp)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <span>Setting up 2FA...</span>
+                            }
+                            else
+                            {
+                                <span>Enable 2FA</span>
+                            }
+                        </MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Linked Telegram Accounts -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Linked Telegram Accounts</MudText>
+
+                    @if (_profileData.LinkedAccounts.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mb-3">
+                            No Telegram accounts linked yet. Link your account to use bot commands.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudTable Items="@_profileData.LinkedAccounts" Hover="true" Striped="true" Class="mb-3">
+                            <HeaderContent>
+                                <MudTh>Telegram Username</MudTh>
+                                <MudTh>Telegram ID</MudTh>
+                                <MudTh>Linked Date</MudTh>
+                                <MudTh>Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Username">@@@(context.TelegramUsername ?? "N/A")</MudTd>
+                                <MudTd DataLabel="ID">@context.TelegramId</MudTd>
+                                <MudTd DataLabel="Linked">@FormatDate(context.LinkedAt)</MudTd>
+                                <MudTd DataLabel="Actions">
+                                    <MudButton Color="Color.Error"
+                                              Size="Size.Small"
+                                              Variant="Variant.Text"
+                                              OnClick="@(() => UnlinkAccount(context.Id))"
+                                              Disabled="@_unlinkingAccount">
+                                        Unlink
+                                    </MudButton>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+
+                    @if (_showLinkToken && _currentLinkToken != null)
+                    {
+                        <MudAlert Severity="Severity.Success" Class="mb-3">
+                            <MudText Typo="Typo.body1" Class="mb-2"><strong>Your Link Token (expires in 15 minutes):</strong></MudText>
+                            <MudTextField Value="@_currentLinkToken.Token"
+                                         ReadOnly="true"
+                                         Variant="Variant.Outlined"
+                                         Adornment="Adornment.End"
+                                         AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                                         OnAdornmentClick="@(() => CopyToClipboard(_currentLinkToken.Token ?? string.Empty))" />
+                            <MudText Typo="Typo.body2" Class="mt-2">
+                                Open Telegram and send this command to the bot:<br/>
+                                <code>/link @(_currentLinkToken.Token)</code>
+                            </MudText>
+                        </MudAlert>
+                    }
+
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              OnClick="@GenerateLinkToken"
+                              Disabled="@_generatingToken">
+                        @if (_generatingToken)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Generating Token...</span>
+                        }
+                        else
+                        {
+                            <span>Link New Telegram Account</span>
+                        }
+                    </MudButton>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Notification Preferences -->
+            <MudItem xs="12">
+                <NotificationPreferencesCard UserPermissionLevel="@(_profileData?.PermissionLevel ?? 0)" />
+            </MudItem>
+        </MudGrid>
+    }
+    else if (_profileData != null && !_profileData.Success)
+    {
+        <MudAlert Severity="Severity.Error">@_profileData.Error</MudAlert>
+    }
+</MudContainer>
+
+<!-- TOTP Setup Dialog -->
+<MudDialog @bind-Visible="_showTotpSetup" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Enable Two-Factor Authentication</MudText>
+
+        @if (_totpSetupResult != null)
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.body2">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):</MudText>
+
+                <div style="text-align: center;">
+                    <img src="@_qrCodeDataUrl" alt="QR Code" style="width: 200px; height: 200px;" />
+                </div>
+
+                <MudText Typo="Typo.body2">Or enter this code manually:</MudText>
+                <MudTextField Value="@_totpSetupResult.ManualEntryKey" ReadOnly="true" Variant="Variant.Outlined" />
+
+                <MudText Typo="Typo.body2" Class="mt-3">Enter the 6-digit code from your app to verify:</MudText>
+                <MudTextField @bind-Value="_totpVerificationCode"
+                             Label="Verification Code"
+                             Variant="Variant.Outlined"
+                             MaxLength="6" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@CancelTotpSetup">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="@VerifyAndEnableTotp" Disabled="@_verifyingTotp">
+            @if (_verifyingTotp)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Verifying...</span>
+            }
+            else
+            {
+                <span>Verify and Enable</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code {
+    private HttpClient Http => HttpFactory.CreateClient(HttpClientNames.Api);
+
+    private ProfilePageResponse? _profileData;
+    private bool _loading = true;
+
+    // Password change
+    private MudForm? _passwordForm;
+    private string _currentPassword = "";
+    private string _newPassword = "";
+    private string _confirmPassword = "";
+    private bool _changingPassword;
+
+    // TOTP
+    private bool _togglingTotp;
+    private string _resetTotpPassword = "";
+    private bool _showTotpSetup;
+    private ProfileTotpSetupResponse? _totpSetupResult;
+    private string _qrCodeDataUrl = string.Empty;
+    private string _totpVerificationCode = "";
+    private bool _verifyingTotp;
+
+    // Telegram Linking
+    private bool _generatingToken;
+    private bool _unlinkingAccount;
+    private bool _showLinkToken;
+    private GenerateLinkTokenResponse? _currentLinkToken;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfileAsync();
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _profileData = await Http.GetFromJsonAsync<ProfilePageResponse>(Routes.Pages.Profile);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load profile data");
+            Snackbar.Add($"Error loading profile: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ChangePassword()
+    {
+        if (string.IsNullOrWhiteSpace(_currentPassword) || string.IsNullOrWhiteSpace(_newPassword))
+        {
+            Snackbar.Add("Please fill in all fields", Severity.Warning);
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            Snackbar.Add("New passwords do not match", Severity.Error);
+            return;
+        }
+
+        if (_newPassword.Length < 8)
+        {
+            Snackbar.Add("New password must be at least 8 characters", Severity.Error);
+            return;
+        }
+
+        _changingPassword = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ChangePasswordRequest(_currentPassword, _newPassword, _confirmPassword);
+            var response = await Http.PostAsJsonAsync(Routes.Profile.ChangePassword, request);
+            var result = await response.Content.ReadFromJsonAsync<ChangePasswordResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add("Password changed successfully", Severity.Success);
+
+                // Clear form
+                _currentPassword = "";
+                _newPassword = "";
+                _confirmPassword = "";
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Failed to change password", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to change password");
+            Snackbar.Add($"Error changing password: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _changingPassword = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task EnableTotp()
+    {
+        _togglingTotp = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(Routes.Profile.TotpSetup, null);
+            var result = await response.Content.ReadFromJsonAsync<ProfileTotpSetupResponse>();
+
+            if (result?.Success == true)
+            {
+                _totpSetupResult = result;
+                // Generate QR code client-side via JS (GIF format, more compact)
+                _qrCodeDataUrl = await JsRuntime.InvokeAsync<string>("generateQrCode", result.QrCodeUri);
+                _showTotpSetup = true;
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Failed to setup 2FA", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to setup TOTP");
+            Snackbar.Add($"Error setting up 2FA: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _togglingTotp = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task VerifyAndEnableTotp()
+    {
+        if (string.IsNullOrWhiteSpace(_totpVerificationCode))
+        {
+            Snackbar.Add("Please enter the verification code", Severity.Warning);
+            return;
+        }
+
+        _verifyingTotp = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ProfileTotpVerifyRequest(_totpVerificationCode);
+            var response = await Http.PostAsJsonAsync(Routes.Profile.TotpVerify, request);
+            var result = await response.Content.ReadFromJsonAsync<ProfileTotpVerifyResponse>();
+
+            if (result?.Success == true)
+            {
+                _showTotpSetup = false;
+                _totpVerificationCode = "";
+                _totpSetupResult = null;
+
+                await LoadProfileAsync();
+                Snackbar.Add("2FA enabled successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Invalid verification code", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to verify TOTP");
+            Snackbar.Add($"Error verifying code: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _verifyingTotp = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelTotpSetup()
+    {
+        _showTotpSetup = false;
+        _totpSetupResult = null;
+        _qrCodeDataUrl = string.Empty;
+        _totpVerificationCode = "";
+    }
+
+    private async Task ResetTotp()
+    {
+        if (string.IsNullOrWhiteSpace(_resetTotpPassword))
+        {
+            Snackbar.Add("Please enter your password", Severity.Warning);
+            return;
+        }
+
+        _togglingTotp = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ProfileTotpResetRequest(_resetTotpPassword);
+            var response = await Http.PostAsJsonAsync(Routes.Profile.TotpReset, request);
+            var result = await response.Content.ReadFromJsonAsync<ProfileTotpSetupResponse>();
+
+            if (result?.Success == true)
+            {
+                _totpSetupResult = result;
+                // Generate QR code client-side via JS (GIF format, more compact)
+                _qrCodeDataUrl = await JsRuntime.InvokeAsync<string>("generateQrCode", result.QrCodeUri);
+                _resetTotpPassword = "";
+                _showTotpSetup = true;
+
+                Snackbar.Add("Scan the new QR code with your authenticator app", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Invalid password", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to reset TOTP");
+            Snackbar.Add($"Error resetting 2FA: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _togglingTotp = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerateLinkToken()
+    {
+        _generatingToken = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(Routes.Profile.GenerateLinkToken, null);
+            var result = await response.Content.ReadFromJsonAsync<GenerateLinkTokenResponse>();
+
+            if (result?.Success == true)
+            {
+                _currentLinkToken = result;
+                _showLinkToken = true;
+
+                Snackbar.Add("Link token generated successfully! Use it within 15 minutes.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Failed to generate link token", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to generate link token");
+            Snackbar.Add($"Error generating token: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _generatingToken = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UnlinkAccount(long mappingId)
+    {
+        _unlinkingAccount = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsync(Routes.Profile.UnlinkTelegram(mappingId), null);
+            var result = await response.Content.ReadFromJsonAsync<UnlinkTelegramResponse>();
+
+            if (result?.Success == true)
+            {
+                Snackbar.Add("Telegram account unlinked successfully", Severity.Success);
+                await LoadProfileAsync();
+            }
+            else
+            {
+                Snackbar.Add(result?.Error ?? "Failed to unlink account", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to unlink Telegram account");
+            Snackbar.Add($"Error unlinking account: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _unlinkingAccount = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("Token copied to clipboard!", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Please copy the token manually", Severity.Warning);
+        }
+    }
+
+    private static string FormatDate(DateTimeOffset? timestamp)
+    {
+        if (!timestamp.HasValue) return "Never";
+        return timestamp.Value.ToString("yyyy-MM-dd HH:mm");
+    }
+}

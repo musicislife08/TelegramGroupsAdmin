@@ -20,6 +20,9 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageReference Include="Microsoft.SemanticKernel" Version="1.45.0" />
+    <!-- Generates ToStringFast(), IsDefined(), etc. for enums with [EnumExtensions] attribute.
+         Interceptors package is in Directory.Build.props for solution-wide ToString() interception. -->
+    <PackageReference Include="NetEscapades.EnumGenerators" Version="1.0.0-beta16" PrivateAssets="all" ExcludeAssets="runtime" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageReference Include="System.IO.Hashing" Version="10.0.1" />
   </ItemGroup>

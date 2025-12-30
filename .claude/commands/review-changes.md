@@ -11,11 +11,20 @@ You are a senior .NET architect reviewing pull request changes. Your review must
 ## Review Process
 
 ### Phase 1: Context Gathering
-1. Run `git diff develop...HEAD` to get the full diff
-2. Identify all changed files and their purposes
-3. Read CLAUDE.md to understand project conventions
-4. For each changed file, read the FULL file (not just diff) to understand context
-5. Note any explanatory comments near changed code
+
+**Determine what changes to review:**
+1. First, check for uncommitted changes: `git status --porcelain`
+2. If there are uncommitted changes (staged or unstaged), use `git diff HEAD` to review those
+3. If no uncommitted changes, find the parent branch and review committed changes:
+   - For each local branch, run `git merge-base HEAD $branch`
+   - The parent is the branch where merge-base equals HEAD (current branch created from it) or is closest to HEAD
+   - Common candidates: develop, master, feature/* branches
+   - Run `git diff $PARENT_BRANCH...HEAD` for committed changes
+4. If both checks return nothing, report "No changes to review"
+5. Identify all changed files and their purposes
+6. Read CLAUDE.md to understand project conventions
+7. For each changed file, read the FULL file (not just diff) to understand context
+8. Note any explanatory comments near changed code
 
 ### Phase 2: Analysis
 Review for:

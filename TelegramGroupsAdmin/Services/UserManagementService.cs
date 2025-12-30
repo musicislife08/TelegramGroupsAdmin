@@ -27,21 +27,8 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
         // Escalation prevention: Users cannot assign permission levels above their own
         if (permissionLevel > modifierPermissionLevel)
         {
-            var modifierPermissionName = modifierPermissionLevel switch
-            {
-                0 => "Admin",
-                1 => "GlobalAdmin",
-                2 => "Owner",
-                _ => modifierPermissionLevel.ToString()
-            };
-
-            var requestedPermissionName = permissionLevel switch
-            {
-                0 => "Admin",
-                1 => "GlobalAdmin",
-                2 => "Owner",
-                _ => permissionLevel.ToString()
-            };
+            var modifierPermissionName = ((PermissionLevel)modifierPermissionLevel).ToStringFast();
+            var requestedPermissionName = ((PermissionLevel)permissionLevel).ToStringFast();
 
             throw new UnauthorizedAccessException(
                 $"Cannot assign permission level {requestedPermissionName} (your level: {modifierPermissionName})");

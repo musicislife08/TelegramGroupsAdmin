@@ -101,6 +101,7 @@ public static class ServiceCollectionExtensions
 
             // Report service
             services.AddScoped<IReportService, ReportService>();
+            services.AddScoped<ITelegramLinkService, TelegramLinkService>();
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations

@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Extensions;
 
@@ -17,7 +18,7 @@ public static class MessagesPageEndpoints
 {
     public static IEndpointRouteBuilder MapMessagesPageEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var group = endpoints.MapGroup("/api/pages")
+        var group = endpoints.MapGroup(Routes.Pages.Base)
             .RequireAuthorization();
 
         // GET /api/pages/messages - Full page data for Messages page

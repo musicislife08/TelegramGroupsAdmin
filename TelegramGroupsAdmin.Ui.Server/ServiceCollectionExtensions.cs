@@ -137,6 +137,7 @@ public static class ServiceCollectionExtensions
 
             // Core services
             services.AddScoped<IAuthService, AuthService>();
+            services.AddScoped<IProfilePageService, ProfilePageService>();
             services.AddScoped<IInviteService, InviteService>();
             services.AddScoped<IMessageExportService, MessageExportService>();
             services.AddScoped<IUserManagementService, UserManagementService>();
