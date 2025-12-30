@@ -91,7 +91,8 @@ public abstract class WasmSharedAuthenticatedTestBase : WasmSharedE2ETestBase
         var cookieValue = authCookieService.GenerateCookieValue(
             user.Id,
             user.Email,
-            user.PermissionLevel);
+            user.PermissionLevel,
+            user.SecurityStamp);
 
         // Extract host and port from the server address
         var baseUri = new Uri(SharedFactory.ServerAddress);

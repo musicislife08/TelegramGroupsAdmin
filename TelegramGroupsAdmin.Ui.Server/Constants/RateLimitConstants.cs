@@ -47,4 +47,22 @@ public static class RateLimitConstants
     /// </summary>
     public const int ResetPasswordMaxAttempts = 3;
     public static readonly TimeSpan ResetPasswordWindow = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Profile password change rate limit: 5 attempts per 15 minutes.
+    /// </summary>
+    public const int PasswordChangeMaxAttempts = 5;
+    public static readonly TimeSpan PasswordChangeWindow = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Profile TOTP setup verification rate limit: 5 attempts per 5 minutes.
+    /// </summary>
+    public const int ProfileTotpVerifyMaxAttempts = 5;
+    public static readonly TimeSpan ProfileTotpVerifyWindow = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Profile TOTP reset rate limit: 3 attempts per 15 minutes.
+    /// </summary>
+    public const int ProfileTotpResetMaxAttempts = 3;
+    public static readonly TimeSpan ProfileTotpResetWindow = TimeSpan.FromMinutes(15);
 }

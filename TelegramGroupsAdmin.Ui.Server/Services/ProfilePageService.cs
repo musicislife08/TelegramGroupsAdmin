@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Repositories;
 using TelegramGroupsAdmin.Ui.Server.Services.Auth;
+using TelegramGroupsAdmin.Ui.Validation;
 
 namespace TelegramGroupsAdmin.Ui.Server.Services;
 
@@ -90,9 +91,9 @@ public class ProfilePageService : IProfilePageService
             return ChangePasswordResponse.Fail("New passwords do not match");
         }
 
-        if (newPassword.Length < 8)
+        if (newPassword.Length < PasswordValidator.MinLength)
         {
-            return ChangePasswordResponse.Fail("New password must be at least 8 characters");
+            return ChangePasswordResponse.Fail($"New password must be at least {PasswordValidator.MinLength} characters");
         }
 
         var user = await _userRepo.GetByIdAsync(userId, cancellationToken);

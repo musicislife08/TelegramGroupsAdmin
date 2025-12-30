@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Services;
 using TelegramGroupsAdmin.Ui.Server.Services.Auth;
+using TelegramGroupsAdmin.Ui.Validation;
 
 namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Actions;
 
@@ -91,7 +92,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication (TOTP disabled by owner)
-            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value, result.SecurityStamp!);
 
             return Results.Ok(LoginResponse.Ok());
         }).AllowAnonymous();
@@ -173,7 +174,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value, result.SecurityStamp!);
 
             return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
@@ -210,7 +211,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value, result.SecurityStamp!);
 
             return Results.Ok(ApiResponse.Ok());
         }).AllowAnonymous();
@@ -272,7 +273,7 @@ public static class AuthEndpoints
             var recoveryCodes = await authService.GenerateRecoveryCodesAsync(userId);
 
             // Sign in the user with cookie authentication
-            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value, result.SecurityStamp!);
 
             return Results.Ok(VerifySetupTotpResponse.Ok(recoveryCodes));
         }).AllowAnonymous();
@@ -313,9 +314,9 @@ public static class AuthEndpoints
             await rateLimitService.RecordAttemptAsync(request.Token, "reset_password");
 
             // Validate password length
-            if (string.IsNullOrEmpty(request.NewPassword) || request.NewPassword.Length < 8)
+            if (string.IsNullOrEmpty(request.NewPassword) || request.NewPassword.Length < PasswordValidator.MinLength)
             {
-                return Results.BadRequest(ApiResponse.Fail("Password must be at least 8 characters"));
+                return Results.BadRequest(ApiResponse.Fail($"Password must be at least {PasswordValidator.MinLength} characters"));
             }
 
             var success = await authService.ResetPasswordAsync(request.Token, request.NewPassword);

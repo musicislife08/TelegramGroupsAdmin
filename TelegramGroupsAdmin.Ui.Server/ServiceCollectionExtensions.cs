@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
@@ -7,6 +9,7 @@ using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Ui.Server.Auth;
 using TelegramGroupsAdmin.Ui.Server.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -102,6 +105,32 @@ public static class ServiceCollectionExtensions
                     options.LoginPath = "/login";
                     options.LogoutPath = "/logout";
                     options.AccessDeniedPath = "/access-denied";
+
+                    // SECURITY: Validate SecurityStamp on each request to invalidate sessions
+                    // after password change, TOTP reset, or other security-sensitive changes
+                    options.Events.OnValidatePrincipal = async context =>
+                    {
+                        var userId = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                        var cookieSecurityStamp = context.Principal?.FindFirst(CustomClaimTypes.SecurityStamp)?.Value;
+
+                        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(cookieSecurityStamp))
+                        {
+                            context.RejectPrincipal();
+                            await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                            return;
+                        }
+
+                        // Get user repository from DI to check current SecurityStamp
+                        var userRepository = context.HttpContext.RequestServices.GetRequiredService<IUserRepository>();
+                        var user = await userRepository.GetByIdAsync(userId, context.HttpContext.RequestAborted);
+
+                        // Reject if user not found or SecurityStamp doesn't match
+                        if (user is null || user.SecurityStamp != cookieSecurityStamp)
+                        {
+                            context.RejectPrincipal();
+                            await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                        }
+                    };
                 });
 
             // Add authorization policies

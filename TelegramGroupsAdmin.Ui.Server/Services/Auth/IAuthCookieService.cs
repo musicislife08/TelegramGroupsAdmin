@@ -17,7 +17,8 @@ public interface IAuthCookieService
     /// <param name="userId">The user's unique identifier</param>
     /// <param name="email">The user's email address</param>
     /// <param name="permissionLevel">The user's permission level</param>
-    Task SignInAsync(HttpContext context, string userId, string email, PermissionLevel permissionLevel);
+    /// <param name="securityStamp">The user's security stamp for session invalidation</param>
+    Task SignInAsync(HttpContext context, string userId, string email, PermissionLevel permissionLevel, string securityStamp);
 
     /// <summary>
     /// Generates an encrypted cookie value without requiring HttpContext.
@@ -26,8 +27,9 @@ public interface IAuthCookieService
     /// <param name="userId">The user's unique identifier</param>
     /// <param name="email">The user's email address</param>
     /// <param name="permissionLevel">The user's permission level</param>
+    /// <param name="securityStamp">The user's security stamp for session invalidation</param>
     /// <returns>The encrypted cookie value that can be set in a browser</returns>
-    string GenerateCookieValue(string userId, string email, PermissionLevel permissionLevel);
+    string GenerateCookieValue(string userId, string email, PermissionLevel permissionLevel, string securityStamp);
 
     /// <summary>
     /// Gets the name of the authentication cookie.

@@ -5,6 +5,7 @@
 @using TelegramGroupsAdmin.Ui.Api
 @using TelegramGroupsAdmin.Ui.Components
 @using TelegramGroupsAdmin.Ui.Models
+@using TelegramGroupsAdmin.Ui.Validation
 @inject IHttpClientFactory HttpFactory
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
@@ -324,9 +325,9 @@
             return;
         }
 
-        if (_newPassword.Length < 8)
+        if (_newPassword.Length < PasswordValidator.MinLength)
         {
-            Snackbar.Add("New password must be at least 8 characters", Severity.Error);
+            Snackbar.Add($"New password must be at least {PasswordValidator.MinLength} characters", Severity.Error);
             return;
         }
 

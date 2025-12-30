@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using TelegramGroupsAdmin.Ui.Api;
 using TelegramGroupsAdmin.Ui.Models;
 using TelegramGroupsAdmin.Ui.Server.Services;
+using TelegramGroupsAdmin.Ui.Server.Services.Auth;
 
 namespace TelegramGroupsAdmin.Ui.Server.Endpoints.Pages;
 
@@ -39,10 +40,19 @@ public static class ProfilePageEndpoints
             HttpContext context,
             [FromBody] ChangePasswordRequest request,
             [FromServices] IProfilePageService profileService,
+            [FromServices] IRateLimitService rateLimitService,
             CancellationToken cancellationToken) =>
         {
             var userId = GetUserId(context);
             if (userId == null) return Results.Unauthorized();
+
+            // Rate limiting for password change attempts
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "password_change");
+            if (!rateLimitCheck.IsAllowed)
+            {
+                return Results.Ok(ChangePasswordResponse.Fail($"Too many password change attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
+            }
+            await rateLimitService.RecordAttemptAsync(userId, "password_change");
 
             return Results.Ok(await profileService.ChangePasswordAsync(
                 userId,
@@ -69,10 +79,19 @@ public static class ProfilePageEndpoints
             HttpContext context,
             [FromBody] ProfileTotpVerifyRequest request,
             [FromServices] IProfilePageService profileService,
+            [FromServices] IRateLimitService rateLimitService,
             CancellationToken cancellationToken) =>
         {
             var userId = GetUserId(context);
             if (userId == null) return Results.Unauthorized();
+
+            // Rate limiting for TOTP verification attempts
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "profile_totp_verify");
+            if (!rateLimitCheck.IsAllowed)
+            {
+                return Results.Ok(ProfileTotpVerifyResponse.Fail($"Too many verification attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
+            }
+            await rateLimitService.RecordAttemptAsync(userId, "profile_totp_verify");
 
             return Results.Ok(await profileService.VerifyAndEnableTotpAsync(userId, request.Code, cancellationToken));
         });
@@ -82,10 +101,19 @@ public static class ProfilePageEndpoints
             HttpContext context,
             [FromBody] ProfileTotpResetRequest request,
             [FromServices] IProfilePageService profileService,
+            [FromServices] IRateLimitService rateLimitService,
             CancellationToken cancellationToken) =>
         {
             var userId = GetUserId(context);
             if (userId == null) return Results.Unauthorized();
+
+            // Rate limiting for TOTP reset attempts (password validation)
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(userId, "profile_totp_reset");
+            if (!rateLimitCheck.IsAllowed)
+            {
+                return Results.Ok(ProfileTotpSetupResponse.Fail($"Too many reset attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."));
+            }
+            await rateLimitService.RecordAttemptAsync(userId, "profile_totp_reset");
 
             return Results.Ok(await profileService.ResetTotpWithPasswordAsync(userId, request.Password, cancellationToken));
         });
