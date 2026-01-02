@@ -279,6 +279,9 @@ public class ConfigService(
             case ConfigType.TelegramBot:
                 record.TelegramBotConfig = json;
                 break;
+            case ConfigType.ServiceMessageDeletion:
+                record.ServiceMessageDeletionConfig = json;
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type");
         }
@@ -294,19 +297,27 @@ public class ConfigService(
             ConfigType.Moderation => record.ModerationConfig,
             ConfigType.UrlFilter => record.BotProtectionConfig,
             ConfigType.TelegramBot => record.TelegramBotConfig,
+            ConfigType.ServiceMessageDeletion => record.ServiceMessageDeletionConfig,
             _ => throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type")
         };
     }
 
+    // Cache PropertyInfo array for IsRecordEmpty - reflection cost paid once at startup
+    // Only string properties are config columns; Id and ChatId are long so already excluded
+    private static readonly System.Reflection.PropertyInfo[] ConfigStringProperties =
+        typeof(ConfigRecordDto)
+            .GetProperties()
+            .Where(p => p.PropertyType == typeof(string))
+            .ToArray();
+
+    /// <summary>
+    /// Checks if all config columns are empty (null or empty string).
+    /// Uses reflection to automatically include all string properties,
+    /// so new config columns don't require manual updates here.
+    /// </summary>
     private static bool IsRecordEmpty(ConfigRecordDto record)
     {
-        return string.IsNullOrEmpty(record.ContentDetectionConfig)
-            && string.IsNullOrEmpty(record.WelcomeConfig)
-            && string.IsNullOrEmpty(record.LogConfig)
-            && string.IsNullOrEmpty(record.ModerationConfig)
-            && string.IsNullOrEmpty(record.BotProtectionConfig)
-            && string.IsNullOrEmpty(record.TelegramBotConfig)
-            && string.IsNullOrEmpty(record.TelegramBotTokenEncrypted);
+        return ConfigStringProperties.All(p => string.IsNullOrEmpty((string?)p.GetValue(record)));
     }
 
     /// <summary>

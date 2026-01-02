@@ -3,6 +3,9 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services.Media;
@@ -67,9 +70,22 @@ public class RefreshUserPhotosJob : IJob
         {
             try
             {
+                using var scope = _scopeFactory.CreateScope();
+
+                // Check if bot is enabled before queueing work
+                var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+                var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+                                ?? TelegramBotConfig.Default;
+
+                if (!botConfig.BotEnabled)
+                {
+                    _logger.LogInformation("Skipping user photo refresh - bot is disabled");
+                    success = true;
+                    return;
+                }
+
                 _logger.LogInformation("Starting user photo refresh for users active in last {Days} days", payload.DaysBack);
 
-                using var scope = _scopeFactory.CreateScope();
                 var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
                 var queueService = scope.ServiceProvider.GetRequiredService<IMediaRefetchQueueService>();
 

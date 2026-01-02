@@ -40,6 +40,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             existing.TelegramBotTokenEncrypted = config.TelegramBotTokenEncrypted;
             existing.OpenAIConfig = config.OpenAIConfig;
             existing.SendGridConfig = config.SendGridConfig;
+            existing.ServiceMessageDeletionConfig = config.ServiceMessageDeletionConfig;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
             // Immutable properties NOT copied: Id (primary key), ChatId (natural key used for query), CreatedAt (database default)
         }

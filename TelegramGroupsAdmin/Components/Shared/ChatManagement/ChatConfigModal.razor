@@ -213,6 +213,54 @@
                 </MudStack>
             </MudTabPanel>
 
+            <!-- Service Message Deletion Tab -->
+            <MudTabPanel Text="Service Messages" Icon="@Icons.Material.Filled.CleaningServices">
+                <MudStack Spacing="3">
+                    <!-- Configuration Mode Selection -->
+                    <MudPaper Elevation="1" Class="pa-4">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Configuration Mode</MudText>
+                        <MudRadioGroup @bind-Value="_useCustomServiceMsgConfig" @bind-Value:after="OnServiceMsgConfigModeChanged" T="bool">
+                            <MudRadio Value="false" T="bool">Use Global Configuration</MudRadio>
+                            <MudRadio Value="true" T="bool">Use Custom Configuration for this Chat</MudRadio>
+                        </MudRadioGroup>
+
+                        @if (!_useCustomServiceMsgConfig && ChatInfo.HasCustomServiceMsgConfig)
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mt-2">
+                                This chat currently has custom service message settings. Switching to global will delete the custom settings.
+                            </MudAlert>
+                        }
+                    </MudPaper>
+
+                    @if (_useCustomServiceMsgConfig)
+                    {
+                        <!-- Reusable ServiceMessageDeletionSettings component for per-chat configuration -->
+                        <ServiceMessageDeletionSettings @ref="_serviceMsgConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnServiceMsgConfigSaved" />
+
+                        <!-- Save Button -->
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                  OnClick="@SaveServiceMsgConfigAsync" Disabled="@_savingServiceMsgConfig" FullWidth="true">
+                            @if (_savingServiceMsgConfig)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                <MudText Class="ms-2">Saving...</MudText>
+                            }
+                            else
+                            {
+                                <span>Save Configuration</span>
+                            }
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            This chat is using the global service message deletion configuration.
+                            To customize settings for this chat specifically, enable "Use Custom Configuration" above.
+                        </MudAlert>
+                    }
+                </MudStack>
+            </MudTabPanel>
+
             <!-- Admins Tab -->
             <MudTabPanel Text="Admins" Icon="@Icons.Material.Filled.AdminPanelSettings">
                 @if (_loadingAdmins)
@@ -312,6 +360,11 @@
     private bool _useCustomWelcomeConfig;
     private WelcomeSystemConfig? _welcomeConfigComponent;
 
+    // Service Message Deletion Config
+    private bool _savingServiceMsgConfig;
+    private bool _useCustomServiceMsgConfig;
+    private ServiceMessageDeletionSettings? _serviceMsgConfigComponent;
+
     // Admins Tab
     private bool _loadingAdmins = true;
     private List<ChatAdmin>? _admins;
@@ -326,6 +379,7 @@
         _healthStatus = ChatInfo.HealthStatus;
         _useCustomConfig = ChatInfo.HasCustomSpamConfig;
         _useCustomWelcomeConfig = ChatInfo.HasCustomWelcomeConfig;
+        _useCustomServiceMsgConfig = ChatInfo.HasCustomServiceMsgConfig;
         await Task.WhenAll(LoadAdminsAsync(), LoadCachedInviteLinkAsync());
     }
 
@@ -399,8 +453,18 @@
         if (_welcomeConfigComponent != null)
         {
             _savingWelcomeConfig = true;
-            await _welcomeConfigComponent.SaveConfiguration();
-            _savingWelcomeConfig = false;
+            try
+            {
+                await _welcomeConfigComponent.SaveConfiguration();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to save welcome config: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _savingWelcomeConfig = false;
+            }
         }
     }
 
@@ -431,6 +495,66 @@
         finally
         {
             _savingWelcomeConfig = false;
+        }
+    }
+
+    // Service Message Deletion Config Methods
+    private async Task OnServiceMsgConfigModeChanged()
+    {
+        if (!_useCustomServiceMsgConfig && ChatInfo.HasCustomServiceMsgConfig)
+        {
+            // User switched from custom to global - delete custom config
+            await SaveServiceMsgConfigModeAsync();
+        }
+    }
+
+    private async Task SaveServiceMsgConfigAsync()
+    {
+        if (_serviceMsgConfigComponent != null)
+        {
+            _savingServiceMsgConfig = true;
+            try
+            {
+                await _serviceMsgConfigComponent.SaveConfiguration();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to save service message config: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _savingServiceMsgConfig = false;
+            }
+        }
+    }
+
+    private Task OnServiceMsgConfigSaved()
+    {
+        // Config was saved by ServiceMessageDeletionSettings component
+        ChatInfo.HasCustomServiceMsgConfig = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveServiceMsgConfigModeAsync()
+    {
+        _savingServiceMsgConfig = true;
+        try
+        {
+            if (!_useCustomServiceMsgConfig && ChatInfo.HasCustomServiceMsgConfig)
+            {
+                // Delete custom config (revert to global)
+                await ConfigService.DeleteAsync(ConfigType.ServiceMessageDeletion, ChatInfo.Chat.ChatId);
+                ChatInfo.HasCustomServiceMsgConfig = false;
+                Snackbar.Add("Reverted to global service message deletion configuration", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save service message config: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingServiceMsgConfig = false;
         }
     }
 

@@ -3,6 +3,7 @@
 @attribute [Authorize(Policy = "GlobalAdminOrOwner")]
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
 @using TelegramGroupsAdmin.Components.Shared.Settings
+@using TelegramGroupsAdmin.Constants
 @using TelegramGroupsAdmin.Services
 @inject NavigationManager Navigation
 @inject BlazorAuthHelper AuthHelper
@@ -19,25 +20,25 @@
                 <MudNavGroup Title="System" Icon="@Icons.Material.Filled.Computer" Expanded="@_systemExpanded" ExpandedChanged="@((bool expanded) => _systemExpanded = expanded)">
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/system/general" Icon="@Icons.Material.Filled.Tune" Match="NavLinkMatch.All">General Settings</MudNavLink>
-                        <MudNavLink Href="/settings/system/security" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Security</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.General)" Icon="@Icons.Material.Filled.Tune" Match="NavLinkMatch.All">@SettingsRoutes.System.GeneralTitle</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.Security)" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">@SettingsRoutes.System.SecurityTitle</MudNavLink>
                     }
                     @if (_canManageAdminAccounts)
                     {
-                        <MudNavLink Href="/settings/system/accounts" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.All">Admin Accounts</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.Accounts)" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.All">@SettingsRoutes.System.AccountsTitle</MudNavLink>
                     }
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/system/ai-providers" Icon="@Icons.Material.Filled.Psychology" Match="NavLinkMatch.All">AI Providers</MudNavLink>
-                        <MudNavLink Href="/settings/system/email" Icon="@Icons.Material.Filled.Email" Match="NavLinkMatch.All">Email</MudNavLink>
-                        <MudNavLink Href="/settings/system/clamav" Icon="@Icons.Material.Filled.Shield" Match="NavLinkMatch.All">ClamAV</MudNavLink>
-                        <MudNavLink Href="/settings/system/virustotal" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">VirusTotal</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.AiProviders)" Icon="@Icons.Material.Filled.Psychology" Match="NavLinkMatch.All">@SettingsRoutes.System.AiProvidersTitle</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.Email)" Icon="@Icons.Material.Filled.Email" Match="NavLinkMatch.All">@SettingsRoutes.System.EmailTitle</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.ClamAv)" Icon="@Icons.Material.Filled.Shield" Match="NavLinkMatch.All">@SettingsRoutes.System.ClamAvTitle</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.VirusTotal)" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">@SettingsRoutes.System.VirusTotalTitle</MudNavLink>
                     }
-                    <MudNavLink Href="/settings/system/logging" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">Logging</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.Logging)" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">@SettingsRoutes.System.LoggingTitle</MudNavLink>
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/system/background-jobs" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">Background Jobs</MudNavLink>
-                        <MudNavLink Href="/settings/system/backup-config" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">Backup Configuration</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.BackgroundJobs)" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">@SettingsRoutes.System.BackgroundJobsTitle</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.System.Section, SettingsRoutes.System.BackupConfig)" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">@SettingsRoutes.System.BackupConfigTitle</MudNavLink>
                     }
                 </MudNavGroup>
 
@@ -45,31 +46,32 @@
                 <MudNavGroup Title="Telegram" Icon="@Icons.Material.Filled.SmartToy" Expanded="@_telegramExpanded" ExpandedChanged="@((bool expanded) => _telegramExpanded = expanded)">
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/telegram/bot-config" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">Bot Configuration</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.BotConfig)" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.BotConfigTitle</MudNavLink>
                     }
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.ServiceMessages)" Icon="@Icons.Material.Filled.CleaningServices" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.ServiceMessagesTitle</MudNavLink>
                 </MudNavGroup>
 
                 <!-- Notifications Group -->
                 <MudNavGroup Title="Notifications" Icon="@Icons.Material.Filled.Notifications" Expanded="@_notificationsExpanded" ExpandedChanged="@((bool expanded) => _notificationsExpanded = expanded)">
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/notifications/web-push" Icon="@Icons.Material.Filled.NotificationsActive" Match="NavLinkMatch.All">Web Push</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Notifications.Section, SettingsRoutes.Notifications.WebPush)" Icon="@Icons.Material.Filled.NotificationsActive" Match="NavLinkMatch.All">@SettingsRoutes.Notifications.WebPushTitle</MudNavLink>
                     }
                 </MudNavGroup>
 
                 <!-- Content Detection Group -->
                 <MudNavGroup Title="Content Detection" Icon="@Icons.Material.Filled.Shield" Expanded="@_contentDetectionExpanded" ExpandedChanged="@((bool expanded) => _contentDetectionExpanded = expanded)">
-                    <MudNavLink Href="/settings/content-detection/algorithms" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Detection Algorithms</MudNavLink>
-                    <MudNavLink Href="/settings/content-detection/tuning" Icon="@Icons.Material.Filled.Insights" Match="NavLinkMatch.All">Algorithm Tuning</MudNavLink>
-                    <MudNavLink Href="/settings/content-detection/ai-integration" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">AI Integration</MudNavLink>
-                    <MudNavLink Href="/settings/content-detection/url-filters" Icon="@Icons.Material.Filled.Link" Match="NavLinkMatch.All">URL Filtering</MudNavLink>
-                    <MudNavLink Href="/settings/content-detection/file-scanning" Icon="@Icons.Material.Filled.Scanner" Match="NavLinkMatch.All">File Scanning</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Algorithms)" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.AlgorithmsTitle</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Tuning)" Icon="@Icons.Material.Filled.Insights" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.TuningTitle</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.AiIntegration)" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.AiIntegrationTitle</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.UrlFilters)" Icon="@Icons.Material.Filled.Link" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.UrlFiltersTitle</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.FileScanning)" Icon="@Icons.Material.Filled.Scanner" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.FileScanningTitle</MudNavLink>
                 </MudNavGroup>
 
                 <!-- Training Data Group -->
                 <MudNavGroup Title="Training Data" Icon="@Icons.Material.Filled.School" Expanded="@_trainingDataExpanded" ExpandedChanged="@((bool expanded) => _trainingDataExpanded = expanded)">
-                    <MudNavLink Href="/settings/training-data/stopwords" Icon="@Icons.Material.Filled.List" Match="NavLinkMatch.All">Stop Words Library</MudNavLink>
-                    <MudNavLink Href="/settings/training-data/samples" Icon="@Icons.Material.Filled.Dataset" Match="NavLinkMatch.All">Training Samples</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.TrainingData.Section, SettingsRoutes.TrainingData.Stopwords)" Icon="@Icons.Material.Filled.List" Match="NavLinkMatch.All">@SettingsRoutes.TrainingData.StopwordsTitle</MudNavLink>
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.TrainingData.Section, SettingsRoutes.TrainingData.Samples)" Icon="@Icons.Material.Filled.Dataset" Match="NavLinkMatch.All">@SettingsRoutes.TrainingData.SamplesTitle</MudNavLink>
                 </MudNavGroup>
             </MudNavMenu>
         </MudPaper>
@@ -84,10 +86,10 @@
             @switch (_currentSection)
             {
                 // System subsections
-                case "system":
+                case SettingsRoutes.System.Section:
                     @switch (_currentSubSection)
                     {
-                        case "general":
+                        case SettingsRoutes.System.General:
                             @if (_canEditInfrastructure)
                             {
                                 <GeneralSettings />
@@ -97,7 +99,7 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "security":
+                        case SettingsRoutes.System.Security:
                             @if (_canEditInfrastructure)
                             {
                                 <SecuritySettings />
@@ -107,13 +109,13 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "accounts":
+                        case SettingsRoutes.System.Accounts:
                             <WebAdminAccounts />
                             break;
-                        case "logging":
+                        case SettingsRoutes.System.Logging:
                             <LoggingSettings />
                             break;
-                        case "background-jobs":
+                        case SettingsRoutes.System.BackgroundJobs:
                             @if (_canEditInfrastructure)
                             {
                                 <BackgroundJobs />
@@ -123,7 +125,7 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "ai-providers":
+                        case SettingsRoutes.System.AiProviders:
                             @if (_canEditInfrastructure)
                             {
                                 <AIProviderSettings />
@@ -133,7 +135,7 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "email":
+                        case SettingsRoutes.System.Email:
                             @if (_canEditInfrastructure)
                             {
                                 <EmailInfrastructureSettings />
@@ -143,7 +145,7 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "clamav":
+                        case SettingsRoutes.System.ClamAv:
                             @if (_canEditInfrastructure)
                             {
                                 <ClamAVInfrastructureSettings />
@@ -153,7 +155,7 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "virustotal":
+                        case SettingsRoutes.System.VirusTotal:
                             @if (_canEditInfrastructure)
                             {
                                 <VirusTotalInfrastructureSettings />
@@ -163,7 +165,7 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "backup-config":
+                        case SettingsRoutes.System.BackupConfig:
                             @if (_canEditInfrastructure)
                             {
                                 <BackupRestore />
@@ -187,10 +189,10 @@
                     break;
 
                 // Telegram subsections
-                case "telegram":
+                case SettingsRoutes.Telegram.Section:
                     @switch (_currentSubSection)
                     {
-                        case "bot-config":
+                        case SettingsRoutes.Telegram.BotConfig:
                             @if (_canEditInfrastructure)
                             {
                                 <TelegramBotSettings />
@@ -199,6 +201,9 @@
                             {
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
+                            break;
+                        case SettingsRoutes.Telegram.ServiceMessages:
+                            <ServiceMessageDeletionSettings />
                             break;
                         default:
                             @if (_canEditInfrastructure)
@@ -214,10 +219,10 @@
                     break;
 
                 // Notifications subsections
-                case "notifications":
+                case SettingsRoutes.Notifications.Section:
                     @switch (_currentSubSection)
                     {
-                        case "web-push":
+                        case SettingsRoutes.Notifications.WebPush:
                             @if (_canEditInfrastructure)
                             {
                                 <WebPushSettings />
@@ -241,22 +246,22 @@
                     break;
 
                 // Content Detection subsections
-                case "content-detection":
+                case SettingsRoutes.ContentDetection.Section:
                     @switch (_currentSubSection)
                     {
-                        case "algorithms":
+                        case SettingsRoutes.ContentDetection.Algorithms:
                             <DetectionOverview />
                             break;
-                        case "tuning":
+                        case SettingsRoutes.ContentDetection.Tuning:
                             <AlgorithmTuning />
                             break;
-                        case "ai-integration":
+                        case SettingsRoutes.ContentDetection.AiIntegration:
                             <AIIntegrationSettings />
                             break;
-                        case "url-filters":
+                        case SettingsRoutes.ContentDetection.UrlFilters:
                             <UrlFiltersConfig ChatId="0" />
                             break;
-                        case "file-scanning":
+                        case SettingsRoutes.ContentDetection.FileScanning:
                             <FileScanningSettings />
                             break;
                         default:
@@ -266,13 +271,13 @@
                     break;
 
                 // Training Data subsections
-                case "training-data":
+                case SettingsRoutes.TrainingData.Section:
                     @switch (_currentSubSection)
                     {
-                        case "stopwords":
+                        case SettingsRoutes.TrainingData.Stopwords:
                             <StopWords />
                             break;
-                        case "samples":
+                        case SettingsRoutes.TrainingData.Samples:
                             <TrainingData />
                             break;
                         default:
@@ -328,47 +333,48 @@
 
     private void UpdateCurrentSection()
     {
-        _currentSection = Section?.ToLowerInvariant() ?? "system";
-        _currentSubSection = SubSection?.ToLowerInvariant() ?? "general";
+        _currentSection = Section?.ToLowerInvariant() ?? SettingsRoutes.System.Section;
+        _currentSubSection = SubSection?.ToLowerInvariant() ?? SettingsRoutes.System.General;
 
         // Auto-expand the appropriate group based on current section
-        _systemExpanded = _currentSection == "system";
-        _telegramExpanded = _currentSection == "telegram";
-        _notificationsExpanded = _currentSection == "notifications";
-        _contentDetectionExpanded = _currentSection == "content-detection";
-        _trainingDataExpanded = _currentSection == "training-data";
+        _systemExpanded = _currentSection == SettingsRoutes.System.Section;
+        _telegramExpanded = _currentSection == SettingsRoutes.Telegram.Section;
+        _notificationsExpanded = _currentSection == SettingsRoutes.Notifications.Section;
+        _contentDetectionExpanded = _currentSection == SettingsRoutes.ContentDetection.Section;
+        _trainingDataExpanded = _currentSection == SettingsRoutes.TrainingData.Section;
 
-        // Set page title
+        // Set page title using constants
         _pageTitle = (_currentSection, _currentSubSection) switch
         {
             // System
-            ("system", "general") => "General Settings",
-            ("system", "security") => "Security Settings",
-            ("system", "accounts") => "Admin Accounts",
-            ("system", "ai-providers") => "AI Providers",
-            ("system", "email") => "Email",
-            ("system", "clamav") => "ClamAV",
-            ("system", "virustotal") => "VirusTotal",
-            ("system", "logging") => "Logging Settings",
-            ("system", "background-jobs") => "Background Jobs",
-            ("system", "backup-config") => "Backup Configuration",
+            (SettingsRoutes.System.Section, SettingsRoutes.System.General) => SettingsRoutes.System.GeneralTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.Security) => SettingsRoutes.System.SecurityTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.Accounts) => SettingsRoutes.System.AccountsTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.AiProviders) => SettingsRoutes.System.AiProvidersTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.Email) => SettingsRoutes.System.EmailTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.ClamAv) => SettingsRoutes.System.ClamAvTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.VirusTotal) => SettingsRoutes.System.VirusTotalTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.Logging) => SettingsRoutes.System.LoggingTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.BackgroundJobs) => SettingsRoutes.System.BackgroundJobsTitle,
+            (SettingsRoutes.System.Section, SettingsRoutes.System.BackupConfig) => SettingsRoutes.System.BackupConfigTitle,
 
             // Telegram
-            ("telegram", "bot-config") => "Bot Configuration",
+            (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.BotConfig) => SettingsRoutes.Telegram.BotConfigTitle,
+            (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.ServiceMessages) => SettingsRoutes.Telegram.ServiceMessagesTitle,
 
             // Notifications
-            ("notifications", "web-push") => "Web Push Notifications",
+            (SettingsRoutes.Notifications.Section, SettingsRoutes.Notifications.WebPush) => SettingsRoutes.Notifications.WebPushTitle,
 
             // Content Detection
-            ("content-detection", "algorithms") => "Detection Algorithms",
-            ("content-detection", "tuning") => "Algorithm Tuning",
-            ("content-detection", "ai-integration") => "AI Integration",
-            ("content-detection", "url-filters") => "URL Filtering",
-            ("content-detection", "file-scanning") => "File Scanning",
+            (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Algorithms) => SettingsRoutes.ContentDetection.AlgorithmsTitle,
+            (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Tuning) => SettingsRoutes.ContentDetection.TuningTitle,
+            (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.AiIntegration) => SettingsRoutes.ContentDetection.AiIntegrationTitle,
+            (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.UrlFilters) => SettingsRoutes.ContentDetection.UrlFiltersTitle,
+            (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.FileScanning) => SettingsRoutes.ContentDetection.FileScanningTitle,
 
             // Training Data
-            ("training-data", "stopwords") => "Stop Words Library",
-            ("training-data", "samples") => "Training Samples",
+            (SettingsRoutes.TrainingData.Section, SettingsRoutes.TrainingData.Stopwords) => SettingsRoutes.TrainingData.StopwordsTitle,
+            (SettingsRoutes.TrainingData.Section, SettingsRoutes.TrainingData.Samples) => SettingsRoutes.TrainingData.SamplesTitle,
 
             _ => "Settings"
         };

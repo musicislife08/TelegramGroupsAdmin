@@ -1,6 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -87,6 +90,18 @@ public class MediaRefetchWorkerService : BackgroundService
     private async Task ProcessMediaRequestAsync(RefetchRequest request, int workerId)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
+
+        // Check if bot is enabled before making Telegram API calls
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+                        ?? TelegramBotConfig.Default;
+
+        if (!botConfig.BotEnabled)
+        {
+            _logger.LogDebug("Worker {WorkerId} skipping media refetch - bot is disabled", workerId);
+            return;
+        }
+
         var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
         var mediaService = scope.ServiceProvider.GetRequiredService<TelegramMediaService>();
 
@@ -130,6 +145,18 @@ public class MediaRefetchWorkerService : BackgroundService
     private async Task ProcessUserPhotoRequestAsync(RefetchRequest request, int workerId)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
+
+        // Check if bot is enabled before making Telegram API calls
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+                        ?? TelegramBotConfig.Default;
+
+        if (!botConfig.BotEnabled)
+        {
+            _logger.LogDebug("Worker {WorkerId} skipping user photo refetch - bot is disabled", workerId);
+            return;
+        }
+
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
 
