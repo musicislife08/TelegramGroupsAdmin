@@ -180,6 +180,14 @@ public class ConfigRecordDto
     public string? VapidPrivateKeyEncrypted { get; set; }
 
     /// <summary>
+    /// Service message deletion configuration (JSONB)
+    /// Controls which types of Telegram service messages are auto-deleted (join/leave, photo changes, etc.)
+    /// Supports per-chat overrides (chat_id > 0)
+    /// </summary>
+    [Column("service_message_deletion_config", TypeName = "jsonb")]
+    public string? ServiceMessageDeletionConfig { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]

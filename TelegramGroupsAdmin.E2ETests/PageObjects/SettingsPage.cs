@@ -424,6 +424,84 @@ public class SettingsPage
 
     #endregion
 
+    #region Service Messages Section
+
+    /// <summary>
+    /// Navigates to the Service Messages page.
+    /// </summary>
+    public async Task NavigateToServiceMessagesAsync()
+    {
+        await NavigateToSectionAsync("telegram", "service-messages");
+    }
+
+    /// <summary>
+    /// Gets the count of service message toggle switches.
+    /// </summary>
+    public async Task<int> GetServiceMessageToggleCountAsync()
+    {
+        // Use label.mud-switch to only match actual switch elements, not paragraphs
+        var toggles = Page.Locator("label.mud-switch");
+        return await toggles.CountAsync();
+    }
+
+    /// <summary>
+    /// Checks if a specific service message type is set to delete by its label text.
+    /// </summary>
+    public async Task<bool> IsServiceMessageDeletionEnabledAsync(string labelText)
+    {
+        // Use label.mud-switch to only match actual switch elements
+        var switchContainer = Page.Locator($"label.mud-switch:has-text('{labelText}')");
+        var input = switchContainer.Locator("input[type='checkbox']");
+        return await input.IsCheckedAsync();
+    }
+
+    /// <summary>
+    /// Toggles a service message deletion setting by its label text.
+    /// </summary>
+    public async Task ToggleServiceMessageDeletionAsync(string labelText)
+    {
+        // Use label.mud-switch to only match actual switch elements
+        var switchContainer = Page.Locator($"label.mud-switch:has-text('{labelText}')");
+        await switchContainer.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks the Save button on the Service Messages settings page.
+    /// </summary>
+    public async Task ClickSaveServiceMessagesAsync()
+    {
+        var saveButton = Page.GetByRole(AriaRole.Button, new() { Name = "Save" });
+        await saveButton.ClickAsync();
+    }
+
+    /// <summary>
+    /// Verifies that all expected service message toggles are visible.
+    /// </summary>
+    public async Task<bool> AreAllServiceMessageTogglesVisibleAsync()
+    {
+        var expectedLabels = new[]
+        {
+            "Delete Join Messages",
+            "Delete Leave Messages",
+            "Delete Photo Changes",
+            "Delete Title Changes",
+            "Delete Pin Notifications",
+            "Delete Chat Creation Messages"
+        };
+
+        foreach (var label in expectedLabels)
+        {
+            // Use label.mud-switch to only match actual switch elements
+            var toggle = Page.Locator($"label.mud-switch:has-text('{label}')");
+            if (!await toggle.IsVisibleAsync())
+                return false;
+        }
+
+        return true;
+    }
+
+    #endregion
+
     #region Dialog Interactions
 
     /// <summary>

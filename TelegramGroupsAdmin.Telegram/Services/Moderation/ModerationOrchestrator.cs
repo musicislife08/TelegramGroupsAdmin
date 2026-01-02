@@ -179,7 +179,7 @@ public class ModerationOrchestrator
         long? messageId,
         Actor executor,
         string reason,
-        long? chatId = null,
+        long chatId,
         CancellationToken cancellationToken = default)
     {
         var protectionResult = CheckServiceAccountProtection(userId);

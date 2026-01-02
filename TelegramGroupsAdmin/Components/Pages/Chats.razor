@@ -163,16 +163,18 @@
                     IsReachable = true
                 };
 
-                // Check if this chat has a custom welcome config
+                // Check if this chat has custom configs
                 var configRecord = await ConfigRepository.GetAsync(chat.ChatId);
                 var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
+                var hasServiceMsgConfig = !string.IsNullOrEmpty(configRecord?.ServiceMessageDeletionConfig);
 
                 _chats.Add(new ManagedChatInfo
                 {
                     Chat = chat,
                     HealthStatus = health,
                     HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId),
-                    HasCustomWelcomeConfig = hasWelcomeConfig
+                    HasCustomWelcomeConfig = hasWelcomeConfig,
+                    HasCustomServiceMsgConfig = hasServiceMsgConfig
                 });
             }
         }

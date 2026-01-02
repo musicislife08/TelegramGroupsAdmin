@@ -180,7 +180,8 @@ public class ReportActionsService : IReportActionsService
             userId: message.UserId,
             messageId: report.MessageId,
             executor: executor,
-            reason: $"Report #{reportId} - inappropriate behavior");
+            reason: $"Report #{reportId} - inappropriate behavior",
+            chatId: message.ChatId);
 
         if (!result.Success)
         {

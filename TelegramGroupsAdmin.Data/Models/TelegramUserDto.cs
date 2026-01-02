@@ -35,8 +35,8 @@ public class WarningEntry
     /// <summary>Actor identifier (web user ID, telegram user ID, or system name)</summary>
     public string ActorId { get; set; } = "unknown";
 
-    /// <summary>Context: Chat ID where warning was issued (optional)</summary>
-    public long? ChatId { get; set; }
+    /// <summary>Context: Chat ID where warning was issued</summary>
+    public long ChatId { get; set; }
 
     /// <summary>Context: Message ID that triggered the warning (optional)</summary>
     public long? MessageId { get; set; }

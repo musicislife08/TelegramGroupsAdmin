@@ -9,6 +9,8 @@ using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -26,6 +28,7 @@ public class FetchUserPhotoJob(
     TelegramPhotoService photoService,
     ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
+    IConfigService configService,
     IOptions<MessageHistoryOptions> historyOptions) : IJob
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
@@ -33,6 +36,7 @@ public class FetchUserPhotoJob(
     private readonly TelegramPhotoService _photoService = photoService;
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
+    private readonly IConfigService _configService = configService;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
 
     public async Task Execute(IJobExecutionContext context)
@@ -59,6 +63,17 @@ public class FetchUserPhotoJob(
 
         try
         {
+            // Check if bot is enabled before making Telegram API calls
+            var botConfig = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+                            ?? TelegramBotConfig.Default;
+
+            if (!botConfig.BotEnabled)
+            {
+                _logger.LogInformation("Skipping user photo fetch - bot is disabled");
+                success = true; // Not a failure, just skipped
+                return;
+            }
+
             _logger.LogDebug(
                 "Fetching user photo for user {UserId} (message {MessageId})",
                 payload.UserId,

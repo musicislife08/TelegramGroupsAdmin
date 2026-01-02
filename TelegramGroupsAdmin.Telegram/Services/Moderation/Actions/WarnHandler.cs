@@ -31,7 +31,7 @@ public class WarnHandler : IWarnHandler
         long userId,
         Actor executor,
         string? reason,
-        long? chatId = null,
+        long chatId,
         long? messageId = null,
         CancellationToken cancellationToken = default)
     {

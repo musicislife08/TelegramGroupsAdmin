@@ -22,6 +22,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation;
 [TestFixture]
 public class ModerationOrchestratorTests
 {
+    private const long TestChatId = 123456789L;
     private IBanHandler _mockBanHandler = null!;
     private ITrustHandler _mockTrustHandler = null!;
     private IWarnHandler _mockWarnHandler = null!;
@@ -111,7 +112,8 @@ public class ModerationOrchestratorTests
             systemUserId,
             null,
             Actor.FromSystem("test"),
-            "Attempted warning of system account");
+            "Attempted warning of system account",
+            TestChatId);
 
         // Assert
         Assert.That(result.Success, Is.False);
@@ -220,15 +222,15 @@ public class ModerationOrchestratorTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 2)); // Below threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long?>())
+                ConfigType.Moderation, Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         // Act
-        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "First warning");
+        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "First warning", TestChatId);
 
         // Assert
         Assert.Multiple(() =>
@@ -254,11 +256,11 @@ public class ModerationOrchestratorTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long?>())
+                ConfigType.Moderation, Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         _mockBanHandler.BanAsync(Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
@@ -268,7 +270,7 @@ public class ModerationOrchestratorTests
             .Returns(UntrustResult.Succeeded());
 
         // Act
-        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Final warning");
+        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Final warning", TestChatId);
 
         // Assert
         Assert.Multiple(() =>
@@ -295,15 +297,15 @@ public class ModerationOrchestratorTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 5)); // Well above threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long?>())
+                ConfigType.Moderation, Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = false, AutoBanThreshold = 3 });
 
         // Act
-        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Warning");
+        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Warning", TestChatId);
 
         // Assert
         Assert.That(result.AutoBanTriggered, Is.False);
@@ -324,15 +326,15 @@ public class ModerationOrchestratorTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long?>())
+                ConfigType.Moderation, Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         // Act
-        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Spam detected");
+        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Spam detected", TestChatId);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -884,18 +886,18 @@ public class ModerationOrchestratorTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long?>())
+                ConfigType.Moderation, Arg.Any<long>())
             .Returns(WarningSystemConfig.Default);
 
         _mockNotificationHandler.NotifyUserWarningAsync(userId, 1, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(NotificationResult.Failed("User blocked bot"));
 
         // Act
-        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Spam detected");
+        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Spam detected", TestChatId);
 
         // Assert - Overall success (warning recorded), notification failure is non-critical
         Assert.Multiple(() =>
@@ -916,18 +918,18 @@ public class ModerationOrchestratorTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
-                ConfigType.Moderation, Arg.Any<long?>())
+                ConfigType.Moderation, Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
         _mockBanHandler.BanAsync(Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Failed("API rate limited"));
 
         // Act
-        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Spam detected");
+        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Spam detected", TestChatId);
 
         // Assert - Warning succeeded, auto-ban attempted but failed
         Assert.Multiple(() =>

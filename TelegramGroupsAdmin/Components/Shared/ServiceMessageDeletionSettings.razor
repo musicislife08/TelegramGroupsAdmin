@@ -1,0 +1,199 @@
+@using TelegramGroupsAdmin.Configuration
+@using TelegramGroupsAdmin.Configuration.Services
+@inject IConfigService ConfigService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="@(ChatId != 0 ? 0 : 1)">
+    @if (ChatId == 0)
+    {
+        <MudText Typo="Typo.h6" GutterBottom="true">Service Message Deletion</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure which types of Telegram service messages are automatically deleted.
+            Service messages include join/leave notifications, photo changes, and more.
+        </MudText>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_config != null)
+    {
+        <MudForm>
+            <MudGrid>
+                <!-- Join Messages -->
+                <MudItem xs="12" md="6">
+                    <MudSwitch @bind-Value="_config.DeleteJoinMessages"
+                               Color="Color.Primary"
+                               Label="Delete Join Messages" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">
+                        "User joined the group" notifications
+                    </MudText>
+                </MudItem>
+
+                <!-- Leave Messages -->
+                <MudItem xs="12" md="6">
+                    <MudSwitch @bind-Value="_config.DeleteLeaveMessages"
+                               Color="Color.Primary"
+                               Label="Delete Leave Messages" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">
+                        "User left the group" notifications
+                    </MudText>
+                </MudItem>
+
+                <!-- Photo Changes -->
+                <MudItem xs="12" md="6">
+                    <MudSwitch @bind-Value="_config.DeletePhotoChanges"
+                               Color="Color.Primary"
+                               Label="Delete Photo Changes" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">
+                        Group photo added/removed notifications
+                    </MudText>
+                </MudItem>
+
+                <!-- Title Changes -->
+                <MudItem xs="12" md="6">
+                    <MudSwitch @bind-Value="_config.DeleteTitleChanges"
+                               Color="Color.Primary"
+                               Label="Delete Title Changes" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">
+                        "User changed the group title" notifications
+                    </MudText>
+                </MudItem>
+
+                <!-- Pinned Messages -->
+                <MudItem xs="12" md="6">
+                    <MudSwitch @bind-Value="_config.DeletePinNotifications"
+                               Color="Color.Primary"
+                               Label="Delete Pin Notifications" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">
+                        "User pinned a message" notifications
+                    </MudText>
+                </MudItem>
+
+                <!-- Chat Creation -->
+                <MudItem xs="12" md="6">
+                    <MudSwitch @bind-Value="_config.DeleteChatCreationMessages"
+                               Color="Color.Primary"
+                               Label="Delete Chat Creation Messages" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">
+                        Group/supergroup/channel created notifications
+                    </MudText>
+                </MudItem>
+
+                @if (ChatId == 0)
+                {
+                    <MudItem xs="12" Class="d-flex justify-space-between mt-4">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveConfig"
+                                   Disabled="_saving">
+                            @if (_saving)
+                            {
+                                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <span>Save Configuration</span>
+                            }
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   OnClick="LoadDefaults"
+                                   Disabled="_saving">
+                            Reset to Defaults
+                        </MudButton>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudForm>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Failed to load configuration</MudAlert>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>
+    /// Chat ID for per-chat configuration. Use 0 for global configuration.
+    /// </summary>
+    [Parameter]
+    public long ChatId { get; set; }
+
+    /// <summary>
+    /// Optional callback when configuration is saved (for per-chat mode)
+    /// </summary>
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    private ServiceMessageDeletionConfig? _config;
+    private bool _loading = true;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfig();
+    }
+
+    private async Task LoadConfig()
+    {
+        _loading = true;
+        try
+        {
+            var config = await ConfigService.GetAsync<ServiceMessageDeletionConfig>(
+                ConfigType.ServiceMessageDeletion, ChatId);
+            _config = config ?? ServiceMessageDeletionConfig.Default;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load configuration: {ex.Message}", Severity.Error);
+            _config = null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>
+    /// Public method to allow parent components to trigger save
+    /// </summary>
+    public async Task SaveConfiguration()
+    {
+        await SaveConfig();
+    }
+
+    private async Task SaveConfig()
+    {
+        if (_config == null) return;
+
+        _saving = true;
+        try
+        {
+            await ConfigService.SaveAsync(ConfigType.ServiceMessageDeletion, ChatId, _config);
+            var scope = ChatId != 0 ? $"for chat {ChatId}" : "globally";
+            Snackbar.Add($"Service message settings saved {scope}", Severity.Success);
+
+            if (OnSaved.HasDelegate)
+            {
+                await OnSaved.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void LoadDefaults()
+    {
+        _config = ServiceMessageDeletionConfig.Default;
+        Snackbar.Add("Defaults loaded. Click 'Save Configuration' to apply.", Severity.Info);
+    }
+}

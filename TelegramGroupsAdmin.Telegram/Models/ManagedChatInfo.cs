@@ -9,4 +9,5 @@ public class ManagedChatInfo
     public required ChatHealthStatus HealthStatus { get; set; }
     public bool HasCustomSpamConfig { get; set; }
     public bool HasCustomWelcomeConfig { get; set; }
+    public bool HasCustomServiceMsgConfig { get; set; }
 }

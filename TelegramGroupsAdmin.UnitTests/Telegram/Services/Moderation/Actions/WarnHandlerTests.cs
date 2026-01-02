@@ -17,6 +17,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 [TestFixture]
 public class WarnHandlerTests
 {
+    private const long TestChatId = 123456789L;
     private ITelegramUserRepository _mockUserRepository = null!;
     private ILogger<WarnHandler> _mockLogger = null!;
     private WarnHandler _handler = null!;
@@ -44,7 +45,7 @@ public class WarnHandlerTests
             .Returns(1);
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, "Spam detected");
+        var result = await _handler.WarnAsync(userId, executor, "Spam detected", TestChatId);
 
         // Assert
         Assert.Multiple(() =>
@@ -73,7 +74,7 @@ public class WarnHandlerTests
             .Returns(3);
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, "Repeated violation");
+        var result = await _handler.WarnAsync(userId, executor, "Repeated violation", TestChatId);
 
         // Assert
         Assert.Multiple(() =>
@@ -122,7 +123,7 @@ public class WarnHandlerTests
             .Returns(1);
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, reason: null);
+        var result = await _handler.WarnAsync(userId, executor, reason: null, TestChatId);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -145,7 +146,7 @@ public class WarnHandlerTests
             .ThrowsAsync(new Exception("Database insert failed"));
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, "Test");
+        var result = await _handler.WarnAsync(userId, executor, "Test", TestChatId);
 
         // Assert
         Assert.Multiple(() =>
@@ -167,7 +168,7 @@ public class WarnHandlerTests
             .ThrowsAsync(new InvalidOperationException("Cannot add warning for unknown user 12345"));
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, "Test");
+        var result = await _handler.WarnAsync(userId, executor, "Test", TestChatId);
 
         // Assert
         Assert.Multiple(() =>
@@ -188,7 +189,7 @@ public class WarnHandlerTests
             .Returns(1);
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, "Warned from web UI");
+        var result = await _handler.WarnAsync(userId, executor, "Warned from web UI", TestChatId);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -213,7 +214,7 @@ public class WarnHandlerTests
             .Returns(1);
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, "Warned by admin");
+        var result = await _handler.WarnAsync(userId, executor, "Warned by admin", TestChatId);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -238,7 +239,7 @@ public class WarnHandlerTests
             .Returns(1);
 
         // Act
-        var result = await _handler.WarnAsync(userId, executor, "Auto-detected spam");
+        var result = await _handler.WarnAsync(userId, executor, "Auto-detected spam", TestChatId);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -264,7 +265,7 @@ public class WarnHandlerTests
             .Returns(1);
 
         // Act
-        await _handler.WarnAsync(userId, executor, "Test");
+        await _handler.WarnAsync(userId, executor, "Test", TestChatId);
 
         // Assert - ExpiresAt should be ~90 days from now
         await _mockUserRepository.Received(1).AddWarningAsync(
