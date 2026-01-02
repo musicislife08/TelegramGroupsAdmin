@@ -1,9 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Mappings;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -18,7 +17,7 @@ public class InviteRepository : IInviteRepository
         _logger = logger;
     }
 
-    public async Task<UiModels.InviteRecord?> GetByTokenAsync(string token, CancellationToken cancellationToken = default)
+    public async Task<InviteRecord?> GetByTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Invites
@@ -28,7 +27,7 @@ public class InviteRepository : IInviteRepository
         return entity?.ToModel();
     }
 
-    public async Task CreateAsync(UiModels.InviteRecord invite, CancellationToken cancellationToken = default)
+    public async Task CreateAsync(InviteRecord invite, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = invite.ToDto();
@@ -90,7 +89,7 @@ public class InviteRepository : IInviteRepository
         _logger.LogInformation("Invite {Token} used by user {UsedBy}", token, usedBy);
     }
 
-    public async Task<List<UiModels.InviteRecord>> GetByCreatorAsync(string createdBy, CancellationToken cancellationToken = default)
+    public async Task<List<InviteRecord>> GetByCreatorAsync(string createdBy, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.Invites
@@ -121,7 +120,7 @@ public class InviteRepository : IInviteRepository
         return expiredInvites.Count;
     }
 
-    public async Task<List<UiModels.InviteRecord>> GetAllAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default)
+    public async Task<List<InviteRecord>> GetAllAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var query = context.Invites.AsNoTracking();
@@ -136,7 +135,7 @@ public class InviteRepository : IInviteRepository
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<UiModels.InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default)
+    public async Task<List<InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var query = context.Invites
@@ -167,7 +166,7 @@ public class InviteRepository : IInviteRepository
 
         var results = await query.OrderByDescending(x => x.Invite.CreatedAt).ToListAsync(cancellationToken);
 
-        return results.Select(r => new UiModels.InviteWithCreator(
+        return results.Select(r => new InviteWithCreator(
             Token: r.Invite.Token,
             CreatedBy: r.Invite.CreatedBy,
             CreatedByEmail: r.CreatorEmail,
@@ -176,7 +175,7 @@ public class InviteRepository : IInviteRepository
             UsedBy: r.Invite.UsedBy,
             UsedByEmail: r.UsedByEmail,
             PermissionLevel: (PermissionLevel)r.Invite.PermissionLevel,
-            Status: (UiModels.InviteStatus)r.Invite.Status,
+            Status: (InviteStatus)r.Invite.Status,
             ModifiedAt: r.Invite.ModifiedAt
         )).ToList();
     }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -160,16 +161,18 @@ public class MediaRefetchWorkerService : BackgroundService
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
 
-        _logger.LogInformation("Worker {WorkerId} refetching user photo: user {UserId}", workerId, request.UserId);
-
         // Get user's current file_unique_id from database
         var user = await userRepo.GetByIdAsync(request.UserId!.Value);
         var knownPhotoId = user?.PhotoFileUniqueId;
 
+        _logger.LogInformation("Worker {WorkerId} refetching user photo: {User}",
+            workerId, user.ToLogInfo(request.UserId!.Value));
+
         // Download photo (will check if changed)
         var result = await photoService.GetUserPhotoWithMetadataAsync(
             request.UserId!.Value,
-            knownPhotoId);
+            knownPhotoId,
+            user);
 
         if (result != null)
         {
@@ -179,7 +182,8 @@ public class MediaRefetchWorkerService : BackgroundService
                 result.FileUniqueId,
                 result.RelativePath);
 
-            _logger.LogInformation("Worker {WorkerId} completed user photo refetch: {UserId}", workerId, request.UserId);
+            _logger.LogInformation("Worker {WorkerId} completed user photo refetch: {User}",
+                workerId, user.ToLogInfo(request.UserId!.Value));
 
             // User photo updates don't have a UI event yet (would need OnUserPhotoUpdated event)
             // For now, users refresh page to see updated photos

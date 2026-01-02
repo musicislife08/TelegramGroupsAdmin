@@ -1,7 +1,7 @@
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+namespace TelegramGroupsAdmin.Core.Mappings;
 
 /// <summary>
 /// Mapping extensions for Recovery Code records
@@ -10,7 +10,7 @@ public static class RecoveryCodeMappings
 {
     extension(DataModels.RecoveryCodeRecordDto data)
     {
-        public UiModels.RecoveryCodeRecord ToModel() => new(
+        public RecoveryCodeRecord ToModel() => new(
             Id: data.Id,
             UserId: data.UserId,
             CodeHash: data.CodeHash,

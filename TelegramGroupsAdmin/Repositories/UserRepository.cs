@@ -1,11 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Mappings;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
-using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -26,7 +25,7 @@ public class UserRepository : IUserRepository
         return await context.Users.CountAsync(cancellationToken);
     }
 
-    public async Task<UiModels.UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
+    public async Task<UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var normalizedEmail = email.ToUpperInvariant();
@@ -39,7 +38,7 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
-    public async Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default)
+    public async Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var normalizedEmail = email.ToUpperInvariant();
@@ -52,7 +51,7 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
-    public async Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task<UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Users
@@ -62,7 +61,7 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
-    public async Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken cancellationToken = default)
+    public async Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = user.ToDto();
@@ -267,7 +266,7 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
     }
 
-    public async Task<List<UiModels.RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.RecoveryCodes
@@ -323,7 +322,7 @@ public class UserRepository : IUserRepository
         return true;
     }
 
-    public async Task<UiModels.InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default)
+    public async Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Invites
@@ -348,7 +347,7 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Invite {Token} used by user {UserId}", token, userId);
     }
 
-    public async Task<List<UiModels.UserRecord>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.Users
@@ -359,7 +358,7 @@ public class UserRepository : IUserRepository
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default)
+    public async Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.Users
@@ -397,14 +396,14 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Set user {UserId} active status to {IsActive}", userId, isActive);
     }
 
-    public async Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default)
+    public async Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
         if (entity == null) return;
 
         entity.Status = (DataModels.UserStatus)(int)newStatus;
-        entity.IsActive = newStatus == UiModels.UserStatus.Active;
+        entity.IsActive = newStatus == UserStatus.Active;
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
 
@@ -413,7 +412,7 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Updated status for user {UserId} to {Status} by {ModifiedBy}", userId, newStatus, modifiedBy);
     }
 
-    public async Task UpdateAsync(UiModels.UserRecord user, CancellationToken cancellationToken = default)
+    public async Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == user.Id, cancellationToken);

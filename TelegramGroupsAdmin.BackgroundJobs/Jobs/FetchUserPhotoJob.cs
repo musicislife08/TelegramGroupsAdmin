@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -74,15 +75,18 @@ public class FetchUserPhotoJob(
                 return;
             }
 
+            // Get user for logging context
+            var user = await _telegramUserRepository.GetByTelegramIdAsync(payload.UserId, cancellationToken);
+
             _logger.LogDebug(
-                "Fetching user photo for user {UserId} (message {MessageId})",
-                payload.UserId,
+                "Fetching user photo for {User} (message {MessageId})",
+                user.ToLogDebug(payload.UserId),
                 payload.MessageId);
 
             try
             {
                 // Fetch user photo (cached if already downloaded)
-                var userPhotoPath = await _photoService.GetUserPhotoAsync(payload.UserId);
+                var userPhotoPath = await _photoService.GetUserPhotoAsync(payload.UserId, user);
 
                 if (userPhotoPath != null)
                 {
@@ -97,8 +101,8 @@ public class FetchUserPhotoJob(
                         {
                             photoHashBase64 = Convert.ToBase64String(photoHashBytes);
                             _logger.LogDebug(
-                                "Computed pHash for user {UserId} (8 bytes → 12 char Base64)",
-                                payload.UserId);
+                                "Computed pHash for {User} (8 bytes → 12 char Base64)",
+                                user.ToLogDebug(payload.UserId));
                         }
                     }
                     catch (Exception hashEx)
@@ -106,8 +110,8 @@ public class FetchUserPhotoJob(
                         // Log but don't fail job if hash computation fails
                         _logger.LogWarning(
                             hashEx,
-                            "Failed to compute photo hash for user {UserId}, continuing without hash",
-                            payload.UserId);
+                            "Failed to compute photo hash for {User}, continuing without hash",
+                            user.ToLogDebug(payload.UserId));
                     }
 
                     // Update telegram_users table with photo path and pHash (centralized storage)
@@ -118,16 +122,16 @@ public class FetchUserPhotoJob(
                         cancellationToken);
 
                     _logger.LogInformation(
-                        "Cached user photo for user {UserId}: {PhotoPath} (pHash: {HasHash})",
-                        payload.UserId,
+                        "Cached user photo for {User}: {PhotoPath} (pHash: {HasHash})",
+                        user.ToLogInfo(payload.UserId),
                         userPhotoPath,
                         photoHashBase64 != null ? "stored" : "none");
                 }
                 else
                 {
                     _logger.LogDebug(
-                        "User {UserId} has no profile photo",
-                        payload.UserId);
+                        "User {User} has no profile photo",
+                        user.ToLogDebug(payload.UserId));
                 }
 
                 success = true;
@@ -136,9 +140,9 @@ public class FetchUserPhotoJob(
             {
                 _logger.LogError(
                     ex,
-                    "Failed to fetch user photo for user {UserId} (message {MessageId})",
-                    payload?.UserId,
-                    payload?.MessageId);
+                    "Failed to fetch user photo for {User} (message {MessageId})",
+                    user.ToLogDebug(payload.UserId),
+                    payload.MessageId);
                 throw; // Re-throw for retry logic and exception recording
             }
         }

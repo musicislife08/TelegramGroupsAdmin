@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// Recovery code record for UI display

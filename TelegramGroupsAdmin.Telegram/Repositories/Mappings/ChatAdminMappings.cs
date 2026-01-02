@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Mappings;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -11,21 +12,30 @@ public static class ChatAdminMappings
     extension(DataModels.ChatAdminRecordDto data)
     {
         /// <summary>
-        /// Maps to UI model with user details from navigation property
+        /// Maps to UI model with user details from navigation property.
+        /// Includes linked web user if the Telegram admin has linked a web account.
         /// </summary>
-        public UiModels.ChatAdmin ToModel() => new()
+        public UiModels.ChatAdmin ToModel()
         {
-            Id = data.Id,
-            ChatId = data.ChatId,
-            TelegramId = data.TelegramId,
-            Username = data.TelegramUser?.Username,
-            FirstName = data.TelegramUser?.FirstName,
-            LastName = data.TelegramUser?.LastName,
-            IsCreator = data.IsCreator,
-            PromotedAt = data.PromotedAt,
-            LastVerifiedAt = data.LastVerifiedAt,
-            IsActive = data.IsActive
-        };
+            // Get the linked web user (first active mapping's user, if any)
+            var linkedWebUser = data.TelegramUser?.UserMappings
+                .FirstOrDefault(m => m.IsActive)?.User?.ToModel();
+
+            return new()
+            {
+                Id = data.Id,
+                ChatId = data.ChatId,
+                TelegramId = data.TelegramId,
+                Username = data.TelegramUser?.Username,
+                FirstName = data.TelegramUser?.FirstName,
+                LastName = data.TelegramUser?.LastName,
+                IsCreator = data.IsCreator,
+                PromotedAt = data.PromotedAt,
+                LastVerifiedAt = data.LastVerifiedAt,
+                IsActive = data.IsActive,
+                LinkedWebUser = linkedWebUser
+            };
+        }
 
         /// <summary>
         /// Maps to UI model with explicit user details (for inline projections)

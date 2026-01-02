@@ -1,6 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
-
-using TelegramGroupsAdmin.Core.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// User record for UI display

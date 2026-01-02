@@ -659,7 +659,7 @@ public class BackupServiceTests
         }
 
         public Task<bool> SendNotificationAsync(
-            string userId,
+            UserRecord user,
             NotificationEventType eventType,
             string subject,
             string message,

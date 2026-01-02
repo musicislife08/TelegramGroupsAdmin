@@ -158,6 +158,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(tum => tum.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // TelegramUsers → TelegramUserMappings (one-to-many via TelegramId)
+        // Navigation only - no FK constraint in database (just index exists)
+        modelBuilder.Entity<TelegramUserMappingRecordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany(tu => tu.UserMappings)
+            .HasForeignKey(tum => tum.TelegramId)
+            .HasPrincipalKey(tu => tu.TelegramUserId)
+            .OnDelete(DeleteBehavior.NoAction); // No cascade - we don't delete mappings when TG user deleted
+
         // Users → TelegramLinkTokens (one-to-many)
         modelBuilder.Entity<TelegramLinkTokenRecordDto>()
             .HasOne(tlt => tlt.User)

@@ -1,9 +1,11 @@
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 
@@ -22,6 +24,7 @@ public class NotificationService : INotificationService
     private readonly IWebPushNotificationService _webPushService;
     private readonly ITelegramUserMappingRepository _telegramMappingRepo;
     private readonly IChatAdminsRepository _chatAdminsRepo;
+    private readonly IManagedChatsRepository _managedChatsRepo;
     private readonly IUserRepository _userRepo;
     private readonly ILogger<NotificationService> _logger;
     private DateTime _lastDeliveryFailureLog = DateTime.MinValue;
@@ -33,6 +36,7 @@ public class NotificationService : INotificationService
         IWebPushNotificationService webPushService,
         ITelegramUserMappingRepository telegramMappingRepo,
         IChatAdminsRepository chatAdminsRepo,
+        IManagedChatsRepository managedChatsRepo,
         IUserRepository userRepo,
         ILogger<NotificationService> logger)
     {
@@ -42,6 +46,7 @@ public class NotificationService : INotificationService
         _webPushService = webPushService;
         _telegramMappingRepo = telegramMappingRepo;
         _chatAdminsRepo = chatAdminsRepo;
+        _managedChatsRepo = managedChatsRepo;
         _userRepo = userRepo;
         _logger = logger;
     }
@@ -53,55 +58,53 @@ public class NotificationService : INotificationService
         string message,
         CancellationToken cancellationToken = default)
     {
+        // Fetch chat once for logging (reuse for all logs in this method)
+        var chat = await _managedChatsRepo.GetByChatIdAsync(chatId, cancellationToken);
+
         try
         {
-            // Get all active admins for this chat (telegram IDs)
+            // Get all active admins for this chat (includes LinkedWebUser via JOIN)
             var chatAdmins = await _chatAdminsRepo.GetChatAdminsAsync(chatId, cancellationToken);
 
-            if (!chatAdmins.Any())
+            if (chatAdmins.Count == 0)
             {
-                _logger.LogWarning("No admins found for chat {ChatId}, cannot send notification", chatId);
+                _logger.LogWarning("No admins found for {Chat}, cannot send notification",
+                    chat.ToLogDebug(chatId));
                 return new Dictionary<string, bool>();
             }
 
-            // Map telegram IDs to web user IDs
-            var webUserIds = new List<string>();
+            // Filter to admins with linked web accounts
+            var linkedAdmins = chatAdmins
+                .Where(a => a.LinkedWebUser != null)
+                .Select(a => a.LinkedWebUser!)
+                .ToList();
 
-            foreach (var admin in chatAdmins)
-            {
-                var mapping = await _telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
-                if (mapping != null)
-                {
-                    webUserIds.Add(mapping.UserId);
-                }
-            }
-
-            if (!webUserIds.Any())
+            if (linkedAdmins.Count == 0)
             {
                 _logger.LogWarning(
-                    "Chat {ChatId} has {AdminCount} admins, but none are linked to web accounts",
-                    chatId, chatAdmins.Count);
+                    "{Chat} has {AdminCount} admins, but none are linked to web accounts",
+                    chat.ToLogDebug(chatId), chatAdmins.Count);
                 return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation(
-                "Sending chat notification for chat {ChatId} to {UserCount} linked admin(s)",
-                chatId, webUserIds.Count);
+                "Sending chat notification for {Chat} to {UserCount} linked admin(s)",
+                chat.ToLogInfo(chatId), linkedAdmins.Count);
 
             // Send notifications to all linked admins
             var results = new Dictionary<string, bool>();
-            foreach (var userId in webUserIds)
+            foreach (var user in linkedAdmins)
             {
-                var success = await SendNotificationAsync(userId, eventType, subject, message, cancellationToken);
-                results[userId] = success;
+                var success = await SendNotificationAsync(user, eventType, subject, message, cancellationToken);
+                results[user.Id] = success;
             }
 
             return results;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send chat notification for chat {ChatId}, event {EventType}",
-                chatId, eventType);
+            _logger.LogError(ex, "Failed to send chat notification for {Chat}, event {EventType}",
+                chat.ToLogDebug(chatId), eventType);
             return new Dictionary<string, bool>();
         }
     }
@@ -132,7 +135,7 @@ public class NotificationService : INotificationService
             var results = new Dictionary<string, bool>();
             foreach (var owner in ownerUsers)
             {
-                var success = await SendNotificationAsync(owner.Id, eventType, subject, message, cancellationToken);
+                var success = await SendNotificationAsync(owner, eventType, subject, message, cancellationToken);
                 results[owner.Id] = success;
             }
 
@@ -146,7 +149,7 @@ public class NotificationService : INotificationService
     }
 
     public async Task<bool> SendNotificationAsync(
-        string userId,
+        UserRecord user,
         NotificationEventType eventType,
         string subject,
         string message,
@@ -155,28 +158,28 @@ public class NotificationService : INotificationService
         try
         {
             // Get user preferences (creates default if not exists)
-            var config = await _preferencesRepo.GetOrCreateAsync(userId, cancellationToken);
+            var config = await _preferencesRepo.GetOrCreateAsync(user.Id, cancellationToken);
 
             var deliverySuccess = false;
 
             // Telegram DM channel - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.TelegramDm, eventType))
             {
-                var telegramSuccess = await SendTelegramDmAsync(userId, subject, message, cancellationToken);
+                var telegramSuccess = await SendTelegramDmAsync(user.Id, subject, message, cancellationToken);
                 deliverySuccess = deliverySuccess || telegramSuccess;
             }
 
             // Email channel - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.Email, eventType))
             {
-                var emailSuccess = await SendEmailAsync(userId, subject, message, cancellationToken);
+                var emailSuccess = await SendEmailAsync(user, subject, message, cancellationToken);
                 deliverySuccess = deliverySuccess || emailSuccess;
             }
 
             // WebPush channel (in-app notifications) - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.WebPush, eventType))
             {
-                var webPushSuccess = await _webPushService.SendAsync(userId, eventType, subject, message, cancellationToken);
+                var webPushSuccess = await _webPushService.SendAsync(user.Id, eventType, subject, message, cancellationToken);
                 deliverySuccess = deliverySuccess || webPushSuccess;
             }
 
@@ -189,8 +192,8 @@ public class NotificationService : INotificationService
 
                 if (!hasTelegramEnabled && !hasEmailEnabled && !hasWebPushEnabled)
                 {
-                    _logger.LogDebug("User {UserId} has no channels enabled for event type {EventType}",
-                        userId, eventType);
+                    _logger.LogDebug("{User} has no channels enabled for event type {EventType}",
+                        user.ToLogDebug(user.Id), eventType);
                 }
                 else
                 {
@@ -199,8 +202,8 @@ public class NotificationService : INotificationService
                     if ((now - _lastDeliveryFailureLog).TotalSeconds >= 60)
                     {
                         _logger.LogWarning(
-                            "Failed to deliver notification to user {UserId} via any enabled channel",
-                            userId);
+                            "Failed to deliver notification to {User} via any enabled channel",
+                            user.ToLogDebug(user.Id));
                         _lastDeliveryFailureLog = now;
                     }
                 }
@@ -210,36 +213,10 @@ public class NotificationService : INotificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send notification to user {UserId} for event {EventType}",
-                userId, eventType);
+            _logger.LogError(ex, "Failed to send notification to {User} for event {EventType}",
+                user.ToLogDebug(user.Id), eventType);
             return false;
         }
-    }
-
-    public async Task<Dictionary<string, bool>> SendNotificationToMultipleAsync(
-        IEnumerable<string> userIds,
-        NotificationEventType eventType,
-        string subject,
-        string message,
-        CancellationToken cancellationToken = default)
-    {
-        var results = new Dictionary<string, bool>();
-
-        // Send notifications in parallel for better performance
-        var tasks = userIds.Select(async userId =>
-        {
-            var success = await SendNotificationAsync(userId, eventType, subject, message, cancellationToken);
-            return (UserId: userId, Success: success);
-        });
-
-        var completedTasks = await Task.WhenAll(tasks);
-
-        foreach (var (userId, success) in completedTasks)
-        {
-            results[userId] = success;
-        }
-
-        return results;
     }
 
     /// <summary>
@@ -298,22 +275,13 @@ public class NotificationService : INotificationService
     /// Uses user's account email (validated)
     /// </summary>
     private async Task<bool> SendEmailAsync(
-        string userId,
+        UserRecord user,
         string subject,
         string message,
         CancellationToken cancellationToken)
     {
-        Telegram.Models.UserRecord? user = null;
         try
         {
-            // Get user's account email
-            user = await _userRepo.GetByIdAsync(userId, cancellationToken);
-            if (user == null)
-            {
-                _logger.LogWarning("User {UserId} not found, cannot send email notification", userId);
-                return false;
-            }
-
             var emailAddress = user.Email;
 
             // Format message as HTML email
@@ -343,14 +311,14 @@ public class NotificationService : INotificationService
             await _emailService.SendEmailAsync(emailAddress, subject, htmlBody, isHtml: true, cancellationToken);
 
             _logger.LogInformation("Sent email notification to {User}",
-                LogDisplayName.WebUserInfo(emailAddress, userId));
+                user.ToLogInfo(user.Id));
 
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send email to {User}",
-                LogDisplayName.WebUserDebug(user?.Email, userId));
+                user.ToLogDebug(user.Id));
             return false;
         }
     }

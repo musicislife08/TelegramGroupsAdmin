@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
+@using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Services
 @attribute [Authorize(Policy = "OwnerOnly")]
 
@@ -9,6 +10,7 @@
 @inject IWebPushNotificationService WebPushService
 @inject NotificationStateService NotificationState
 @inject BlazorAuthHelper AuthHelper
+@inject IUserRepository UserRepository
 
 <PageTitle>Notification Debug</PageTitle>
 
@@ -185,8 +187,22 @@
 
             if (_deliveryMode == DeliveryMode.ToCurrentUser && !string.IsNullOrEmpty(_currentUserId))
             {
+                var user = await UserRepository.GetByIdAsync(_currentUserId);
+                if (user == null)
+                {
+                    _deliveryResults.Add(new DeliveryResult
+                    {
+                        EventType = _selectedEventType,
+                        Mode = _deliveryMode,
+                        Success = false,
+                        Message = "ERROR: Current user not found",
+                        Timestamp = DateTimeOffset.UtcNow
+                    });
+                    return;
+                }
+
                 success = await NotificationService.SendNotificationAsync(
-                    _currentUserId,
+                    user,
                     _selectedEventType,
                     _subject,
                     _message);
@@ -212,7 +228,7 @@
                 Mode = _deliveryMode,
                 Success = success,
                 Message = resultMessage,
-                Timestamp = DateTime.Now
+                Timestamp = DateTimeOffset.UtcNow
             });
 
             // Refresh the notification state to show the new notification in the bell
@@ -226,7 +242,7 @@
                 Mode = _deliveryMode,
                 Success = false,
                 Message = $"Error: {ex.Message}",
-                Timestamp = DateTime.Now
+                Timestamp = DateTimeOffset.UtcNow
             });
         }
         finally
@@ -265,7 +281,7 @@
         public DeliveryMode Mode { get; init; }
         public bool Success { get; init; }
         public string Message { get; init; } = "";
-        public DateTime Timestamp { get; init; }
+        public DateTimeOffset Timestamp { get; init; }
     }
 
     private record EventTypeInfo(NotificationEventType EventType, string Description, string Trigger);
