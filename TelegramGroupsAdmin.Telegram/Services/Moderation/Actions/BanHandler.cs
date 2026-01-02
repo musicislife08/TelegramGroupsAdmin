@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
@@ -42,9 +43,12 @@ public class BanHandler : IBanHandler
         long? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+
         _logger.LogDebug(
-            "Executing ban for user {UserId} by {Executor}",
-            userId, executor.GetDisplayText());
+            "Executing ban for user {User} by {Executor}",
+            user.ToLogDebug(userId), executor.GetDisplayText());
 
         try
         {
@@ -57,14 +61,14 @@ public class BanHandler : IBanHandler
             await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
-                "Ban completed for user {UserId}: {Success} succeeded, {Failed} failed",
-                userId, crossResult.SuccessCount, crossResult.FailCount);
+                "Ban completed for {User}: {Success} succeeded, {Failed} failed",
+                user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount);
 
             return BanResult.Succeeded(crossResult.SuccessCount, crossResult.FailCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute ban for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to execute ban for user {User}", user.ToLogDebug(userId));
             return BanResult.Failed(ex.Message);
         }
     }
@@ -78,9 +82,12 @@ public class BanHandler : IBanHandler
         long? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+
         _logger.LogDebug(
-            "Executing temp ban for user {UserId} for {Duration} by {Executor}",
-            userId, duration, executor.GetDisplayText());
+            "Executing temp ban for user {User} for {Duration} by {Executor}",
+            user.ToLogDebug(userId), duration, executor.GetDisplayText());
 
         try
         {
@@ -109,15 +116,15 @@ public class BanHandler : IBanHandler
                 cancellationToken);
 
             _logger.LogInformation(
-                "Temp ban completed for user {UserId}: {Success} succeeded, {Failed} failed. " +
+                "Temp ban completed for {User}: {Success} succeeded, {Failed} failed. " +
                 "Expires at {ExpiresAt} (JobId: {JobId})",
-                userId, crossResult.SuccessCount, crossResult.FailCount, expiresAt, jobId);
+                user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount, expiresAt, jobId);
 
             return TempBanResult.Succeeded(crossResult.SuccessCount, expiresAt, crossResult.FailCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute temp ban for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to execute temp ban for user {User}", user.ToLogDebug(userId));
             return TempBanResult.Failed(ex.Message);
         }
     }
@@ -129,9 +136,12 @@ public class BanHandler : IBanHandler
         string? reason,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+
         _logger.LogDebug(
-            "Executing unban for user {UserId} by {Executor}",
-            userId, executor.GetDisplayText());
+            "Executing unban for user {User} by {Executor}",
+            user.ToLogDebug(userId), executor.GetDisplayText());
 
         try
         {
@@ -145,14 +155,14 @@ public class BanHandler : IBanHandler
             await _userRepository.SetBanStatusAsync(userId, isBanned: false, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
-                "Unban completed for user {UserId}: {Success} succeeded, {Failed} failed",
-                userId, crossResult.SuccessCount, crossResult.FailCount);
+                "Unban completed for {User}: {Success} succeeded, {Failed} failed",
+                user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount);
 
             return UnbanResult.Succeeded(crossResult.SuccessCount, crossResult.FailCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute unban for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to execute unban for user {User}", user.ToLogDebug(userId));
             return UnbanResult.Failed(ex.Message);
         }
     }

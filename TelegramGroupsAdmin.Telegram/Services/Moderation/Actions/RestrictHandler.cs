@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Constants;
@@ -16,15 +19,21 @@ public class RestrictHandler : IRestrictHandler
 {
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly ICrossChatExecutor _crossChatExecutor;
+    private readonly ITelegramUserRepository _userRepository;
+    private readonly IManagedChatsRepository _chatsRepository;
     private readonly ILogger<RestrictHandler> _logger;
 
     public RestrictHandler(
         ITelegramBotClientFactory botClientFactory,
         ICrossChatExecutor crossChatExecutor,
+        ITelegramUserRepository userRepository,
+        IManagedChatsRepository chatsRepository,
         ILogger<RestrictHandler> logger)
     {
         _botClientFactory = botClientFactory;
         _crossChatExecutor = crossChatExecutor;
+        _userRepository = userRepository;
+        _chatsRepository = chatsRepository;
         _logger = logger;
     }
 
@@ -37,11 +46,17 @@ public class RestrictHandler : IRestrictHandler
         string? reason,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+        var chat = chatId != ModerationConstants.GlobalChatId
+            ? await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken)
+            : null;
+
         var isGlobal = chatId == ModerationConstants.GlobalChatId;
         _logger.LogDebug(
-            "Executing {Scope} restriction for user {UserId} for {Duration} by {Executor}",
-            isGlobal ? "global" : $"chat-specific (chat {chatId})",
-            userId, duration, executor.GetDisplayText());
+            "Executing {Scope} restriction for user {User} for {Duration} by {Executor}",
+            isGlobal ? "global" : $"chat-specific ({chat.ToLogDebug(chatId)})",
+            user.ToLogDebug(userId), duration, executor.GetDisplayText());
 
         try
         {
@@ -50,16 +65,16 @@ public class RestrictHandler : IRestrictHandler
 
             if (isGlobal)
             {
-                return await ExecuteGlobalRestrictionAsync(userId, mutePermissions, expiresAt, cancellationToken);
+                return await ExecuteGlobalRestrictionAsync(user, userId, mutePermissions, expiresAt, cancellationToken);
             }
             else
             {
-                return await ExecuteSingleChatRestrictionAsync(userId, chatId, mutePermissions, expiresAt, cancellationToken);
+                return await ExecuteSingleChatRestrictionAsync(user, userId, chat, chatId, mutePermissions, expiresAt, cancellationToken);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute restriction for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to execute restriction for user {User}", user.ToLogDebug(userId));
             return RestrictResult.Failed(ex.Message);
         }
     }
@@ -68,6 +83,7 @@ public class RestrictHandler : IRestrictHandler
     /// Execute restriction across all managed chats (global mode).
     /// </summary>
     private async Task<RestrictResult> ExecuteGlobalRestrictionAsync(
+        TelegramUser? user,
         long userId,
         ChatPermissions permissions,
         DateTimeOffset expiresAt,
@@ -84,8 +100,8 @@ public class RestrictHandler : IRestrictHandler
             cancellationToken);
 
         _logger.LogInformation(
-            "Global restriction completed for user {UserId}: {Success} succeeded, {Failed} failed. Expires at {ExpiresAt}",
-            userId, crossResult.SuccessCount, crossResult.FailCount, expiresAt);
+            "Global restriction completed for {User}: {Success} succeeded, {Failed} failed. Expires at {ExpiresAt}",
+            user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount, expiresAt);
 
         return RestrictResult.Succeeded(crossResult.SuccessCount, expiresAt, crossResult.FailCount);
     }
@@ -94,7 +110,9 @@ public class RestrictHandler : IRestrictHandler
     /// Execute restriction in a single specific chat.
     /// </summary>
     private async Task<RestrictResult> ExecuteSingleChatRestrictionAsync(
+        TelegramUser? user,
         long userId,
+        ManagedChatRecord? chat,
         long chatId,
         ChatPermissions permissions,
         DateTimeOffset expiresAt,
@@ -110,8 +128,8 @@ public class RestrictHandler : IRestrictHandler
             cancellationToken: cancellationToken);
 
         _logger.LogInformation(
-            "Single-chat restriction completed for user {UserId} in chat {ChatId}. Expires at {ExpiresAt}",
-            userId, chatId, expiresAt);
+            "Single-chat restriction completed for {User} in {Chat}. Expires at {ExpiresAt}",
+            user.ToLogInfo(userId), chat.ToLogInfo(chatId), expiresAt);
 
         return RestrictResult.Succeeded(chatsAffected: ModerationConstants.SingleChatSuccess, expiresAt, chatsFailed: ModerationConstants.NoFailures);
     }

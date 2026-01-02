@@ -24,6 +24,7 @@ public class MessageHandlerTests
     private IMessageHistoryRepository _mockMessageHistoryRepository = null!;
     private IMessageBackfillService _mockMessageBackfillService = null!;
     private IBotMessageService _mockBotMessageService = null!;
+    private IManagedChatsRepository _mockChatsRepository = null!;
     private ILogger<MessageHandler> _mockLogger = null!;
     private MessageHandler _handler = null!;
 
@@ -33,12 +34,14 @@ public class MessageHandlerTests
         _mockMessageHistoryRepository = Substitute.For<IMessageHistoryRepository>();
         _mockMessageBackfillService = Substitute.For<IMessageBackfillService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
+        _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockLogger = Substitute.For<ILogger<MessageHandler>>();
 
         _handler = new MessageHandler(
             _mockMessageHistoryRepository,
             _mockMessageBackfillService,
             _mockBotMessageService,
+            _mockChatsRepository,
             _mockLogger);
     }
 

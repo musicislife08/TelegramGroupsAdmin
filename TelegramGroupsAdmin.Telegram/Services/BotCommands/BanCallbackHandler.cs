@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
@@ -96,7 +97,7 @@ public class BanCallbackHandler : IBanCallbackHandler
 
         if (targetUser == null)
         {
-            _logger.LogWarning("Ban target user {UserId} not found", targetUserId);
+            _logger.LogWarning("Ban target user {User} not found", LogDisplayName.UserDebug(null, null, null, targetUserId));
             await CleanupMessagesAsync(operations, chatId, selectionMessageId, commandMessageId, cancellationToken);
             return;
         }
@@ -106,7 +107,7 @@ public class BanCallbackHandler : IBanCallbackHandler
         var isAdmin = await chatAdminsRepo.IsAdminAsync(chatId, targetUserId, cancellationToken);
         if (isAdmin)
         {
-            _logger.LogWarning("Attempted to ban admin user {UserId}", targetUserId);
+            _logger.LogWarning("Attempted to ban admin user {User}", targetUser.ToLogDebug(targetUserId));
             await CleanupMessagesAsync(operations, chatId, selectionMessageId, commandMessageId, cancellationToken);
             return;
         }
@@ -133,8 +134,8 @@ public class BanCallbackHandler : IBanCallbackHandler
             {
                 _logger.LogInformation(
                     "{TargetUser} banned by {Executor} via selection button",
-                    LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.TelegramUserId),
-                    LogDisplayName.UserInfo(executorUser.FirstName, executorUser.LastName, executorUser.Username, executorUser.Id));
+                    targetUser.ToLogInfo(targetUser.TelegramUserId),
+                    executorUser.ToLogInfo());
 
                 // Send ban notification to user (resolve from scope since IUserMessagingService is Scoped)
                 var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
@@ -154,12 +155,12 @@ public class BanCallbackHandler : IBanCallbackHandler
             }
             else
             {
-                _logger.LogWarning("Ban failed for user {UserId}: {Error}", targetUserId, result.ErrorMessage);
+                _logger.LogWarning("Ban failed for user {User}: {Error}", targetUser.ToLogDebug(targetUserId), result.ErrorMessage);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing ban for user {UserId}", targetUserId);
+            _logger.LogError(ex, "Error executing ban for user {User}", targetUser.ToLogDebug(targetUserId));
         }
 
         // Cleanup messages
