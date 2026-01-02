@@ -31,7 +31,7 @@ public class ServiceMessageDeletionConfig
     /// <summary>
     /// Delete "X pinned a message" notifications (PinnedMessage).
     /// </summary>
-    public bool DeletePinnedMessages { get; set; } = true;
+    public bool DeletePinNotifications { get; set; } = true;
 
     /// <summary>
     /// Delete chat creation messages (GroupChatCreated, SupergroupChatCreated, ChannelChatCreated).

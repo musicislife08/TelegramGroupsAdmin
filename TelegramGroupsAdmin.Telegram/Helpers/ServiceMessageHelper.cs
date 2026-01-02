@@ -42,7 +42,7 @@ public static class ServiceMessageHelper
                 return true;
 
             case { PinnedMessage: not null }:
-                shouldDelete = config.DeletePinnedMessages;
+                shouldDelete = config.DeletePinNotifications;
                 return true;
 
             case { GroupChatCreated: true }:

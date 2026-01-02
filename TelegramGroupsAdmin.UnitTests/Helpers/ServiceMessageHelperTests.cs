@@ -281,7 +281,7 @@ public class ServiceMessageHelperTests
             PinnedMessage = new Message { Text = "Pinned content", Chat = new Chat { Id = 123 } },
             Chat = new Chat { Id = 123 }
         };
-        var config = new ServiceMessageDeletionConfig { DeletePinnedMessages = false };
+        var config = new ServiceMessageDeletionConfig { DeletePinNotifications = false };
 
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
@@ -385,7 +385,7 @@ public class ServiceMessageHelperTests
             DeleteLeaveMessages = false,
             DeletePhotoChanges = false,
             DeleteTitleChanges = false,
-            DeletePinnedMessages = false,
+            DeletePinNotifications = false,
             DeleteChatCreationMessages = false
         };
 

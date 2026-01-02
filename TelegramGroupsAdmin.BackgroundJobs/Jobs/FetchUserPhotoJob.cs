@@ -64,7 +64,7 @@ public class FetchUserPhotoJob(
         try
         {
             // Check if bot is enabled before making Telegram API calls
-            var botConfig = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+            var botConfig = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
                             ?? TelegramBotConfig.Default;
 
             if (!botConfig.BotEnabled)

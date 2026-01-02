@@ -1,7 +1,5 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
@@ -27,14 +25,12 @@ public class ServiceMessageDeletionSettingsTestContext : BunitContext
         Snackbar = Substitute.For<ISnackbar>();
 
         // Default config returns
-        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long?>())
+        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
             .Returns(ServiceMessageDeletionConfig.Default);
 
         // Register mocks
         Services.AddSingleton(ConfigService);
         Services.AddSingleton(Snackbar);
-        Services.AddSingleton<ILogger<ServiceMessageDeletionSettings>>(
-            NullLogger<ServiceMessageDeletionSettings>.Instance);
 
         // Add MudBlazor services
         Services.AddMudServices(options =>
@@ -64,7 +60,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
     {
         ConfigService.ClearReceivedCalls();
         Snackbar.ClearReceivedCalls();
-        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long?>())
+        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
             .Returns(ServiceMessageDeletionConfig.Default);
     }
 
@@ -346,7 +342,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
     public void ShowsErrorAlert_WhenConfigLoadFails()
     {
         // Arrange - return null to simulate failed config load (component handles this)
-        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long?>())
+        ConfigService.GetAsync<ServiceMessageDeletionConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
             .Returns((ServiceMessageDeletionConfig?)null);
 
         // Act
@@ -380,7 +376,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
         // Assert - ConfigService.GetAsync should have been called
         await ConfigService.Received().GetAsync<ServiceMessageDeletionConfig>(
             ConfigType.ServiceMessageDeletion,
-            Arg.Any<long?>());
+            Arg.Any<long>());
     }
 
     [Test]

@@ -93,7 +93,7 @@ public class MediaRefetchWorkerService : BackgroundService
 
         // Check if bot is enabled before making Telegram API calls
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
                         ?? TelegramBotConfig.Default;
 
         if (!botConfig.BotEnabled)
@@ -148,7 +148,7 @@ public class MediaRefetchWorkerService : BackgroundService
 
         // Check if bot is enabled before making Telegram API calls
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
                         ?? TelegramBotConfig.Default;
 
         if (!botConfig.BotEnabled)

@@ -8,9 +8,9 @@ namespace TelegramGroupsAdmin.Configuration.Repositories;
 public interface IConfigRepository
 {
     /// <summary>
-    /// Get config record for a specific chat (null = global)
+    /// Get config record for a specific chat (0 = global)
     /// </summary>
-    Task<ConfigRecordDto?> GetAsync(long? chatId, CancellationToken cancellationToken = default);
+    Task<ConfigRecordDto?> GetAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Upsert (insert or update) config record for a specific chat
@@ -18,9 +18,9 @@ public interface IConfigRepository
     Task UpsertAsync(ConfigRecordDto config, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete config record for a specific chat
+    /// Delete config record for a specific chat (0 = global)
     /// </summary>
-    Task DeleteAsync(long? chatId, CancellationToken cancellationToken = default);
+    Task DeleteAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get config record by chat ID (alias for GetAsync with non-null chatId)

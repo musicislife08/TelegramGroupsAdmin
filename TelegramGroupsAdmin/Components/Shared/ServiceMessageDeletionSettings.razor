@@ -2,10 +2,9 @@
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
-@inject ILogger<ServiceMessageDeletionSettings> Logger
 
-<MudPaper Class="pa-4" Elevation="@(ChatId.HasValue ? 0 : 1)">
-    @if (!ChatId.HasValue)
+<MudPaper Class="pa-4" Elevation="@(ChatId != 0 ? 0 : 1)">
+    @if (ChatId == 0)
     {
         <MudText Typo="Typo.h6" GutterBottom="true">Service Message Deletion</MudText>
         <MudText Typo="Typo.body2" Class="mb-4">
@@ -64,7 +63,7 @@
 
                 <!-- Pinned Messages -->
                 <MudItem xs="12" md="6">
-                    <MudSwitch @bind-Value="_config.DeletePinnedMessages"
+                    <MudSwitch @bind-Value="_config.DeletePinNotifications"
                                Color="Color.Primary"
                                Label="Delete Pin Notifications" />
                     <MudText Typo="Typo.caption" Class="mud-text-secondary ml-12">
@@ -82,7 +81,7 @@
                     </MudText>
                 </MudItem>
 
-                @if (!ChatId.HasValue)
+                @if (ChatId == 0)
                 {
                     <MudItem xs="12" Class="d-flex justify-space-between mt-4">
                         <MudButton Variant="Variant.Filled"
@@ -118,10 +117,10 @@
 
 @code {
     /// <summary>
-    /// Optional chat ID for per-chat configuration. If null, uses global configuration.
+    /// Chat ID for per-chat configuration. Use 0 for global configuration.
     /// </summary>
     [Parameter]
-    public long? ChatId { get; set; }
+    public long ChatId { get; set; }
 
     /// <summary>
     /// Optional callback when configuration is saved (for per-chat mode)
@@ -174,8 +173,7 @@
         try
         {
             await ConfigService.SaveAsync(ConfigType.ServiceMessageDeletion, ChatId, _config);
-            var scope = ChatId.HasValue ? $"for chat {ChatId}" : "globally";
-            Logger.LogInformation("Service message deletion settings saved {Scope}", scope);
+            var scope = ChatId != 0 ? $"for chat {ChatId}" : "globally";
             Snackbar.Add($"Service message settings saved {scope}", Severity.Success);
 
             if (OnSaved.HasDelegate)
