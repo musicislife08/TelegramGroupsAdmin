@@ -39,18 +39,28 @@ public class TableExportService
             .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
             .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
             .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
-            .Select(p => new
+            .Select(p =>
             {
-                ColumnName = p.GetCustomAttribute<ColumnAttribute>()!.Name,
-                PropertyName = p.Name
+                var columnAttr = p.GetCustomAttribute<ColumnAttribute>()!;
+                return new
+                {
+                    ColumnName = columnAttr.Name,
+                    PropertyName = p.Name,
+                    // Detect JSONB columns - Dapper can't deserialize these to complex types
+                    IsJsonb = string.Equals(columnAttr.TypeName, "jsonb", StringComparison.OrdinalIgnoreCase)
+                };
             })
             .ToList();
 
         // Build column list with aliases to match property names (fixes Dapper reflection mapping issue)
+        // JSONB columns are cast to TEXT so Dapper receives them as strings (fixes List<T> mapping errors)
         var columnList = string.Join(", ", columnMappings.Select(m =>
-            m.ColumnName == m.PropertyName.ToLowerInvariant()
-                ? m.ColumnName  // No alias needed if names match
-                : $"{m.ColumnName} AS {m.PropertyName}"));  // Add alias for Dapper mapping
+        {
+            var columnExpr = m.IsJsonb ? $"{m.ColumnName}::text" : m.ColumnName;
+            return columnExpr == m.PropertyName.ToLowerInvariant()
+                ? columnExpr  // No alias needed if names match
+                : $"{columnExpr} AS {m.PropertyName}";  // Add alias for Dapper mapping
+        }));
 
         var columnNames = columnMappings.Select(m => m.ColumnName).ToList();
 
