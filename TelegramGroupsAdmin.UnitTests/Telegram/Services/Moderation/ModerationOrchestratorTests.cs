@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
@@ -31,6 +32,7 @@ public class ModerationOrchestratorTests
     private IAuditHandler _mockAuditHandler = null!;
     private INotificationHandler _mockNotificationHandler = null!;
     private ITrainingHandler _mockTrainingHandler = null!;
+    private ITelegramUserRepository _mockUserRepository = null!;
     private IConfigService _mockConfigService = null!;
     private ILogger<ModerationOrchestrator> _mockLogger = null!;
     private ModerationOrchestrator _orchestrator = null!;
@@ -46,6 +48,7 @@ public class ModerationOrchestratorTests
         _mockAuditHandler = Substitute.For<IAuditHandler>();
         _mockNotificationHandler = Substitute.For<INotificationHandler>();
         _mockTrainingHandler = Substitute.For<ITrainingHandler>();
+        _mockUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockConfigService = Substitute.For<IConfigService>();
         _mockLogger = Substitute.For<ILogger<ModerationOrchestrator>>();
 
@@ -58,6 +61,7 @@ public class ModerationOrchestratorTests
             _mockAuditHandler,
             _mockNotificationHandler,
             _mockTrainingHandler,
+            _mockUserRepository,
             _mockConfigService,
             _mockLogger);
     }

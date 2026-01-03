@@ -445,18 +445,18 @@ public class WelcomeService : IWelcomeService
             keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatId, user.Id, botInfo.Username!);
 
             _logger.LogInformation(
-                "Sending DM welcome message to {User} in chat {ChatId}",
+                "Sending DM welcome message to {User} in {Chat}",
                 user.ToLogInfo(),
-                chatId);
+                chatInfo.ToLogInfo());
         }
         else
         {
             keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, user.Id);
 
             _logger.LogInformation(
-                "Sending chat accept/deny welcome message to {User} in chat {ChatId}",
+                "Sending chat accept/deny welcome message to {User} in {Chat}",
                 user.ToLogInfo(),
-                chatId);
+                chatInfo.ToLogInfo());
         }
 
         var message = await operations.SendMessageAsync(

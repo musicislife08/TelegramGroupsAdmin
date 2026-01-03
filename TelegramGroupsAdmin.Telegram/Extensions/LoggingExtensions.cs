@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Extensions;
@@ -8,6 +9,26 @@ namespace TelegramGroupsAdmin.Telegram.Extensions;
 /// </summary>
 public static class LoggingExtensions
 {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DB Entity Extensions (TelegramUserDto)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Format DB user entity for INFO logs (name only, no ID).
+    /// </summary>
+    public static string ToLogInfo(this TelegramUserDto? user)
+        => LogDisplayName.UserInfo(user?.FirstName, user?.LastName, user?.Username, user?.TelegramUserId ?? 0);
+
+    /// <summary>
+    /// Format DB user entity for DEBUG/WARNING/ERROR logs (name + ID).
+    /// </summary>
+    public static string ToLogDebug(this TelegramUserDto? user)
+        => LogDisplayName.UserDebug(user?.FirstName, user?.LastName, user?.Username, user?.TelegramUserId ?? 0);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Repository Async Extensions (for cases where only ID is available)
+    // ═══════════════════════════════════════════════════════════════════════════
+
     /// <summary>
     /// Get user display name for logging. Looks up user from database.
     /// </summary>

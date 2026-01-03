@@ -225,6 +225,9 @@ public class NotificationService : INotificationService
     /// </summary>
     private async Task<bool> SendTelegramDmAsync(string userId, string subject, string message, CancellationToken cancellationToken)
     {
+        // Fetch once for logging
+        var user = await _userRepo.GetByIdAsync(userId, cancellationToken);
+
         try
         {
             // Get Telegram mapping for this web user
@@ -233,7 +236,8 @@ public class NotificationService : INotificationService
 
             if (mapping == null)
             {
-                _logger.LogDebug("User {UserId} has no Telegram account linked, skipping Telegram DM", userId);
+                _logger.LogDebug("User {User} has no Telegram account linked, skipping Telegram DM",
+                    user.ToLogDebug(userId));
                 return false;
             }
 
@@ -249,23 +253,23 @@ public class NotificationService : INotificationService
 
             if (result.DmSent)
             {
-                _logger.LogInformation("Sent Telegram DM notification to user {UserId} (Telegram ID {TelegramId})",
-                    userId, mapping.TelegramId);
+                _logger.LogInformation("Sent Telegram DM notification to {User} (Telegram ID {TelegramId})",
+                    user.ToLogInfo(userId), mapping.TelegramId);
                 return true;
             }
 
             if (!result.Failed)
             {
                 // Queued for later delivery
-                _logger.LogDebug("Telegram DM queued for user {UserId} (Telegram ID {TelegramId})",
-                    userId, mapping.TelegramId);
+                _logger.LogDebug("Telegram DM queued for {User} (Telegram ID {TelegramId})",
+                    user.ToLogDebug(userId), mapping.TelegramId);
             }
 
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send Telegram DM to user {UserId}", userId);
+            _logger.LogError(ex, "Failed to send Telegram DM to {User}", user.ToLogDebug(userId));
             return false;
         }
     }
