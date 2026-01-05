@@ -235,7 +235,8 @@
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for user {UserId}", _currentUserId);
+                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
+                    LogDisplayName.WebUserDebug(_currentUserEmail, _currentUserId));
             }
         }
 
@@ -1262,12 +1263,15 @@
                     yesText: "OK");
 
                 Logger.LogInformation(
-                    "User {UserId} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
-                    message.UserId, banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
+                    "{User} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
+                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
             }
             else
             {
-                Logger.LogError("Failed to temp ban user {UserId}: {Error}", message.UserId, banResult.ErrorMessage);
+                Logger.LogError("Failed to temp ban {User}: {Error}",
+                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    banResult.ErrorMessage);
 
                 await DialogService.ShowMessageBox(
                     "Error",
@@ -1277,7 +1281,8 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error temp banning user {UserId}", message.UserId);
+            Logger.LogError(ex, "Error temp banning {User}",
+                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
 
             await DialogService.ShowMessageBox(
                 "Error",

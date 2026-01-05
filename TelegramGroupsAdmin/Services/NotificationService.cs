@@ -179,7 +179,7 @@ public class NotificationService : INotificationService
             // WebPush channel (in-app notifications) - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.WebPush, eventType))
             {
-                var webPushSuccess = await _webPushService.SendAsync(user.Id, eventType, subject, message, cancellationToken);
+                var webPushSuccess = await _webPushService.SendAsync(user, eventType, subject, message, cancellationToken);
                 deliverySuccess = deliverySuccess || webPushSuccess;
             }
 
