@@ -66,6 +66,20 @@ public static class TelegramLoggingExtensions
         /// </summary>
         public string ToLogDebug()
             => LogDisplayName.UserDebug(user?.FirstName, user?.LastName, user?.Username, user?.TelegramUserId ?? 0);
+
+        /// <summary>
+        /// Format DB user entity for INFO logs with userId fallback when user is null.
+        /// </summary>
+        /// <param name="userId">Telegram user ID (used as fallback when user is null)</param>
+        public string ToLogInfo(long userId)
+            => LogDisplayName.UserInfo(user?.FirstName, user?.LastName, user?.Username, userId);
+
+        /// <summary>
+        /// Format DB user entity for DEBUG/WARNING/ERROR logs with userId fallback when user is null.
+        /// </summary>
+        /// <param name="userId">Telegram user ID</param>
+        public string ToLogDebug(long userId)
+            => LogDisplayName.UserDebug(user?.FirstName, user?.LastName, user?.Username, userId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

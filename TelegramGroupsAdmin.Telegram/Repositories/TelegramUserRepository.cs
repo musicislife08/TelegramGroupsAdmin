@@ -861,7 +861,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (user == null)
         {
-            _logger.LogWarning("Cannot set ban status for unknown user {User}", user.ToLogDebug());
+            _logger.LogWarning("Cannot set ban status for unknown user {User}", user.ToLogDebug(telegramUserId));
             return;
         }
 
@@ -981,7 +981,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (user == null)
         {
-            _logger.LogWarning("Cannot set active status for unknown user {User}", user.ToLogDebug());
+            _logger.LogWarning("Cannot set active status for unknown user {User}", user.ToLogDebug(telegramUserId));
             return;
         }
 
