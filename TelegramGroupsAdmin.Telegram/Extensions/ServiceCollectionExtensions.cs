@@ -141,6 +141,9 @@ public static class ServiceCollectionExtensions
             services.AddKeyedScoped<IBotCommand, MyStatusCommand>(CommandNames.MyStatus);
             services.AddSingleton<CommandRouter>();
 
+            // Caching services
+            services.AddSingleton<IChatCache, ChatCache>();
+
             // Background services (refactored into smaller services)
             services.AddSingleton<DetectionActionService>();
             services.AddSingleton<IChatManagementService, ChatManagementService>();

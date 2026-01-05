@@ -148,7 +148,7 @@ public class BanCallbackHandler : IBanCallbackHandler
 
                 await messagingService.SendToUserAsync(
                     userId: targetUserId,
-                    chatId: chatId,
+                    chat: callbackQuery.Message!.Chat,
                     messageText: banNotification,
                     replyToMessageId: null,
                     cancellationToken: cancellationToken);

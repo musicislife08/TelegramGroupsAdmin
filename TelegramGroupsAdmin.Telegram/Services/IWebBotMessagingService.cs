@@ -13,10 +13,12 @@ public interface IWebBotMessagingService
     /// Returns success with bot user ID, or failure with reason
     /// </summary>
     /// <param name="webUserId">Web user ID from authentication</param>
+    /// <param name="webUserEmail">Web user email for logging</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result with availability status, bot user ID (if available), and reason (if unavailable)</returns>
     Task<WebBotFeatureAvailability> CheckFeatureAvailabilityAsync(
         string webUserId,
+        string? webUserEmail,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -24,6 +26,7 @@ public interface IWebBotMessagingService
     /// Signature format: \n\n—username (using linked Telegram username)
     /// </summary>
     /// <param name="webUserId">Web user ID (for signature and audit)</param>
+    /// <param name="webUserEmail">Web user email for logging</param>
     /// <param name="chatId">Target chat ID</param>
     /// <param name="text">Message text (signature will be appended)</param>
     /// <param name="replyToMessageId">Optional message ID to reply to</param>
@@ -31,6 +34,7 @@ public interface IWebBotMessagingService
     /// <returns>Result with success status and sent message (if successful)</returns>
     Task<WebBotMessageResult> SendMessageAsync(
         string webUserId,
+        string? webUserEmail,
         long chatId,
         string text,
         long? replyToMessageId = null,
@@ -40,6 +44,7 @@ public interface IWebBotMessagingService
     /// Edit an existing bot message (no signature added/modified)
     /// </summary>
     /// <param name="webUserId">Web user ID (for audit)</param>
+    /// <param name="webUserEmail">Web user email for logging</param>
     /// <param name="chatId">Chat ID where message exists</param>
     /// <param name="messageId">Message ID to edit</param>
     /// <param name="text">New message text (replaces existing, no signature appended)</param>
@@ -47,6 +52,7 @@ public interface IWebBotMessagingService
     /// <returns>Result with success status and edited message (if successful)</returns>
     Task<WebBotMessageResult> EditMessageAsync(
         string webUserId,
+        string? webUserEmail,
         long chatId,
         int messageId,
         string text,

@@ -146,9 +146,9 @@ public class ReportService(
 
             var results = await messagingService.SendToMultipleUsersAsync(
                 userIds: adminUserIds,
-                chatId: report.ChatId,
+                chat: originalMessage!.Chat,
                 messageText: reportNotification,
-                replyToMessageId: originalMessage?.MessageId,
+                replyToMessageId: originalMessage.MessageId,
                 cancellationToken: cancellationToken);
 
             var dmCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.PrivateDm);

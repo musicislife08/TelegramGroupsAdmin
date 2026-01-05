@@ -22,6 +22,7 @@ public class ChatManagementService(
     IServiceProvider serviceProvider,
     ITelegramBotClientFactory botFactory,
     ITelegramConfigLoader configLoader,
+    IChatCache chatCache,
     ILogger<ChatManagementService> logger) : IChatManagementService
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
@@ -207,17 +208,33 @@ public class ChatManagementService(
 
             if (isActive)
             {
+                // Cache SDK Chat when bot joins/is promoted
+                chatCache.UpdateChat(chat);
+
                 logger.LogInformation(
                     "✅ Bot added to {ChatType} {Chat} as {Status}",
                     chat.Type,
-                    LogDisplayName.ChatInfo(chatName, chat.Id),
+                    chat.ToLogInfo(),
+                    newStatus);
+            }
+            else if (isDeleted)
+            {
+                // Remove from cache when bot is kicked/left
+                chatCache.RemoveChat(chat.Id);
+
+                logger.LogWarning(
+                    "❌ Bot removed from {Chat} - status: {Status}",
+                    chat.ToLogDebug(),
                     newStatus);
             }
             else
             {
+                // Bot demoted but still in chat - keep cache updated
+                chatCache.UpdateChat(chat);
+
                 logger.LogWarning(
-                    "❌ Bot removed from {Chat} - status: {Status}",
-                    LogDisplayName.ChatDebug(chatName, chat.Id),
+                    "⚠️ Bot demoted in {Chat} - status: {Status}",
+                    chat.ToLogDebug(),
                     newStatus);
             }
 
@@ -608,6 +625,9 @@ public class ChatManagementService(
             health.IsReachable = true;
             chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
 
+            // Cache SDK Chat for use by other services (e.g., NotificationHandler)
+            chatCache.UpdateChat(chat);
+
             // Skip health check for private chats (only relevant for groups)
             if (chat.Type == ChatType.Private)
             {
@@ -916,7 +936,7 @@ public class ChatManagementService(
 
             // Refresh from Telegram API to validate and update if needed
             // This fetches the current primary link and only writes to DB if it changed
-            var inviteLink = await inviteLinkService.RefreshInviteLinkAsync(chat.Id, cancellationToken);
+            var inviteLink = await inviteLinkService.RefreshInviteLinkAsync(chat, cancellationToken);
 
             if (inviteLink != null)
             {

@@ -83,7 +83,7 @@ public class WelcomeService : IWelcomeService
         if (user.IsBot)
         {
             var shouldAllow = await _botProtectionService.ShouldAllowBotAsync(
-                chatMemberUpdate.Chat.Id,
+                chatMemberUpdate.Chat,
                 user,
                 chatMemberUpdate);
 
@@ -91,7 +91,7 @@ public class WelcomeService : IWelcomeService
             {
                 // Ban the bot
                 await _botProtectionService.BanBotAsync(
-                    chatMemberUpdate.Chat.Id,
+                    chatMemberUpdate.Chat,
                     user,
                     "Not whitelisted and not invited by admin",
                     cancellationToken);
@@ -186,10 +186,8 @@ public class WelcomeService : IWelcomeService
 
                 // Check for impersonation
                 var impersonationResult = await impersonationService.CheckUserAsync(
-                    user.Id,
-                    chatMemberUpdate.Chat.Id,
-                    user.FirstName,
-                    user.LastName,
+                    user,
+                    chatMemberUpdate.Chat,
                     photoPath);
 
                 if (impersonationResult != null)
@@ -851,7 +849,7 @@ public class WelcomeService : IWelcomeService
             {
                 using var inviteLinkScope = _serviceProvider.CreateScope();
                 var inviteLinkService = inviteLinkScope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
-                chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChatId, cancellationToken);
+                chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChat, cancellationToken);
 
                 if (chatDeepLink != null)
                 {

@@ -600,7 +600,7 @@ public class DetectionActionService(
 
             var sendResult = await userMessagingService.SendToUserAsync(
                 userId,
-                chatId,
+                message.Chat,
                 notificationMessage,
                 replyToMessageId: null,  // Original message already deleted
                 cancellationToken: cancellationToken);

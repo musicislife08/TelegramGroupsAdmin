@@ -1,3 +1,5 @@
+using Telegram.Bot.Types;
+
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
@@ -15,11 +17,12 @@ public interface IImpersonationDetectionService
     /// Checks a user for impersonation against all chat admins
     /// Returns null if no matches found (score = 0)
     /// </summary>
+    /// <param name="user">SDK User object from message</param>
+    /// <param name="chat">SDK Chat object from message</param>
+    /// <param name="photoPath">User's photo path from database (if available)</param>
     Task<ImpersonationCheckResult?> CheckUserAsync(
-        long userId,
-        long chatId,
-        string? firstName,
-        string? lastName,
+        User user,
+        Chat chat,
         string? photoPath);
 
     /// <summary>

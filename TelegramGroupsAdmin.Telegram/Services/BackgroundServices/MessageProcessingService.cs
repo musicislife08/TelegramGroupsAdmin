@@ -29,6 +29,7 @@ public partial class MessageProcessingService(
     ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
     IChatManagementService chatManagementService,
+    IChatCache chatCache,
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
@@ -37,6 +38,7 @@ public partial class MessageProcessingService(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
     private readonly ITelegramBotClientFactory _botFactory = botFactory;
+    private readonly IChatCache _chatCache = chatCache;
     private readonly TelegramPhotoService _photoService = telegramPhotoService;
     private readonly TelegramMediaService _mediaService = telegramMediaService;
 
@@ -98,6 +100,9 @@ public partial class MessageProcessingService(
             }
             return; // Don't process private messages further
         }
+
+        // Keep SDK Chat cache warm (used by NotificationHandler and other services)
+        _chatCache.UpdateChat(message.Chat);
 
         // Detect Group → Supergroup migration
         // When a Group is upgraded to Supergroup (e.g., when granting admin), Telegram:
@@ -567,18 +572,16 @@ public partial class MessageProcessingService(
 
                 // Check for impersonation
                 var impersonationResult = await impersonationService.CheckUserAsync(
-                    message.From.Id,
-                    message.Chat.Id,
-                    message.From.FirstName,
-                    message.From.LastName,
+                    message.From,
+                    message.Chat,
                     photoPath);
 
                 if (impersonationResult != null)
                 {
                     logger.LogWarning(
                         "Impersonation detected for {User} in {Chat} (score: {Score}, risk: {Risk})",
-                        LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                        LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                        message.From.ToLogDebug(),
+                        message.Chat.ToLogDebug(),
                         impersonationResult.TotalScore,
                         impersonationResult.RiskLevel);
 
@@ -591,7 +594,7 @@ public partial class MessageProcessingService(
                     {
                         logger.LogInformation(
                             "{User} auto-banned for impersonation (score: {Score})",
-                            LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                            message.From.ToLogInfo(),
                             impersonationResult.TotalScore);
                     }
                 }

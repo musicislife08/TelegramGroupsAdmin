@@ -106,7 +106,7 @@ public class WarnCommand : IBotCommand
 
             var messageResult = await _messagingService.SendToUserAsync(
                 userId: targetUser.Id,
-                chatId: message.Chat.Id,
+                chat: message.Chat,
                 messageText: warningNotification,
                 replyToMessageId: message.ReplyToMessage.MessageId,
                 cancellationToken: cancellationToken);
