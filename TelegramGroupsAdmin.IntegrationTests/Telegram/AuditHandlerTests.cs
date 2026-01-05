@@ -68,6 +68,7 @@ public class AuditHandlerTests
         // Register repositories and handlers
         services.AddScoped<IUserActionsRepository, UserActionsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+        services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
         services.AddScoped<IAuditHandler, AuditHandler>();
 
         _serviceProvider = services.BuildServiceProvider();
