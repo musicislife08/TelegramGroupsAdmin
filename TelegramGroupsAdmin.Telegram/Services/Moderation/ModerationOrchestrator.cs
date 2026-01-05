@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
@@ -36,6 +38,9 @@ public class ModerationOrchestrator
     private readonly INotificationHandler _notificationHandler;
     private readonly ITrainingHandler _trainingHandler;
 
+    // Repositories for logging
+    private readonly ITelegramUserRepository _userRepository;
+
     // Configuration
     private readonly IConfigService _configService;
     private readonly ILogger<ModerationOrchestrator> _logger;
@@ -49,6 +54,7 @@ public class ModerationOrchestrator
         IAuditHandler auditHandler,
         INotificationHandler notificationHandler,
         ITrainingHandler trainingHandler,
+        ITelegramUserRepository userRepository,
         IConfigService configService,
         ILogger<ModerationOrchestrator> logger)
     {
@@ -60,6 +66,7 @@ public class ModerationOrchestrator
         _auditHandler = auditHandler;
         _notificationHandler = notificationHandler;
         _trainingHandler = trainingHandler;
+        _userRepository = userRepository;
         _configService = configService;
         _logger = logger;
     }
@@ -77,7 +84,7 @@ public class ModerationOrchestrator
         global::Telegram.Bot.Types.Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = CheckServiceAccountProtection(userId);
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
         if (protectionResult != null) return protectionResult;
 
         // Step 1: Ensure message exists in database (backfill if needed for training data)
@@ -135,7 +142,7 @@ public class ModerationOrchestrator
         string reason,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = CheckServiceAccountProtection(userId);
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
         if (protectionResult != null) return protectionResult;
 
         // Primary action: Ban globally
@@ -182,8 +189,11 @@ public class ModerationOrchestrator
         long chatId,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = CheckServiceAccountProtection(userId);
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
         if (protectionResult != null) return protectionResult;
+
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
 
         // Primary action: Issue warning (writes to warnings table)
         var warnResult = await _warnHandler.WarnAsync(userId, executor, reason, chatId, messageId, cancellationToken);
@@ -212,8 +222,8 @@ public class ModerationOrchestrator
             warnResult.WarningCount >= warningConfig.AutoBanThreshold)
         {
             _logger.LogWarning(
-                "Auto-ban triggered: User {UserId} has {WarnCount} warnings (threshold: {Threshold})",
-                userId, warnResult.WarningCount, warningConfig.AutoBanThreshold);
+                "Auto-ban triggered: {User} has {WarnCount} warnings (threshold: {Threshold})",
+                user.ToLogDebug(userId), warnResult.WarningCount, warningConfig.AutoBanThreshold);
 
             // Use configured auto-ban reason with {count} placeholder support
             var autoBanReason = !string.IsNullOrWhiteSpace(warningConfig.AutoBanReason)
@@ -230,8 +240,8 @@ public class ModerationOrchestrator
             else
             {
                 _logger.LogError(
-                    "Auto-ban failed for user {UserId}: {Error}",
-                    userId, banResult.ErrorMessage);
+                    "Auto-ban failed for {User}: {Error}",
+                    user.ToLogDebug(userId), banResult.ErrorMessage);
             }
         }
 
@@ -348,7 +358,7 @@ public class ModerationOrchestrator
         TimeSpan duration,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = CheckServiceAccountProtection(userId);
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
         if (protectionResult != null) return protectionResult;
 
         var tempBanResult = await _banHandler.TempBanAsync(userId, executor, duration, reason, messageId, cancellationToken);
@@ -381,7 +391,7 @@ public class ModerationOrchestrator
         long? chatId = null,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = CheckServiceAccountProtection(userId);
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
         if (protectionResult != null) return protectionResult;
 
         var restrictResult = await _restrictHandler.RestrictAsync(
@@ -403,13 +413,14 @@ public class ModerationOrchestrator
     /// <summary>
     /// Checks if user is a Telegram system account (777000, 1087968824, etc.) and returns error if moderation is attempted.
     /// </summary>
-    private ModerationResult? CheckServiceAccountProtection(long userId)
+    private async Task<ModerationResult?> CheckServiceAccountProtectionAsync(long userId, CancellationToken cancellationToken)
     {
         if (TelegramConstants.IsSystemUser(userId))
         {
+            var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
             _logger.LogWarning(
-                "Moderation action blocked for Telegram system account (user {UserId})",
-                userId);
+                "Moderation action blocked for Telegram system account ({User})",
+                user.ToLogDebug(userId));
 
             return ModerationResult.SystemAccountBlocked();
         }

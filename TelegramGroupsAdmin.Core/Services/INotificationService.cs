@@ -45,14 +45,14 @@ public interface INotificationService
     /// Send a notification to a specific user (for special cases)
     /// Automatically routes to enabled channels based on user preferences
     /// </summary>
-    /// <param name="userId">Web user ID (from users table)</param>
+    /// <param name="user">Web user record</param>
     /// <param name="eventType">Type of event triggering the notification</param>
     /// <param name="subject">Notification subject/title</param>
     /// <param name="message">Notification message body</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if at least one channel delivered successfully</returns>
     Task<bool> SendNotificationAsync(
-        string userId,
+        UserRecord user,
         NotificationEventType eventType,
         string subject,
         string message,

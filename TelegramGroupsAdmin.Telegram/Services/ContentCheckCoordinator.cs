@@ -41,9 +41,9 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         if (TelegramConstants.IsSystemUser(request.UserId))
         {
             _logger.LogInformation(
-                "Skipping all content detection for Telegram system account (user {UserId}) in chat {ChatId}",
-                request.UserId,
-                request.ChatId);
+                "Skipping all content detection for Telegram system account ({User}) in {Chat}",
+                request.UserName,
+                request.ChatName);
 
             return new ContentCheckCoordinatorResult
             {
@@ -74,9 +74,9 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, cancellationToken);
 
         _logger.LogInformation(
-            "User {UserId} status in chat {ChatId}: Trusted={Trusted}, Admin={Admin}",
-            request.UserId,
-            request.ChatId,
+            "{User} status in {Chat}: Trusted={Trusted}, Admin={Admin}",
+            request.UserName,
+            request.ChatName,
             isUserTrusted,
             isUserAdmin);
 
@@ -89,8 +89,8 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         _logger.LogInformation(
-            "Chat {ChatId} has {Count} critical (always_run) checks configured: {Checks}",
-            request.ChatId,
+            "{Chat} has {Count} critical (always_run) checks configured: {Checks}",
+            request.ChatName,
             criticalCheckNames.Count,
             criticalCheckNames.Count > 0 ? string.Join(", ", criticalCheckNames) : "none");
 
@@ -104,9 +104,9 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 : "User is admin and no critical checks configured";
 
             _logger.LogInformation(
-                "Skipping all spam detection for user {UserId} in chat {ChatId}: {Reason}",
-                request.UserId,
-                request.ChatId,
+                "Skipping all spam detection for {User} in {Chat}: {Reason}",
+                request.UserName,
+                request.ChatName,
                 skipReason);
 
             return new ContentCheckCoordinatorResult
@@ -128,9 +128,9 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 : "standard user";
 
         _logger.LogInformation(
-            "Running full spam detection pipeline for user {UserId} in chat {ChatId}: {Reason}",
-            request.UserId,
-            request.ChatId,
+            "Running full spam detection pipeline for {User} in {Chat}: {Reason}",
+            request.UserName,
+            request.ChatName,
             detectionReason);
 
         // PERF-3 Option B: Pass trust context to individual checks
@@ -157,10 +157,10 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                     criticalViolations.Add($"{checkResult.CheckName}: {checkResult.Details}");
 
                     _logger.LogWarning(
-                        "Critical check violation: {CheckName} flagged user {UserId} in chat {ChatId}: {Details}",
+                        "Critical check violation: {CheckName} flagged {User} in {Chat}: {Details}",
                         checkResult.CheckName,
-                        request.UserId,
-                        request.ChatId,
+                        request.UserName,
+                        request.ChatName,
                         checkResult.Details);
                 }
             }
@@ -176,9 +176,9 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 : "User is a chat admin - regular spam detection bypassed (critical checks passed)";
 
             _logger.LogInformation(
-                "✓ Critical checks passed, skipping regular spam detection for user {UserId} in chat {ChatId}: {Reason}",
-                request.UserId,
-                request.ChatId,
+                "✓ Critical checks passed, skipping regular spam detection for {User} in {Chat}: {Reason}",
+                request.UserName,
+                request.ChatName,
                 skipReason);
 
             return new ContentCheckCoordinatorResult

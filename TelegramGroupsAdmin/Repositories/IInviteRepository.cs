@@ -1,5 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -11,12 +11,12 @@ public interface IInviteRepository
     /// <summary>
     /// Get an invite by its token
     /// </summary>
-    Task<UiModels.InviteRecord?> GetByTokenAsync(string token, CancellationToken cancellationToken = default);
+    Task<InviteRecord?> GetByTokenAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Create a new invite from an InviteRecord model
     /// </summary>
-    Task CreateAsync(UiModels.InviteRecord invite, CancellationToken cancellationToken = default);
+    Task CreateAsync(InviteRecord invite, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Create a new invite and return the generated token
@@ -31,7 +31,7 @@ public interface IInviteRepository
     /// <summary>
     /// Get all invites created by a specific user
     /// </summary>
-    Task<List<UiModels.InviteRecord>> GetByCreatorAsync(string createdBy, CancellationToken cancellationToken = default);
+    Task<List<InviteRecord>> GetByCreatorAsync(string createdBy, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Clean up expired invites and return count of deleted records
@@ -41,12 +41,12 @@ public interface IInviteRepository
     /// <summary>
     /// Get all invites filtered by status
     /// </summary>
-    Task<List<UiModels.InviteRecord>> GetAllAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default);
+    Task<List<InviteRecord>> GetAllAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all invites with creator and used-by email addresses, filtered by status
     /// </summary>
-    Task<List<UiModels.InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default);
+    Task<List<InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Revoke a pending invite and return true if successful

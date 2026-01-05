@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Constants;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -38,17 +39,17 @@ public class DetectionActionService(
     /// Load effective content detection config for a chat (with fallback to defaults).
     /// Resolves repository from scope since this is a Singleton service and repositories are Scoped.
     /// </summary>
-    private async Task<ContentDetectionConfig> GetConfigAsync(long chatId, CancellationToken cancellationToken)
+    private async Task<ContentDetectionConfig> GetConfigAsync(Chat chat, CancellationToken cancellationToken)
     {
         try
         {
             using var scope = serviceProvider.CreateScope();
             var configRepository = scope.ServiceProvider.GetRequiredService<IContentDetectionConfigRepository>();
-            return await configRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+            return await configRepository.GetEffectiveConfigAsync(chat.Id, cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to load content detection config for chat {ChatId}, using defaults", chatId);
+            logger.LogError(ex, "Failed to load content detection config for {Chat}, using defaults", chat.ToLogDebug());
             return new ContentDetectionConfig();
         }
     }
@@ -95,7 +96,7 @@ public class DetectionActionService(
         try
         {
             // Load thresholds from database config (admin-configurable per chat)
-            var config = await GetConfigAsync(message.Chat.Id, cancellationToken);
+            var config = await GetConfigAsync(message.Chat, cancellationToken);
 
             // Only take action if spam was detected
             if (!spamResult.IsSpam || spamResult.NetConfidence <= config.ReviewQueueThreshold)
@@ -185,7 +186,7 @@ public class DetectionActionService(
                     cancellationToken);
 
                 // Notify chat admins about malware detection (Phase 5.1)
-                SendNotificationAsync(message.Chat.Id, NotificationEventType.MalwareDetected,
+                SendNotificationAsync(message.Chat, NotificationEventType.MalwareDetected,
                     "Malware Detected and Removed",
                     $"Malware was detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and the message was deleted.\n\n" +
                     $"User: {TelegramDisplayName.Format(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id)}\n" +
@@ -222,9 +223,9 @@ public class DetectionActionService(
                     cancellationToken);
 
                 logger.LogInformation(
-                    "Created admin review report for message {MessageId} in chat {ChatId}: OpenAI flagged for human review",
+                    "Created admin review report for message {MessageId} in {Chat}: OpenAI flagged for human review",
                     message.MessageId,
-                    message.Chat.Id);
+                    message.Chat.ToLogInfo());
                 return; // Early return - don't auto-ban
             }
 
@@ -264,14 +265,14 @@ public class DetectionActionService(
                     messageDeleted = true;
 
                     logger.LogInformation(
-                        "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",
+                        "Deleted spam message {MessageId} from {Chat} (auto-ban)",
                         message.MessageId,
-                        message.Chat.Id);
+                        message.Chat.ToLogInfo());
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to delete spam message {MessageId} from chat {ChatId}",
-                        message.MessageId, message.Chat.Id);
+                    logger.LogWarning(ex, "Failed to delete spam message {MessageId} from {Chat}",
+                        message.MessageId, message.Chat.ToLogDebug());
                 }
 
                 // Send consolidated notification (Phase 5.2: replaces 3 separate notifications)
@@ -303,9 +304,9 @@ public class DetectionActionService(
                     cancellationToken);
 
                 logger.LogInformation(
-                    "Created admin review report for message {MessageId} in chat {ChatId}: {Reason}",
+                    "Created admin review report for message {MessageId} in {Chat}: {Reason}",
                     message.MessageId,
-                    message.Chat.Id,
+                    message.Chat.ToLogInfo(),
                     reason);
             }
         }
@@ -478,8 +479,8 @@ public class DetectionActionService(
                     if (timeSinceLastSchedule < SpamDetectionConstants.CleanupJobDeduplicationWindow)
                     {
                         logger.LogDebug(
-                            "Skipping duplicate cleanup job for user {UserId} (already scheduled {Seconds}s ago)",
-                            userId,
+                            "Skipping duplicate cleanup job for {User} (already scheduled {Seconds}s ago)",
+                            message.From.ToLogDebug(),
                             timeSinceLastSchedule.TotalSeconds);
                         // Don't schedule another job - the existing one will handle all messages
                         goto skipCleanupJob;
@@ -511,16 +512,16 @@ public class DetectionActionService(
                 }
 
                 logger.LogInformation(
-                    "Scheduled cross-chat message cleanup job for user {UserId} (will execute in 15s)",
-                    userId);
+                    "Scheduled cross-chat message cleanup job for {User} (will execute in 15s)",
+                    message.From.ToLogInfo());
 
             skipCleanupJob:; // Label for early exit from deduplication check
             }
             catch (Exception jobEx)
             {
                 logger.LogWarning(jobEx,
-                    "Failed to schedule message cleanup job for user {UserId} (ban still successful)",
-                    message.From.Id);
+                    "Failed to schedule message cleanup job for {User} (ban still successful)",
+                    message.From.ToLogDebug());
             }
 
             // Return ban results for consolidated notification (Phase 5.2)
@@ -529,8 +530,8 @@ public class DetectionActionService(
         catch (Exception ex)
         {
             logger.LogError(ex,
-                "Failed to execute auto-ban for user {UserId}",
-                message.From?.Id);
+                "Failed to execute auto-ban for {User}",
+                message.From.ToLogDebug());
             return null; // Ban failed
         }
     }
@@ -580,16 +581,16 @@ public class DetectionActionService(
                     deletionSource: "critical_violation",
                     cancellationToken);
                 logger.LogInformation(
-                    "Deleted message {MessageId} from chat {ChatId} due to critical check violations",
+                    "Deleted message {MessageId} from {Chat} due to critical check violations",
                     message.MessageId,
-                    chatId);
+                    message.Chat.ToLogInfo());
             }
             catch (Exception ex)
             {
                 logger.LogError(ex,
-                    "Failed to delete message {MessageId} from chat {ChatId}",
+                    "Failed to delete message {MessageId} from {Chat}",
                     message.MessageId,
-                    chatId);
+                    message.Chat.ToLogDebug());
             }
 
             // Step 2: Notify user about violation (DM preferred, public reply fallback)
@@ -599,7 +600,7 @@ public class DetectionActionService(
 
             var sendResult = await userMessagingService.SendToUserAsync(
                 userId,
-                chatId,
+                message.Chat,
                 notificationMessage,
                 replyToMessageId: null,  // Original message already deleted
                 cancellationToken: cancellationToken);
@@ -607,32 +608,32 @@ public class DetectionActionService(
             if (sendResult.Success)
             {
                 logger.LogInformation(
-                    "Sent critical check violation notice to user {UserId} via {DeliveryMethod}",
-                    userId,
+                    "Sent critical check violation notice to {User} via {DeliveryMethod}",
+                    message.From.ToLogInfo(),
                     sendResult.DeliveryMethod);
             }
             else
             {
                 logger.LogWarning(
-                    "Failed to send critical check violation notice to user {UserId}: {Error}",
-                    userId,
+                    "Failed to send critical check violation notice to {User}: {Error}",
+                    message.From.ToLogDebug(),
                     sendResult.ErrorMessage);
             }
 
             // Step 3: Log audit event (for transparency)
             logger.LogInformation(
-                "Critical check violation handling complete for user {UserId} in chat {ChatId}. " +
+                "Critical check violation handling complete for {User} in {Chat}. " +
                 "Message deleted, user notified via {DeliveryMethod}. NO ban/warning applied.",
-                userId,
-                chatId,
+                message.From.ToLogInfo(),
+                message.Chat.ToLogInfo(),
                 sendResult.DeliveryMethod);
         }
         catch (Exception ex)
         {
             logger.LogError(ex,
-                "Failed to handle critical check violation for user {UserId} in chat {ChatId}",
-                message.From.Id,
-                message.Chat.Id);
+                "Failed to handle critical check violation for {User} in {Chat}",
+                message.From.ToLogDebug(),
+                message.Chat.ToLogDebug());
         }
     }
 
@@ -769,8 +770,8 @@ public class DetectionActionService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to send consolidated spam notification for message {MessageId} in chat {ChatId}",
-                    message.MessageId, message.Chat.Id);
+                logger.LogError(ex, "Failed to send consolidated spam notification for message {MessageId} in {Chat}",
+                    message.MessageId, message.Chat.ToLogDebug());
             }
         }, cancellationToken);
     }
@@ -795,7 +796,7 @@ public class DetectionActionService(
     /// Creates scope to resolve scoped INotificationService from singleton background service
     /// Fire-and-forget pattern - does not await the notification task
     /// </summary>
-    private void SendNotificationAsync(long chatId, NotificationEventType eventType, string subject, string message, CancellationToken cancellationToken)
+    private void SendNotificationAsync(Chat chat, NotificationEventType eventType, string subject, string message, CancellationToken cancellationToken)
     {
         _ = Task.Run(async () =>
         {
@@ -803,11 +804,11 @@ public class DetectionActionService(
             {
                 using var scope = serviceProvider.CreateScope();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                await notificationService.SendChatNotificationAsync(chatId, eventType, subject, message, cancellationToken);
+                await notificationService.SendChatNotificationAsync(chat.Id, eventType, subject, message, cancellationToken);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to send notification for event {EventType} in chat {ChatId}", eventType, chatId);
+                logger.LogError(ex, "Failed to send notification for event {EventType} in {Chat}", eventType, chat.ToLogDebug());
             }
         }, cancellationToken);
     }

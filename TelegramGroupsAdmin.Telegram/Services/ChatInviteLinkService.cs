@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Telegram.Extensions;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -25,7 +27,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
     }
 
     public async Task<string?> GetInviteLinkAsync(
-        long chatId,
+        Chat chat,
         CancellationToken cancellationToken = default)
     {
         try
@@ -34,15 +36,15 @@ public class ChatInviteLinkService : IChatInviteLinkService
             using var scope = _serviceProvider.CreateScope();
             var configRepo = scope.ServiceProvider.GetRequiredService<IConfigRepository>();
 
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, cancellationToken);
+            var cachedConfig = await configRepo.GetByChatIdAsync(chat.Id, cancellationToken);
             if (cachedConfig?.InviteLink != null)
             {
-                _logger.LogDebug("Using cached invite link for chat {ChatId}", chatId);
+                _logger.LogDebug("Using cached invite link for {Chat}", chat.ToLogDebug());
                 return cachedConfig.InviteLink;
             }
 
             // Step 2: Not cached - fetch and cache
-            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, cancellationToken);
+            return await FetchAndCacheInviteLinkAsync(chat, configRepo, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -53,14 +55,14 @@ public class ChatInviteLinkService : IChatInviteLinkService
             // Health check should prevent most permission issues
             _logger.LogWarning(
                 ex,
-                "Failed to get invite link for chat {ChatId}. Bot may lack admin permissions or health check issue.",
-                chatId);
+                "Failed to get invite link for {Chat}. Bot may lack admin permissions or health check issue.",
+                chat.ToLogDebug());
             return null;
         }
     }
 
     public async Task<string?> RefreshInviteLinkAsync(
-        long chatId,
+        Chat chat,
         CancellationToken cancellationToken = default)
     {
         try
@@ -70,16 +72,16 @@ public class ChatInviteLinkService : IChatInviteLinkService
             using var scope = _serviceProvider.CreateScope();
             var configRepo = scope.ServiceProvider.GetRequiredService<IConfigRepository>();
 
-            _logger.LogDebug("Refreshing invite link from Telegram for chat {ChatId}", chatId);
+            _logger.LogDebug("Refreshing invite link from Telegram for {Chat}", chat.ToLogDebug());
 
-            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, cancellationToken);
+            return await FetchAndCacheInviteLinkAsync(chat, configRepo, cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 ex,
-                "Failed to refresh invite link for chat {ChatId}. Bot may lack admin permissions.",
-                chatId);
+                "Failed to refresh invite link for {Chat}. Bot may lack admin permissions.",
+                chat.ToLogDebug());
             return null;
         }
     }
@@ -89,14 +91,11 @@ public class ChatInviteLinkService : IChatInviteLinkService
     /// Only updates cache if link has changed (reduces unnecessary writes)
     /// </summary>
     private async Task<string?> FetchAndCacheInviteLinkAsync(
-        long chatId,
+        Chat chat,
         IConfigRepository configRepo,
         CancellationToken cancellationToken)
     {
         var operations = await _botClientFactory.GetOperationsAsync();
-
-        // Get chat info from Telegram
-        var chat = await operations.GetChatAsync(chatId, cancellationToken);
 
         string? currentLink;
 
@@ -104,14 +103,14 @@ public class ChatInviteLinkService : IChatInviteLinkService
         if (!string.IsNullOrEmpty(chat.Username))
         {
             currentLink = $"https://t.me/{chat.Username}";
-            _logger.LogDebug("Got public invite link for chat {ChatId}: {Link}", chatId, currentLink);
+            _logger.LogDebug("Got public invite link for {Chat}: {Link}", chat.ToLogDebug(), currentLink);
 
             // Cache public group link too (username could change)
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, cancellationToken);
+            var cachedConfig = await configRepo.GetByChatIdAsync(chat.Id, cancellationToken);
             if (cachedConfig?.InviteLink != currentLink)
             {
-                await configRepo.SaveInviteLinkAsync(chatId, currentLink, cancellationToken);
-                _logger.LogDebug("Cached public invite link for chat {ChatId}", chatId);
+                await configRepo.SaveInviteLinkAsync(chat.Id, currentLink, cancellationToken);
+                _logger.LogDebug("Cached public invite link for {Chat}", chat.ToLogDebug());
             }
 
             return currentLink;
@@ -120,26 +119,26 @@ public class ChatInviteLinkService : IChatInviteLinkService
         {
             // Private group - check if we already have a cached link
             // ExportChatInviteLink GENERATES a new link (revokes old), so we must avoid calling it
-            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, cancellationToken);
+            var cachedConfig = await configRepo.GetByChatIdAsync(chat.Id, cancellationToken);
 
             if (cachedConfig?.InviteLink != null)
             {
                 // Use cached link - don't call ExportChatInviteLink (it would revoke this one)
-                _logger.LogDebug("Using existing cached invite link for private chat {ChatId}", chatId);
+                _logger.LogDebug("Using existing cached invite link for private {Chat}", chat.ToLogDebug());
                 return cachedConfig.InviteLink;
             }
 
             // No cached link - export the primary link (this WILL revoke any previous primary link)
             // This should only happen on first setup
-            currentLink = await operations.ExportChatInviteLinkAsync(chatId, cancellationToken);
+            currentLink = await operations.ExportChatInviteLinkAsync(chat.Id, cancellationToken);
             _logger.LogWarning(
-                "Exported PRIMARY invite link for private chat {ChatId} - this revokes previous primary link! " +
+                "Exported PRIMARY invite link for private {Chat} - this revokes previous primary link! " +
                 "Link: {Link}",
-                chatId,
+                chat.ToLogDebug(),
                 currentLink);
 
             // Cache it so we never call ExportChatInviteLink again for this chat
-            await configRepo.SaveInviteLinkAsync(chatId, currentLink, cancellationToken);
+            await configRepo.SaveInviteLinkAsync(chat.Id, currentLink, cancellationToken);
             return currentLink;
         }
     }

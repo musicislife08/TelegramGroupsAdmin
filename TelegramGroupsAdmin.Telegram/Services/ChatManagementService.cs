@@ -7,6 +7,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
@@ -21,6 +22,7 @@ public class ChatManagementService(
     IServiceProvider serviceProvider,
     ITelegramBotClientFactory botFactory,
     ITelegramConfigLoader configLoader,
+    IChatCache chatCache,
     ILogger<ChatManagementService> logger) : IChatManagementService
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
@@ -206,17 +208,33 @@ public class ChatManagementService(
 
             if (isActive)
             {
+                // Cache SDK Chat when bot joins/is promoted
+                chatCache.UpdateChat(chat);
+
                 logger.LogInformation(
                     "✅ Bot added to {ChatType} {Chat} as {Status}",
                     chat.Type,
-                    LogDisplayName.ChatInfo(chatName, chat.Id),
+                    chat.ToLogInfo(),
+                    newStatus);
+            }
+            else if (isDeleted)
+            {
+                // Remove from cache when bot is kicked/left
+                chatCache.RemoveChat(chat.Id);
+
+                logger.LogWarning(
+                    "❌ Bot removed from {Chat} - status: {Status}",
+                    chat.ToLogDebug(),
                     newStatus);
             }
             else
             {
+                // Bot demoted but still in chat - keep cache updated
+                chatCache.UpdateChat(chat);
+
                 logger.LogWarning(
-                    "❌ Bot removed from {Chat} - status: {Status}",
-                    LogDisplayName.ChatDebug(chatName, chat.Id),
+                    "⚠️ Bot demoted in {Chat} - status: {Status}",
+                    chat.ToLogDebug(),
                     newStatus);
             }
 
@@ -432,12 +450,13 @@ public class ChatManagementService(
     /// </summary>
     public async Task RefreshChatAdminsAsync(long chatId, CancellationToken cancellationToken = default)
     {
+        Chat? chat = null; // Captured early for error logging
         try
         {
             var operations = await botFactory.GetOperationsAsync();
 
             // Check if this is a group chat (only groups/supergroups have administrators)
-            var chat = await operations.GetChatAsync(chatId, cancellationToken);
+            chat = await operations.GetChatAsync(chatId, cancellationToken);
             if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
             {
                 logger.LogDebug("Skipping admin refresh for non-group chat {Chat} (type: {Type})",
@@ -538,7 +557,7 @@ public class ChatManagementService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to refresh admins for chat {ChatId}", chatId);
+            logger.LogWarning(ex, "Failed to refresh admins for {Chat}", chat.ToLogDebug());
             throw; // Re-throw so caller can track failures
         }
     }
@@ -548,11 +567,13 @@ public class ChatManagementService(
     /// </summary>
     public async Task RefreshHealthForChatAsync(long chatId, CancellationToken cancellationToken = default)
     {
+        string? chatName = null; // Captured early for error logging
         try
         {
             var operations = await botFactory.GetOperationsAsync();
 
-            var (health, chatName) = await PerformHealthCheckAsync(operations, chatId, cancellationToken);
+            var (health, chatName_) = await PerformHealthCheckAsync(operations, chatId, cancellationToken);
+            chatName = chatName_;
             _healthCache[chatId] = health;
             OnHealthUpdate?.Invoke(health);
 
@@ -578,7 +599,8 @@ public class ChatManagementService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to perform health check for chat {ChatId}", chatId);
+            logger.LogError(ex, "Failed to perform health check for {Chat}",
+                LogDisplayName.ChatDebug(chatName, chatId));
         }
     }
 
@@ -602,6 +624,9 @@ public class ChatManagementService(
             var chat = await operations.GetChatAsync(chatId, cancellationToken);
             health.IsReachable = true;
             chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
+
+            // Cache SDK Chat for use by other services (e.g., NotificationHandler)
+            chatCache.UpdateChat(chat);
 
             // Skip health check for private chats (only relevant for groups)
             if (chat.Type == ChatType.Private)
@@ -632,7 +657,8 @@ public class ChatManagementService(
             catch (ApiRequestException ex) when (ex.Message.Contains("hidden"))
             {
                 // Hidden members enabled and bot isn't admin - can't check own status
-                logger.LogDebug("Chat {ChatId} has hidden members and bot is not admin", chatId);
+                logger.LogDebug("{Chat} has hidden members and bot is not admin",
+                    LogDisplayName.ChatDebug(chatName, chatId));
                 health.BotStatus = "Unknown (hidden members)";
                 health.IsAdmin = false;
             }
@@ -649,7 +675,7 @@ public class ChatManagementService(
                 // Validate and refresh cached invite link (all groups - public and private)
                 if (chat.Type is ChatType.Supergroup or ChatType.Group)
                 {
-                    await ValidateInviteLinkAsync(chatId, cancellationToken);
+                    await ValidateInviteLinkAsync(chat, cancellationToken);
                 }
             }
             else
@@ -795,7 +821,7 @@ public class ChatManagementService(
                 logger.LogInformation("Backfilling {Count} missing chat icons", chatsWithoutIcons.Count);
                 foreach (var chat in chatsWithoutIcons)
                 {
-                    await FetchChatIconAsync(chat.ChatId, cancellationToken);
+                    await FetchChatIconAsync(chat, cancellationToken);
                 }
             }
 
@@ -822,25 +848,41 @@ public class ChatManagementService(
         bool includeIcon = true,
         CancellationToken cancellationToken = default)
     {
+        // Fetch chat from DB for logging context and icon update
+        ManagedChatRecord? chat = null;
         try
         {
-            logger.LogDebug("Refreshing single chat {ChatId}", chatId); // ID-only since we don't have name yet
+            using var scope = serviceProvider.CreateScope();
+            var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+            chat = await managedChatsRepo.GetByChatIdAsync(chatId, cancellationToken);
+        }
+        catch
+        {
+            // Non-fatal - continue with ID-only logging if DB fetch fails
+        }
+
+        try
+        {
+            logger.LogDebug("Refreshing single chat {Chat}",
+                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
 
             // Refresh admin list and health
             await RefreshChatAdminsAsync(chatId, cancellationToken);
             await RefreshHealthForChatAsync(chatId, cancellationToken);
 
             // Optionally fetch fresh chat icon
-            if (includeIcon)
+            if (includeIcon && chat != null)
             {
-                await FetchChatIconAsync(chatId, cancellationToken);
+                await FetchChatIconAsync(chat, cancellationToken);
             }
 
-            logger.LogDebug("✅ Single chat refresh completed for chat {ChatId}", chatId);
+            logger.LogDebug("✅ Single chat refresh completed for {Chat}",
+                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to refresh single chat {ChatId}", chatId);
+            logger.LogError(ex, "Failed to refresh single chat {Chat}",
+                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
             throw;
         }
     }
@@ -851,9 +893,10 @@ public class ChatManagementService(
     /// Extracted from periodic health check to reduce API calls
     /// </summary>
     private async Task FetchChatIconAsync(
-        long chatId,
+        ManagedChatRecord chat,
         CancellationToken cancellationToken = default)
     {
+        var (chatId, chatName) = (chat.ChatId, chat.ChatName);
         try
         {
             using var scope = serviceProvider.CreateScope();
@@ -864,20 +907,16 @@ public class ChatManagementService(
             {
                 // Save icon path to database
                 var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-
-                if (existingChat != null)
-                {
-                    var updatedChat = existingChat with { ChatIconPath = iconPath };
-                    await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
-                    logger.LogInformation("✅ Cached chat icon for {Chat}",
-                        LogDisplayName.ChatInfo(existingChat.ChatName, chatId));
-                }
+                var updatedChat = chat with { ChatIconPath = iconPath };
+                await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
+                logger.LogInformation("✅ Cached chat icon for {Chat}",
+                    LogDisplayName.ChatInfo(chatName, chatId));
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to fetch chat icon for chat {ChatId} (non-fatal)", chatId);
+            logger.LogWarning(ex, "Failed to fetch chat icon for {Chat} (non-fatal)",
+                LogDisplayName.ChatDebug(chatName, chatId));
             // Non-fatal - don't throw
         }
     }
@@ -888,7 +927,7 @@ public class ChatManagementService(
     /// - Public groups: Caches https://t.me/{username} link
     /// - Private groups: Fetches/caches primary invite link (only exports if not cached)
     /// </summary>
-    private async Task ValidateInviteLinkAsync(long chatId, CancellationToken cancellationToken = default)
+    private async Task ValidateInviteLinkAsync(Chat chat, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -897,21 +936,22 @@ public class ChatManagementService(
 
             // Refresh from Telegram API to validate and update if needed
             // This fetches the current primary link and only writes to DB if it changed
-            var inviteLink = await inviteLinkService.RefreshInviteLinkAsync(chatId, cancellationToken);
+            var inviteLink = await inviteLinkService.RefreshInviteLinkAsync(chat, cancellationToken);
 
             if (inviteLink != null)
             {
-                logger.LogDebug("Validated invite link for chat {ChatId}", chatId);
+                logger.LogDebug("Validated invite link for {Chat}", chat.ToLogDebug());
             }
             else
             {
-                logger.LogWarning("Could not validate invite link for chat {ChatId} - bot may lack admin permissions", chatId);
+                logger.LogWarning("Could not validate invite link for {Chat} - bot may lack admin permissions",
+                    chat.ToLogDebug());
             }
         }
         catch (Exception ex)
         {
             // Non-fatal - invite link validation failure shouldn't fail health check
-            logger.LogWarning(ex, "Failed to validate invite link for chat {ChatId}", chatId);
+            logger.LogWarning(ex, "Failed to validate invite link for {Chat}", chat.ToLogDebug());
         }
     }
 
@@ -962,6 +1002,7 @@ public class ChatManagementService(
         long chatId,
         CancellationToken cancellationToken = default)
     {
+        ChatFullInfo? chat = null; // Captured early for error logging
         try
         {
             using var scope = serviceProvider.CreateScope();
@@ -970,7 +1011,7 @@ public class ChatManagementService(
             var photoHashService = scope.ServiceProvider.GetRequiredService<IPhotoHashService>();
 
             // Get chat info to check for linked channel
-            var chat = await operations.GetChatAsync(chatId, cancellationToken);
+            chat = await operations.GetChatAsync(chatId, cancellationToken);
 
             if (chat.LinkedChatId.HasValue)
             {
@@ -990,7 +1031,7 @@ public class ChatManagementService(
                     catch (Exception iconEx)
                     {
                         logger.LogWarning(iconEx, "Failed to fetch channel icon for {Channel} (non-fatal)",
-                            LogDisplayName.ChatDebug(null, linkedChannelId));
+                            linkedChannel.ToLogDebug());
                     }
 
                     // Compute photo hash for impersonation comparison
@@ -1003,7 +1044,8 @@ public class ChatManagementService(
                         }
                         catch (Exception hashEx)
                         {
-                            logger.LogWarning(hashEx, "Failed to compute photo hash for channel {ChannelId} (non-fatal)", linkedChannelId);
+                            logger.LogWarning(hashEx, "Failed to compute photo hash for {Channel} (non-fatal)",
+                                linkedChannel.ToLogDebug());
                         }
                     }
 
@@ -1051,8 +1093,8 @@ public class ChatManagementService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to sync linked channel for chat {ChatId} (non-fatal)", chatId);
-            // Non-fatal - don't throw (no chat name available in outer catch)
+            logger.LogWarning(ex, "Failed to sync linked channel for {Chat} (non-fatal)", chat.ToLogDebug());
+            // Non-fatal - don't throw
         }
     }
 

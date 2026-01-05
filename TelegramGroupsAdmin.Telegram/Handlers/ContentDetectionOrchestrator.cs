@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -83,13 +84,10 @@ public class ContentDetectionOrchestrator
             {
                 Message = text ?? "", // Empty string for image-only messages
                 UserId = message.From?.Id ?? 0,
-                // Pass pre-formatted display name for logging (REFACTOR-10 will rename to UserDisplayName)
-                UserName = TelegramDisplayName.Format(
-                    message.From?.FirstName,
-                    message.From?.LastName,
-                    message.From?.Username,
-                    message.From?.Id ?? 0),
+                // Pass pre-formatted display names for logging
+                UserName = message.From.ToLogDebug(),
                 ChatId = message.Chat.Id,
+                ChatName = message.Chat.ToLogDebug(),
                 PhotoLocalPath = photoFullPath // Pass full for ImageSpamCheck layers
             };
 
@@ -129,10 +127,10 @@ public class ContentDetectionOrchestrator
                     cancellationToken);
 
                 // Check for auto-trust after storing non-spam detection result
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                if (!result.SpamResult.IsSpam && message.From != null)
                 {
                     var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
-                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From, message.Chat, cancellationToken);
                 }
 
                 // Phase 4.21: Language warning for non-English non-spam messages from untrusted users

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Constants;
@@ -35,9 +36,12 @@ public class WarnHandler : IWarnHandler
         long? messageId = null,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+
         _logger.LogDebug(
-            "Issuing warning for user {UserId} by {Executor}",
-            userId, executor.GetDisplayText());
+            "Issuing warning for user {User} by {Executor}",
+            user.ToLogDebug(userId), executor.GetDisplayText());
 
         try
         {
@@ -59,14 +63,14 @@ public class WarnHandler : IWarnHandler
             var activeCount = await _userRepository.AddWarningAsync(userId, warning, cancellationToken);
 
             _logger.LogInformation(
-                "Warning issued for user {UserId}: total active warnings {WarnCount}",
-                userId, activeCount);
+                "Warning issued for {User}: total active warnings {WarnCount}",
+                user.ToLogInfo(userId), activeCount);
 
             return WarnResult.Succeeded(activeCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to issue warning for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to issue warning for user {User}", user.ToLogDebug(userId));
             return WarnResult.Failed(ex.Message);
         }
     }

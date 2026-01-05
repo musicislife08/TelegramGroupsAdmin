@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -16,17 +17,20 @@ public class MessageHandler : IMessageHandler
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IMessageBackfillService _messageBackfillService;
     private readonly IBotMessageService _botMessageService;
+    private readonly IManagedChatsRepository _chatsRepository;
     private readonly ILogger<MessageHandler> _logger;
 
     public MessageHandler(
         IMessageHistoryRepository messageHistoryRepository,
         IMessageBackfillService messageBackfillService,
         IBotMessageService botMessageService,
+        IManagedChatsRepository chatsRepository,
         ILogger<MessageHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
         _messageBackfillService = messageBackfillService;
         _botMessageService = botMessageService;
+        _chatsRepository = chatsRepository;
         _logger = logger;
     }
 
@@ -37,9 +41,12 @@ public class MessageHandler : IMessageHandler
         Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+
         _logger.LogDebug(
-            "Ensuring message {MessageId} exists in database for chat {ChatId}",
-            messageId, chatId);
+            "Ensuring message {MessageId} exists in database for {Chat}",
+            messageId, chat.ToLogDebug(chatId));
 
         // Check if message already exists
         var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
@@ -80,9 +87,12 @@ public class MessageHandler : IMessageHandler
         Actor executor,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+
         _logger.LogDebug(
-            "Deleting message {MessageId} from chat {ChatId} by {Executor}",
-            messageId, chatId, executor.GetDisplayText());
+            "Deleting message {MessageId} from {Chat} by {Executor}",
+            messageId, chat.ToLogDebug(chatId), executor.GetDisplayText());
 
         try
         {
@@ -93,8 +103,8 @@ public class MessageHandler : IMessageHandler
                 cancellationToken);
 
             _logger.LogInformation(
-                "Deleted message {MessageId} from chat {ChatId}",
-                messageId, chatId);
+                "Deleted message {MessageId} from {Chat}",
+                messageId, chat.ToLogInfo(chatId));
 
             return DeleteResult.Succeeded(messageDeleted: true);
         }
@@ -103,8 +113,8 @@ public class MessageHandler : IMessageHandler
             // Report the failure - let the orchestrator decide what to do
             // (message may already be deleted, API error, etc.)
             _logger.LogWarning(ex,
-                "Failed to delete message {MessageId} in chat {ChatId}",
-                messageId, chatId);
+                "Failed to delete message {MessageId} in {Chat}",
+                messageId, chat.ToLogDebug(chatId));
 
             return DeleteResult.Failed(ex.Message);
         }

@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -43,6 +44,7 @@ public class WebBotMessagingService : IWebBotMessagingService
 
     public async Task<WebBotFeatureAvailability> CheckFeatureAvailabilityAsync(
         string webUserId,
+        string? webUserEmail,
         CancellationToken cancellationToken = default)
     {
         try
@@ -71,7 +73,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             }
 
             // Check 3: User must have linked Telegram account with username
-            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, cancellationToken);
+            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, webUserEmail, cancellationToken);
             if (linkedUser == null)
             {
                 return new WebBotFeatureAvailability(false, null, null, errorMessage);
@@ -91,21 +93,24 @@ public class WebBotMessagingService : IWebBotMessagingService
             }
 
             _logger.LogInformation(
-                "WebBotMessaging available for user {UserId} (Telegram: @{Username})",
-                webUserId,
+                "WebBotMessaging available for {User} (Telegram: @{Username})",
+                LogDisplayName.WebUserInfo(webUserEmail, webUserId),
                 linkedUser.Username);
 
             return new WebBotFeatureAvailability(true, botUserId, linkedUser.Username, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check feature availability for user {UserId}", webUserId);
+            _logger.LogError(ex,
+                "Failed to check feature availability for {User}",
+                LogDisplayName.WebUserDebug(webUserEmail, webUserId));
             return new WebBotFeatureAvailability(false, null, null, $"Error checking availability: {ex.Message}");
         }
     }
 
     public async Task<WebBotMessageResult> SendMessageAsync(
         string webUserId,
+        string? webUserEmail,
         long chatId,
         string text,
         long? replyToMessageId = null,
@@ -114,7 +119,7 @@ public class WebBotMessagingService : IWebBotMessagingService
         try
         {
             // Get linked Telegram user for signature
-            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, cancellationToken);
+            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, webUserEmail, cancellationToken);
             if (linkedUser == null)
             {
                 return new WebBotMessageResult(false, null, errorMessage);
@@ -153,22 +158,25 @@ public class WebBotMessagingService : IWebBotMessagingService
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Sent bot message {MessageId} from web user {UserId} (Telegram: @{Username})",
+                "Sent bot message {MessageId} from {User} (Telegram: @{Username})",
                 sentMessage.MessageId,
-                webUserId,
+                LogDisplayName.WebUserInfo(webUserEmail, webUserId),
                 linkedUser.Username);
 
             return new WebBotMessageResult(true, sentMessage, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send bot message for user {UserId}", webUserId);
+            _logger.LogError(ex,
+                "Failed to send bot message for {User}",
+                LogDisplayName.WebUserDebug(webUserEmail, webUserId));
             return new WebBotMessageResult(false, null, ex.Message);
         }
     }
 
     public async Task<WebBotMessageResult> EditMessageAsync(
         string webUserId,
+        string? webUserEmail,
         long chatId,
         int messageId,
         string text,
@@ -197,15 +205,18 @@ public class WebBotMessagingService : IWebBotMessagingService
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Edited bot message {MessageId} from web user {UserId}",
+                "Edited bot message {MessageId} from {User}",
                 messageId,
-                webUserId);
+                LogDisplayName.WebUserInfo(webUserEmail, webUserId));
 
             return new WebBotMessageResult(true, editedMessage, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to edit bot message {MessageId} for user {UserId}", messageId, webUserId);
+            _logger.LogError(ex,
+                "Failed to edit bot message {MessageId} for {User}",
+                messageId,
+                LogDisplayName.WebUserDebug(webUserEmail, webUserId));
             return new WebBotMessageResult(false, null, ex.Message);
         }
     }
@@ -216,6 +227,7 @@ public class WebBotMessagingService : IWebBotMessagingService
     /// <returns>Tuple of (TelegramUser, ErrorMessage) - user is null if validation fails</returns>
     private async Task<(TelegramUser? User, string? ErrorMessage)> GetLinkedTelegramUserAsync(
         string webUserId,
+        string? webUserEmail,
         CancellationToken cancellationToken)
     {
         var mappings = await _mappingRepo.GetByUserIdAsync(webUserId, cancellationToken);
@@ -223,7 +235,9 @@ public class WebBotMessagingService : IWebBotMessagingService
 
         if (!linkedTelegramId.HasValue)
         {
-            _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: No linked Telegram account", webUserId);
+            _logger.LogDebug(
+                "WebBotMessaging unavailable for {User}: No linked Telegram account",
+                LogDisplayName.WebUserDebug(webUserEmail, webUserId));
             return (null, "No linked Telegram account");
         }
 
@@ -231,7 +245,9 @@ public class WebBotMessagingService : IWebBotMessagingService
 
         if (linkedUser == null || string.IsNullOrEmpty(linkedUser.Username))
         {
-            _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: Linked user not found or has no username", webUserId);
+            _logger.LogDebug(
+                "WebBotMessaging unavailable for {User}: Linked user not found or has no username",
+                LogDisplayName.WebUserDebug(webUserEmail, webUserId));
             return (null, "Linked Telegram account has no username");
         }
 

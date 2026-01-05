@@ -46,6 +46,14 @@ public class AuthCookieService : IAuthCookieService
     }
 
     /// <summary>
+    /// Signs out a user by clearing the authentication cookie.
+    /// </summary>
+    public async Task SignOutAsync(HttpContext context)
+    {
+        await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    }
+
+    /// <summary>
     /// Generates an encrypted cookie value without requiring HttpContext.
     /// Use this in tests to create valid auth cookies programmatically.
     /// </summary>

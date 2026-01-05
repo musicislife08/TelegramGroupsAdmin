@@ -187,4 +187,12 @@ public class TelegramUserDto
     /// </summary>
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; }
+
+    // Navigation properties
+
+    /// <summary>
+    /// Web account mappings for this Telegram user.
+    /// Typically 0-1 active mappings (each TG user links to at most one web account).
+    /// </summary>
+    public virtual ICollection<TelegramUserMappingRecordDto> UserMappings { get; set; } = [];
 }

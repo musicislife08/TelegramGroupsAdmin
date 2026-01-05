@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
@@ -30,9 +31,12 @@ public class TrustHandler : ITrustHandler
         string? reason,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
+
         _logger.LogDebug(
-            "Setting trust for user {UserId} by {Executor}",
-            userId, executor.GetDisplayText());
+            "Setting trust for user {User} by {Executor}",
+            user.ToLogDebug(userId), executor.GetDisplayText());
 
         try
         {
@@ -42,14 +46,14 @@ public class TrustHandler : ITrustHandler
                 cancellationToken);
 
             _logger.LogInformation(
-                "Trust set for user {UserId} globally",
-                userId);
+                "Trust set for {User} globally",
+                user.ToLogInfo(userId));
 
             return TrustResult.Succeeded();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to set trust for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to set trust for user {User}", user.ToLogDebug(userId));
             return TrustResult.Failed(ex.Message);
         }
     }
@@ -61,9 +65,12 @@ public class TrustHandler : ITrustHandler
         string? reason,
         CancellationToken cancellationToken = default)
     {
+        // Fetch once for logging
+        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
+
         _logger.LogDebug(
-            "Removing trust for user {UserId} by {Executor}. Reason: {Reason}",
-            userId, executor.GetDisplayText(), reason);
+            "Removing trust for user {User} by {Executor}. Reason: {Reason}",
+            user.ToLogDebug(userId), executor.GetDisplayText(), reason);
 
         try
         {
@@ -75,14 +82,14 @@ public class TrustHandler : ITrustHandler
                 cancellationToken);
 
             _logger.LogInformation(
-                "Trust removed for user {UserId} by {Executor}",
-                userId, executor.GetDisplayText());
+                "Trust removed for {User} by {Executor}",
+                user.ToLogInfo(userId), executor.GetDisplayText());
 
             return UntrustResult.Succeeded();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove trust for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to remove trust for user {User}", user.ToLogDebug(userId));
             return UntrustResult.Failed(ex.Message);
         }
     }

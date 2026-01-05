@@ -210,7 +210,7 @@ public class BanCommand : IBotCommand
 
             var messageResult = await _messagingService.SendToUserAsync(
                 userId: targetUser.Id,
-                chatId: message.Chat.Id,
+                chat: message.Chat,
                 messageText: banNotification,
                 replyToMessageId: null, // Don't reply to trigger message for bans
                 cancellationToken: cancellationToken);

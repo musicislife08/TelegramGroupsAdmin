@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -132,7 +133,7 @@ public partial class CommandRouter
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing command /{Command} by user {UserId}", commandName, message.From?.Id);
+            _logger.LogError(ex, "Error executing command /{Command} by {User}", commandName, message.From.ToLogDebug());
             return new CommandResult($"❌ Error executing command: {ex.Message}", false);
         }
     }

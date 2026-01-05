@@ -1,5 +1,4 @@
 using TelegramGroupsAdmin.Core.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -9,10 +8,10 @@ namespace TelegramGroupsAdmin.Repositories;
 public interface IUserRepository
 {
     Task<int> GetUserCountAsync(CancellationToken cancellationToken = default);
-    Task<UiModels.UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
-    Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default);
-    Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default);
-    Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken cancellationToken = default);
+    Task<UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default);
+    Task<UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default);
+    Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Atomically register a user (create or reactivate) and mark the invite as used in a single transaction.
@@ -41,18 +40,18 @@ public interface IUserRepository
     Task DisableTotpAsync(string userId, CancellationToken cancellationToken = default);
     Task ResetTotpAsync(string userId, CancellationToken cancellationToken = default);
     Task DeleteRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
-    Task<List<UiModels.RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
+    Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
     Task AddRecoveryCodesAsync(string userId, List<string> codeHashes, CancellationToken cancellationToken = default);
     Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
     Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
-    Task<UiModels.InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default);
+    Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default);
     Task UseInviteAsync(string token, string userId, CancellationToken cancellationToken = default);
-    Task<List<UiModels.UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
+    Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
     Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default);
     Task SetActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default);
-    Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default);
-    Task UpdateAsync(UiModels.UserRecord user, CancellationToken cancellationToken = default);
+    Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default);
+    Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default);
 
     // Account Lockout Methods (SECURITY-5, SECURITY-6)
     Task IncrementFailedLoginAttemptsAsync(string userId, CancellationToken cancellationToken = default);

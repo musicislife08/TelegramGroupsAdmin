@@ -1,8 +1,7 @@
 using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+namespace TelegramGroupsAdmin.Core.Mappings;
 
 /// <summary>
 /// Mapping extensions for User records
@@ -11,7 +10,7 @@ public static class UserMappings
 {
     extension(DataModels.UserRecordDto data)
     {
-        public UiModels.UserRecord ToModel() => new(
+        public UserRecord ToModel() => new(
             Id: data.Id,
             Email: data.Email,
             NormalizedEmail: data.NormalizedEmail,
@@ -25,7 +24,7 @@ public static class UserMappings
             TotpSetupStartedAt: data.TotpSetupStartedAt,
             CreatedAt: data.CreatedAt,
             LastLoginAt: data.LastLoginAt,
-            Status: (UiModels.UserStatus)data.Status,
+            Status: (UserStatus)data.Status,
             ModifiedBy: data.ModifiedBy,
             ModifiedAt: data.ModifiedAt,
             EmailVerified: data.EmailVerified,
@@ -38,7 +37,7 @@ public static class UserMappings
         );
     }
 
-    extension(UiModels.UserRecord ui)
+    extension(UserRecord ui)
     {
         public DataModels.UserRecordDto ToDto() => new()
         {

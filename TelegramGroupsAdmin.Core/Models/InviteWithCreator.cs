@@ -1,16 +1,16 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
-
-using TelegramGroupsAdmin.Core.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// Invite record for UI display
+/// Invite with creator information for UI display
 /// </summary>
-public record InviteRecord(
+public record InviteWithCreator(
     string Token,
     string CreatedBy,
+    string CreatedByEmail,
     DateTimeOffset CreatedAt,
     DateTimeOffset ExpiresAt,
     string? UsedBy,
+    string? UsedByEmail,
     PermissionLevel PermissionLevel,
     InviteStatus Status,
     DateTimeOffset? ModifiedAt

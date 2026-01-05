@@ -3,6 +3,7 @@ using Lib.Net.Http.WebPush;
 using Lib.Net.Http.WebPush.Authentication;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Constants;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Repositories;
@@ -20,7 +21,7 @@ public interface IWebPushNotificationService
     /// Send an in-app notification to a user
     /// </summary>
     Task<bool> SendAsync(
-        string userId,
+        UserRecord user,
         NotificationEventType eventType,
         string subject,
         string message,
@@ -101,7 +102,7 @@ public class WebPushNotificationService : IWebPushNotificationService
     }
 
     public async Task<bool> SendAsync(
-        string userId,
+        UserRecord user,
         NotificationEventType eventType,
         string subject,
         string message,
@@ -112,7 +113,7 @@ public class WebPushNotificationService : IWebPushNotificationService
             // 1. Always save to database (for in-app bell)
             var notification = new WebNotification
             {
-                UserId = userId,
+                UserId = user.Id,
                 EventType = eventType,
                 Subject = subject,
                 Message = message,
@@ -122,23 +123,23 @@ public class WebPushNotificationService : IWebPushNotificationService
 
             await _notificationRepository.CreateAsync(notification, cancellationToken);
 
-            _logger.LogDebug("Created web notification for user {UserId}, event {EventType}",
-                userId, eventType);
+            _logger.LogDebug("Created web notification for {User}, event {EventType}",
+                user.ToLogDebug(), eventType);
 
             // 2. Send browser push to all user's subscribed devices (if VAPID configured)
-            await SendBrowserPushAsync(userId, subject, message, cancellationToken);
+            await SendBrowserPushAsync(user, subject, message, cancellationToken);
 
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create web notification for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to create web notification for {User}", user.ToLogDebug());
             return false;
         }
     }
 
     private async Task SendBrowserPushAsync(
-        string userId,
+        UserRecord user,
         string title,
         string body,
         CancellationToken cancellationToken)
@@ -153,11 +154,11 @@ public class WebPushNotificationService : IWebPushNotificationService
                 return;
             }
 
-            var subscriptions = await _subscriptionRepository.GetByUserIdAsync(userId, cancellationToken);
+            var subscriptions = await _subscriptionRepository.GetByUserIdAsync(user.Id, cancellationToken);
 
             if (!subscriptions.Any())
             {
-                _logger.LogDebug("User {UserId} has no push subscriptions", userId);
+                _logger.LogDebug("{User} has no push subscriptions", user.ToLogDebug());
                 return;
             }
 
@@ -195,27 +196,27 @@ public class WebPushNotificationService : IWebPushNotificationService
                         message,
                         cancellationToken);
 
-                    _logger.LogDebug("Sent browser push to user {UserId}", userId);
+                    _logger.LogDebug("Sent browser push to {User}", user.ToLogDebug());
                 }
                 catch (PushServiceClientException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
                 {
                     // Subscription expired or unsubscribed - remove it
                     _logger.LogInformation(
-                        "Push subscription expired for user {UserId}, removing endpoint",
-                        userId);
+                        "Push subscription expired for {User}, removing endpoint",
+                        user.ToLogInfo());
                     await _subscriptionRepository.DeleteByEndpointAsync(subscription.Endpoint, cancellationToken);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex,
-                        "Failed to send browser push to user {UserId}",
-                        userId);
+                        "Failed to send browser push to {User}",
+                        user.ToLogDebug());
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send browser push notifications to user {UserId}", userId);
+            _logger.LogError(ex, "Failed to send browser push notifications to {User}", user.ToLogDebug());
         }
     }
 

@@ -1,8 +1,7 @@
 using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+namespace TelegramGroupsAdmin.Core.Mappings;
 
 /// <summary>
 /// Mapping extensions for Invite records
@@ -11,21 +10,21 @@ public static class InviteMappings
 {
     extension(DataModels.InviteRecordDto data)
     {
-        public UiModels.InviteRecord ToModel() => new(
+        public InviteRecord ToModel() => new(
             Token: data.Token,
             CreatedBy: data.CreatedBy,
             CreatedAt: data.CreatedAt,
             ExpiresAt: data.ExpiresAt,
             UsedBy: data.UsedBy,
             PermissionLevel: (PermissionLevel)data.PermissionLevel,
-            Status: (UiModels.InviteStatus)data.Status,
+            Status: (InviteStatus)data.Status,
             ModifiedAt: data.ModifiedAt
         );
     }
 
     extension(DataModels.InviteWithCreatorDto data)
     {
-        public UiModels.InviteWithCreator ToModel() => new(
+        public InviteWithCreator ToModel() => new(
             Token: data.Invite.Token,
             CreatedBy: data.Invite.CreatedBy,
             CreatedByEmail: data.CreatorEmail,
@@ -34,12 +33,12 @@ public static class InviteMappings
             UsedBy: data.Invite.UsedBy,
             UsedByEmail: null, // Not available in Data model - would need additional lookup
             PermissionLevel: (PermissionLevel)data.Invite.PermissionLevel,
-            Status: (UiModels.InviteStatus)data.Invite.Status,
+            Status: (InviteStatus)data.Invite.Status,
             ModifiedAt: data.Invite.ModifiedAt
         );
     }
 
-    extension(UiModels.InviteRecord ui)
+    extension(InviteRecord ui)
     {
         public DataModels.InviteRecordDto ToDto() => new()
         {

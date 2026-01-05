@@ -187,6 +187,8 @@
     private DateTime _lastUpdate = DateTime.Now;
 
     // User state
+    private string? _currentUserId; // Cached web user ID for service calls
+    private string? _currentUserEmail; // Cached web user email for logging
     private PermissionLevel _userPermissionLevel = PermissionLevel.Admin; // Default to Admin
     private HashSet<long> _userTelegramIds = []; // Current user's linked Telegram IDs
 
@@ -218,21 +220,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Get user permission level and ID
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
+        // Cache user identity for service calls (avoids repeated AuthHelper calls)
+        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
+        _currentUserEmail = await AuthHelper.GetCurrentUserEmailAsync();
         _userPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
 
         // Load current user's linked Telegram accounts for message alignment
-        if (!string.IsNullOrEmpty(userId))
+        if (!string.IsNullOrEmpty(_currentUserId))
         {
             try
             {
-                var mappings = await TelegramMappingRepository.GetByUserIdAsync(userId);
+                var mappings = await TelegramMappingRepository.GetByUserIdAsync(_currentUserId);
                 _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for user {UserId}", userId);
+                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
+                    LogDisplayName.WebUserDebug(_currentUserEmail, _currentUserId));
             }
         }
 
@@ -1259,12 +1263,15 @@
                     yesText: "OK");
 
                 Logger.LogInformation(
-                    "User {UserId} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
-                    message.UserId, banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
+                    "{User} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
+                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
             }
             else
             {
-                Logger.LogError("Failed to temp ban user {UserId}: {Error}", message.UserId, banResult.ErrorMessage);
+                Logger.LogError("Failed to temp ban {User}: {Error}",
+                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    banResult.ErrorMessage);
 
                 await DialogService.ShowMessageBox(
                     "Error",
@@ -1274,7 +1281,8 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error temp banning user {UserId}", message.UserId);
+            Logger.LogError(ex, "Error temp banning {User}",
+                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
 
             await DialogService.ShowMessageBox(
                 "Error",
@@ -1509,15 +1517,14 @@
     /// </summary>
     private async Task CheckFeatureAvailabilityAsync()
     {
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(_currentUserId))
         {
             _isFeatureAvailable = false;
             _featureUnavailableReason = "Not authenticated";
             return;
         }
 
-        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(userId);
+        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(_currentUserId, _currentUserEmail);
         _isFeatureAvailable = result.IsAvailable;
         _botUserId = result.BotUserId;
         _linkedUsername = result.LinkedUsername;
@@ -1550,15 +1557,15 @@
         if (!_selectedChatId.HasValue)
             return;
 
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(_currentUserId))
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
         var result = await WebBotMessagingService.SendMessageAsync(
-            userId,
+            _currentUserId,
+            _currentUserEmail,
             _selectedChatId.Value,
             text,
             _replyToMessageId);
@@ -1586,15 +1593,15 @@
         if (!_isEditingMessageId.HasValue || !_selectedChatId.HasValue)
             return;
 
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(_currentUserId))
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
         var result = await WebBotMessagingService.EditMessageAsync(
-            userId,
+            _currentUserId,
+            _currentUserEmail,
             _selectedChatId.Value,
             (int)_isEditingMessageId.Value,
             text);

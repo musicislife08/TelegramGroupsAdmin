@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -28,6 +29,7 @@ public partial class MessageProcessingService(
     ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
     IChatManagementService chatManagementService,
+    IChatCache chatCache,
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
@@ -36,6 +38,7 @@ public partial class MessageProcessingService(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
     private readonly ITelegramBotClientFactory _botFactory = botFactory;
+    private readonly IChatCache _chatCache = chatCache;
     private readonly TelegramPhotoService _photoService = telegramPhotoService;
     private readonly TelegramMediaService _mediaService = telegramMediaService;
 
@@ -92,11 +95,14 @@ public partial class MessageProcessingService(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error executing command in private chat {ChatId}", message.Chat.Id);
+                    logger.LogError(ex, "Error executing command in private chat {Chat}", message.Chat.ToLogDebug());
                 }
             }
             return; // Don't process private messages further
         }
+
+        // Keep SDK Chat cache warm (used by NotificationHandler and other services)
+        _chatCache.UpdateChat(message.Chat);
 
         // Detect Group → Supergroup migration
         // When a Group is upgraded to Supergroup (e.g., when granting admin), Telegram:
@@ -128,10 +134,10 @@ public partial class MessageProcessingService(
         if (ServiceMessageHelper.IsServiceMessage(message, deletionConfig, out var shouldDelete))
         {
             logger.LogInformation(
-                "Detected service message: Type={Type}, MessageId={MessageId}, ChatId={ChatId}",
+                "Detected service message: Type={Type}, MessageId={MessageId}, Chat={Chat}",
                 message.Type,
                 message.MessageId,
-                message.Chat.Id);
+                message.Chat.ToLogInfo());
 
             // Skip deletion if the bot itself was removed from the group
             // Bot no longer has permissions to delete messages after being kicked
@@ -141,8 +147,8 @@ public partial class MessageProcessingService(
                 if (message.LeftChatMember.Id == operations.BotId)
                 {
                     logger.LogInformation(
-                        "Skipping deletion of LeftChatMember service message - bot was removed from chat {ChatId}",
-                        message.Chat.Id);
+                        "Skipping deletion of LeftChatMember service message - bot was removed from {Chat}",
+                        message.Chat.ToLogInfo());
                     return; // Don't try to delete or process further
                 }
             }
@@ -160,25 +166,25 @@ public partial class MessageProcessingService(
                         cancellationToken);
 
                     logger.LogInformation(
-                        "Deleted service message (type: {Type}) in chat {ChatId}",
+                        "Deleted service message (type: {Type}) in {Chat}",
                         message.Type,
-                        message.Chat.Id);
+                        message.Chat.ToLogInfo());
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(
                         ex,
-                        "Failed to delete service message {MessageId} in chat {ChatId}",
+                        "Failed to delete service message {MessageId} in {Chat}",
                         message.MessageId,
-                        message.Chat.Id);
+                        message.Chat.ToLogDebug());
                 }
             }
             else
             {
                 logger.LogDebug(
-                    "Skipping deletion of {Type} service message (disabled in config) in chat {ChatId}",
+                    "Skipping deletion of {Type} service message (disabled in config) in {Chat}",
                     message.Type,
-                    message.Chat.Id);
+                    message.Chat.ToLogDebug());
             }
 
             return; // Don't process service messages further
@@ -224,8 +230,8 @@ public partial class MessageProcessingService(
                 if (shouldRefreshAdmins)
                 {
                     logger.LogInformation(
-                        "Refreshing admin cache for chat {ChatId} ({Reason})",
-                        message.Chat.Id,
+                        "Refreshing admin cache for {Chat} ({Reason})",
+                        message.Chat.ToLogInfo(),
                         refreshReason);
 
                     try
@@ -234,7 +240,7 @@ public partial class MessageProcessingService(
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning(ex, "Failed to refresh admins for chat {ChatId}", message.Chat.Id);
+                        logger.LogWarning(ex, "Failed to refresh admins for {Chat}", message.Chat.ToLogDebug());
                     }
                 }
             }
@@ -242,7 +248,7 @@ public partial class MessageProcessingService(
             {
                 if (isNewChat)
                 {
-                    logger.LogDebug("Discovered new private chat {ChatId}, skipping admin cache refresh", message.Chat.Id);
+                    logger.LogDebug("Discovered new private {Chat}, skipping admin cache refresh", message.Chat.ToLogDebug());
                 }
             }
 
@@ -285,8 +291,8 @@ public partial class MessageProcessingService(
                 catch (Exception ex)
                 {
                     logger.LogError(ex,
-                        "Error executing command in chat {ChatId}, message will still be saved to history",
-                        message.Chat.Id);
+                        "Error executing command in {Chat}, message will still be saved to history",
+                        message.Chat.ToLogDebug());
                     // Continue to save message to history regardless of command error
                 }
                 // Continue to save command message to history (don't return early)
@@ -309,8 +315,8 @@ public partial class MessageProcessingService(
                 catch (Exception ex)
                 {
                     logger.LogError(ex,
-                        "Error handling @admin mention in chat {ChatId}, message will still be saved to history",
-                        message.Chat.Id);
+                        "Error handling @admin mention in {Chat}, message will still be saved to history",
+                        message.Chat.ToLogDebug());
                     // Continue to save message to history regardless of error
                 }
             }
@@ -556,8 +562,8 @@ public partial class MessageProcessingService(
             if (shouldCheck)
             {
                 logger.LogDebug(
-                    "Checking user {UserId} for impersonation on message #{MessageCount}",
-                    message.From.Id,
+                    "Checking {User} for impersonation on message #{MessageCount}",
+                    message.From.ToLogDebug(),
                     message.MessageId);
 
                 // Get cached user photo path (may be null if not fetched yet)
@@ -566,18 +572,16 @@ public partial class MessageProcessingService(
 
                 // Check for impersonation
                 var impersonationResult = await impersonationService.CheckUserAsync(
-                    message.From.Id,
-                    message.Chat.Id,
-                    message.From.FirstName,
-                    message.From.LastName,
+                    message.From,
+                    message.Chat,
                     photoPath);
 
                 if (impersonationResult != null)
                 {
                     logger.LogWarning(
                         "Impersonation detected for {User} in {Chat} (score: {Score}, risk: {Risk})",
-                        LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                        LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                        message.From.ToLogDebug(),
+                        message.Chat.ToLogDebug(),
                         impersonationResult.TotalScore,
                         impersonationResult.RiskLevel);
 
@@ -590,7 +594,7 @@ public partial class MessageProcessingService(
                     {
                         logger.LogInformation(
                             "{User} auto-banned for impersonation (score: {Score})",
-                            LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                            message.From.ToLogInfo(),
                             impersonationResult.TotalScore);
                     }
                 }
@@ -600,10 +604,10 @@ public partial class MessageProcessingService(
             OnNewMessage?.Invoke(messageRecord);
 
             logger.LogDebug(
-                "Cached message {MessageId} from user {UserId} in chat {ChatId} (photo: {HasPhoto}, text: {HasText})",
+                "Cached message {MessageId} from {User} in {Chat} (photo: {HasPhoto}, text: {HasText})",
                 message.MessageId,
-                message.From.Id,
-                message.Chat.Id,
+                message.From.ToLogDebug(),
+                message.Chat.ToLogDebug(),
                 photoFileId != null,
                 text != null);
 
@@ -620,11 +624,11 @@ public partial class MessageProcessingService(
                         deletionSource: "command_cleanup",
                         cancellationToken);
 
-                    logger.LogDebug("Deleted command message {MessageId} in chat {ChatId}", message.MessageId, message.Chat.Id);
+                    logger.LogDebug("Deleted command message {MessageId} in {Chat}", message.MessageId, message.Chat.ToLogDebug());
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to delete command message {MessageId} in chat {ChatId}", message.MessageId, message.Chat.Id);
+                    logger.LogWarning(ex, "Failed to delete command message {MessageId} in {Chat}", message.MessageId, message.Chat.ToLogDebug());
                 }
             }
 
@@ -651,8 +655,8 @@ public partial class MessageProcessingService(
                     // Chat is inactive (bot not admin) - skip content detection
                     // Message is already saved, just don't process for spam
                     logger.LogDebug(
-                        "Skipping content detection for inactive chat {ChatId} - bot is not admin",
-                        message.Chat.Id);
+                        "Skipping content detection for inactive {Chat} - bot is not admin",
+                        message.Chat.ToLogDebug());
                 }
                 else
                 {
@@ -672,10 +676,10 @@ public partial class MessageProcessingService(
         catch (Exception ex)
         {
             logger.LogError(ex,
-                "Error caching message {MessageId} from user {UserId} in chat {ChatId}",
+                "Error caching message {MessageId} from {User} in {Chat}",
                 message.MessageId,
-                message.From?.Id,
-                message.Chat?.Id);
+                message.From.ToLogDebug(),
+                message.Chat.ToLogDebug());
         }
     }
 

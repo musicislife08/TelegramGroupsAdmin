@@ -13,7 +13,7 @@ public interface IAuthService
     Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
     Task<AuthResult> UseRecoveryCodeAsync(string userId, string code, CancellationToken cancellationToken = default);
-    Task LogoutAsync(string userId, CancellationToken cancellationToken = default);
+    Task AuditLogoutAsync(string userId, string email, CancellationToken cancellationToken = default);
     Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword, CancellationToken cancellationToken = default);
     Task<bool> ResendVerificationEmailAsync(string email, CancellationToken cancellationToken = default);
     Task<bool> RequestPasswordResetAsync(string email, CancellationToken cancellationToken = default);

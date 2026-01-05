@@ -69,7 +69,7 @@ public class InviteCommand : IBotCommand
         }
 
         // Get cached invite link (or fetch from Telegram if not cached)
-        var inviteLink = await inviteLinkService.GetInviteLinkAsync(chatId, cancellationToken);
+        var inviteLink = await inviteLinkService.GetInviteLinkAsync(message.Chat, cancellationToken);
 
         if (string.IsNullOrEmpty(inviteLink))
         {

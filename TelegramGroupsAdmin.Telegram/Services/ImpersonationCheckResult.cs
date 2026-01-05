@@ -1,3 +1,4 @@
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -26,7 +27,15 @@ public record ImpersonationCheckResult
     public int TotalScore { get; init; }
     public ImpersonationRiskLevel RiskLevel { get; init; }
 
-    public long SuspectedUserId { get; init; }
+    /// <summary>
+    /// SDK User object for the suspected impersonator
+    /// </summary>
+    public required User SuspectedUser { get; init; }
+
+    /// <summary>
+    /// SDK Chat object where detection occurred
+    /// </summary>
+    public required Chat DetectionChat { get; init; }
 
     /// <summary>
     /// Target user ID (only set when TargetEntityType is User)
@@ -47,8 +56,6 @@ public record ImpersonationCheckResult
     /// Display name of the target entity (chat name or channel name)
     /// </summary>
     public string? TargetEntityName { get; init; }
-
-    public long ChatId { get; init; }
 
     public bool NameMatch { get; init; }
     public bool PhotoMatch { get; init; }

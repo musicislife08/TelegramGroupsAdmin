@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -860,7 +861,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (user == null)
         {
-            _logger.LogWarning("Cannot set ban status for unknown user {UserId}", telegramUserId);
+            _logger.LogWarning("Cannot set ban status for unknown user {User}", user.ToLogDebug(telegramUserId));
             return;
         }
 
@@ -871,8 +872,8 @@ public class TelegramUserRepository : ITelegramUserRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Set ban status for user {UserId}: IsBanned={IsBanned}, ExpiresAt={ExpiresAt}",
-            telegramUserId, isBanned, expiresAt);
+            "Set ban status for {User}: IsBanned={IsBanned}, ExpiresAt={ExpiresAt}",
+            user.ToLogInfo(), isBanned, expiresAt);
     }
 
     /// <inheritdoc />
@@ -980,7 +981,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (user == null)
         {
-            _logger.LogWarning("Cannot set active status for unknown user {UserId}", telegramUserId);
+            _logger.LogWarning("Cannot set active status for unknown user {User}", user.ToLogDebug(telegramUserId));
             return;
         }
 
@@ -990,8 +991,8 @@ public class TelegramUserRepository : ITelegramUserRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Set active status for user {UserId}: IsActive={IsActive}",
-            telegramUserId, isActive);
+            "Set active status for {User}: IsActive={IsActive}",
+            user.ToLogInfo(), isActive);
     }
 
     /// <inheritdoc />

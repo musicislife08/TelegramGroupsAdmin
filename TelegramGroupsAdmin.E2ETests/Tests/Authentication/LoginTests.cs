@@ -119,7 +119,7 @@ public class LoginTests : SharedE2ETestBase
             .WithEmail(TestCredentials.GenerateEmail("disabled"))
             .WithPassword(password)
             .WithEmailVerified()
-            .WithStatus(Telegram.Models.UserStatus.Disabled)
+            .WithStatus(Core.Models.UserStatus.Disabled)
             .BuildAsync();
 
         // Act - try to login

@@ -13,10 +13,10 @@ public interface IBotProtectionService
     /// Returns true if the bot should be allowed (whitelisted or admin-invited)
     /// Returns false if the bot should be banned
     /// </summary>
-    Task<bool> ShouldAllowBotAsync(long chatId, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default);
+    Task<bool> ShouldAllowBotAsync(Chat chat, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ban a bot from the chat and log the event
     /// </summary>
-    Task BanBotAsync(long chatId, User bot, string reason, CancellationToken cancellationToken = default);
+    Task BanBotAsync(Chat chat, User bot, string reason, CancellationToken cancellationToken = default);
 }

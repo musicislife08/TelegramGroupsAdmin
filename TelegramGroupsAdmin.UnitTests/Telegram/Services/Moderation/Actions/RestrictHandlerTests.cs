@@ -4,6 +4,7 @@ using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -19,6 +20,8 @@ public class RestrictHandlerTests
 {
     private ITelegramBotClientFactory _mockBotClientFactory = null!;
     private ICrossChatExecutor _mockCrossChatExecutor = null!;
+    private ITelegramUserRepository _mockUserRepository = null!;
+    private IManagedChatsRepository _mockChatsRepository = null!;
     private ITelegramOperations _mockOperations = null!;
     private ILogger<RestrictHandler> _mockLogger = null!;
     private RestrictHandler _handler = null!;
@@ -28,6 +31,8 @@ public class RestrictHandlerTests
     {
         _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockCrossChatExecutor = Substitute.For<ICrossChatExecutor>();
+        _mockUserRepository = Substitute.For<ITelegramUserRepository>();
+        _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockOperations = Substitute.For<ITelegramOperations>();
         _mockLogger = Substitute.For<ILogger<RestrictHandler>>();
 
@@ -37,6 +42,8 @@ public class RestrictHandlerTests
         _handler = new RestrictHandler(
             _mockBotClientFactory,
             _mockCrossChatExecutor,
+            _mockUserRepository,
+            _mockChatsRepository,
             _mockLogger);
     }
 

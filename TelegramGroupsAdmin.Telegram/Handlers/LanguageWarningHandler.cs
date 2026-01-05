@@ -101,7 +101,7 @@ public class LanguageWarningHandler
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
             await messagingService.SendToUserAsync(
                 userId: message.From.Id,
-                chatId: message.Chat.Id,
+                chat: message.Chat,
                 messageText: warningMessage,
                 replyToMessageId: message.MessageId,
                 cancellationToken: cancellationToken);

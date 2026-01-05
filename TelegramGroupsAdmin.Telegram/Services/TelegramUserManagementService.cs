@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
-
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -137,9 +137,9 @@ public class TelegramUserManagementService
         if (TelegramConstants.IsSystemUser(telegramUserId) && !newTrustStatus)
         {
             _logger.LogWarning(
-                "Blocked attempt to remove trust from Telegram system account (user {TelegramUserId}). " +
+                "Blocked attempt to remove trust from Telegram system account ({User}). " +
                 "System accounts must always remain trusted.",
-                telegramUserId);
+                user.ToLogDebug());
             return false;
         }
         await _userRepository.UpdateTrustStatusAsync(telegramUserId, newTrustStatus, cancellationToken);
@@ -181,8 +181,8 @@ public class TelegramUserManagementService
         }
 
         _logger.LogInformation(
-            "User {TelegramUserId} trust toggled to {IsTrusted} by {ModifiedBy}",
-            telegramUserId,
+            "{User} trust toggled to {IsTrusted} by {ModifiedBy}",
+            user.ToLogInfo(),
             newTrustStatus,
             modifiedBy);
 
@@ -233,7 +233,7 @@ public class TelegramUserManagementService
         var isBanned = await _userRepository.IsBannedAsync(telegramUserId, cancellationToken);
         if (!isBanned)
         {
-            _logger.LogWarning("User {TelegramUserId} is not currently banned", telegramUserId);
+            _logger.LogWarning("{User} is not currently banned", user.ToLogDebug());
             return false;
         }
 
@@ -255,8 +255,8 @@ public class TelegramUserManagementService
         await _userActionsRepository.InsertAsync(unbanAction, cancellationToken);
 
         _logger.LogInformation(
-            "User {TelegramUserId} unbanned by {UnbannedBy}. Reason: {Reason}",
-            telegramUserId,
+            "{User} unbanned by {UnbannedBy}. Reason: {Reason}",
+            user.ToLogInfo(),
             unbannedBy,
             reason ?? "Manual unban");
 
