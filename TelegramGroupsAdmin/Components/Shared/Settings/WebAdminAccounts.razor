@@ -214,12 +214,14 @@
     private bool _loading = true;
     private IEnumerable<UserStatus>? _selectedStatuses = [UserStatus.Active, UserStatus.Pending, UserStatus.Disabled];
     private string? _currentUserId;
+    private string? _currentUserEmail;
     private PermissionLevel _currentUserPermissionLevel = PermissionLevel.Admin;
 
     protected override async Task OnInitializedAsync()
     {
         // Get current user info
         _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
+        _currentUserEmail = await AuthHelper.GetCurrentUserEmailAsync();
         _currentUserPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
 
         await LoadUsersAsync();
@@ -552,7 +554,7 @@
         {
             try
             {
-                await AccountLockoutService.UnlockAccountAsync(user.Id, _currentUserId!);
+                await AccountLockoutService.UnlockAccountAsync(user.Id, _currentUserId!, _currentUserEmail!);
                 Snackbar.Add($"Unlocked account for {user.Email}", Severity.Success);
                 await LoadUsersAsync();
             }

@@ -38,8 +38,8 @@ public class TotpService(
 
             if (setupExpired)
             {
-                logger.LogInformation("TOTP setup expired for user {UserId} (started {SetupTime}, expired after {Minutes}min)",
-                    userId, setupStartedAt, AuthenticationConstants.TotpSetupExpiration.TotalMinutes);
+                logger.LogInformation("TOTP setup expired for {User} (started {SetupTime}, expired after {Minutes}min)",
+                    LogDisplayName.WebUserInfo(userEmail, userId), setupStartedAt, AuthenticationConstants.TotpSetupExpiration.TotalMinutes);
             }
         }
 
@@ -52,7 +52,8 @@ public class TotpService(
         {
             // TOTP setup in progress - reuse existing secret (handles Blazor SSR page reloads)
             secret = totpProtection.Unprotect(user.TotpSecret);
-            logger.LogDebug("Reusing existing TOTP secret for user {UserId} during setup", userId);
+            logger.LogDebug("Reusing existing TOTP secret for {User} during setup",
+                LogDisplayName.WebUserDebug(userEmail, userId));
         }
         else
         {
@@ -65,7 +66,8 @@ public class TotpService(
             // Encrypt and store secret (not enabled yet)
             var protectedSecret = totpProtection.Protect(secret);
             await userRepository.UpdateTotpSecretAsync(userId, protectedSecret, cancellationToken);
-            logger.LogInformation("Generated new TOTP secret for user {UserId} (expired: {Expired})", userId, setupExpired);
+            logger.LogInformation("Generated new TOTP secret for {User} (expired: {Expired})",
+                LogDisplayName.WebUserInfo(userEmail, userId), setupExpired);
         }
 
         // Generate QR code URI

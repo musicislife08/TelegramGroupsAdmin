@@ -91,13 +91,14 @@ public class AccountLockoutService : IAccountLockoutService
         }
     }
 
-    public async Task ResetLockoutAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task ResetLockoutAsync(string userId, string userEmail, CancellationToken cancellationToken = default)
     {
         await _userRepository.ResetFailedLoginAttemptsAsync(userId, cancellationToken);
-        _logger.LogInformation("Reset lockout state for user {UserId} after successful login", userId);
+        _logger.LogInformation("Reset lockout state for {User} after successful login",
+            LogDisplayName.WebUserInfo(userEmail, userId));
     }
 
-    public async Task UnlockAccountAsync(string userId, string unlockedBy, CancellationToken cancellationToken = default)
+    public async Task UnlockAccountAsync(string userId, string unlockedById, string unlockedByEmail, CancellationToken cancellationToken = default)
     {
         // Get user before unlock
         var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
@@ -110,8 +111,9 @@ public class AccountLockoutService : IAccountLockoutService
         // Unlock the account
         await _userRepository.UnlockAccountAsync(userId, cancellationToken);
 
-        _logger.LogInformation("Account manually unlocked for {User} by {UnlockedBy}",
-            LogDisplayName.WebUserInfo(user.Email, userId), unlockedBy);
+        _logger.LogInformation("Account manually unlocked for {User} by {Admin}",
+            LogDisplayName.WebUserInfo(user.Email, userId),
+            LogDisplayName.WebUserInfo(unlockedByEmail, unlockedById));
 
         // Send email notification (fire-and-forget)
         _ = Task.Run(async () =>
@@ -136,7 +138,7 @@ public class AccountLockoutService : IAccountLockoutService
         // Audit log the unlock event
         await _auditService.LogEventAsync(
             AuditEventType.UserAccountUnlocked,
-            actor: Actor.FromWebUser(unlockedBy),
+            actor: Actor.FromWebUser(unlockedById),
             target: Actor.FromWebUser(userId),
             value: "Account manually unlocked by administrator",
             cancellationToken: cancellationToken);

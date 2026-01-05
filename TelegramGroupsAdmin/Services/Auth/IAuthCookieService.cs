@@ -3,7 +3,7 @@ using TelegramGroupsAdmin.Core.Models;
 namespace TelegramGroupsAdmin.Services.Auth;
 
 /// <summary>
-/// Service for generating authentication cookies and signing in users.
+/// Service for generating authentication cookies and signing in/out users.
 /// Centralizes all cookie authentication logic in one place for consistency
 /// between the running application and test scenarios.
 /// </summary>
@@ -18,6 +18,12 @@ public interface IAuthCookieService
     /// <param name="email">The user's email address</param>
     /// <param name="permissionLevel">The user's permission level</param>
     Task SignInAsync(HttpContext context, string userId, string email, PermissionLevel permissionLevel);
+
+    /// <summary>
+    /// Signs out a user by clearing the authentication cookie.
+    /// </summary>
+    /// <param name="context">The HTTP context to sign out from</param>
+    Task SignOutAsync(HttpContext context);
 
     /// <summary>
     /// Generates an encrypted cookie value without requiring HttpContext.

@@ -136,7 +136,7 @@ public class AuthService(
         }
 
         // SECURITY-6: Reset lockout state on successful password verification
-        await accountLockoutService.ResetLockoutAsync(user.Id, cancellationToken);
+        await accountLockoutService.ResetLockoutAsync(user.Id, user.Email, cancellationToken);
 
         // Update last login timestamp
         await userRepository.UpdateLastLoginAsync(user.Id, cancellationToken);
@@ -393,9 +393,9 @@ public class AuthService(
         return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
     }
 
-    public async Task LogoutAsync(string userId, CancellationToken cancellationToken = default)
+    public async Task AuditLogoutAsync(string userId, string email, CancellationToken cancellationToken = default)
     {
-        logger.LogInformation("User logged out: {UserId}", userId); // Note: No email in scope
+        logger.LogInformation("User logged out: {User}", LogDisplayName.WebUserInfo(email, userId));
 
         // Audit log
         await auditLog.LogEventAsync(

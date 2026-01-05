@@ -1,11 +1,14 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TgUser = Telegram.Bot.Types.User;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
@@ -52,7 +55,7 @@ public class UserAutoTrustServiceTests
             .Returns(config);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - should not even check user or messages
         await _userRepo.DidNotReceive().GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
@@ -70,7 +73,7 @@ public class UserAutoTrustServiceTests
             .Returns((UiModels.TelegramUser?)null);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert
         await _userActionsRepo.DidNotReceive().InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
@@ -95,7 +98,7 @@ public class UserAutoTrustServiceTests
             .Returns(user);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - should not even check messages since account is too young
         await _detectionResultsRepo.DidNotReceive()
@@ -126,7 +129,7 @@ public class UserAutoTrustServiceTests
             .Returns(CreateDetectionResults(2));
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert
         await _userActionsRepo.DidNotReceive().InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
@@ -158,7 +161,7 @@ public class UserAutoTrustServiceTests
             .Returns(1L);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - trust action should be created
         await _userActionsRepo.Received(1).InsertAsync(
@@ -192,13 +195,34 @@ public class UserAutoTrustServiceTests
             .Returns(1L);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - should trust despite 0 age because age check is disabled
         await _userActionsRepo.Received(1).InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
     }
 
     #region Helpers
+
+    /// <summary>
+    /// Creates a Telegram SDK User object for testing
+    /// </summary>
+    private static TgUser CreateTgUser() => new()
+    {
+        Id = TestUserId,
+        FirstName = "Test",
+        LastName = "User",
+        Username = "testuser"
+    };
+
+    /// <summary>
+    /// Creates a Telegram SDK Chat object for testing
+    /// </summary>
+    private static Chat CreateTestChat() => new()
+    {
+        Id = TestChatId,
+        Type = ChatType.Supergroup,
+        Title = "Test Chat"
+    };
 
     private static UiModels.TelegramUser CreateTestUser(int firstSeenHoursAgo)
     {

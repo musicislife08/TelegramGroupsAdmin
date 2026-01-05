@@ -127,10 +127,10 @@ public class ContentDetectionOrchestrator
                     cancellationToken);
 
                 // Check for auto-trust after storing non-spam detection result
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                if (!result.SpamResult.IsSpam && message.From != null)
                 {
                     var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
-                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From, message.Chat, cancellationToken);
                 }
 
                 // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
