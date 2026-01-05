@@ -193,7 +193,7 @@ public class NotificationService : INotificationService
                 if (!hasTelegramEnabled && !hasEmailEnabled && !hasWebPushEnabled)
                 {
                     _logger.LogDebug("{User} has no channels enabled for event type {EventType}",
-                        user.ToLogDebug(user.Id), eventType);
+                        user.ToLogDebug(), eventType);
                 }
                 else
                 {
@@ -203,7 +203,7 @@ public class NotificationService : INotificationService
                     {
                         _logger.LogWarning(
                             "Failed to deliver notification to {User} via any enabled channel",
-                            user.ToLogDebug(user.Id));
+                            user.ToLogDebug());
                         _lastDeliveryFailureLog = now;
                     }
                 }
@@ -214,7 +214,7 @@ public class NotificationService : INotificationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send notification to {User} for event {EventType}",
-                user.ToLogDebug(user.Id), eventType);
+                user.ToLogDebug(), eventType);
             return false;
         }
     }
@@ -315,14 +315,14 @@ public class NotificationService : INotificationService
             await _emailService.SendEmailAsync(emailAddress, subject, htmlBody, isHtml: true, cancellationToken);
 
             _logger.LogInformation("Sent email notification to {User}",
-                user.ToLogInfo(user.Id));
+                user.ToLogInfo());
 
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send email to {User}",
-                user.ToLogDebug(user.Id));
+                user.ToLogDebug());
             return false;
         }
     }

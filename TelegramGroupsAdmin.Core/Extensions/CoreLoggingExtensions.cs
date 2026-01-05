@@ -27,5 +27,21 @@ public static class CoreLoggingExtensions
         /// <returns>"user@example.com (abc-123)" or "Unknown User (abc-123)"</returns>
         public string ToLogDebug()
             => LogDisplayName.WebUserDebug(user?.Email, user?.Id ?? "unknown");
+
+        /// <summary>
+        /// Format web user for INFO logs with userId fallback when user is null.
+        /// </summary>
+        /// <param name="userId">User ID (used as fallback when user is null)</param>
+        /// <returns>"user@example.com" or "User {userId}" if email unavailable</returns>
+        public string ToLogInfo(string userId)
+            => LogDisplayName.WebUserInfo(user?.Email, userId);
+
+        /// <summary>
+        /// Format web user for DEBUG/WARNING/ERROR logs with userId fallback when user is null.
+        /// </summary>
+        /// <param name="userId">User ID</param>
+        /// <returns>"user@example.com (userId)" or "Unknown User (userId)"</returns>
+        public string ToLogDebug(string userId)
+            => LogDisplayName.WebUserDebug(user?.Email, userId);
     }
 }
