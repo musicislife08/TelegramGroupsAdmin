@@ -148,8 +148,7 @@
             {
                 // SECURITY: Generate intermediate authentication token (valid for 5 minutes)
                 var intermediateToken = IntermediateAuthService.CreateToken(result.UserId!);
-
-                var setupUrl = $"/login/setup-2fa?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(safeReturnUrl)}";
+                var setupUrl = UrlHelpers.BuildSetup2FAUrl(result.UserId, intermediateToken, safeReturnUrl);
                 HttpContextAccessor.HttpContext?.Response.Redirect(setupUrl);
                 return;
             }
@@ -161,8 +160,7 @@
                 // This prevents authentication bypass attacks where an attacker could directly
                 // access /login/verify?userId=VICTIM_ID and brute-force TOTP codes
                 var intermediateToken = IntermediateAuthService.CreateToken(result.UserId!);
-
-                var verifyUrl = $"/login/verify?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(safeReturnUrl)}";
+                var verifyUrl = UrlHelpers.BuildVerifyUrl(result.UserId, intermediateToken, safeReturnUrl);
                 HttpContextAccessor.HttpContext?.Response.Redirect(verifyUrl);
                 return;
             }
