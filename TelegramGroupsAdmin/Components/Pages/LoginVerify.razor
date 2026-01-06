@@ -1,14 +1,12 @@
 @page "/login/verify"
 @using System.ComponentModel.DataAnnotations
-@using System.Security.Claims
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authentication.Cookies
-@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Auth
 @inject IAuthService AuthService
 @inject IIntermediateAuthService IntermediateAuthService
+@inject IAuthCookieService AuthCookieService
 @inject IHttpContextAccessor HttpContextAccessor
 @inject ILogger<LoginVerify> Logger
 @attribute [AllowAnonymous]
@@ -18,7 +16,6 @@
 
 <div class="verify-container">
     <h1 class="verify-title">Two-Factor Authentication</h1>
-    <p class="verify-subtitle">Enter the 6-digit code from your authenticator app</p>
 
     @if (!string.IsNullOrEmpty(_successMessage))
     {
@@ -30,38 +27,80 @@
         <div class="alert-error">@_errorMessage</div>
     }
 
-    <EditForm Model="@Model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
-        <DataAnnotationsValidator />
+    @if (!_showRecoveryCodeInput)
+    {
+        <p class="verify-subtitle">Enter the 6-digit code from your authenticator app</p>
 
-        <div class="form-group">
-            <label class="form-label" for="code">Verification Code</label>
-            <input type="text"
-                   id="code"
-                   name="Model.Code"
-                   class="form-input"
-                   value="@Model!.Code"
-                   placeholder="000000"
-                   maxlength="6"
-                   pattern="[0-9]*"
-                   inputmode="numeric"
-                   required />
-            <ValidationMessage For="@(() => Model!.Code)" />
+        <EditForm Model="@Model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
+            <DataAnnotationsValidator />
+
+            <div class="form-group">
+                <label class="form-label" for="code">Verification Code</label>
+                <input type="text"
+                       id="code"
+                       name="Model.Code"
+                       class="form-input"
+                       value="@Model!.Code"
+                       placeholder="000000"
+                       maxlength="6"
+                       pattern="[0-9]*"
+                       inputmode="numeric"
+                       required />
+                <ValidationMessage For="@(() => Model!.Code)" />
+            </div>
+
+            <button type="submit" class="btn-primary">Verify</button>
+        </EditForm>
+
+        <div class="divider"></div>
+
+        <p class="text-center">
+            Lost access to your authenticator?<br />
+            <a href="@UrlHelpers.BuildVerifyUrl(UserId, IntermediateToken, ReturnUrl, useRecovery: true)" class="recovery-link">Use a recovery code instead</a>
+        </p>
+    }
+    else
+    {
+        <p class="verify-subtitle">Enter one of your recovery codes</p>
+
+        <div class="recovery-info">
+            <p>Recovery codes are single-use. After using one, it will be permanently invalidated.</p>
         </div>
 
-        <button type="submit" class="btn-primary">Verify</button>
-    </EditForm>
+        <EditForm Model="@RecoveryModel" FormName="recovery-form" OnValidSubmit="HandleRecoveryCodeAsync" method="post">
+            <DataAnnotationsValidator />
 
-    <div class="divider"></div>
+            <div class="form-group">
+                <label class="form-label" for="recoveryCode">Recovery Code</label>
+                <input type="text"
+                       id="recoveryCode"
+                       name="RecoveryModel.RecoveryCode"
+                       class="form-input recovery-input"
+                       value="@RecoveryModel!.RecoveryCode"
+                       placeholder="xxxxxxxxxxxxxxxx"
+                       maxlength="16"
+                       required />
+                <ValidationMessage For="@(() => RecoveryModel!.RecoveryCode)" />
+            </div>
 
-    <p class="text-center">
-        Lost access to your authenticator? Contact your administrator to reset 2FA.<br />
-        <a href="/login">Back to Login</a>
-    </p>
+            <button type="submit" class="btn-primary">Use Recovery Code</button>
+        </EditForm>
+
+        <div class="divider"></div>
+
+        <p class="text-center">
+            <a href="@UrlHelpers.BuildVerifyUrl(UserId, IntermediateToken, ReturnUrl)" class="recovery-link">Back to authenticator code</a><br />
+            <a href="/login">Back to Login</a>
+        </p>
+    }
 </div>
 
 @code {
     [SupplyParameterFromForm]
     private VerifyModel? Model { get; set; }
+
+    [SupplyParameterFromForm]
+    private RecoveryCodeModel? RecoveryModel { get; set; }
 
     [SupplyParameterFromQuery(Name = "userId")]
     private string? UserId { get; set; }
@@ -72,24 +111,48 @@
     [SupplyParameterFromQuery(Name = "returnUrl")]
     private string? ReturnUrl { get; set; }
 
+    [SupplyParameterFromQuery(Name = "useRecovery")]
+    private bool UseRecovery { get; set; }
+
     private string? _errorMessage;
     private string? _successMessage;
+    private bool _showRecoveryCodeInput;
+
+    /// <summary>
+    /// Validates the authentication session. Returns true if valid, false if invalid.
+    /// Sets _errorMessage and redirects to /login on failure.
+    /// </summary>
+    private bool ValidateSession()
+    {
+        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        {
+            _errorMessage = "Invalid authentication session. Please log in again.";
+            HttpContextAccessor.HttpContext?.Response.Redirect("/login");
+            return false;
+        }
+
+        if (!IntermediateAuthService.ValidateToken(IntermediateToken, UserId))
+        {
+            _errorMessage = "Invalid or expired authentication session. Please log in again.";
+            HttpContextAccessor.HttpContext?.Response.Redirect("/login");
+            return false;
+        }
+
+        return true;
+    }
 
     protected override void OnInitialized()
     {
         Model ??= new VerifyModel();
+        RecoveryModel ??= new RecoveryCodeModel();
+        _showRecoveryCodeInput = UseRecovery;
 
-        var httpContext = HttpContextAccessor.HttpContext;
-
-        // SECURITY: Validate that user has a valid intermediate authentication token
+        // SECURITY: Validate that user has a valid intermediate authentication token.
         // This prevents attackers from directly accessing /login/verify?userId=VICTIM_ID
-        // and brute-forcing TOTP codes without knowing the password
-        if (!string.IsNullOrEmpty(UserId) && !string.IsNullOrEmpty(IntermediateToken)) return;
-        _errorMessage = "Invalid authentication session. Please log in again.";
-        httpContext?.Response.Redirect("/login");
-
-        // Validate token without consuming it yet (we'll consume it when they submit the form)
-        // We can't consume here because OnInitialized runs on every page load
+        // and brute-forcing TOTP codes without knowing the password.
+        // Early validation provides better UX - users see "session expired" immediately
+        // rather than after entering their TOTP code.
+        ValidateSession();
     }
 
     private async Task HandleVerifyAsync()
@@ -97,25 +160,22 @@
         _errorMessage = null;
         _successMessage = null;
 
-        if (Model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        if (Model == null)
         {
             _errorMessage = "Form data is missing.";
             return;
         }
 
+        // SECURITY: Re-validate session before processing (token could have expired since page load)
+        if (!ValidateSession())
+        {
+            return;
+        }
+
         try
         {
-            // SECURITY: Validate intermediate auth token (without consuming)
-            // This allows users to retry if they mistype the TOTP code
-            if (!IntermediateAuthService.ValidateToken(IntermediateToken, UserId))
-            {
-                _errorMessage = "Invalid or expired authentication session. Please log in again.";
-                HttpContextAccessor.HttpContext?.Response.Redirect("/login");
-                return;
-            }
-
-            // Verify TOTP code
-            var result = await AuthService.VerifyTotpAsync(UserId, Model.Code);
+            // Verify TOTP code (UserId guaranteed non-null by ValidateSession)
+            var result = await AuthService.VerifyTotpAsync(UserId!, Model.Code);
 
             if (!result.Success)
             {
@@ -125,7 +185,7 @@
             }
 
             // SECURITY: Consume token after successful authentication to prevent reuse
-            IntermediateAuthService.ConsumeToken(IntermediateToken);
+            IntermediateAuthService.ConsumeToken(IntermediateToken!);
 
             // Sign in the user with cookie authentication (works in static SSR)
             var httpContext = HttpContextAccessor.HttpContext;
@@ -135,27 +195,7 @@
                 return;
             }
 
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, result.UserId!),
-                new(ClaimTypes.Email, result.Email!),
-                new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
-                new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-            };
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-            var authProperties = new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-            };
-
-            await httpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            await AuthCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
             // Redirect using HttpContext (validate URL to prevent open redirect attacks)
             var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
@@ -168,13 +208,60 @@
         }
     }
 
-    private static string GetRoleName(int permissionLevel) => permissionLevel switch
+    private async Task HandleRecoveryCodeAsync()
     {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Admin"
-    };
+        _errorMessage = null;
+        _successMessage = null;
+
+        if (RecoveryModel == null)
+        {
+            _errorMessage = "Form data is missing.";
+            return;
+        }
+
+        // SECURITY: Re-validate session before processing (token could have expired since page load)
+        if (!ValidateSession())
+        {
+            return;
+        }
+
+        try
+        {
+            // Verify recovery code (UserId guaranteed non-null by ValidateSession)
+            var result = await AuthService.UseRecoveryCodeAsync(UserId!, RecoveryModel.RecoveryCode);
+
+            if (!result.Success)
+            {
+                _errorMessage = result.ErrorMessage ?? "Invalid recovery code. Please try again.";
+                RecoveryModel = new RecoveryCodeModel();
+                return;
+            }
+
+            // SECURITY: Consume token after successful authentication to prevent reuse
+            IntermediateAuthService.ConsumeToken(IntermediateToken!);
+
+            // Sign in the user with cookie authentication (works in static SSR)
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null)
+            {
+                _errorMessage = "Unable to complete authentication. Please try again.";
+                return;
+            }
+
+            await AuthCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+
+            Logger.LogInformation("User {UserId} logged in using recovery code", UserId);
+
+            // Redirect using HttpContext (validate URL to prevent open redirect attacks)
+            var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+            httpContext.Response.Redirect(safeReturnUrl);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred. Please try again.";
+            Logger.LogError(ex, "Unexpected error during recovery code verification for user {UserId}", UserId);
+        }
+    }
 
     public class VerifyModel
     {
@@ -182,5 +269,13 @@
         [StringLength(6, MinimumLength = 6, ErrorMessage = "Code must be 6 digits")]
         [RegularExpression("^[0-9]{6}$", ErrorMessage = "Code must be 6 digits")]
         public string Code { get; set; } = string.Empty;
+    }
+
+    public class RecoveryCodeModel
+    {
+        [Required(ErrorMessage = "Recovery code is required")]
+        [StringLength(16, MinimumLength = 16, ErrorMessage = "Recovery code must be 16 characters")]
+        [RegularExpression("^[a-f0-9]{16}$", ErrorMessage = "Invalid recovery code format")]
+        public string RecoveryCode { get; set; } = string.Empty;
     }
 }

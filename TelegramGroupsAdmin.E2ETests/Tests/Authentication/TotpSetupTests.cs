@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.E2ETests.Helpers;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
@@ -105,7 +106,7 @@ public class TotpSetupTests : SharedE2ETestBase
     }
 
     [Test]
-    public async Task TotpSetup_WithValidCode_CompletesAndRedirects()
+    public async Task TotpSetup_WithValidCode_ShowsRecoveryCodes()
     {
         // Arrange - create user requiring TOTP setup
         var password = TestCredentials.GeneratePassword();
@@ -133,7 +134,90 @@ public class TotpSetupTests : SharedE2ETestBase
         // Act - verify with valid code
         await _setupPage.VerifyAsync(totpCode);
 
-        // Assert - should redirect to home (no longer on setup page)
+        // Assert - should show recovery codes section
+        await _setupPage.WaitForRecoveryCodesAsync();
+        Assert.That(await _setupPage.IsRecoveryCodesSectionVisibleAsync(), Is.True,
+            "Recovery codes section should be visible after TOTP verification");
+
+        // Should have recovery codes per AuthenticationConstants.RecoveryCodeCount
+        var codes = await _setupPage.GetRecoveryCodesAsync();
+        Assert.That(codes.Count, Is.EqualTo(AuthenticationConstants.RecoveryCodeCount),
+            $"Should display {AuthenticationConstants.RecoveryCodeCount} recovery codes");
+
+        // Each code should be a valid format (hex string per AuthenticationConstants.RecoveryCodeStringLength)
+        var expectedPattern = $@"^[a-f0-9]{{{AuthenticationConstants.RecoveryCodeStringLength}}}$";
+        foreach (var code in codes)
+        {
+            Assert.That(code, Does.Match(expectedPattern),
+                $"Recovery code '{code}' should be a {AuthenticationConstants.RecoveryCodeStringLength}-character hex string");
+        }
+    }
+
+    [Test]
+    public async Task TotpSetup_RecoveryCodesConfirmation_RequiredToComplete()
+    {
+        // Arrange - create user requiring TOTP setup
+        var password = TestCredentials.GeneratePassword();
+        var user = await new TestUserBuilder(SharedFactory.Services)
+            .WithEmail(TestCredentials.GenerateEmail("confirm-required"))
+            .WithPassword(password)
+            .WithEmailVerified()
+            .RequiresTotpSetup()
+            .AsOwner()
+            .BuildAsync();
+
+        // Navigate through login to setup page
+        await _loginPage.NavigateAsync();
+        await _loginPage.LoginAsync(user.Email, password);
+        await _setupPage.WaitForPageAsync();
+
+        // Get the manual key and generate a valid TOTP code
+        var manualKey = await _setupPage.GetManualKeyAsync();
+        var cleanSecret = manualKey!.Replace(" ", "");
+        var totpCode = TotpHelper.GenerateCode(cleanSecret);
+
+        // Verify with valid code to get to recovery codes
+        await _setupPage.VerifyAsync(totpCode);
+        await _setupPage.WaitForRecoveryCodesAsync();
+
+        // Assert - confirmation checkbox should be visible and unchecked by default
+        Assert.That(await _setupPage.IsConfirmCheckboxVisibleAsync(), Is.True,
+            "Confirmation checkbox should be visible");
+        Assert.That(await _setupPage.IsConfirmationCheckedAsync(), Is.False,
+            "Confirmation checkbox should be unchecked by default");
+    }
+
+    [Test]
+    public async Task TotpSetup_CompleteFlow_RedirectsToHomeAfterConfirmation()
+    {
+        // Arrange - create user requiring TOTP setup
+        var password = TestCredentials.GeneratePassword();
+        var user = await new TestUserBuilder(SharedFactory.Services)
+            .WithEmail(TestCredentials.GenerateEmail("complete-flow"))
+            .WithPassword(password)
+            .WithEmailVerified()
+            .RequiresTotpSetup()
+            .AsOwner()
+            .BuildAsync();
+
+        // Navigate through login to setup page
+        await _loginPage.NavigateAsync();
+        await _loginPage.LoginAsync(user.Email, password);
+        await _setupPage.WaitForPageAsync();
+
+        // Get the manual key and generate a valid TOTP code
+        var manualKey = await _setupPage.GetManualKeyAsync();
+        var cleanSecret = manualKey!.Replace(" ", "");
+        var totpCode = TotpHelper.GenerateCode(cleanSecret);
+
+        // Act - complete full setup flow including recovery codes
+        var recoveryCodes = await _setupPage.Complete2FASetupAsync(totpCode);
+
+        // Assert - should have received recovery codes
+        Assert.That(recoveryCodes.Count, Is.EqualTo(AuthenticationConstants.RecoveryCodeCount),
+            $"Should have received {AuthenticationConstants.RecoveryCodeCount} recovery codes");
+
+        // Should redirect to home (no longer on setup page)
         await _setupPage.WaitForRedirectAsync();
         await Expect(Page).Not.ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login"));
     }

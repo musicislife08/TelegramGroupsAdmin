@@ -135,3 +135,32 @@ body {
 .text-center a:hover {
     text-decoration: underline;
 }
+
+.recovery-link {
+    color: #594ae2;
+    text-decoration: none;
+}
+
+.recovery-link:hover {
+    text-decoration: underline;
+}
+
+.recovery-info {
+    background: rgba(89, 74, 226, 0.1);
+    border: 1px solid rgba(89, 74, 226, 0.3);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.recovery-info p {
+    margin: 0;
+    color: #b0b0b0;
+    font-size: 0.875rem;
+}
+
+.recovery-input {
+    font-family: monospace;
+    letter-spacing: 0.2em;
+    text-align: center;
+}

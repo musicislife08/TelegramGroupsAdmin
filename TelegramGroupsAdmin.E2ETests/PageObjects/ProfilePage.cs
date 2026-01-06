@@ -198,6 +198,11 @@ public class ProfilePage
 
     #region TOTP Section
 
+    // Recovery Codes dialog selectors
+    private const string PasswordConfirmDialog = ".mud-dialog:has-text('Confirm Your Password')";
+    private const string RecoveryCodesDialog = ".mud-dialog:has-text('Save Your Recovery Codes')";
+    private const string RecoveryCodeItems = ".mud-dialog .mud-grid-item"; // MudItem renders as mud-grid-item
+
     /// <summary>
     /// Checks if the TOTP section is visible.
     /// </summary>
@@ -296,6 +301,163 @@ public class ProfilePage
         var cancelButton = _page.Locator(".mud-dialog").GetByRole(AriaRole.Button, new() { Name = "Cancel" });
         await cancelButton.ClickAsync();
     }
+
+    #region Recovery Codes
+
+    /// <summary>
+    /// Checks if the "Regenerate Recovery Codes" button is visible.
+    /// Only visible when 2FA is enabled.
+    /// </summary>
+    public async Task<bool> IsRegenerateRecoveryCodesButtonVisibleAsync()
+    {
+        var button = _page.Locator(TotpSection).GetByRole(AriaRole.Button, new() { Name = "Regenerate Recovery Codes" });
+        return await button.IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Regenerate Recovery Codes" button.
+    /// </summary>
+    public async Task ClickRegenerateRecoveryCodesAsync()
+    {
+        var button = _page.Locator(TotpSection).GetByRole(AriaRole.Button, new() { Name = "Regenerate Recovery Codes" });
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Checks if the password confirmation dialog is visible.
+    /// </summary>
+    public async Task<bool> IsPasswordConfirmDialogVisibleAsync()
+    {
+        return await _page.Locator(PasswordConfirmDialog).IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Waits for the password confirmation dialog to appear.
+    /// </summary>
+    public async Task WaitForPasswordConfirmDialogAsync(int timeoutMs = 5000)
+    {
+        await _page.Locator(PasswordConfirmDialog).WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
+    }
+
+    /// <summary>
+    /// Fills the password field in the confirmation dialog.
+    /// </summary>
+    public async Task FillPasswordConfirmDialogAsync(string password)
+    {
+        var input = _page.Locator(PasswordConfirmDialog).GetByLabel("Password");
+        await input.FillAsync(password);
+    }
+
+    /// <summary>
+    /// Clicks "Generate New Codes" in the password confirmation dialog.
+    /// </summary>
+    public async Task ClickGenerateNewCodesAsync()
+    {
+        var button = _page.Locator(PasswordConfirmDialog).GetByRole(AriaRole.Button, new() { Name = "Generate New Codes" });
+        await button.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+    }
+
+    /// <summary>
+    /// Cancels the password confirmation dialog.
+    /// </summary>
+    public async Task CancelPasswordConfirmDialogAsync()
+    {
+        var button = _page.Locator(PasswordConfirmDialog).GetByRole(AriaRole.Button, new() { Name = "Cancel" });
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Checks if the recovery codes display dialog is visible.
+    /// </summary>
+    public async Task<bool> IsRecoveryCodesDialogVisibleAsync()
+    {
+        return await _page.Locator(RecoveryCodesDialog).IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Waits for the recovery codes dialog to appear.
+    /// </summary>
+    public async Task WaitForRecoveryCodesDialogAsync(int timeoutMs = 10000)
+    {
+        await _page.Locator(RecoveryCodesDialog).WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
+    }
+
+    /// <summary>
+    /// Gets all recovery codes displayed in the dialog.
+    /// </summary>
+    public async Task<List<string>> GetRecoveryCodesFromDialogAsync()
+    {
+        var codes = new List<string>();
+        var codeElements = await _page.Locator(RecoveryCodeItems).AllAsync();
+
+        foreach (var element in codeElements)
+        {
+            var text = await element.TextContentAsync();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                codes.Add(text.Trim());
+            }
+        }
+
+        return codes;
+    }
+
+    /// <summary>
+    /// Gets the count of recovery codes displayed in the dialog.
+    /// </summary>
+    public async Task<int> GetRecoveryCodesCountAsync()
+    {
+        return await _page.Locator(RecoveryCodeItems).CountAsync();
+    }
+
+    /// <summary>
+    /// Clicks "Copy All Codes" button in the recovery codes dialog.
+    /// </summary>
+    public async Task ClickCopyAllCodesAsync()
+    {
+        var button = _page.Locator(RecoveryCodesDialog).GetByRole(AriaRole.Button, new() { Name = "Copy All Codes" });
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks "I Have Saved My Codes" to close the recovery codes dialog.
+    /// </summary>
+    public async Task ClickSavedCodesAsync()
+    {
+        var button = _page.Locator(RecoveryCodesDialog).GetByRole(AriaRole.Button, new() { Name = "I Have Saved My Codes" });
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Performs the complete regenerate recovery codes flow:
+    /// clicks button, enters password, gets codes, closes dialog.
+    /// Returns the list of new recovery codes.
+    /// </summary>
+    public async Task<List<string>> RegenerateRecoveryCodesAsync(string password)
+    {
+        await ClickRegenerateRecoveryCodesAsync();
+        await WaitForPasswordConfirmDialogAsync();
+        await FillPasswordConfirmDialogAsync(password);
+        await ClickGenerateNewCodesAsync();
+        await WaitForRecoveryCodesDialogAsync();
+
+        var codes = await GetRecoveryCodesFromDialogAsync();
+
+        await ClickSavedCodesAsync();
+
+        return codes;
+    }
+
+    #endregion
 
     #endregion
 

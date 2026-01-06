@@ -38,6 +38,11 @@ public static class AuthenticationConstants
     public const int RecoveryCodeByteLength = 8;
 
     /// <summary>
+    /// Recovery code string length (hex encoding = 2 chars per byte).
+    /// </summary>
+    public const int RecoveryCodeStringLength = RecoveryCodeByteLength * 2; // 16 chars
+
+    /// <summary>
     /// Intermediate auth token byte length for cryptographic randomness (32 bytes = 256 bits).
     /// </summary>
     public const int IntermediateTokenByteLength = 32;

@@ -87,6 +87,23 @@
                     {
                         <MudAlert Severity="Severity.Success" Class="mb-3">2FA is currently enabled</MudAlert>
                         <MudStack Spacing="3">
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Primary"
+                                      FullWidth="true"
+                                      OnClick="@ShowRegenerateRecoveryCodes"
+                                      Disabled="@_generatingRecoveryCodes">
+                                @if (_generatingRecoveryCodes)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Generating...</span>
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-2" />
+                                    <span>Regenerate Recovery Codes</span>
+                                }
+                            </MudButton>
+                            <MudDivider Class="my-2" />
                             <MudTextField @bind-Value="_resetTotpPassword"
                                          Label="Enter Password to Reset 2FA"
                                          InputType="InputType.Password"
@@ -255,6 +272,80 @@
     </DialogActions>
 </MudDialog>
 
+<!-- Password Confirmation Dialog for Regenerating Recovery Codes -->
+<MudDialog @bind-Visible="_showPasswordConfirmDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Confirm Your Password</MudText>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            This will invalidate all your existing recovery codes and generate new ones.
+        </MudText>
+        <MudTextField @bind-Value="_recoveryCodesPassword"
+                     Label="Password"
+                     InputType="InputType.Password"
+                     Variant="Variant.Outlined"
+                     Required="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@CancelRegenerateRecoveryCodes">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="@RegenerateRecoveryCodes" Disabled="@_generatingRecoveryCodes">
+            @if (_generatingRecoveryCodes)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Generating...</span>
+            }
+            else
+            {
+                <span>Generate New Codes</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<!-- Recovery Codes Display Dialog -->
+<MudDialog @bind-Visible="_showRecoveryCodes" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = false, BackdropClick = false })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-2" Color="Color.Warning">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-2" />
+            Save Your Recovery Codes
+        </MudText>
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
+            <strong>These codes can only be viewed once.</strong> If you lose access to your authenticator app,
+            you'll need one of these codes to sign in. Each code can only be used once.
+        </MudAlert>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Store these codes in a safe place, such as a password manager or printed copy in a secure location.
+        </MudText>
+        @if (_recoveryCodes != null)
+        {
+            <MudPaper Class="pa-3 mb-3" Style="background: rgba(0,0,0,0.2);">
+                <MudGrid Spacing="2">
+                    @foreach (var recoveryCode in _recoveryCodes)
+                    {
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body1" Style="font-family: monospace; text-align: center;">
+                                @recoveryCode
+                            </MudText>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+            <MudButton Variant="Variant.Outlined"
+                      Color="Color.Primary"
+                      FullWidth="true"
+                      StartIcon="@Icons.Material.Filled.ContentCopy"
+                      OnClick="@CopyRecoveryCodesToClipboard"
+                      Class="mb-2">
+                Copy All Codes
+            </MudButton>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@CloseRecoveryCodesDialog">
+            I Have Saved My Codes
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
 
 @code {
     private UserRecord? _user;
@@ -275,6 +366,13 @@
     private TotpSetupResult? _totpSetupResult;
     private string _totpVerificationCode = "";
     private bool _verifyingTotp;
+
+    // Recovery Codes
+    private bool _showRecoveryCodes;
+    private bool _showPasswordConfirmDialog;
+    private IReadOnlyList<string>? _recoveryCodes;
+    private bool _generatingRecoveryCodes;
+    private string _recoveryCodesPassword = "";
 
     // Telegram Linking
     private List<TelegramUserMappingRecord>? _linkedAccounts;
@@ -415,9 +513,14 @@
             {
                 _showTotpSetup = false;
                 _totpVerificationCode = "";
+                _totpSetupResult = null;
+
+                // Generate recovery codes - user must save these
+                _recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(_currentUserId);
+                _showRecoveryCodes = true;
 
                 await LoadUserAsync();
-                Snackbar.Add("2FA enabled successfully", Severity.Success);
+                Snackbar.Add("2FA enabled successfully. Save your recovery codes!", Severity.Success);
             }
             else
             {
@@ -440,6 +543,83 @@
         _showTotpSetup = false;
         _totpSetupResult = null;
         _totpVerificationCode = "";
+    }
+
+    private void ShowRegenerateRecoveryCodes()
+    {
+        _recoveryCodesPassword = "";
+        _showPasswordConfirmDialog = true;
+    }
+
+    private void CancelRegenerateRecoveryCodes()
+    {
+        _showPasswordConfirmDialog = false;
+        _recoveryCodesPassword = "";
+    }
+
+    private async Task RegenerateRecoveryCodes()
+    {
+        if (string.IsNullOrEmpty(_currentUserId) || string.IsNullOrWhiteSpace(_recoveryCodesPassword))
+        {
+            Snackbar.Add("Please enter your password", Severity.Warning);
+            return;
+        }
+
+        _generatingRecoveryCodes = true;
+        StateHasChanged();
+
+        try
+        {
+            // Verify password first
+            var loginResult = await AuthService.LoginAsync(_user!.Email, _recoveryCodesPassword);
+
+            if (!loginResult.Success)
+            {
+                Snackbar.Add("Invalid password", Severity.Error);
+                _generatingRecoveryCodes = false;
+                StateHasChanged();
+                return;
+            }
+
+            // Generate new recovery codes
+            _recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(_currentUserId);
+            _showPasswordConfirmDialog = false;
+            _recoveryCodesPassword = "";
+            _showRecoveryCodes = true;
+
+            Snackbar.Add("New recovery codes generated. Save them now!", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating recovery codes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _generatingRecoveryCodes = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyRecoveryCodesToClipboard()
+    {
+        if (_recoveryCodes == null) return;
+
+        var codesText = string.Join("\n", _recoveryCodes);
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", codesText);
+            Snackbar.Add("Recovery codes copied to clipboard!", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Please copy the codes manually", Severity.Warning);
+        }
+    }
+
+    private void CloseRecoveryCodesDialog()
+    {
+        _showRecoveryCodes = false;
+        _recoveryCodes = null;
     }
 
     private async Task ResetTotp()
