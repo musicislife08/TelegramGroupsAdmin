@@ -15,6 +15,17 @@ public static class UrlHelpers
         if (string.IsNullOrEmpty(url))
             return false;
 
+        // Security: Explicitly block XSS vectors (defense in depth)
+        // These are also blocked by the "/" prefix check below, but explicit checks
+        // protect against future refactoring that might relax the prefix requirement
+        if (url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+            url.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+            url.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase) ||
+            url.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         // Reject absolute URLs (http://, https://, //)
         if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||

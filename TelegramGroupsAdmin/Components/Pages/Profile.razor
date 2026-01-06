@@ -329,14 +329,6 @@
                     }
                 </MudGrid>
             </MudPaper>
-            <MudButton Variant="Variant.Outlined"
-                      Color="Color.Primary"
-                      FullWidth="true"
-                      StartIcon="@Icons.Material.Filled.ContentCopy"
-                      OnClick="@CopyRecoveryCodesToClipboard"
-                      Class="mb-2">
-                Copy All Codes
-            </MudButton>
         }
     </DialogContent>
     <DialogActions>
@@ -597,22 +589,6 @@
         {
             _generatingRecoveryCodes = false;
             StateHasChanged();
-        }
-    }
-
-    private async Task CopyRecoveryCodesToClipboard()
-    {
-        if (_recoveryCodes == null) return;
-
-        var codesText = string.Join("\n", _recoveryCodes);
-        try
-        {
-            await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", codesText);
-            Snackbar.Add("Recovery codes copied to clipboard!", Severity.Success);
-        }
-        catch
-        {
-            Snackbar.Add("Please copy the codes manually", Severity.Warning);
         }
     }
 

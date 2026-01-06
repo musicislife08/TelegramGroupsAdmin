@@ -79,6 +79,22 @@ public class UrlHelpersTests
         Assert.That(UrlHelpers.IsLocalUrl("DATA:text/html,test"), Is.False); // Case insensitive
     }
 
+    [Test]
+    public void IsLocalUrl_VbscriptProtocol_ReturnsFalse()
+    {
+        // Security: XSS protection - vbscript: URLs must be blocked (IE legacy)
+        Assert.That(UrlHelpers.IsLocalUrl("vbscript:msgbox(1)"), Is.False);
+        Assert.That(UrlHelpers.IsLocalUrl("VBSCRIPT:msgbox(1)"), Is.False); // Case insensitive
+    }
+
+    [Test]
+    public void IsLocalUrl_FileProtocol_ReturnsFalse()
+    {
+        // Security: Block file: protocol to prevent local file access
+        Assert.That(UrlHelpers.IsLocalUrl("file:///etc/passwd"), Is.False);
+        Assert.That(UrlHelpers.IsLocalUrl("FILE:///C:/Windows/System32"), Is.False); // Case insensitive
+    }
+
     #endregion
 
     #region GetSafeRedirectUrl Tests
