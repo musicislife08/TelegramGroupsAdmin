@@ -96,13 +96,20 @@ public class MigrationTestHelper : IDisposable
 
     /// <summary>
     /// Executes a scalar SQL query and returns the result cast to the specified type.
+    /// Uses GetFieldValue&lt;T&gt; for proper type handling (DateTimeOffset, enums, etc.)
     /// </summary>
     public async Task<T?> ExecuteScalarAsync<T>(string sql)
     {
-        var result = await ExecuteScalarAsync(sql);
-        if (result == null || result == DBNull.Value)
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var cmd = new NpgsqlCommand(sql, connection);
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        if (!await reader.ReadAsync() || reader.IsDBNull(0))
             return default;
-        return (T)result;
+
+        // Use GetFieldValue<T> for proper type conversion (preserves DateTimeOffset timezone, etc.)
+        return reader.GetFieldValue<T>(0);
     }
 
     /// <summary>

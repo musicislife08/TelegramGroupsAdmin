@@ -180,22 +180,7 @@ if (serilogConfig != null)
     app.Logger.LogInformation("Loaded log configuration from database");
 }
 
-// Train ML.NET spam classifier model on startup (always retrain for fresh data)
-// Once scheduled retraining is implemented (Commit 3), this can be optimized to load if <8h old
-var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IMLTextClassifierService>();
-app.Logger.LogInformation("Training ML spam classifier model with latest data...");
-await mlClassifier.TrainModelAsync();
-var metadata = mlClassifier.GetMetadata();
-app.Logger.LogInformation(
-    "ML classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1}, balanced: {Balanced})",
-    metadata?.SpamSampleCount,
-    metadata?.HamSampleCount,
-    metadata?.SpamRatio,
-    metadata?.IsBalanced);
-
-// Note: Default background job configurations are ensured by QuartzSchedulingSyncService on startup
-
-// Check for --migrate-only flag to run migrations and exit
+// Check for --migrate-only flag to run migrations and exit (before ML training)
 if (args.Contains("--migrate-only") || args.Contains("--migrate"))
 {
     app.Logger.LogInformation("Migration complete. Exiting (--migrate-only flag).");
@@ -203,6 +188,7 @@ if (args.Contains("--migrate-only") || args.Contains("--migrate"))
 }
 
 // Check for --backup flag to create encrypted backup (requires --passphrase)
+// Runs before ML training since backup doesn't need the classifier
 if (args.Contains("--backup"))
 {
     var backupPath = args.SkipWhile(a => a != "--backup").Skip(1).FirstOrDefault() ?? $"backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
@@ -237,6 +223,7 @@ if (args.Contains("--backup"))
 }
 
 // Check for --restore flag to restore encrypted backup (WIPES ALL DATA, requires --passphrase)
+// Runs before ML training - classifier will train on next normal startup
 if (args.Contains("--restore"))
 {
     var restorePath = args.SkipWhile(a => a != "--restore").Skip(1).FirstOrDefault();
@@ -282,6 +269,20 @@ if (args.Contains("--restore"))
     app.Logger.LogInformation("✅ System restore complete. Exiting (--restore flag).");
     Environment.Exit(0);
 }
+
+// Train ML.NET spam classifier model on startup (always retrain for fresh data)
+var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IMLTextClassifierService>();
+app.Logger.LogInformation("Training ML spam classifier model with latest data...");
+await mlClassifier.TrainModelAsync();
+var metadata = mlClassifier.GetMetadata();
+app.Logger.LogInformation(
+    "ML classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1}, balanced: {Balanced})",
+    metadata?.SpamSampleCount,
+    metadata?.HamSampleCount,
+    metadata?.SpamRatio,
+    metadata?.IsBalanced);
+
+// Note: Default background job configurations are ensured by QuartzSchedulingSyncService on startup
 
 // Configure HTTP request pipeline
 app.ConfigurePipeline();
