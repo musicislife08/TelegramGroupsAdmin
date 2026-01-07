@@ -253,6 +253,8 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 **Quartz.NET Job Architecture**: Jobs in BackgroundJobs project, payloads in Abstractions (breaks circular deps). Jobs re-throw exceptions for retry/logging. Job configs stored in database (configs.background_jobs_config JSONB column).
 
+**Quartz.NET Payload Access**: Always use `context.MergedJobDataMap` (not `JobDetail.JobDataMap`) to access trigger-level data. On-demand jobs triggered via `TriggerNowAsync` store payloads in the trigger's JobDataMap, which is only accessible via `MergedJobDataMap`. Use `JobPayloadHelper.TryGetPayloadAsync<T>()` for defensive payload extraction with automatic stale trigger cleanup.
+
 **Translation Storage**: Exclusive arc pattern (message_id XOR edit_id) in message_translations table. MessageProcessingService translates before save (≥10 chars, <80% Latin script). Reused by spam detection.
 
 **DM Notifications**: IDmDeliveryService (Singleton), pending_notifications table (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup.
