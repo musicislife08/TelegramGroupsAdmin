@@ -590,6 +590,164 @@ public class AIContentCheckTests
 
     #endregion
 
+    #region CheckAsync - OCR Passthrough Tests
+
+    [Test]
+    public async Task CheckAsync_OcrOnlyMessage_AnalyzesOcrText()
+    {
+        // Arrange - Image with no caption but OCR extracted text
+        SetupChatService(CreateSpamResponse("Spam in image text", 0.9));
+
+        var request = CreateValidRequest() with
+        {
+            Message = null,  // No caption
+            OcrExtractedText = "BUY CRYPTO NOW! 100x GUARANTEED RETURNS!"
+        };
+
+        // Act
+        var response = await _check.CheckAsync(request);
+
+        // Assert
+        Assert.That(response.Score, Is.EqualTo(4.5).Within(0.01)); // 0.9 * 5.0
+        Assert.That(response.Abstained, Is.False);
+
+        // Verify AI service was called (OCR text should be analyzed)
+        await _mockChatService.Received(1).GetCompletionAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<ChatCompletionOptions?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CheckAsync_CaptionPlusOcr_CombinesTextWithSeparator()
+    {
+        // Arrange - Message with both caption and OCR text
+        SetupChatService(CreateCleanResponse("Legitimate content", 0.85));
+
+        var request = CreateValidRequest() with
+        {
+            Message = "Check out this screenshot",
+            OcrExtractedText = "Meeting notes from today"
+        };
+
+        // Act
+        var response = await _check.CheckAsync(request);
+
+        // Assert - Clean verdict
+        Assert.That(response.Score, Is.EqualTo(0.0));
+        Assert.That(response.Abstained, Is.False);
+    }
+
+    [Test]
+    public async Task CheckAsync_ShortCaptionWithLongOcr_PassesMinLengthCheck()
+    {
+        // Arrange - Short caption (< 10 chars) but long OCR text
+        SetupChatService(CreateSpamResponse("Spam detected", 0.75));
+
+        var request = CreateValidRequest() with
+        {
+            Message = "Hi",  // Only 2 chars - would normally be too short
+            OcrExtractedText = "This is a much longer text extracted from the image via OCR",
+            MinMessageLength = 10,
+            CheckShortMessages = false
+        };
+
+        // Act
+        var response = await _check.CheckAsync(request);
+
+        // Assert - Should NOT abstain because combined length > 10
+        Assert.That(response.Abstained, Is.False);
+        Assert.That(response.Score, Is.EqualTo(3.75).Within(0.01)); // 0.75 * 5.0
+    }
+
+    [Test]
+    public async Task CheckAsync_ShortOcrOnly_Abstains()
+    {
+        // Arrange - Only short OCR text, no caption
+        var request = CreateValidRequest() with
+        {
+            Message = null,
+            OcrExtractedText = "Hi",  // Only 2 chars - too short
+            MinMessageLength = 10,
+            CheckShortMessages = false
+        };
+
+        // Act
+        var response = await _check.CheckAsync(request);
+
+        // Assert - Should abstain because combined text too short
+        Assert.That(response.Abstained, Is.True);
+        Assert.That(response.Details, Does.Contain("too short"));
+    }
+
+    [Test]
+    public async Task CheckAsync_DifferentOcrSameCaption_SeparateCacheEntries()
+    {
+        // Arrange - Same caption but different OCR text should use different cache keys
+        SetupChatService(CreateSpamResponse("Spam detected", 0.8));
+
+        var request1 = CreateValidRequest() with
+        {
+            Message = "Check this out",
+            OcrExtractedText = "First image OCR text with spam content"
+        };
+
+        var request2 = CreateValidRequest() with
+        {
+            Message = "Check this out",  // Same caption
+            OcrExtractedText = "Different image OCR text also spam"  // Different OCR
+        };
+
+        // Act
+        await _check.CheckAsync(request1);
+        await _check.CheckAsync(request2);
+
+        // Assert - Chat service should be called twice (different cache keys)
+        await _mockChatService.Received(2).GetCompletionAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<ChatCompletionOptions?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CheckAsync_SameOcrSameCaption_UsesCachedResult()
+    {
+        // Arrange - Identical requests should use cache
+        SetupChatService(CreateSpamResponse("Spam detected", 0.8));
+
+        var request1 = CreateValidRequest() with
+        {
+            Message = "Check this out",
+            OcrExtractedText = "Same OCR text"
+        };
+
+        var request2 = CreateValidRequest() with
+        {
+            Message = "Check this out",
+            OcrExtractedText = "Same OCR text"  // Identical
+        };
+
+        // Act
+        var response1 = await _check.CheckAsync(request1);
+        var response2 = await _check.CheckAsync(request2);
+
+        // Assert - Chat service should only be called once (cached on second call)
+        await _mockChatService.Received(1).GetCompletionAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<ChatCompletionOptions?>(),
+            Arg.Any<CancellationToken>());
+
+        Assert.That(response2.Details, Does.Contain("cached"));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private AIVetoCheckRequest CreateValidRequest()

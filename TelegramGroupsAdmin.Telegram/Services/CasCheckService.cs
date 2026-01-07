@@ -92,9 +92,11 @@ public class CasCheckService : ICasCheckService
                 return new CasCheckResult(false, null);
             }
 
-            var isBanned = casResponse.Ok && casResponse.Result?.IsBanned == true;
-            var reason = isBanned
-                ? string.Join(", ", casResponse.Result?.Messages ?? [])
+            // CAS API: ok=true means user IS in the ban database (banned)
+            // ok=false means user is NOT in the database (not banned)
+            var isBanned = casResponse.Ok;
+            var reason = isBanned && casResponse.Result != null
+                ? $"CAS ban ({casResponse.Result.Offenses} offense(s))"
                 : null;
 
             var result = new CasCheckResult(isBanned, reason);
@@ -126,19 +128,25 @@ public class CasCheckService : ICasCheckService
         }
     }
 
+    /// <summary>
+    /// CAS API response format.
+    /// ok=true means user is banned, ok=false means not found (not banned).
+    /// </summary>
     private record CasApiResponse
     {
         public bool Ok { get; init; }
         public CasResult? Result { get; init; }
+        public string? Description { get; init; }
     }
 
+    /// <summary>
+    /// CAS ban details returned when ok=true.
+    /// </summary>
     private record CasResult
     {
-        /// <summary>
-        /// User ID echoed back by CAS API. Kept for debugging, response validation, and API contract documentation.
-        /// </summary>
-        public string? UserId { get; init; }
-        public bool IsBanned { get; init; }
-        public string[]? Messages { get; init; }
+        public int Offenses { get; init; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("time_added")]
+        public long TimeAdded { get; init; }
     }
 }
