@@ -98,9 +98,26 @@ public class TableExportService
                     // If target property is string, keep as raw JSON string
                     // If target property is complex type, deserialize
                     var targetType = Nullable.GetUnderlyingType(mapping.Property.PropertyType) ?? mapping.Property.PropertyType;
-                    value = targetType == typeof(string)
-                        ? jsonText
-                        : JsonSerializer.Deserialize(jsonText, mapping.Property.PropertyType, JsonOptions);
+                    if (targetType == typeof(string))
+                    {
+                        value = jsonText;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            value = JsonSerializer.Deserialize(jsonText, mapping.Property.PropertyType, JsonOptions);
+                        }
+                        catch (JsonException ex)
+                        {
+                            // Fail fast - a corrupted JSONB column means the backup would be incomplete
+                            // Better to fail the backup than produce a file that would corrupt the DB on restore
+                            throw new InvalidOperationException(
+                                $"Failed to deserialize JSONB column '{mapping.ColumnName}' in table '{tableName}'. " +
+                                $"Expected type: {mapping.Property.PropertyType.Name}. JSON content: {jsonText[..Math.Min(200, jsonText.Length)]}...",
+                                ex);
+                        }
+                    }
                 }
                 else
                 {
