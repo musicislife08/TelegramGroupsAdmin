@@ -355,35 +355,32 @@
             }
             else if (_result.SpamResult != null)
             {
-                if (_result.SpamResult.NetConfidence >= 85 || _result.SpamResult.MaxConfidence >= 85)
+                @switch (_result.SpamResult.RecommendedAction)
                 {
-                    <MudAlert Severity="Severity.Error">
-                        <MudText Typo="Typo.body1"><strong>Action:</strong> Auto-Ban + Delete Message</MudText>
-                        <MudText Typo="Typo.body2" Class="mt-1">
-                            High confidence spam (net: @_result.SpamResult.NetConfidence, max: @_result.SpamResult.MaxConfidence%).
-                            User would be banned and message deleted immediately.
-                        </MudText>
-                    </MudAlert>
-                }
-                else if (_result.SpamResult.NetConfidence >= 50 || _result.SpamResult.MaxConfidence >= 50)
-                {
-                    <MudAlert Severity="Severity.Warning">
-                        <MudText Typo="Typo.body1"><strong>Action:</strong> Create Report for Admin Review</MudText>
-                        <MudText Typo="Typo.body2" Class="mt-1">
-                            Borderline spam (net: @_result.SpamResult.NetConfidence, max: @_result.SpamResult.MaxConfidence%).
-                            Report created for manual admin review in /reports queue.
-                        </MudText>
-                    </MudAlert>
-                }
-                else
-                {
-                    <MudAlert Severity="Severity.Success">
-                        <MudText Typo="Typo.body1"><strong>Action:</strong> Allow Message</MudText>
-                        <MudText Typo="Typo.body2" Class="mt-1">
-                            Low spam confidence (net: @_result.SpamResult.NetConfidence, max: @_result.SpamResult.MaxConfidence%).
-                            Message allowed, detection result logged for training.
-                        </MudText>
-                    </MudAlert>
+                    case DetectionAction.AutoBan:
+                        <MudAlert Severity="Severity.Error">
+                            <MudText Typo="Typo.body1"><strong>Action:</strong> Auto-Ban + Delete Message</MudText>
+                            <MudText Typo="Typo.body2" Class="mt-1">
+                                High confidence spam (score ≥ 5.0). User would be banned and message deleted immediately.
+                            </MudText>
+                        </MudAlert>
+                        break;
+                    case DetectionAction.ReviewQueue:
+                        <MudAlert Severity="Severity.Warning">
+                            <MudText Typo="Typo.body1"><strong>Action:</strong> Create Report for Admin Review</MudText>
+                            <MudText Typo="Typo.body2" Class="mt-1">
+                                Borderline spam (score 3.0-5.0). Report created for manual admin review in /reports queue.
+                            </MudText>
+                        </MudAlert>
+                        break;
+                    default:
+                        <MudAlert Severity="Severity.Success">
+                            <MudText Typo="Typo.body1"><strong>Action:</strong> Allow Message</MudText>
+                            <MudText Typo="Typo.body2" Class="mt-1">
+                                Low spam score (&lt; 3.0). Message allowed, detection result logged for training.
+                            </MudText>
+                        </MudAlert>
+                        break;
                 }
             }
 

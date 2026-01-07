@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -23,6 +24,7 @@ public class WelcomeService : IWelcomeService
     private readonly IDmDeliveryService _dmDeliveryService;
     private readonly IJobScheduler _jobScheduler;
     private readonly ITelegramBotClientFactory _botClientFactory;
+    private readonly ICasCheckService _casCheckService;
 
     public WelcomeService(
         ILogger<WelcomeService> logger,
@@ -30,7 +32,8 @@ public class WelcomeService : IWelcomeService
         IBotProtectionService botProtectionService,
         IDmDeliveryService dmDeliveryService,
         IJobScheduler jobScheduler,
-        ITelegramBotClientFactory botClientFactory)
+        ITelegramBotClientFactory botClientFactory,
+        ICasCheckService casCheckService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -38,6 +41,7 @@ public class WelcomeService : IWelcomeService
         _dmDeliveryService = dmDeliveryService;
         _jobScheduler = jobScheduler;
         _botClientFactory = botClientFactory;
+        _casCheckService = casCheckService;
     }
 
     private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
@@ -136,6 +140,10 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
+            // Step 1: FIRST - Restrict user permissions (mute immediately)
+            // User can't do harm while we run checks
+            await RestrictUserPermissionsAsync(operations, chatMemberUpdate.Chat, user, cancellationToken);
+
             // Create user record if not exists (IsActive: false - not engaged yet)
             // Must happen for ALL joining users, not just those checked for impersonation
             using var impersonationScope = _serviceProvider.CreateScope();
@@ -170,7 +178,7 @@ public class WelcomeService : IWelcomeService
                     user.ToLogInfo());
             }
 
-            // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
+            // Step 2: Check for impersonation (name + photo similarity vs admins)
             var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
             var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
 
@@ -219,10 +227,33 @@ public class WelcomeService : IWelcomeService
                 }
             }
 
-            // Step 1: Restrict user permissions (mute on join)
-            await RestrictUserPermissionsAsync(operations, chatMemberUpdate.Chat, user, cancellationToken);
+            // Step 3: CAS (Combot Anti-Spam) check - auto-ban known spammers
+            var casResult = await _casCheckService.CheckUserAsync(user.Id, cancellationToken);
+            if (casResult.IsBanned)
+            {
+                _logger.LogWarning(
+                    "CAS banned user detected: {User} in {Chat} (reason: {Reason})",
+                    user.ToLogInfo(),
+                    chatMemberUpdate.Chat.ToLogInfo(),
+                    casResult.Reason ?? "No reason provided");
 
-            // Step 2: Send welcome message with inline buttons
+                // Ban user using ModerationOrchestrator
+                var moderationOrchestrator = impersonationScope.ServiceProvider.GetRequiredService<ModerationOrchestrator>();
+                var reason = $"CAS banned: {casResult.Reason ?? "Listed in CAS database"}";
+                await moderationOrchestrator.BanUserAsync(
+                    userId: user.Id,
+                    messageId: null,
+                    executor: Core.Models.Actor.Cas,
+                    reason: reason,
+                    cancellationToken);
+
+                _logger.LogInformation(
+                    "{User} auto-banned (CAS), skipping welcome flow",
+                    user.ToLogInfo());
+                return;
+            }
+
+            // Step 4: Send welcome message with inline buttons
             var welcomeMessage = await SendWelcomeMessageAsync(
                 operations,
                 chatMemberUpdate.Chat.Id,
@@ -230,7 +261,7 @@ public class WelcomeService : IWelcomeService
                 config,
                 cancellationToken);
 
-            // Step 3: Create welcome response record (pending state)
+            // Step 5: Create welcome response record (pending state)
             var welcomeResponse = new WelcomeResponse(
                 Id: 0, // Will be set by database
                 ChatId: chatMemberUpdate.Chat.Id,
@@ -247,7 +278,7 @@ public class WelcomeService : IWelcomeService
 
             var responseId = await WithRepositoryAsync((repo, cancellationToken) => repo.InsertAsync(welcomeResponse, cancellationToken), cancellationToken);
 
-            // Step 4: Schedule timeout via Quartz.NET (replaces fire-and-forget Task.Run)
+            // Step 6: Schedule timeout via Quartz.NET (replaces fire-and-forget Task.Run)
             var payload = new WelcomeTimeoutPayload(
                 chatMemberUpdate.Chat.Id,
                 user.Id,

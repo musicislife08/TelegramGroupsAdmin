@@ -15,8 +15,8 @@ public interface IContentDetectionEngine
     Task<ContentDetectionResult> CheckMessageAsync(ContentCheckRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Run only non-OpenAI checks to determine if message should be vetoed by OpenAI
-    /// Used internally for two-tier decision system (veto mode)
+    /// Run all non-AI pipeline checks (stop words, similarity, etc.)
+    /// AI veto check runs separately via CheckMessageAsync when spam flags are set
     /// </summary>
-    Task<ContentDetectionResult> CheckMessageWithoutOpenAIAsync(ContentCheckRequest request, CancellationToken cancellationToken = default);
+    Task<ContentDetectionResult> RunPipelineChecksAsync(ContentCheckRequest request, CancellationToken cancellationToken = default);
 }

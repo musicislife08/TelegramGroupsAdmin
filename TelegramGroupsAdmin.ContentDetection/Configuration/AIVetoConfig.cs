@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.ContentDetection.Configuration;
 
 /// <summary>
-/// OpenAI integration configuration
+/// AI veto configuration - AI always runs as veto to confirm/override spam detection
 /// </summary>
-public class OpenAIConfig
+public class AIVetoConfig
 {
     /// <summary>
     /// Whether to use global configuration instead of chat-specific overrides
@@ -12,24 +12,12 @@ public class OpenAIConfig
     public bool UseGlobal { get; set; } = true;
 
     /// <summary>
-    /// Whether OpenAI check is enabled
+    /// Whether AI veto check is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Whether OpenAI runs in veto mode (confirm spam) or enhancement mode (find spam)
-    /// </summary>
-    public bool VetoMode { get; set; } = true;
-
-    /// <summary>
-    /// Confidence threshold for triggering OpenAI veto (0-100)
-    /// OpenAI veto only runs if spam is detected with confidence below this threshold
-    /// Higher values = more vetos (more conservative), Lower values = fewer vetos (more aggressive)
-    /// </summary>
-    public int VetoThreshold { get; set; } = 95;
-
-    /// <summary>
-    /// Whether to check short messages with OpenAI
+    /// Whether to check short messages with AI
     /// </summary>
     public bool CheckShortMessages { get; set; } = false;
 
@@ -39,7 +27,7 @@ public class OpenAIConfig
     public string? SystemPrompt { get; set; }
 
     /// <summary>
-    /// Number of recent messages to include as context for OpenAI analysis
+    /// Number of recent messages to include as context for AI analysis
     /// Provides conversation history to improve spam detection accuracy
     /// Higher values = more context but increased API costs
     /// </summary>

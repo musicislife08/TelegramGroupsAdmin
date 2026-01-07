@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TelegramGroupsAdmin.ContentDetection.Configuration;
 
 /// <summary>
@@ -99,9 +101,11 @@ public class ContentDetectionConfig
     public SpacingConfig Spacing { get; set; } = new();
 
     /// <summary>
-    /// OpenAI integration configuration
+    /// AI veto configuration - AI always runs as veto to confirm/override spam detection
+    /// JSON key kept as "openAI" for database compatibility (existing JSONB data)
     /// </summary>
-    public OpenAIConfig OpenAI { get; set; } = new();
+    [JsonPropertyName("openAI")]
+    public AIVetoConfig AIVeto { get; set; } = new();
 
     /// <summary>
     /// URL blocklist checking configuration

@@ -376,42 +376,37 @@
         }
     </MudCard>
 
-    <!-- OpenAI -->
+    <!-- AI Veto -->
     <MudCard Elevation="1">
         <MudCardHeader>
             <CardHeaderContent>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudSwitch T="bool" @bind-Value="_config.OpenAI.Enabled" Color="Color.Primary" />
-                    <MudText Typo="Typo.h6">OpenAI Verification</MudText>
-                    <HelpTooltip Text="Uses GPT-4 to analyze message context and intent. Best accuracy for nuanced spam detection. In Veto Mode: confirms other algorithms' spam verdicts (reduces false positives). In Detection Mode: actively searches for spam. Slow (~1.2s average) but high quality. Costs apply per API call." />
-                    <MudChip T="string" Size="Size.Small" Color="@(_config.OpenAI.Enabled ? Color.Success : Color.Default)">
-                        @(_config.OpenAI.Enabled ? "Enabled" : "Disabled")
+                    <MudSwitch T="bool" @bind-Value="_config.AIVeto.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">AI Veto Check</MudText>
+                    <HelpTooltip Text="Uses AI to verify spam detected by other algorithms. Acts as quality control - confirms or vetoes other algorithms' spam verdicts, reducing false positives. Only runs on messages already flagged as potential spam. Slow (~1.2s average) but high quality. Costs apply per API call." />
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.AIVeto.Enabled ? Color.Success : Color.Default)">
+                        @(_config.AIVeto.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
                     <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Schedule">Slow</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionOpenAI>("OpenAI Configuration"))">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionOpenAI>("AI Veto Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
         </MudCardHeader>
-        @if (_config.OpenAI.Enabled)
+        @if (_config.AIVeto.Enabled)
         {
             <MudCardContent>
                 <MudGrid>
                     <MudItem xs="12" md="6">
-                        <MudSwitch T="bool" @bind-Value="_config.OpenAI.VetoMode"
-                                  Label="Veto Mode (Confirm Spam)"
-                                  Color="Color.Primary" />
-                        <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
-                            If enabled, OpenAI confirms spam. If disabled, OpenAI finds spam.
-                        </MudText>
-                    </MudItem>
-                    <MudItem xs="12" md="6">
-                        <MudSwitch T="bool" @bind-Value="_config.OpenAI.CheckShortMessages"
+                        <MudSwitch T="bool" @bind-Value="_config.AIVeto.CheckShortMessages"
                                   Label="Check Short Messages"
                                   Color="Color.Primary" />
+                        <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                            Include short messages in AI veto analysis.
+                        </MudText>
                     </MudItem>
                 </MudGrid>
             </MudCardContent>

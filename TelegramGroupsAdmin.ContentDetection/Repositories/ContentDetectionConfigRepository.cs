@@ -195,7 +195,7 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
                 InvisibleChars = chatConfig.InvisibleChars.UseGlobal ? globalConfig.InvisibleChars : chatConfig.InvisibleChars,
                 Translation = chatConfig.Translation.UseGlobal ? globalConfig.Translation : chatConfig.Translation,
                 Spacing = chatConfig.Spacing.UseGlobal ? globalConfig.Spacing : chatConfig.Spacing,
-                OpenAI = chatConfig.OpenAI.UseGlobal ? globalConfig.OpenAI : chatConfig.OpenAI,
+                AIVeto = chatConfig.AIVeto.UseGlobal ? globalConfig.AIVeto : chatConfig.AIVeto,
                 UrlBlocklist = chatConfig.UrlBlocklist.UseGlobal ? globalConfig.UrlBlocklist : chatConfig.UrlBlocklist,
                 ThreatIntel = chatConfig.ThreatIntel.UseGlobal ? globalConfig.ThreatIntel : chatConfig.ThreatIntel,
                 SeoScraping = chatConfig.SeoScraping.UseGlobal ? globalConfig.SeoScraping : chatConfig.SeoScraping,

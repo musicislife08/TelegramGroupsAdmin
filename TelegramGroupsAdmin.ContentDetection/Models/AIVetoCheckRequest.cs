@@ -1,11 +1,10 @@
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
-/// Request for OpenAI spam check
+/// Request for AI veto spam check - AI always runs as veto to confirm/override other spam checks
 /// </summary>
-public sealed class OpenAICheckRequest : ContentCheckRequestBase
+public sealed class AIVetoCheckRequest : ContentCheckRequestBase
 {
-    public required bool VetoMode { get; init; }
     public required string? SystemPrompt { get; init; }
     public required bool HasSpamFlags { get; init; }
     public required int MinMessageLength { get; init; }
@@ -13,4 +12,9 @@ public sealed class OpenAICheckRequest : ContentCheckRequestBase
     public required int MessageHistoryCount { get; init; }
     public required string Model { get; init; }
     public required int MaxTokens { get; init; }
+
+    /// <summary>
+    /// OCR-extracted text from image (combined with caption for veto analysis)
+    /// </summary>
+    public string? OcrExtractedText { get; init; }
 }
