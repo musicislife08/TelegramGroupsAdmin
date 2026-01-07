@@ -4,22 +4,32 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Static utility class for building AI prompts for spam detection.
+/// Static utility class for building AI prompts for spam veto.
 /// Provider-agnostic - returns prompts that can be used with any AI provider via IChatService.
+/// AI always runs as veto to verify spam detection from other checks.
 /// </summary>
 public static class AIPromptBuilder
 {
     /// <summary>
-    /// Create system and user prompts for spam detection.
+    /// Create system and user prompts for spam veto verification.
     /// Returns prompts that can be passed to IChatService.GetCompletionAsync().
     /// </summary>
     public static AIPromptResult CreatePrompts(
-        OpenAICheckRequest req,
+        AIVetoCheckRequest req,
         IEnumerable<HistoryMessage> history)
     {
-        // Phase 4.5: Use modular prompt builder
+        // Use modular prompt builder
         // Custom prompt (if provided) replaces the default rules section only
-        var systemPrompt = BuildSystemPrompt(req.VetoMode, req.SystemPrompt);
+        var systemPrompt = BuildSystemPrompt(req.SystemPrompt);
+
+        // Combine caption and OCR text for analysis (handles image-only messages with OCR)
+        var effectiveText = req.Message;
+        if (!string.IsNullOrWhiteSpace(req.OcrExtractedText))
+        {
+            effectiveText = string.IsNullOrWhiteSpace(effectiveText)
+                ? req.OcrExtractedText
+                : $"{effectiveText}\n\n[IMAGE TEXT]\n{req.OcrExtractedText}";
+        }
 
         // Build context from message history
         var contextBuilder = new StringBuilder();
@@ -36,37 +46,28 @@ public static class AIPromptBuilder
             contextBuilder.AppendLine();
         }
 
-        var userPrompt = req.VetoMode
-            ? $$"""
-               Analyze this message that was flagged by other spam filters. Is it actually spam?
+        // AI always runs as veto - message was already flagged by other spam checks
+        var userPrompt = $$"""
+            Analyze this message that was flagged by other spam filters. Is it actually spam?
 
-               {{contextBuilder}}
-               Current message from user {{req.UserName}} (ID: {{req.UserId}}):
-               "{{req.Message}}"
+            {{contextBuilder}}
+            Current message from user {{req.UserName}} (ID: {{req.UserId}}):
+            "{{effectiveText}}"
 
-               Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "confidence": 0.0-1.0}
-               """
-            : $$"""
-              Analyze this message for spam content.
-
-              {{contextBuilder}}
-              Message from user {{req.UserName}} (ID: {{req.UserId}}):
-              "{{req.Message}}"
-
-              Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "confidence": 0.0-1.0}
-              """;
+            Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "confidence": 0.0-1.0}
+            """;
 
         return new AIPromptResult(systemPrompt, userPrompt);
     }
 
     /// <summary>
-    /// Phase 4.5: Build complete system prompt from modular components
+    /// Build complete system prompt from modular components
     /// </summary>
-    public static string BuildSystemPrompt(bool vetoMode, string? customRulesPrompt = null)
+    public static string BuildSystemPrompt(string? customRulesPrompt = null)
     {
         var baseTechnical = GetBaseTechnicalPrompt();
         var rules = customRulesPrompt ?? GetDefaultRulesPrompt();
-        var modeGuidance = GetModeGuidancePrompt(vetoMode);
+        var modeGuidance = GetVetoGuidancePrompt();
 
         return $$"""
             {{baseTechnical}}
@@ -81,7 +82,7 @@ public static class AIPromptBuilder
     }
 
     /// <summary>
-    /// Phase 4.5: Get technical base prompt (unchangeable by users)
+    /// Get technical base prompt (unchangeable by users)
     /// Defines JSON format and result types
     /// </summary>
     public static string GetBaseTechnicalPrompt()
@@ -102,7 +103,7 @@ public static class AIPromptBuilder
     }
 
     /// <summary>
-    /// Phase 4.5: Get default spam/legitimate content rules
+    /// Get default spam/legitimate content rules
     /// Can be overridden by chat-specific custom prompts
     /// </summary>
     public static string GetDefaultRulesPrompt()
@@ -130,53 +131,31 @@ public static class AIPromptBuilder
     }
 
     /// <summary>
-    /// Phase 4.5: Get mode-specific guidance (veto vs detection)
+    /// Get veto mode guidance - AI verifies spam detected by other checks
     /// </summary>
-    public static string GetModeGuidancePrompt(bool vetoMode)
+    public static string GetVetoGuidancePrompt()
     {
-        if (vetoMode)
-        {
-            return """
-                MODE: Spam Verification (Veto)
-                Other filters have flagged this message as potential spam. Your job is to verify if it's actually spam or a false positive.
-
-                Return "spam" (confirm spam) if:
-                - The message clearly matches spam indicators above
-                - Contains personal testimonials, solicitation, or promotional content
-                - You agree with the other filters' assessment
-
-                Return "clean" (veto/override) if:
-                - The message is educational, informational, or conversational in nature
-                - No direct solicitation or testimonial promoting paid services
-                - Legitimate sharing of resources, tools, or ideas for group discussion
-                - You disagree with the other filters (false positive)
-
-                Return "review" if:
-                - You're uncertain whether it's spam or legitimate
-                - The message is borderline or context-dependent
-                - Human judgment would be more reliable
-
-                Be cautious with vetoes - only override if you're confident it's a false positive.
-                """;
-        }
-
         return """
-            MODE: Spam Detection
-            Analyze this message and determine if it's spam.
+            MODE: Spam Verification (Veto)
+            Other filters have flagged this message as potential spam. Your job is to verify if it's actually spam or a false positive.
 
-            Return "spam" if:
-            - Message clearly matches spam indicators above
-            - Promotional, solicitation, or scam content
+            Return "spam" (confirm spam) if:
+            - The message clearly matches spam indicators above
+            - Contains personal testimonials, solicitation, or promotional content
+            - You agree with the other filters' assessment
 
-            Return "clean" if:
-            - Legitimate conversation or discussion
-            - When in doubt, lean toward "clean" to preserve conversation
+            Return "clean" (veto/override) if:
+            - The message is educational, informational, or conversational in nature
+            - No direct solicitation or testimonial promoting paid services
+            - Legitimate sharing of resources, tools, or ideas for group discussion
+            - You disagree with the other filters (false positive)
 
             Return "review" if:
-            - Uncertain or borderline case
-            - Requires human judgment
+            - You're uncertain whether it's spam or legitimate
+            - The message is borderline or context-dependent
+            - Human judgment would be more reliable
 
-            Be conservative - false positives (blocking legitimate messages) are worse than false negatives.
+            Be cautious with vetoes - only override if you're confident it's a false positive.
             """;
     }
 }

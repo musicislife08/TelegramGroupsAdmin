@@ -105,9 +105,9 @@ public static class ServiceCollectionExtensions
 
             // Register V2 content checks (proper abstention support)
             // Key fix: Return Score=0 when finding nothing (not "Clean 20%")
+            // Note: CAS check moved to user join flow (WelcomeService) - checks USER not MESSAGE
             services.AddScoped<IContentCheckV2, Checks.InvisibleCharsContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.StopWordsContentCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.CasContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.SimilarityContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.BayesContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.SpacingContentCheckV2>();

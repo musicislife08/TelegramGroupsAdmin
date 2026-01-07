@@ -121,6 +121,9 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
 
+            // CAS (Combot Anti-Spam) check on user join
+            services.AddSingleton<ICasCheckService, CasCheckService>();
+
             // Bot command system (Keyed Services pattern)
             // Commands are Scoped (to allow injecting Scoped services like ModerationOrchestrator)
             // CommandRouter is Singleton (creates scopes internally when executing commands)

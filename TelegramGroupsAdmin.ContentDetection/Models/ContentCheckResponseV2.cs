@@ -40,4 +40,9 @@ public record ContentCheckResponseV2
     /// Time spent executing this check in milliseconds
     /// </summary>
     public double ProcessingTimeMs { get; init; }
+
+    /// <summary>
+    /// OCR-extracted text from image (populated by ImageContentCheckV2 for downstream veto use)
+    /// </summary>
+    public string? OcrExtractedText { get; init; }
 }

@@ -7,17 +7,18 @@ using TelegramGroupsAdmin.Core.Services.AI;
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Utility class for parsing AI chat completion responses for spam detection.
+/// Utility class for parsing AI chat completion responses for spam veto.
 /// Provider-agnostic - works with ChatCompletionResult from any AI provider via IChatService.
 /// </summary>
 public static class AIResponseParser
 {
     /// <summary>
     /// Create spam check response from AI chat completion result.
+    /// AI always runs as veto to verify spam detected by other checks.
     /// </summary>
     public static ContentCheckResponse ParseResponse(
         ChatCompletionResult result,
-        OpenAICheckRequest req,
+        AIVetoCheckRequest req,
         bool fromCache,
         ILogger logger)
     {
@@ -54,15 +55,11 @@ public static class AIResponseParser
 
             var confidence = (int)Math.Round((jsonResponse.Confidence ?? ContentDetectionConstants.DefaultOpenAIConfidence) * 100);
 
-            // Build details message based on result
+            // Build details message - AI always runs as veto
             var details = checkResult switch
             {
-                CheckResultType.Spam => req.VetoMode
-                    ? $"AI confirmed spam: {jsonResponse.Reason}"
-                    : $"AI detected spam: {jsonResponse.Reason}",
-                CheckResultType.Clean => req.VetoMode
-                    ? $"AI vetoed spam: {jsonResponse.Reason}"
-                    : $"AI found no spam: {jsonResponse.Reason}",
+                CheckResultType.Spam => $"AI confirmed spam: {jsonResponse.Reason}",
+                CheckResultType.Clean => $"AI vetoed spam: {jsonResponse.Reason}",
                 CheckResultType.Review => $"AI flagged for review: {jsonResponse.Reason}",
                 _ => $"AI result: {jsonResponse.Reason}"
             };
@@ -72,7 +69,7 @@ public static class AIResponseParser
                 details += " (cached)";
             }
 
-            logger.LogDebug("AI check completed: Result={Result}, Confidence={Confidence}, Reason={Reason}, FromCache={FromCache}",
+            logger.LogDebug("AI veto check completed: Result={Result}, Confidence={Confidence}, Reason={Reason}, FromCache={FromCache}",
                 checkResult, confidence, jsonResponse.Reason, fromCache);
 
             return new ContentCheckResponse

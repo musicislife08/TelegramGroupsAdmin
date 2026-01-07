@@ -212,12 +212,12 @@ public class SystemAccountBypassTests
                 "System accounts should bypass all detection.");
         }
 
-        public Task<ContentDetectionResult> CheckMessageWithoutOpenAIAsync(
+        public Task<ContentDetectionResult> RunPipelineChecksAsync(
             ContentCheckRequest request,
             CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException(
-                $"ContentDetectionEngine.CheckMessageWithoutOpenAIAsync should not be called for system account {request.UserId}. " +
+                $"ContentDetectionEngine.RunPipelineChecksAsync should not be called for system account {request.UserId}. " +
                 "System accounts should bypass all detection.");
         }
     }

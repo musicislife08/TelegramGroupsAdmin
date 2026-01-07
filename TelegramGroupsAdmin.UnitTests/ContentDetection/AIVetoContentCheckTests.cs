@@ -161,13 +161,12 @@ public class AIContentCheckTests
     public async Task CheckAsync_MessageTooShort_Abstains()
     {
         // Arrange
-        var request = new OpenAICheckRequest
+        var request = new AIVetoCheckRequest
         {
             Message = "Hi",
             UserId = 123,
             UserName = "testuser",
             ChatId = 456,
-            VetoMode = false,
             SystemPrompt = null,
             HasSpamFlags = false,
             MinMessageLength = 10,
@@ -193,15 +192,14 @@ public class AIContentCheckTests
         // Arrange
         SetupChatService(CreateSpamResponse("Suspicious short message", 0.8));
 
-        var request = new OpenAICheckRequest
+        var request = new AIVetoCheckRequest
         {
             Message = "Hi",
             UserId = 123,
             UserName = "testuser",
             ChatId = 456,
-            VetoMode = false,
             SystemPrompt = null,
-            HasSpamFlags = false,
+            HasSpamFlags = true,  // AI veto requires spam flags from other checks
             MinMessageLength = 10,
             CheckShortMessages = true,
             MessageHistoryCount = 3,
@@ -220,19 +218,19 @@ public class AIContentCheckTests
 
     #endregion
 
-    #region CheckAsync - Veto Mode Tests
+    #region CheckAsync - Veto Mode Tests (AI always runs as veto)
 
     [Test]
-    public async Task CheckAsync_VetoMode_NoSpamFlags_Abstains()
+    public async Task CheckAsync_NoSpamFlags_Abstains()
     {
+        // AI veto only runs when other checks have flagged spam
         // Arrange
-        var request = new OpenAICheckRequest
+        var request = new AIVetoCheckRequest
         {
             Message = "This is a test message",
             UserId = 123,
             UserName = "testuser",
             ChatId = 456,
-            VetoMode = true,
             SystemPrompt = null,
             HasSpamFlags = false,
             MinMessageLength = 10,
@@ -249,22 +247,21 @@ public class AIContentCheckTests
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
         Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("Veto mode"));
+        Assert.That(response.Details, Does.Contain("No spam flags"));
     }
 
     [Test]
-    public async Task CheckAsync_VetoMode_HasSpamFlags_CallsAPI()
+    public async Task CheckAsync_HasSpamFlags_CallsAPI()
     {
         // Arrange
         SetupChatService(CreateCleanResponse("Looks fine to me", 0.9));
 
-        var request = new OpenAICheckRequest
+        var request = new AIVetoCheckRequest
         {
             Message = "This is a test message",
             UserId = 123,
             UserName = "testuser",
             ChatId = 456,
-            VetoMode = true,
             SystemPrompt = null,
             HasSpamFlags = true,
             MinMessageLength = 10,
@@ -595,17 +592,17 @@ public class AIContentCheckTests
 
     #region Helper Methods
 
-    private OpenAICheckRequest CreateValidRequest()
+    private AIVetoCheckRequest CreateValidRequest()
     {
-        return new OpenAICheckRequest
+        // AI always runs as veto - HasSpamFlags = true means other checks flagged as spam
+        return new AIVetoCheckRequest
         {
             Message = "This is a test message that is long enough to be checked",
             UserId = 123,
             UserName = "testuser",
             ChatId = 456,
-            VetoMode = false,
             SystemPrompt = null,
-            HasSpamFlags = false,
+            HasSpamFlags = true,  // AI veto requires spam flags from other checks
             MinMessageLength = 10,
             CheckShortMessages = false,
             MessageHistoryCount = 3,

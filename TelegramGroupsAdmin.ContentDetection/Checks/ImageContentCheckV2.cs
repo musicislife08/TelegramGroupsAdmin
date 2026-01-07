@@ -66,6 +66,17 @@ public class ImageContentCheckV2(
             var config = await _configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
             var imageConfig = config.ImageSpam;
 
+            // Extract OCR text early so it's available for all return paths (for veto passthrough)
+            string? extractedOcrText = null;
+            if (imageConfig.UseOCR &&
+                !string.IsNullOrEmpty(req.PhotoLocalPath) &&
+                File.Exists(req.PhotoLocalPath))
+            {
+                extractedOcrText = await _imageTextExtractionService.ExtractTextAsync(
+                    req.PhotoLocalPath,
+                    req.CancellationToken);
+            }
+
             // ML-5 Layer 1: Hash similarity check (fastest - check if we've seen this spam before)
             if (imageConfig.UseHashSimilarity &&
                 !string.IsNullOrEmpty(req.PhotoLocalPath) &&
@@ -114,7 +125,8 @@ public class ImageContentCheckV2(
                                     Score = 0.0,
                                     Abstained = true,
                                     Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
-                                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                                    OcrExtractedText = extractedOcrText
                                 };
                             }
 
@@ -128,7 +140,8 @@ public class ImageContentCheckV2(
                                 Score = score,
                                 Abstained = false,
                                 Details = $"Image hash {bestSimilarity:P0} similar to known spam sample",
-                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                                OcrExtractedText = extractedOcrText
                             };
                         }
 
@@ -147,102 +160,95 @@ public class ImageContentCheckV2(
                 }
             }
 
-            // ML-5 Layer 2: OCR + text-based spam detection
-            if (imageConfig.UseOCR &&
-                !string.IsNullOrEmpty(req.PhotoLocalPath) &&
-                File.Exists(req.PhotoLocalPath))
+            // ML-5 Layer 2: OCR + text-based spam detection (using pre-extracted text)
+            if (!string.IsNullOrWhiteSpace(extractedOcrText) &&
+                extractedOcrText.Length >= imageConfig.MinOcrTextLength)
             {
-                var extractedText = await _imageTextExtractionService.ExtractTextAsync(
-                    req.PhotoLocalPath,
-                    req.CancellationToken);
+                logger.LogDebug(
+                    "ImageSpam V2 Layer 2: OCR extracted {CharCount} characters from {PhotoPath}, running text-based spam checks",
+                    extractedOcrText.Length, Path.GetFileName(req.PhotoLocalPath));
 
-                if (!string.IsNullOrWhiteSpace(extractedText) &&
-                    extractedText.Length >= imageConfig.MinOcrTextLength)
+                // Create text-only request (no ImageData = ImageSpamCheck won't re-execute)
+                var ocrRequest = new ContentCheckRequest
                 {
-                    logger.LogDebug(
-                        "ImageSpam V2 Layer 2: OCR extracted {CharCount} characters from {PhotoPath}, running text-based spam checks",
-                        extractedText.Length, Path.GetFileName(req.PhotoLocalPath));
+                    Message = extractedOcrText,
+                    UserId = req.UserId,
+                    UserName = req.UserName,
+                    ChatId = req.ChatId,
+                    Metadata = new ContentCheckMetadata(),
+                    CheckOnly = false,
+                    HasSpamFlags = false,
+                    IsUserTrusted = false,
+                    IsUserAdmin = false,
+                    ImageData = null,  // ← Key: No image = ImageSpamCheck won't run
+                    PhotoFileId = null,
+                    PhotoUrl = null,
+                    PhotoLocalPath = null,
+                    Urls = []
+                };
 
-                    // Create text-only request (no ImageData = ImageSpamCheck won't re-execute)
-                    var ocrRequest = new ContentCheckRequest
+                // Run all text-based spam checks on OCR text
+                // Lazy-resolve engine to break circular dependency
+                var contentDetectionEngine = _serviceProvider.GetRequiredService<IContentDetectionEngine>();
+                var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
+
+                // Check if result is confident enough to skip expensive Vision API
+                if (ocrResult.MaxConfidence >= imageConfig.OcrConfidenceThreshold)
+                {
+                    // Map OCR text check confidence to score
+                    var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier : 0.0;
+
+                    // V2: Only return score if spam detected, otherwise abstain
+                    if (!ocrResult.IsSpam)
                     {
-                        Message = extractedText,
-                        UserId = req.UserId,
-                        UserName = req.UserName,
-                        ChatId = req.ChatId,
-                        Metadata = new ContentCheckMetadata(),
-                        CheckOnly = false,
-                        HasSpamFlags = false,
-                        IsUserTrusted = false,
-                        IsUserAdmin = false,
-                        ImageData = null,  // ← Key: No image = ImageSpamCheck won't run
-                        PhotoFileId = null,
-                        PhotoUrl = null,
-                        PhotoLocalPath = null,
-                        Urls = []
-                    };
-
-                    // Run all text-based spam checks on OCR text
-                    // Lazy-resolve engine to break circular dependency
-                    var contentDetectionEngine = _serviceProvider.GetRequiredService<IContentDetectionEngine>();
-                    var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
-
-                    // Check if result is confident enough to skip expensive Vision API
-                    if (ocrResult.MaxConfidence >= imageConfig.OcrConfidenceThreshold)
-                    {
-                        // Map OCR text check confidence to score
-                        var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier : 0.0;
-
-                        // V2: Only return score if spam detected, otherwise abstain
-                        if (!ocrResult.IsSpam)
-                        {
-                            logger.LogDebug(
-                                "ImageSpam V2 Layer 2: OCR text checks returned clean ({Confidence}%), abstaining",
-                                ocrResult.MaxConfidence);
-
-                            return new ContentCheckResponseV2
-                            {
-                                CheckName = CheckName,
-                                Score = 0.0,
-                                Abstained = true,
-                                Details = "OCR detected text analyzed as clean, abstaining",
-                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                            };
-                        }
-
-                        var flaggedChecks = ocrResult.CheckResults
-                            .Where(c => c.Result == CheckResultType.Spam)
-                            .Select(c => c.CheckName)
-                            .ToList();
-
-                        logger.LogInformation(
-                            "ImageSpam V2 Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning {Score:F2} points",
-                            ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold, score);
+                        logger.LogDebug(
+                            "ImageSpam V2 Layer 2: OCR text checks returned clean ({Confidence}%), abstaining",
+                            ocrResult.MaxConfidence);
 
                         return new ContentCheckResponseV2
                         {
                             CheckName = CheckName,
-                            Score = score,
-                            Abstained = false,
-                            Details = $"OCR detected spam text analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}",
-                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                            Score = 0.0,
+                            Abstained = true,
+                            Details = "OCR detected text analyzed as clean, abstaining",
+                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                            OcrExtractedText = extractedOcrText
                         };
                     }
 
-                    // OCR checks uncertain - proceed to Vision (Layer 3)
-                    logger.LogDebug(
-                        "ImageSpam V2 Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
-                        ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold);
+                    var flaggedChecks = ocrResult.CheckResults
+                        .Where(c => c.Result == CheckResultType.Spam)
+                        .Select(c => c.CheckName)
+                        .ToList();
+
+                    logger.LogInformation(
+                        "ImageSpam V2 Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning {Score:F2} points",
+                        ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold, score);
+
+                    return new ContentCheckResponseV2
+                    {
+                        CheckName = CheckName,
+                        Score = score,
+                        Abstained = false,
+                        Details = $"OCR detected spam text analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                        OcrExtractedText = extractedOcrText
+                    };
                 }
-                else if (!string.IsNullOrWhiteSpace(extractedText))
-                {
-                    logger.LogDebug("ImageSpam V2 Layer 2: OCR extracted only {CharCount} characters (< {MinLength}), too short for text analysis",
-                        extractedText.Length, imageConfig.MinOcrTextLength);
-                }
+
+                // OCR checks uncertain - proceed to Vision (Layer 3)
+                logger.LogDebug(
+                    "ImageSpam V2 Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
+                    ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold);
+            }
+            else if (!string.IsNullOrWhiteSpace(extractedOcrText))
+            {
+                logger.LogDebug("ImageSpam V2 Layer 2: OCR extracted only {CharCount} characters (< {MinLength}), too short for text analysis",
+                    extractedOcrText.Length, imageConfig.MinOcrTextLength);
             }
 
             // ML-5 Layer 3: AI Vision fallback (provider-agnostic via IChatService)
-            return await CheckWithVisionAsync(req, startTimestamp);
+            return await CheckWithVisionAsync(req, startTimestamp, extractedOcrText);
         }
         catch (Exception ex)
         {
@@ -254,7 +260,8 @@ public class ImageContentCheckV2(
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
                 Error = ex,
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                OcrExtractedText = null // OCR extraction may have failed
             };
         }
     }
@@ -262,7 +269,7 @@ public class ImageContentCheckV2(
     /// <summary>
     /// ML-5 Layer 3: AI Vision check using IChatService (supports multiple providers)
     /// </summary>
-    private async Task<ContentCheckResponseV2> CheckWithVisionAsync(ImageCheckRequest req, long startTimestamp)
+    private async Task<ContentCheckResponseV2> CheckWithVisionAsync(ImageCheckRequest req, long startTimestamp, string? extractedOcrText)
     {
         // Check if image analysis feature is available
         if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ImageAnalysis, req.CancellationToken))
@@ -274,7 +281,8 @@ public class ImageContentCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "Vision not available - no AI provider configured for image analysis",
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                OcrExtractedText = extractedOcrText
             };
         }
 
@@ -296,7 +304,8 @@ public class ImageContentCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "No local image file available for Vision analysis",
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                OcrExtractedText = extractedOcrText
             };
         }
         else
@@ -307,7 +316,8 @@ public class ImageContentCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "No image data provided",
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                OcrExtractedText = extractedOcrText
             };
         }
 
@@ -339,11 +349,12 @@ public class ImageContentCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = "Empty AI Vision response",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                    OcrExtractedText = extractedOcrText
                 };
             }
 
-            return ParseSpamResponse(result.Content, req.UserId, startTimestamp);
+            return ParseSpamResponse(result.Content, req.UserId, startTimestamp, extractedOcrText);
         }
         catch (Exception ex)
         {
@@ -355,7 +366,8 @@ public class ImageContentCheckV2(
                 Abstained = true,
                 Details = $"AI Vision error: {ex.Message}",
                 Error = ex,
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                OcrExtractedText = extractedOcrText
             };
         }
     }
@@ -405,7 +417,7 @@ public class ImageContentCheckV2(
     /// <summary>
     /// Parse AI Vision response and create V2 spam check result with scoring
     /// </summary>
-    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
+    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp, string? extractedOcrText)
     {
         try
         {
@@ -431,7 +443,8 @@ public class ImageContentCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = "Failed to parse AI Vision response",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                    OcrExtractedText = extractedOcrText
                 };
             }
 
@@ -453,7 +466,8 @@ public class ImageContentCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = $"AI Vision: Clean ({details})",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                    OcrExtractedText = extractedOcrText
                 };
             }
 
@@ -466,7 +480,8 @@ public class ImageContentCheckV2(
                 Score = score,
                 Abstained = false,
                 Details = details,
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                OcrExtractedText = extractedOcrText
             };
         }
         catch (Exception ex)
@@ -480,7 +495,8 @@ public class ImageContentCheckV2(
                 Abstained = true,
                 Details = "Failed to parse spam analysis",
                 Error = ex,
-                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                OcrExtractedText = extractedOcrText
             };
         }
     }
