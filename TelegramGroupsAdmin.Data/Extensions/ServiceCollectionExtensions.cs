@@ -11,7 +11,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddDataServices(this IServiceCollection services, string connectionString)
     {
-        // Npgsql data source for Dapper (BackupService only - infrastructure exception)
+        // Npgsql data source for backup service (raw ADO.NET - Dapper can't handle complex JSONB types)
         services.AddNpgsqlDataSource(connectionString);
 
         // EF Core DbContext with pooling (scoped lifetime, automatically disposed)

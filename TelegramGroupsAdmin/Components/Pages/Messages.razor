@@ -23,6 +23,7 @@
 @inject IJobTriggerService JobTriggerService
 @inject ModerationOrchestrator ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
+@inject ITelegramUserRepository TelegramUserRepository
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
@@ -99,6 +100,7 @@
                                                    OnFilterByChat="HandleFilterByChat"
                                                    OnDeleteMessage="HandleDeleteMessage"
                                                    OnTempBan="HandleTempBan"
+                                                   OnWarn="HandleWarn"
                                                    OnReplyClick="HandleReplyClick"
                                                    OnReplyToClick="HandleReplyToClick"
                                                    OnEditClick="@((tuple) => HandleEditClick(tuple.MessageId, tuple.MessageText))"
@@ -1288,6 +1290,81 @@
                 "Error",
                 $"Failed to temp ban user: {ex.Message}",
                 yesText: "OK");
+        }
+    }
+
+    private async Task HandleWarn(MessageRecord message)
+    {
+        // Get user's current warning count from database
+        var warningCount = await TelegramUserRepository.GetActiveWarningCountAsync(message.UserId);
+
+        // Show warn dialog
+        var parameters = new DialogParameters<WarnDialog>
+        {
+            { x => x.UserId, message.UserId },
+            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" },
+            { x => x.CurrentWarningCount, warningCount }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<WarnDialog>("Issue Warning", parameters, options);
+        var result = await dialog.Result;
+
+        if (result == null || result.Canceled || result.Data is not WarnDialog.WarnResult warnResult)
+            return;
+
+        try
+        {
+            // Get executor Actor from authentication state
+            Actor executor;
+            try
+            {
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
+
+            // Call moderation service to warn the user
+            var warnServiceResult = await ModerationService.WarnUserAsync(
+                message.UserId,
+                message.MessageId,
+                executor,
+                warnResult.Reason ?? "Warning issued via UI",
+                message.ChatId);
+
+            if (warnServiceResult.Success)
+            {
+                Snackbar.Add($"Warning issued to {message.UserName ?? message.FirstName ?? $"User {message.UserId}"}", Severity.Success);
+
+                Logger.LogInformation(
+                    "Warning issued to {User} for message {MessageId}",
+                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.MessageId);
+            }
+            else
+            {
+                Logger.LogError("Failed to warn {User}: {Error}",
+                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    warnServiceResult.ErrorMessage);
+
+                Snackbar.Add($"Failed to warn user: {warnServiceResult.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error warning {User}",
+                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
+
+            Snackbar.Add($"Failed to warn user: {ex.Message}", Severity.Error);
         }
     }
 

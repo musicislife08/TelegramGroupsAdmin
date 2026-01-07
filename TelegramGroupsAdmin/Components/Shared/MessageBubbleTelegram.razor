@@ -357,6 +357,13 @@
                                 </div>
                             </MudMenuItem>
 
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnWarn.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <div class="tg-menu-item tg-menu-item-warning">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
+                                    <span>Warn User</span>
+                                </div>
+                            </MudMenuItem>
+
                             @* Phase 4.20: Manual translation button (for messages that didn't auto-translate) *@
                             @if (Message.Translation == null && !string.IsNullOrWhiteSpace(Message.MessageText))
                             {
@@ -425,6 +432,9 @@
 
     [Parameter]
     public EventCallback<MessageRecord> OnTempBan { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnWarn { get; set; }
 
     [Parameter]
     public bool IsCurrentUser { get; set; }

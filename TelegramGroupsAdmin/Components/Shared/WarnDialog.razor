@@ -1,0 +1,67 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body1">
+                Issue a warning to <strong>@Username</strong>?
+            </MudText>
+
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Warnings expire automatically after the configured period (default: 7 days).
+                @if (CurrentWarningCount > 0)
+                {
+                    <br />
+                    <strong>Current active warnings: @CurrentWarningCount</strong>
+                }
+            </MudText>
+
+            <!-- Reason -->
+            <MudTextField @bind-Value="_reason"
+                         Label="Reason"
+                         Variant="Variant.Outlined"
+                         Lines="3"
+                         Placeholder="e.g., Posting off-topic content, Mild spam behavior"
+                         Required="false" />
+
+            <MudAlert Severity="Severity.Warning" Dense="true">
+                Multiple warnings may result in an automatic ban (configurable per chat).
+            </MudAlert>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning"
+                  Variant="Variant.Filled"
+                  OnClick="@Submit">
+            Issue Warning
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public long UserId { get; set; }
+    [Parameter] public string Username { get; set; } = string.Empty;
+    [Parameter] public int CurrentWarningCount { get; set; }
+
+    private string _reason = string.Empty;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        var result = new WarnResult
+        {
+            Reason = string.IsNullOrWhiteSpace(_reason) ? null : _reason.Trim()
+        };
+
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    public class WarnResult
+    {
+        public string? Reason { get; set; }
+    }
+}
