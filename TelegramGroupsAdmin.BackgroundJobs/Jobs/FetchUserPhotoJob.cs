@@ -1,9 +1,8 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -42,12 +41,8 @@ public class FetchUserPhotoJob(
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<FetchUserPhotoPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize FetchUserPhotoPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<FetchUserPhotoPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }

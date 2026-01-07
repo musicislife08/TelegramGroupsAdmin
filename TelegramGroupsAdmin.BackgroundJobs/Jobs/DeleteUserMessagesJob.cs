@@ -1,8 +1,7 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -26,12 +25,8 @@ public class DeleteUserMessagesJob(
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<DeleteUserMessagesPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize DeleteUserMessagesPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteUserMessagesPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
