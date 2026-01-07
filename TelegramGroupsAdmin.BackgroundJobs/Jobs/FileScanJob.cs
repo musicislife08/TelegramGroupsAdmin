@@ -1,15 +1,14 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -45,12 +44,8 @@ public class FileScanJob(
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<FileScanJobPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize FileScanJobPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<FileScanJobPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }

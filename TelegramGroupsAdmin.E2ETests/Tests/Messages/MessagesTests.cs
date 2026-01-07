@@ -211,6 +211,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
 
         await _messagesPage.SelectChatByNameAsync("Test Group");
 
+        // Wait for Blazor re-render to apply .active class
+        await _messagesPage.WaitForChatViewActiveAsync();
+
         // Assert - chat view becomes active
         Assert.That(await _messagesPage.IsChatViewActiveAsync(), Is.True,
             "Chat view should be active after selecting a chat");

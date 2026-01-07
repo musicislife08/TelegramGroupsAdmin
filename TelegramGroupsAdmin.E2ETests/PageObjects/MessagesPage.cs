@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -199,6 +200,15 @@ public class MessagesPage
     public async Task<bool> IsChatViewActiveAsync()
     {
         return await _page.Locator($"{MainView}.active").IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Waits for the chat view to become active after selecting a chat.
+    /// Uses Playwright's auto-waiting to handle Blazor re-render timing.
+    /// </summary>
+    public async Task WaitForChatViewActiveAsync()
+    {
+        await Expect(_page.Locator($"{MainView}.active")).ToBeVisibleAsync();
     }
 
     /// <summary>
