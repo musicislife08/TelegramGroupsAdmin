@@ -598,11 +598,9 @@ public class AIContentCheckTests
         // Arrange - Image with no caption but OCR extracted text
         SetupChatService(CreateSpamResponse("Spam in image text", 0.9));
 
-        var request = CreateValidRequest() with
-        {
-            Message = null,  // No caption
-            OcrExtractedText = "BUY CRYPTO NOW! 100x GUARANTEED RETURNS!"
-        };
+        var request = CreateRequestWithOcr(
+            message: "",
+            ocrText: "BUY CRYPTO NOW! 100x GUARANTEED RETURNS!");
 
         // Act
         var response = await _check.CheckAsync(request);
@@ -626,11 +624,9 @@ public class AIContentCheckTests
         // Arrange - Message with both caption and OCR text
         SetupChatService(CreateCleanResponse("Legitimate content", 0.85));
 
-        var request = CreateValidRequest() with
-        {
-            Message = "Check out this screenshot",
-            OcrExtractedText = "Meeting notes from today"
-        };
+        var request = CreateRequestWithOcr(
+            message: "Check out this screenshot",
+            ocrText: "Meeting notes from today");
 
         // Act
         var response = await _check.CheckAsync(request);
@@ -646,13 +642,9 @@ public class AIContentCheckTests
         // Arrange - Short caption (< 10 chars) but long OCR text
         SetupChatService(CreateSpamResponse("Spam detected", 0.75));
 
-        var request = CreateValidRequest() with
-        {
-            Message = "Hi",  // Only 2 chars - would normally be too short
-            OcrExtractedText = "This is a much longer text extracted from the image via OCR",
-            MinMessageLength = 10,
-            CheckShortMessages = false
-        };
+        var request = CreateRequestWithOcr(
+            message: "Hi",  // Only 2 chars - would normally be too short
+            ocrText: "This is a much longer text extracted from the image via OCR");
 
         // Act
         var response = await _check.CheckAsync(request);
@@ -666,13 +658,9 @@ public class AIContentCheckTests
     public async Task CheckAsync_ShortOcrOnly_Abstains()
     {
         // Arrange - Only short OCR text, no caption
-        var request = CreateValidRequest() with
-        {
-            Message = null,
-            OcrExtractedText = "Hi",  // Only 2 chars - too short
-            MinMessageLength = 10,
-            CheckShortMessages = false
-        };
+        var request = CreateRequestWithOcr(
+            message: "",
+            ocrText: "Hi");  // Only 2 chars - too short
 
         // Act
         var response = await _check.CheckAsync(request);
@@ -688,17 +676,13 @@ public class AIContentCheckTests
         // Arrange - Same caption but different OCR text should use different cache keys
         SetupChatService(CreateSpamResponse("Spam detected", 0.8));
 
-        var request1 = CreateValidRequest() with
-        {
-            Message = "Check this out",
-            OcrExtractedText = "First image OCR text with spam content"
-        };
+        var request1 = CreateRequestWithOcr(
+            message: "Check this out",
+            ocrText: "First image OCR text with spam content");
 
-        var request2 = CreateValidRequest() with
-        {
-            Message = "Check this out",  // Same caption
-            OcrExtractedText = "Different image OCR text also spam"  // Different OCR
-        };
+        var request2 = CreateRequestWithOcr(
+            message: "Check this out",  // Same caption
+            ocrText: "Different image OCR text also spam");  // Different OCR
 
         // Act
         await _check.CheckAsync(request1);
@@ -719,17 +703,13 @@ public class AIContentCheckTests
         // Arrange - Identical requests should use cache
         SetupChatService(CreateSpamResponse("Spam detected", 0.8));
 
-        var request1 = CreateValidRequest() with
-        {
-            Message = "Check this out",
-            OcrExtractedText = "Same OCR text"
-        };
+        var request1 = CreateRequestWithOcr(
+            message: "Check this out",
+            ocrText: "Same OCR text");
 
-        var request2 = CreateValidRequest() with
-        {
-            Message = "Check this out",
-            OcrExtractedText = "Same OCR text"  // Identical
-        };
+        var request2 = CreateRequestWithOcr(
+            message: "Check this out",
+            ocrText: "Same OCR text");  // Identical
 
         // Act
         var response1 = await _check.CheckAsync(request1);
@@ -749,6 +729,26 @@ public class AIContentCheckTests
     #endregion
 
     #region Helper Methods
+
+    private AIVetoCheckRequest CreateRequestWithOcr(string message, string ocrText)
+    {
+        return new AIVetoCheckRequest
+        {
+            Message = message,
+            UserId = 123,
+            UserName = "testuser",
+            ChatId = 456,
+            SystemPrompt = null,
+            HasSpamFlags = true,
+            MinMessageLength = 10,
+            CheckShortMessages = false,
+            MessageHistoryCount = 3,
+            Model = "gpt-4",
+            MaxTokens = 500,
+            OcrExtractedText = ocrText,
+            CancellationToken = CancellationToken.None
+        };
+    }
 
     private AIVetoCheckRequest CreateValidRequest()
     {

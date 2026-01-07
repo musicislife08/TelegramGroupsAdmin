@@ -66,7 +66,10 @@ public class ImageContentCheckV2(
             var config = await _configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
             var imageConfig = config.ImageSpam;
 
-            // Extract OCR text early so it's available for all return paths (for veto passthrough)
+            // Extract OCR text early so it's available for all return paths (for AI veto passthrough)
+            // Trade-off: OCR runs even if hash similarity (Layer 1) returns early, but this ensures
+            // AI veto can analyze image text for false positive detection. OCR is CPU-bound (Tesseract)
+            // but typically completes in <100ms for typical image sizes.
             string? extractedOcrText = null;
             if (imageConfig.UseOCR &&
                 !string.IsNullOrEmpty(req.PhotoLocalPath) &&
