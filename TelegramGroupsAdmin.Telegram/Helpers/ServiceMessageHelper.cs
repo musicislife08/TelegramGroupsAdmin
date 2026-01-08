@@ -1,5 +1,6 @@
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Helpers;
 
@@ -55,5 +56,39 @@ public static class ServiceMessageHelper
                 shouldDelete = false;
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Generate human-readable text for a service message (mirrors Telegram Desktop display).
+    /// </summary>
+    public static string? GetServiceMessageText(Message message)
+    {
+        return message switch
+        {
+            { NewChatMembers: not null } => FormatJoinMessage(message),
+            { LeftChatMember: not null } => $"{TelegramDisplayName.Format(message.LeftChatMember)} left the group",
+            { NewChatTitle: not null } => $"Group name changed to \"{message.NewChatTitle}\"",
+            { NewChatPhoto: not null } => "Group photo updated",
+            { DeleteChatPhoto: true } => "Group photo removed",
+            { PinnedMessage: not null } => "Message pinned",
+            _ => null
+        };
+    }
+
+    private static string FormatJoinMessage(Message message)
+    {
+        var members = message.NewChatMembers!;
+        if (members.Length == 1)
+        {
+            var user = members[0];
+            // Check if user joined themselves or was added by someone else
+            if (message.From?.Id == user.Id)
+                return $"{TelegramDisplayName.Format(user)} joined the group";
+            else
+                return $"{TelegramDisplayName.Format(message.From)} added {TelegramDisplayName.Format(user)}";
+        }
+
+        var names = string.Join(", ", members.Select(TelegramDisplayName.Format));
+        return $"{TelegramDisplayName.Format(message.From)} added {names}";
     }
 }

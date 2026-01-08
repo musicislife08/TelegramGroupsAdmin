@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
@@ -1013,6 +1014,104 @@ public class ModerationOrchestratorTests
         // Verify training data creation was attempted
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
             messageId, executor, Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region SyncBanToChatAsync Tests
+
+    [Test]
+    public async Task SyncBanToChatAsync_SuccessfulSync_ReturnsSingleChatAffected()
+    {
+        // Arrange
+        var user = new User { Id = 12345, FirstName = "Spammer" };
+        var chat = new Chat { Id = -100123456789, Title = "New Group" };
+
+        _mockBanHandler.BanAsync(user, chat, Actor.AutoDetection, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1));
+
+        // Act
+        var result = await _orchestrator.SyncBanToChatAsync(
+            user, chat, "Lazy ban sync", triggeredByMessageId: 42L);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.ChatsAffected, Is.EqualTo(1));
+        });
+
+        // Verify audit record was created
+        await _mockAuditHandler.Received(1).LogBanAsync(
+            user.Id, Actor.AutoDetection, "Lazy ban sync", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    public async Task SyncBanToChatAsync_TelegramSystemAccount_ReturnsError(long systemUserId)
+    {
+        // Arrange
+        var user = new User { Id = systemUserId };
+        var chat = new Chat { Id = -100123456789 };
+
+        // Act
+        var result = await _orchestrator.SyncBanToChatAsync(user, chat, "Test");
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("system account"));
+        });
+
+        // Verify handler was NOT called
+        await _mockBanHandler.DidNotReceive().BanAsync(
+            Arg.Any<User>(), Arg.Any<Chat>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SyncBanToChatAsync_BanFails_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User { Id = 12345, FirstName = "Test" };
+        var chat = new Chat { Id = -100123456789, Title = "Test Group" };
+
+        _mockBanHandler.BanAsync(user, chat, Actor.AutoDetection, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Failed("User is chat admin"));
+
+        // Act
+        var result = await _orchestrator.SyncBanToChatAsync(user, chat, "Lazy sync");
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo("User is chat admin"));
+        });
+
+        // Verify no audit record on failure
+        await _mockAuditHandler.DidNotReceive().LogBanAsync(
+            Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SyncBanToChatAsync_UsesAutoDetectionActor()
+    {
+        // Arrange - Verify the orchestrator uses Actor.AutoDetection for lazy syncs
+        var user = new User { Id = 12345, FirstName = "Spammer" };
+        var chat = new Chat { Id = -100123456789, Title = "Test Group" };
+
+        _mockBanHandler.BanAsync(Arg.Any<User>(), Arg.Any<Chat>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1));
+
+        // Act
+        await _orchestrator.SyncBanToChatAsync(user, chat, "Lazy sync", triggeredByMessageId: 42L);
+
+        // Assert - Verify Actor.AutoDetection was used
+        await _mockBanHandler.Received(1).BanAsync(
+            user, chat, Actor.AutoDetection, "Lazy sync", 42L, Arg.Any<CancellationToken>());
     }
 
     #endregion

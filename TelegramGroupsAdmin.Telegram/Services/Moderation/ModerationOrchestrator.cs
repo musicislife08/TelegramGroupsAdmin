@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -407,6 +408,36 @@ public class ModerationOrchestrator
         {
             Success = true,
             ChatsAffected = restrictResult.ChatsAffected
+        };
+    }
+
+    /// <summary>
+    /// Sync an existing global ban to a specific chat (lazy sync for chats added after ban).
+    /// Use when a globally banned user joins or posts in a chat that was added after their ban.
+    /// </summary>
+    public async Task<ModerationResult> SyncBanToChatAsync(
+        User user,
+        Chat chat,
+        string reason,
+        long? triggeredByMessageId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var protectionResult = await CheckServiceAccountProtectionAsync(user.Id, cancellationToken);
+        if (protectionResult != null) return protectionResult;
+
+        var banResult = await _banHandler.BanAsync(
+            user, chat, Actor.AutoDetection, reason, triggeredByMessageId, cancellationToken);
+
+        if (!banResult.Success)
+            return ModerationResult.Failed(banResult.ErrorMessage ?? "Ban sync failed");
+
+        // Audit successful ban sync
+        await _auditHandler.LogBanAsync(user.Id, Actor.AutoDetection, reason, cancellationToken);
+
+        return new ModerationResult
+        {
+            Success = true,
+            ChatsAffected = banResult.ChatsAffected
         };
     }
 

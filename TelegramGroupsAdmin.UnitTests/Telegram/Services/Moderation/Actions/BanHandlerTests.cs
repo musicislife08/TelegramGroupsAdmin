@@ -2,11 +2,12 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
@@ -21,6 +22,8 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 public class BanHandlerTests
 {
     private ICrossChatExecutor _mockCrossChatExecutor = null!;
+    private ITelegramBotClientFactory _mockBotClientFactory = null!;
+    private ITelegramOperations _mockOperations = null!;
     private IJobScheduler _mockJobScheduler = null!;
     private ITelegramUserRepository _mockUserRepository = null!;
     private ILogger<BanHandler> _mockLogger = null!;
@@ -30,15 +33,26 @@ public class BanHandlerTests
     public void SetUp()
     {
         _mockCrossChatExecutor = Substitute.For<ICrossChatExecutor>();
+        _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
+        _mockOperations = Substitute.For<ITelegramOperations>();
+        _mockBotClientFactory.GetOperationsAsync().Returns(_mockOperations);
         _mockJobScheduler = Substitute.For<IJobScheduler>();
         _mockUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockLogger = Substitute.For<ILogger<BanHandler>>();
 
         _handler = new BanHandler(
             _mockCrossChatExecutor,
+            _mockBotClientFactory,
             _mockJobScheduler,
             _mockUserRepository,
             _mockLogger);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        // NSubstitute mocks don't require disposal, but NUnit analyzer expects it
+        (_mockBotClientFactory as IDisposable)?.Dispose();
     }
 
     #region BanAsync Tests
@@ -421,6 +435,73 @@ public class BanHandlerTests
 
         // Assert - Telegram unban should happen before DB update
         Assert.That(callOrder, Is.EqualTo(new[] { "TelegramUnban", "SetBanStatus" }));
+    }
+
+    #endregion
+
+    #region BanAsync (Single-Chat Overload) Tests
+
+    [Test]
+    public async Task BanAsync_SingleChat_SuccessfulBan_ReturnsSuccessWithOneChat()
+    {
+        // Arrange
+        var user = new User { Id = 12345, FirstName = "Spammer" };
+        var chat = new Chat { Id = -100123456789, Title = "Test Group" };
+        var executor = Actor.AutoDetection;
+
+        // Act
+        var result = await _handler.BanAsync(user, chat, executor, "Lazy ban sync");
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.ChatsAffected, Is.EqualTo(1));
+        });
+
+        // Verify Telegram API called
+        await _mockOperations.Received(1).BanChatMemberAsync(
+            chat.Id, user.Id, Arg.Any<DateTime?>(), Arg.Any<CancellationToken>());
+
+        // Verify ban status set (idempotent)
+        await _mockUserRepository.Received(1).SetBanStatusAsync(
+            user.Id, isBanned: true, expiresAt: null, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanAsync_SingleChat_TelegramApiFails_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User { Id = 12345, FirstName = "Test" };
+        var chat = new Chat { Id = -100123456789, Title = "Test Group" };
+        var executor = Actor.AutoDetection;
+
+        _mockOperations.BanChatMemberAsync(chat.Id, user.Id, Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("User is admin"));
+
+        // Act
+        var result = await _handler.BanAsync(user, chat, executor, "Test");
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("User is admin"));
+        });
+    }
+
+    [Test]
+    public async Task BanAsync_SingleChat_NullReason_StillSucceeds()
+    {
+        // Arrange
+        var user = new User { Id = 12345, FirstName = "Test" };
+        var chat = new Chat { Id = -100123456789, Title = "Test Group" };
+
+        // Act
+        var result = await _handler.BanAsync(user, chat, Actor.AutoDetection, reason: null);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
     }
 
     #endregion

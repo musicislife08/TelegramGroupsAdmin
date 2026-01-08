@@ -21,5 +21,11 @@ public enum ContentCheckSkipReason
     /// User is a chat administrator
     /// Regular spam checks bypassed, critical checks still run
     /// </summary>
-    UserAdmin = 2
+    UserAdmin = 2,
+
+    /// <summary>
+    /// Service message (join, leave, title change, etc.)
+    /// No content to check - stored for UI consistency with Telegram Desktop
+    /// </summary>
+    ServiceMessage = 3
 }

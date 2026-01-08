@@ -1,3 +1,4 @@
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
@@ -15,6 +16,17 @@ public interface IBanHandler
     /// </summary>
     Task<BanResult> BanAsync(
         long userId,
+        Actor executor,
+        string? reason,
+        long? triggeredByMessageId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Ban user in a single specific chat (lazy sync for chats added after global ban).
+    /// </summary>
+    Task<BanResult> BanAsync(
+        User user,
+        Chat chat,
         Actor executor,
         string? reason,
         long? triggeredByMessageId = null,

@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -19,17 +21,20 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 public class BanHandler : IBanHandler
 {
     private readonly ICrossChatExecutor _crossChatExecutor;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IJobScheduler _jobScheduler;
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<BanHandler> _logger;
 
     public BanHandler(
         ICrossChatExecutor crossChatExecutor,
+        ITelegramBotClientFactory botClientFactory,
         IJobScheduler jobScheduler,
         ITelegramUserRepository userRepository,
         ILogger<BanHandler> logger)
     {
         _crossChatExecutor = crossChatExecutor;
+        _botClientFactory = botClientFactory;
         _jobScheduler = jobScheduler;
         _userRepository = userRepository;
         _logger = logger;
@@ -69,6 +74,41 @@ public class BanHandler : IBanHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to execute ban for user {User}", user.ToLogDebug(userId));
+            return BanResult.Failed(ex.Message);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<BanResult> BanAsync(
+        User user,
+        Chat chat,
+        Actor executor,
+        string? reason,
+        long? triggeredByMessageId = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug(
+            "Executing single-chat ban for {User} in {Chat} by {Executor}",
+            user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
+
+        try
+        {
+            var operations = await _botClientFactory.GetOperationsAsync();
+            await operations.BanChatMemberAsync(chat.Id, user.Id, cancellationToken: cancellationToken);
+
+            // Ensure global ban status is set (idempotent if already banned)
+            await _userRepository.SetBanStatusAsync(user.Id, isBanned: true, expiresAt: null, cancellationToken);
+
+            _logger.LogInformation(
+                "Single-chat ban completed for {User} in {Chat} (lazy sync)",
+                user.ToLogInfo(), chat.ToLogInfo());
+
+            return BanResult.Succeeded(chatsAffected: 1);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to execute single-chat ban for {User} in {Chat}",
+                user.ToLogDebug(), chat.ToLogDebug());
             return BanResult.Failed(ex.Message);
         }
     }
