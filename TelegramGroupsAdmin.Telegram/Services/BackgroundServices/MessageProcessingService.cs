@@ -139,6 +139,76 @@ public partial class MessageProcessingService(
                 message.MessageId,
                 message.Chat.ToLogInfo());
 
+            // Store service message for UI consistency with Telegram Desktop
+            var serviceMessageText = ServiceMessageHelper.GetServiceMessageText(message);
+            if (serviceMessageText != null && message.From != null)
+            {
+                var serviceMessageRecord = new MessageRecord(
+                    message.MessageId,
+                    message.From.Id,
+                    message.From.Username,
+                    message.From.FirstName,
+                    message.From.LastName,
+                    message.Chat.Id,
+                    DateTimeOffset.UtcNow,
+                    serviceMessageText,
+                    PhotoFileId: null,
+                    PhotoFileSize: null,
+                    Urls: null,
+                    EditDate: null,
+                    ContentHash: null,
+                    ChatName: message.Chat.Title ?? message.Chat.Username,
+                    PhotoLocalPath: null,
+                    PhotoThumbnailPath: null,
+                    ChatIconPath: null,
+                    UserPhotoPath: null,
+                    DeletedAt: null,
+                    DeletionSource: null,
+                    ReplyToMessageId: null,
+                    ReplyToUser: null,
+                    ReplyToText: null,
+                    MediaType: null,
+                    MediaFileId: null,
+                    MediaFileSize: null,
+                    MediaFileName: null,
+                    MediaMimeType: null,
+                    MediaLocalPath: null,
+                    MediaDuration: null,
+                    Translation: null,
+                    ContentCheckSkipReason: ContentCheckSkipReason.ServiceMessage
+                );
+
+                var repository = messageScope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+                await repository.InsertMessageAsync(serviceMessageRecord, cancellationToken);
+            }
+
+            // Check for banned users joining - lazy sync ban to this chat
+            if (message.NewChatMembers != null)
+            {
+                var userRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
+
+                foreach (var joiningUser in message.NewChatMembers)
+                {
+                    if (joiningUser.IsBot) continue;
+
+                    var existingUser = await userRepo.GetByTelegramIdAsync(joiningUser.Id, cancellationToken);
+                    if (existingUser?.IsBanned == true)
+                    {
+                        logger.LogWarning(
+                            "Globally banned user {User} attempted to join {Chat} - applying ban",
+                            joiningUser.ToLogInfo(), message.Chat.ToLogInfo());
+
+                        await moderationService.SyncBanToChatAsync(
+                            joiningUser,
+                            message.Chat,
+                            "Lazy ban sync: User was globally banned before this chat was added",
+                            triggeredByMessageId: message.MessageId,
+                            cancellationToken: cancellationToken);
+                    }
+                }
+            }
+
             // Skip deletion if the bot itself was removed from the group
             // Bot no longer has permissions to delete messages after being kicked
             if (message.LeftChatMember != null)
@@ -497,6 +567,15 @@ public partial class MessageProcessingService(
                     userId: message.From.Id,
                     deletedBy: Core.Models.Actor.AutoDetection,
                     reason: "User banned during message processing (multi-message spam campaign)",
+                    cancellationToken: cancellationToken);
+
+                // Lazy sync: Apply Telegram-level ban to this chat
+                // (User may have joined this chat before it was added to the bot's managed chats)
+                await moderationService.SyncBanToChatAsync(
+                    message.From,
+                    message.Chat,
+                    "Lazy ban sync: User was globally banned before this chat was added",
+                    triggeredByMessageId: message.MessageId,
                     cancellationToken: cancellationToken);
 
                 // Don't process this message further (no spam detection, no user photo fetch, etc.)

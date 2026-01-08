@@ -1,3 +1,5 @@
+using Telegram.Bot.Types;
+
 namespace TelegramGroupsAdmin.Core.Utilities;
 
 /// <summary>
@@ -6,6 +8,17 @@ namespace TelegramGroupsAdmin.Core.Utilities;
 /// </summary>
 public static class TelegramDisplayName
 {
+    /// <summary>
+    /// Gets display name for a Telegram User object.
+    /// </summary>
+    /// <param name="user">Telegram User object (nullable)</param>
+    /// <returns>Formatted display name or "Unknown" if user is null</returns>
+    public static string Format(User? user)
+    {
+        if (user == null) return "Unknown";
+        return Format(user.FirstName, user.LastName, user.Username, user.Id);
+    }
+
     /// <summary>
     /// Gets display name for UI/logs. No @ prefix.
     /// Priority: System User (chatName or system name) → FullName (First + Last) → Username → User {id}

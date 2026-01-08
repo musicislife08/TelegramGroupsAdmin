@@ -1,3 +1,4 @@
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Utilities;
 
@@ -388,6 +389,42 @@ public class TelegramDisplayNameTests
         var result = TelegramDisplayName.FormatMention("Jim", "Smith", null, 1395388788);
         Assert.That(result, Is.EqualTo("Jim Smith"));
         Assert.That(result, Does.Not.StartWith("@"));
+    }
+
+    #endregion
+
+    #region Format - User Object Overload Tests
+
+    [Test]
+    public void Format_UserObject_WithFullName_ReturnsFullName()
+    {
+        var user = new User { Id = 12345, FirstName = "John", LastName = "Doe", Username = "johndoe" };
+        var result = TelegramDisplayName.Format(user);
+        Assert.That(result, Is.EqualTo("John Doe"));
+    }
+
+    [Test]
+    public void Format_UserObject_WithOnlyFirstName_ReturnsFirstName()
+    {
+        var user = new User { Id = 12345, FirstName = "John" };
+        var result = TelegramDisplayName.Format(user);
+        Assert.That(result, Is.EqualTo("John"));
+    }
+
+    [Test]
+    public void Format_UserObject_Null_ReturnsUnknown()
+    {
+        User? user = null;
+        var result = TelegramDisplayName.Format(user);
+        Assert.That(result, Is.EqualTo("Unknown"));
+    }
+
+    [Test]
+    public void Format_UserObject_NoNameOrUsername_ReturnsUserId()
+    {
+        var user = new User { Id = 12345 };
+        var result = TelegramDisplayName.Format(user);
+        Assert.That(result, Is.EqualTo("User 12345"));
     }
 
     #endregion

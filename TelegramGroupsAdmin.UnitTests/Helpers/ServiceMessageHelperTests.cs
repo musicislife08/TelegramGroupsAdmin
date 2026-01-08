@@ -434,4 +434,135 @@ public class ServiceMessageHelperTests
     }
 
     #endregion
+
+    #region GetServiceMessageText Tests
+
+    [Test]
+    public void GetServiceMessageText_JoinMessage_SelfJoin_ReturnsJoinedText()
+    {
+        var user = new User { Id = 456, FirstName = "John", LastName = "Doe" };
+        var message = new Message
+        {
+            From = user,
+            NewChatMembers = [user],
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("John Doe joined the group"));
+    }
+
+    [Test]
+    public void GetServiceMessageText_JoinMessage_AddedByAdmin_ReturnsAddedText()
+    {
+        var admin = new User { Id = 999, FirstName = "Admin" };
+        var user = new User { Id = 456, FirstName = "John" };
+        var message = new Message
+        {
+            From = admin,
+            NewChatMembers = [user],
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("Admin added John"));
+    }
+
+    [Test]
+    public void GetServiceMessageText_JoinMessage_MultipleUsers_ReturnsAddedAllText()
+    {
+        var admin = new User { Id = 999, FirstName = "Admin" };
+        var user1 = new User { Id = 456, FirstName = "John" };
+        var user2 = new User { Id = 789, FirstName = "Jane" };
+        var message = new Message
+        {
+            From = admin,
+            NewChatMembers = [user1, user2],
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("Admin added John, Jane"));
+    }
+
+    [Test]
+    public void GetServiceMessageText_LeaveMessage_ReturnsLeftText()
+    {
+        var user = new User { Id = 456, FirstName = "John", LastName = "Doe" };
+        var message = new Message
+        {
+            LeftChatMember = user,
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("John Doe left the group"));
+    }
+
+    [Test]
+    public void GetServiceMessageText_TitleChange_ReturnsTitleText()
+    {
+        var message = new Message
+        {
+            NewChatTitle = "New Group Name",
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("Group name changed to \"New Group Name\""));
+    }
+
+    [Test]
+    public void GetServiceMessageText_PhotoChange_ReturnsPhotoUpdatedText()
+    {
+        var message = new Message
+        {
+            NewChatPhoto = [new PhotoSize { FileId = "abc", FileUniqueId = "xyz", Width = 100, Height = 100 }],
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("Group photo updated"));
+    }
+
+    [Test]
+    public void GetServiceMessageText_PhotoDelete_ReturnsPhotoRemovedText()
+    {
+        var message = new Message
+        {
+            DeleteChatPhoto = true,
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("Group photo removed"));
+    }
+
+    [Test]
+    public void GetServiceMessageText_PinnedMessage_ReturnsPinnedText()
+    {
+        var message = new Message
+        {
+            PinnedMessage = new Message { Text = "Important", Chat = new Chat { Id = 123 } },
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.EqualTo("Message pinned"));
+    }
+
+    [Test]
+    public void GetServiceMessageText_RegularMessage_ReturnsNull()
+    {
+        var message = new Message
+        {
+            Text = "Hello world",
+            Chat = new Chat { Id = 123 }
+        };
+
+        var result = ServiceMessageHelper.GetServiceMessageText(message);
+        Assert.That(result, Is.Null);
+    }
+
+    #endregion
 }
