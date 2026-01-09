@@ -7,10 +7,11 @@ namespace TelegramGroupsAdmin.Configuration;
 public enum ConfigType
 {
     /// <summary>
-    /// Content detection configuration (spam_detection_config column)
+    /// Content detection configuration (content_detection_configs table)
     /// Contains: ContentDetectionConfig model
+    /// Stored in separate table, routed via IContentDetectionConfigRepository
     /// </summary>
-    SpamDetection,
+    ContentDetection,
 
     /// <summary>
     /// Welcome message configuration (welcome_config column)

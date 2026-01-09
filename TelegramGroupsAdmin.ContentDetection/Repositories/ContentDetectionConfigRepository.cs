@@ -1,25 +1,21 @@
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Mappings;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
 /// <summary>
-/// Repository implementation for content detection configurations
-/// Uses DbContextFactory to avoid concurrency issues
+/// Repository implementation for content detection configurations.
+/// Uses EF Core's OwnsOne().ToJson() for strongly-typed JSONB mapping.
+/// Maps between Data layer (ContentDetectionConfigData) and Business layer (ContentDetectionConfig).
 /// </summary>
 public class ContentDetectionConfigRepository : IContentDetectionConfigRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<ContentDetectionConfigRepository> _logger;
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,  // Important for deserialization!
-        WriteIndented = true
-    };
 
     public ContentDetectionConfigRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<ContentDetectionConfigRepository> logger)
     {
@@ -28,7 +24,7 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
     }
 
     /// <summary>
-    /// Get the global spam detection configuration (chat_id = 0)
+    /// Get the global content detection configuration (chat_id = 0)
     /// </summary>
     public async Task<ContentDetectionConfig> GetGlobalConfigAsync(CancellationToken cancellationToken = default)
     {
@@ -41,44 +37,41 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
                 .OrderByDescending(c => c.LastUpdated)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (entity == null || string.IsNullOrEmpty(entity.ConfigJson))
+            if (entity?.Config == null)
             {
-                // Return default configuration if none exists
                 _logger.LogWarning("No global config found in database, returning defaults");
                 return new ContentDetectionConfig();
             }
 
-            var config = JsonSerializer.Deserialize<ContentDetectionConfig>(entity.ConfigJson, JsonOptions);
-            return config ?? new ContentDetectionConfig();
+            return entity.Config.ToModel();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retrieve global spam detection configuration");
-            return new ContentDetectionConfig(); // Return default on error
+            _logger.LogError(ex, "Failed to retrieve global content detection configuration");
+            return new ContentDetectionConfig();
         }
     }
 
     /// <summary>
-    /// Update the global spam detection configuration
+    /// Update the global content detection configuration
     /// </summary>
     public async Task<bool> UpdateGlobalConfigAsync(ContentDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var configJson = JsonSerializer.Serialize(config, JsonOptions);
             var timestamp = DateTimeOffset.UtcNow;
+            var configData = config.ToData();
 
             var entity = await context.ContentDetectionConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
 
             if (entity == null)
             {
-                // Insert new record
                 entity = new TelegramGroupsAdmin.Data.Models.ContentDetectionConfigRecordDto
                 {
                     ChatId = 0,
-                    ConfigJson = configJson,
+                    Config = configData,
                     LastUpdated = timestamp,
                     UpdatedBy = updatedBy
                 };
@@ -86,28 +79,27 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
             }
             else
             {
-                // Update existing record
-                entity.ConfigJson = configJson;
+                entity.Config = configData;
                 entity.LastUpdated = timestamp;
                 entity.UpdatedBy = updatedBy;
             }
 
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Updated global spam detection configuration (updated_by: {UpdatedBy})", updatedBy);
+            _logger.LogInformation("Updated global content detection configuration (updated_by: {UpdatedBy})", updatedBy);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update global spam detection configuration");
+            _logger.LogError(ex, "Failed to update global content detection configuration");
             throw;
         }
     }
 
     /// <summary>
-    /// Get the raw chat-specific configuration (without merging with global)
-    /// Returns null if no chat-specific config exists
-    /// Used by UI components to preserve UseGlobal flags when editing
+    /// Get the raw chat-specific configuration (without merging with global).
+    /// Returns null if no chat-specific config exists.
+    /// Used by UI components to preserve UseGlobal flags when editing.
     /// </summary>
     public async Task<ContentDetectionConfig?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default)
     {
@@ -120,60 +112,55 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
                 .OrderByDescending(c => c.LastUpdated)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (entity == null || string.IsNullOrEmpty(entity.ConfigJson))
+            if (entity?.Config == null)
             {
                 _logger.LogDebug("No chat-specific config found for chat {ChatId}", chatId);
                 return null;
             }
 
-            var config = JsonSerializer.Deserialize<ContentDetectionConfig>(entity.ConfigJson, JsonOptions);
             _logger.LogDebug("Loaded raw chat config for {ChatId}", chatId);
-            return config;
+            return entity.Config.ToModel();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve chat config for chat {ChatId}", chatId);
-            return null; // Return null on error
+            return null;
         }
     }
 
     /// <summary>
-    /// Get effective configuration for a specific chat with section-by-section fallback to global config
-    /// NEW: Supports granular overrides via UseGlobal flags in each sub-config
-    /// Loads both global and chat configs, then merges section-by-section based on UseGlobal flags
+    /// Get effective configuration for a specific chat with section-by-section fallback to global config.
+    /// Supports granular overrides via UseGlobal flags in each sub-config.
     /// </summary>
     public async Task<ContentDetectionConfig> GetEffectiveConfigAsync(long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            // Load both global (chat_id=0) and chat-specific configs
             var entities = await context.ContentDetectionConfigs
                 .AsNoTracking()
                 .Where(c => c.ChatId == 0 || c.ChatId == chatId)
-                .OrderByDescending(c => c.LastUpdated)  // Most recent first
+                .OrderByDescending(c => c.LastUpdated)
                 .ToListAsync(cancellationToken);
 
             var globalEntity = entities.FirstOrDefault(e => e.ChatId == 0);
             var chatEntity = entities.FirstOrDefault(e => e.ChatId == chatId);
 
-            // If no global config exists, return defaults
-            if (globalEntity == null || string.IsNullOrEmpty(globalEntity.ConfigJson))
+            if (globalEntity?.Config == null)
             {
                 _logger.LogWarning("No global config found, returning defaults");
                 return new ContentDetectionConfig();
             }
 
-            var globalConfig = JsonSerializer.Deserialize<ContentDetectionConfig>(globalEntity.ConfigJson, JsonOptions) ?? new ContentDetectionConfig();
+            var globalConfig = globalEntity.Config.ToModel();
 
-            // If no chat-specific config, return global as-is
-            if (chatEntity == null || string.IsNullOrEmpty(chatEntity.ConfigJson))
+            if (chatEntity?.Config == null)
             {
                 _logger.LogDebug("No chat-specific config for {ChatId}, using global", chatId);
                 return globalConfig;
             }
 
-            var chatConfig = JsonSerializer.Deserialize<ContentDetectionConfig>(chatEntity.ConfigJson, JsonOptions) ?? new ContentDetectionConfig();
+            var chatConfig = chatEntity.Config.ToModel();
 
             // Merge section-by-section based on UseGlobal flags
             var merged = new ContentDetectionConfig
@@ -200,17 +187,17 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
                 ThreatIntel = chatConfig.ThreatIntel.UseGlobal ? globalConfig.ThreatIntel : chatConfig.ThreatIntel,
                 SeoScraping = chatConfig.SeoScraping.UseGlobal ? globalConfig.SeoScraping : chatConfig.SeoScraping,
                 ImageSpam = chatConfig.ImageSpam.UseGlobal ? globalConfig.ImageSpam : chatConfig.ImageSpam,
-                VideoSpam = chatConfig.VideoSpam.UseGlobal ? globalConfig.VideoSpam : chatConfig.VideoSpam
+                VideoSpam = chatConfig.VideoSpam.UseGlobal ? globalConfig.VideoSpam : chatConfig.VideoSpam,
+                FileScanning = chatConfig.FileScanning.UseGlobal ? globalConfig.FileScanning : chatConfig.FileScanning
             };
 
             _logger.LogDebug("Loaded merged config for chat {ChatId} (global + chat overrides)", chatId);
-
             return merged;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retrieve spam detection configuration for chat {ChatId}", chatId);
-            return new ContentDetectionConfig(); // Return default on error
+            _logger.LogError(ex, "Failed to retrieve content detection configuration for chat {ChatId}", chatId);
+            return new ContentDetectionConfig();
         }
     }
 
@@ -222,19 +209,18 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var configJson = JsonSerializer.Serialize(config, JsonOptions);
             var timestamp = DateTimeOffset.UtcNow;
+            var configData = config.ToData();
 
             var entity = await context.ContentDetectionConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
             if (entity == null)
             {
-                // Insert new record
                 entity = new TelegramGroupsAdmin.Data.Models.ContentDetectionConfigRecordDto
                 {
                     ChatId = chatId,
-                    ConfigJson = configJson,
+                    Config = configData,
                     LastUpdated = timestamp,
                     UpdatedBy = updatedBy
                 };
@@ -242,20 +228,19 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
             }
             else
             {
-                // Update existing record
-                entity.ConfigJson = configJson;
+                entity.Config = configData;
                 entity.LastUpdated = timestamp;
                 entity.UpdatedBy = updatedBy;
             }
 
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Updated spam detection configuration for chat {ChatId}", chatId);
+            _logger.LogInformation("Updated content detection configuration for chat {ChatId}", chatId);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update spam detection configuration for chat {ChatId}", chatId);
+            _logger.LogError(ex, "Failed to update content detection configuration for chat {ChatId}", chatId);
             throw;
         }
     }
@@ -307,13 +292,72 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
             context.ContentDetectionConfigs.Remove(entity);
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Deleted spam detection configuration for chat {ChatId}", chatId);
+            _logger.LogInformation("Deleted content detection configuration for chat {ChatId}", chatId);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete spam detection configuration for chat {ChatId}", chatId);
+            _logger.LogError(ex, "Failed to delete content detection configuration for chat {ChatId}", chatId);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Get the names of checks that have AlwaysRun=true for the given chat.
+    /// Uses optimized raw SQL to query JSONB directly, handling UseGlobal merging.
+    /// Returns check names that are both Enabled and AlwaysRun.
+    /// </summary>
+    public async Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Raw SQL query that:
+        // 1. Extracts sub-configs from JSONB using jsonb_each
+        // 2. Gets both global (chat_id=0) and chat-specific configs
+        // 3. For each check, uses chat-specific value unless useGlobal=true
+        // 4. Returns check names where enabled=true AND alwaysRun=true
+        const string sql = """
+            WITH configs AS (
+              SELECT
+                chat_id,
+                key,
+                value
+              FROM content_detection_configs,
+              LATERAL jsonb_each(config_json) AS items(key, value)
+              WHERE chat_id = {0} OR chat_id = 0
+            ),
+            effective_configs AS (
+              SELECT
+                c.key,
+                CASE
+                  WHEN chat.value IS NOT NULL
+                       AND COALESCE((chat.value->>'UseGlobal')::boolean, false) = false
+                    THEN chat.value
+                  ELSE global.value
+                END as value
+              FROM (SELECT DISTINCT key FROM configs) c
+              LEFT JOIN (SELECT key, value FROM configs WHERE chat_id = {0}) chat ON c.key = chat.key
+              LEFT JOIN (SELECT key, value FROM configs WHERE chat_id = 0) global ON c.key = global.key
+            )
+            SELECT key as "Value"
+            FROM effective_configs
+            WHERE value IS NOT NULL
+              AND COALESCE((value->>'Enabled')::boolean, false) = true
+              AND COALESCE((value->>'AlwaysRun')::boolean, false) = true
+            """;
+
+        try
+        {
+            var results = await context.Database
+                .SqlQueryRaw<string>(sql, chatId)
+                .ToListAsync(cancellationToken);
+
+            return results.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get critical check names for chat {ChatId}", chatId);
+            return [];
         }
     }
 }

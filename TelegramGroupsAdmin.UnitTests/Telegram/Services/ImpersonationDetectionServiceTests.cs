@@ -6,7 +6,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Services;
@@ -55,7 +55,7 @@ public class ImpersonationDetectionServiceTests
         _mockConfigService = Substitute.For<IConfigService>();
 
         // Default config: check first 5 messages
-        _mockConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, Arg.Any<long>())
+        _mockConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Arg.Any<long>())
             .Returns(new ContentDetectionConfig { FirstMessagesCount = 5 });
 
         // Note: Full service instantiation requires concrete dependencies that can't be mocked.

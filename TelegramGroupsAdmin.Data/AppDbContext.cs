@@ -32,7 +32,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ManagedChatRecordDto> ManagedChats => Set<ManagedChatRecordDto>();
     public DbSet<LinkedChannelRecordDto> LinkedChannels => Set<LinkedChannelRecordDto>();
     public DbSet<ChatAdminRecordDto> ChatAdmins => Set<ChatAdminRecordDto>();
-    public DbSet<ChatPromptRecordDto> ChatPrompts => Set<ChatPromptRecordDto>();
 
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
@@ -44,7 +43,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
     public DbSet<TrainingLabelDto> TrainingLabels => Set<TrainingLabelDto>();
     public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
-    public DbSet<ContentCheckConfigRecordDto> ContentCheckConfigs => Set<ContentCheckConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
     public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
     public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
@@ -858,5 +856,45 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<RawAlgorithmPerformanceStatsDto>()
             .HasNoKey()
             .ToView(null);
+
+        // ============================================================================
+        // Content Detection Config JSON Mapping (Issue #252)
+        // Uses EF Core OwnsOne().ToJson() for strongly-typed JSONB column mapping
+        // ============================================================================
+        modelBuilder.Entity<ContentDetectionConfigRecordDto>()
+            .OwnsOne(c => c.Config, config =>
+            {
+                config.ToJson("config_json");
+
+                // Map all nested sub-configs
+                config.OwnsOne(x => x.StopWords);
+                config.OwnsOne(x => x.Similarity);
+                config.OwnsOne(x => x.Cas);
+                config.OwnsOne(x => x.Bayes);
+                config.OwnsOne(x => x.InvisibleChars);
+                config.OwnsOne(x => x.Translation);
+                config.OwnsOne(x => x.Spacing);
+                config.OwnsOne(x => x.AIVeto);
+                config.OwnsOne(x => x.UrlBlocklist);
+                config.OwnsOne(x => x.ThreatIntel);
+                config.OwnsOne(x => x.SeoScraping);
+                config.OwnsOne(x => x.ImageSpam);
+                config.OwnsOne(x => x.VideoSpam);
+                config.OwnsOne(x => x.FileScanning);
+            });
+
+        // Partial unique index: Only ONE global content detection config (chat_id IS NULL)
+        modelBuilder.Entity<ContentDetectionConfigRecordDto>()
+            .HasIndex(c => c.ChatId)
+            .HasFilter("chat_id IS NULL")
+            .IsUnique()
+            .HasDatabaseName("idx_content_detection_configs_global");
+
+        // Partial unique index: Each chat can have only ONE content detection config
+        modelBuilder.Entity<ContentDetectionConfigRecordDto>()
+            .HasIndex(c => c.ChatId)
+            .HasFilter("chat_id IS NOT NULL")
+            .IsUnique()
+            .HasDatabaseName("idx_content_detection_configs_chat");
     }
 }

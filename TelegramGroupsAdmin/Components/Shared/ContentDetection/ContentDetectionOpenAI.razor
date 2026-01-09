@@ -1,8 +1,6 @@
-@using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Services
-@inject IContentDetectionConfigRepository ConfigRepository
+@inject IConfigService ConfigService
 @inject IPromptVersionRepository PromptVersionRepository
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -55,13 +53,23 @@
                                 HelperText="@(aiVetoReadOnly ? $"Using global value: {aiVetoConfig.MessageHistoryCount}" : "Recent messages sent to AI for context (0-10)")" />
             </FieldWithHelp>
 
-            <MudTextField @bind-Value="aiVetoConfig.SystemPrompt"
-                         Label="Custom System Prompt (Optional)"
-                         Lines="5"
-                         AutoGrow="true"
-                         Variant="Variant.Outlined"
-                         Disabled="@aiVetoReadOnly"
-                         HelperText="@(aiVetoReadOnly ? "Using global prompt" : "Topic-specific instructions for this group")" />
+            @* Active prompt from prompt_versions table (use AI Prompt Builder below to create/modify) *@
+            @if (!string.IsNullOrEmpty(_activePromptText))
+            {
+                <MudTextField Value="@_activePromptText"
+                             Label="Active System Prompt"
+                             Lines="4"
+                             AutoGrow="true"
+                             Variant="Variant.Outlined"
+                             ReadOnly="true"
+                             HelperText="Use AI Prompt Builder below to generate or modify prompts" />
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                    No custom prompt configured. Use the AI Prompt Builder below to generate one, or the default prompt will be used.
+                </MudAlert>
+            }
 
             <MudNumericField @bind-Value="aiVetoConfig.ConfidenceThreshold"
                             Label="Confidence Threshold"
@@ -151,6 +159,7 @@
     private ContentDetectionConfig _config = new();
     private ContentDetectionConfig _globalConfig = new();
     private List<PromptVersion> _promptVersions = [];
+    private string? _activePromptText; // Current active prompt from prompt_versions table
     private bool IsGlobalView => ChatId is null or 0;
 
     protected override async Task OnInitializedAsync()
@@ -164,7 +173,8 @@
         try
         {
             // Always load global config for comparison/fallback
-            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+            _globalConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                            ?? new ContentDetectionConfig();
 
             if (IsGlobalView)
             {
@@ -174,7 +184,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, ChatId!.Value);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }
@@ -205,6 +215,8 @@
         try
         {
             _promptVersions = await PromptVersionRepository.GetVersionHistoryByChatIdAsync(targetChatId);
+            // Set active prompt text for display
+            _activePromptText = _promptVersions.FirstOrDefault(v => v.IsActive)?.PromptText;
         }
         catch (Exception ex)
         {
@@ -246,11 +258,7 @@
                     null
                 );
 
-                // Update the config to use the new prompt
-                var configToUpdate = (IsGlobalView || !_config.AIVeto.UseGlobal) ? _config.AIVeto : _globalConfig.AIVeto;
-                configToUpdate.SystemPrompt = generatedPrompt;
-
-                // Reload versions to show the new one
+                // Prompt saved to prompt_versions table - reload versions to show the new one
                 await LoadPromptVersions();
 
                 Snackbar.Add($"Prompt v{newVersion.Version} created and activated!", Severity.Success);
@@ -268,11 +276,7 @@
         {
             var restoredVersion = await PromptVersionRepository.RestoreVersionAsync(versionId);
 
-            // Update the config to use the restored prompt
-            var configToUpdate = (IsGlobalView || !_config.AIVeto.UseGlobal) ? _config.AIVeto : _globalConfig.AIVeto;
-            configToUpdate.SystemPrompt = restoredVersion.PromptText;
-
-            // Reload versions to update UI
+            // Reload versions to update UI (prompt stored in prompt_versions table)
             await LoadPromptVersions();
 
             Snackbar.Add($"Prompt v{restoredVersion.Version} restored and activated!", Severity.Success);
@@ -327,11 +331,7 @@
                     null
                 );
 
-                // Update the config to use the new improved prompt
-                var configToUpdate = (IsGlobalView || !_config.AIVeto.UseGlobal) ? _config.AIVeto : _globalConfig.AIVeto;
-                configToUpdate.SystemPrompt = improvedPrompt;
-
-                // Reload versions to show the new one
+                // Prompt saved to prompt_versions table - reload versions to show the new one
                 await LoadPromptVersions();
 
                 Snackbar.Add($"Improved prompt saved as v{newVersion.Version} and activated!", Severity.Success);

@@ -2,9 +2,10 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -12,7 +13,6 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
-using OpenAIConfigDb = TelegramGroupsAdmin.Configuration.Models.OpenAIConfig;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -25,7 +25,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngineV2> _logger;
     private readonly IContentDetectionConfigRepository _configRepository;
-    private readonly ISystemConfigRepository _fileScanningConfigRepo;
+    private readonly ISystemConfigRepository _systemConfigRepo;
+    private readonly IPromptVersionRepository _promptVersionRepo;
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
     private readonly IAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
@@ -37,7 +38,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     public ContentDetectionEngineV2(
         ILogger<ContentDetectionEngineV2> logger,
         IContentDetectionConfigRepository configRepository,
-        ISystemConfigRepository fileScanningConfigRepo,
+        ISystemConfigRepository systemConfigRepo,
+        IPromptVersionRepository promptVersionRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
         IAITranslationService translationService,
         IUrlPreFilterService preFilterService,
@@ -45,7 +47,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     {
         _logger = logger;
         _configRepository = configRepository;
-        _fileScanningConfigRepo = fileScanningConfigRepo;
+        _systemConfigRepo = systemConfigRepo;
+        _promptVersionRepo = promptVersionRepo;
         _contentChecksV2 = contentChecksV2;
         _translationService = translationService;
         _preFilterService = preFilterService;
@@ -119,11 +122,13 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         // Run all non-AI pipeline checks
         var pipelineResult = await RunPipelineChecksAsync(request, cancellationToken);
 
-        // Load infrastructure-level OpenAI config (global kill switch)
-        var openAIConfig = await _fileScanningConfigRepo.GetOpenAIConfigAsync(cancellationToken);
+        // Load AI provider config (connection + feature settings)
+        var aiProviderConfig = await _systemConfigRepo.GetAIProviderConfigAsync(cancellationToken);
+        var spamFeatureConfig = aiProviderConfig?.Features.GetValueOrDefault(AIFeatureType.SpamDetection);
+        var connection = aiProviderConfig?.Connections.FirstOrDefault(c => c.Id == spamFeatureConfig?.ConnectionId);
 
-        // Check BOTH infrastructure.Enabled (global) AND spamdetection.AIVeto.Enabled (per-chat)
-        var infrastructureEnabled = openAIConfig?.Enabled ?? false;
+        // Check BOTH infrastructure.Enabled (connection active) AND spamdetection.AIVeto.Enabled (per-chat)
+        var infrastructureEnabled = connection?.Enabled ?? false;
         var spamDetectionEnabled = config.AIVeto.Enabled;
 
         // AI always runs as veto to confirm ANY spam detection (even low confidence)
@@ -142,11 +147,15 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             var aiVetoCheck = _contentChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
             if (aiVetoCheck != null)
             {
-                // Note: AI service is obtained via IChatService (supports OpenAI, Azure, local providers)
-                _logger.LogInformation("Running AI veto check for {User}", request.UserName ?? $"User {request.UserId}");
+                // Fetch custom prompt from prompt_versions table (null = use default prompt)
+                var activePrompt = await _promptVersionRepo.GetActiveVersionAsync(request.ChatId, cancellationToken);
+                var systemPrompt = activePrompt?.PromptText;
+
+                _logger.LogInformation("Running AI veto check for {User} (custom prompt: {HasCustom})",
+                    request.UserName ?? $"User {request.UserId}", systemPrompt != null);
 
                 var vetoRequest = request with { HasSpamFlags = true };
-                var checkRequest = BuildAIRequest(vetoRequest, config, openAIConfig, pipelineResult.OcrExtractedText, cancellationToken);
+                var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, cancellationToken);
                 var vetoResultV2 = await aiVetoCheck.CheckAsync(checkRequest);
 
                 // Convert V2 response to ContentCheckResponse
@@ -428,7 +437,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private AIVetoCheckRequest BuildAIRequest(
         ContentCheckRequest originalRequest,
         ContentDetectionConfig config,
-        OpenAIConfigDb? openAIConfig,
+        AIFeatureConfig? featureConfig,
+        string? systemPrompt,
         string? ocrExtractedText,
         CancellationToken cancellationToken)
     {
@@ -438,13 +448,13 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             UserId = originalRequest.UserId,
             UserName = originalRequest.UserName,
             ChatId = originalRequest.ChatId,
-            SystemPrompt = config.AIVeto.SystemPrompt,
+            SystemPrompt = systemPrompt, // From prompt_versions table (null = use default)
             HasSpamFlags = originalRequest.HasSpamFlags,
             MinMessageLength = config.MinMessageLength,
             CheckShortMessages = config.AIVeto.CheckShortMessages,
             MessageHistoryCount = config.AIVeto.MessageHistoryCount,
-            Model = openAIConfig?.Model ?? "gpt-4o-mini",
-            MaxTokens = openAIConfig?.MaxTokens ?? 500,
+            Model = featureConfig?.Model ?? "gpt-4o-mini",
+            MaxTokens = featureConfig?.MaxTokens ?? 500,
             OcrExtractedText = ocrExtractedText,
             CancellationToken = cancellationToken
         };

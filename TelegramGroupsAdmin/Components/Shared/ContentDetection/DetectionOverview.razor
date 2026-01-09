@@ -1,6 +1,4 @@
-@using TelegramGroupsAdmin.ContentDetection.Configuration
-@using TelegramGroupsAdmin.ContentDetection.Repositories
-@inject IContentDetectionConfigRepository ConfigRepository
+@inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
@@ -487,7 +485,7 @@
         </MudCardContent>
     </MudCard>
 
-    <!-- Critical Checks Configuration Header -->
+    <!-- Critical Checks Configuration -->
     <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
         <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
         Critical Checks Configuration
@@ -496,25 +494,7 @@
         Configure which checks run for ALL users (bypassing trust/admin exemptions).
     </MudText>
 
-    <!-- Critical Checks Card -->
-    <MudCard Elevation="1">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudText Typo="Typo.h6">
-                    <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Error" Class="mr-2" />
-                    Always-Run Checks (Bypass Trust/Admin Status)
-                </MudText>
-            </CardHeaderContent>
-        </MudCardHeader>
-        <MudCardContent>
-            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-                <strong>Policy:</strong> Critical violations trigger message deletion + DM notification for ALL users.
-                Trusted/admin users are NOT banned or warned, but their violating messages are still deleted.
-            </MudAlert>
-
-            <CriticalChecks />
-        </MudCardContent>
-    </MudCard>
+    <CriticalChecks />
 
     <!-- Save Button (Bottom) -->
     <MudPaper Class="pa-4" Elevation="1">
@@ -540,9 +520,9 @@
     {
         try
         {
-            _config = ChatId.HasValue
-                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value)
-                : await ConfigRepository.GetGlobalConfigAsync();
+            var chatId = ChatId ?? 0;
+            _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
+                      ?? new ContentDetectionConfig();
         }
         catch (Exception ex)
         {
@@ -559,16 +539,9 @@
         {
             _isSaving = true;
 
-            if (ChatId.HasValue)
-            {
-                await ConfigRepository.UpdateChatConfigAsync(ChatId.Value, _config);
-                Snackbar.Add("Chat configuration saved successfully", Severity.Success);
-            }
-            else
-            {
-                await ConfigRepository.UpdateGlobalConfigAsync(_config);
-                Snackbar.Add("Global configuration saved successfully", Severity.Success);
-            }
+            var chatId = ChatId ?? 0;
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, chatId, _config);
+            Snackbar.Add(chatId == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
         }
         catch (Exception ex)
         {

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
@@ -17,18 +19,18 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class TranslationHandler
 {
-    private readonly IContentDetectionConfigRepository _configRepository;
+    private readonly IConfigService _configService;
     private readonly IAITranslationService _translationService;
     private readonly ILanguageDetectionService _languageDetectionService;
     private readonly ILogger<TranslationHandler> _logger;
 
     public TranslationHandler(
-        IContentDetectionConfigRepository configRepository,
+        IConfigService configService,
         IAITranslationService translationService,
         ILanguageDetectionService languageDetectionService,
         ILogger<TranslationHandler> logger)
     {
-        _configRepository = configRepository;
+        _configService = configService;
         _translationService = translationService;
         _languageDetectionService = languageDetectionService;
         _logger = logger;
@@ -49,8 +51,9 @@ public class TranslationHandler
             return null;
         }
 
-        // Load translation configuration
-        var spamConfig = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+        // Load translation configuration via ConfigService (single entry point for all config)
+        var spamConfig = await _configService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                        ?? new ContentDetectionConfig();
 
         // Check if translation is enabled and message meets minimum length
         if (!spamConfig.Translation.Enabled ||

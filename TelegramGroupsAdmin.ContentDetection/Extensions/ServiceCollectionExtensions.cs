@@ -3,7 +3,9 @@ using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 
 namespace TelegramGroupsAdmin.ContentDetection.Extensions;
 
@@ -35,7 +37,7 @@ public static class ServiceCollectionExtensions
 
             // Register repositories (needed by engine for config)
             services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
-            services.AddScoped<IContentCheckConfigRepository, ContentCheckConfigRepository>(); // Phase 4.14: Critical checks
+            // NOTE: ContentCheckConfigRepository removed - critical checks now extracted via GetCriticalCheckNamesAsync() from ContentDetectionConfig
 
             // Register detection results repository
             services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();

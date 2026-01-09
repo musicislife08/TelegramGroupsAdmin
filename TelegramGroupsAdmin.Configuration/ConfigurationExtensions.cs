@@ -19,7 +19,7 @@ public static class ConfigurationExtensions
             services.Configure<ContentDetectionOptions>(configuration.GetSection("SpamDetection"));
 
             // NOTE: OpenAIOptions and SendGridOptions removed - now using database config
-            // See OpenAIConfig and SendGridConfig in database (configs table)
+            // See AIProviderConfig and SendGridConfig in database (configs table)
 
             // MessageHistoryOptions: Set ImageStoragePath from App:DataPath if not explicitly configured
             services.Configure<MessageHistoryOptions>(options =>

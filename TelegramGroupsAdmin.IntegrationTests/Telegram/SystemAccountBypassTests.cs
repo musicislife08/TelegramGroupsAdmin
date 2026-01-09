@@ -1,9 +1,13 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -60,7 +64,13 @@ public class SystemAccountBypassTests
         // Register real repositories
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
-        services.AddScoped<IContentCheckConfigRepository, ContentCheckConfigRepository>();
+
+        // Register config service dependencies
+        services.AddScoped<IConfigRepository, ConfigRepository>();
+        services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
+        services.AddSingleton<IMemoryCache, MemoryCache>();
+        services.AddDataProtection();
+        services.AddScoped<IConfigService, ConfigService>();
 
         // Register a mock content detection engine that should NEVER be called for system accounts
         services.AddSingleton<IContentDetectionEngine, ThrowingContentDetectionEngine>();

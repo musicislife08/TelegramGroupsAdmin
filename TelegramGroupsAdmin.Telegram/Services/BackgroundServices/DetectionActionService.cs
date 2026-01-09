@@ -2,7 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -37,15 +38,16 @@ public class DetectionActionService(
 
     /// <summary>
     /// Load effective content detection config for a chat (with fallback to defaults).
-    /// Resolves repository from scope since this is a Singleton service and repositories are Scoped.
+    /// Resolves ConfigService from scope since this is a Singleton service and services are Scoped.
     /// </summary>
     private async Task<ContentDetectionConfig> GetConfigAsync(Chat chat, CancellationToken cancellationToken)
     {
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var configRepository = scope.ServiceProvider.GetRequiredService<IContentDetectionConfigRepository>();
-            return await configRepository.GetEffectiveConfigAsync(chat.Id, cancellationToken);
+            var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+            return await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chat.Id)
+                   ?? new ContentDetectionConfig();
         }
         catch (Exception ex)
         {

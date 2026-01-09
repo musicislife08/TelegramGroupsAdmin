@@ -23,7 +23,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             // Update existing record - manually copy properties to avoid Id modification error
             // DO NOT use SetValues() - it tries to copy Id which is a key property
             // NOTE: ChatId is NOT copied - we queried by ChatId, so it's already the same value (immutable natural key)
-            existing.ContentDetectionConfig = config.ContentDetectionConfig;
+            // NOTE: ContentDetection config is in separate table (content_detection_configs), not here
             existing.WelcomeConfig = config.WelcomeConfig;
             existing.LogConfig = config.LogConfig;
             existing.ModerationConfig = config.ModerationConfig;
@@ -36,7 +36,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             existing.PassphraseEncrypted = config.PassphraseEncrypted;
             existing.InviteLink = config.InviteLink;
             existing.TelegramBotTokenEncrypted = config.TelegramBotTokenEncrypted;
-            existing.OpenAIConfig = config.OpenAIConfig;
+            // OpenAIConfig removed - superseded by AIProviderConfig
             existing.SendGridConfig = config.SendGridConfig;
             existing.ServiceMessageDeletionConfig = config.ServiceMessageDeletionConfig;
             existing.UpdatedAt = DateTimeOffset.UtcNow;

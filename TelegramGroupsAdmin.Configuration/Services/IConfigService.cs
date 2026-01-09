@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Configuration.Repositories;
+
 namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
@@ -52,4 +54,17 @@ public interface IConfigService
     /// Save the Telegram bot token to database (encrypted, global config only, chat_id = 0)
     /// </summary>
     Task SaveTelegramBotTokenAsync(string botToken);
+
+    /// <summary>
+    /// Get all content detection chat configurations (for admin UI listing).
+    /// Returns metadata about which chats have custom configs.
+    /// </summary>
+    Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get the names of content detection checks that have AlwaysRun=true for the given chat.
+    /// Uses optimized JSONB query to efficiently extract only critical check names.
+    /// Handles UseGlobal merging at the database level.
+    /// </summary>
+    Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default);
 }

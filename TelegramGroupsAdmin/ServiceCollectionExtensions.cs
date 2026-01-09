@@ -156,7 +156,6 @@ public static class ServiceCollectionExtensions
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
             services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
             services.AddHostedService<VapidKeyGenerationService>(); // Auto-generates VAPID keys on first startup
-            services.AddHostedService<AIProviderMigrationService>(); // Migrates OpenAI config to multi-provider format
 
             // Push subscriptions repository (browser push endpoints)
             services.AddScoped<Core.Repositories.IPushSubscriptionsRepository, Core.Repositories.PushSubscriptionsRepository>();
@@ -272,7 +271,7 @@ public static class ServiceCollectionExtensions
         {
             // Spam Detection repositories (from ContentDetection library)
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.StopWordsRepository>();
-            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.ContentDetectionConfigRepository>();
+            services.AddScoped<TelegramGroupsAdmin.Configuration.Repositories.IContentDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.ContentDetectionConfigRepository>();
 
             // Analytics repository (Phase 5: Performance metrics, from ContentDetection library)
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IAnalyticsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.AnalyticsRepository>();

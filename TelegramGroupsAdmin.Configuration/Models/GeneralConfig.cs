@@ -33,9 +33,5 @@ public class GeneralConfig
     /// </summary>
     public long MaxFileSizeBytes { get; set; } = 4831838208;  // 4.5GB in bytes
 
-    /// <summary>
-    /// Always run for all users (bypass trust/admin status)
-    /// Integration with Phase 4.14 Critical Checks
-    /// </summary>
-    public bool AlwaysRunForAllUsers { get; set; } = true;
+    // AlwaysRunForAllUsers moved to ContentDetectionConfig.FileScanning.AlwaysRun
 }

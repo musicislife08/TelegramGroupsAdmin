@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 38; // Updated 2025-12-13: +training_labels (ML.NET SDCA classifier training labels)
+    public const int TotalTableCount = 36; // Updated 2026-01-08: -content_check_configs (merged into content_detection_configs)
 
     /// <summary>
     /// Web application users (ASP.NET Identity)
@@ -318,22 +318,6 @@ public static class GoldenDataset
         public const long Config1_Id = 1;
         public const long Config1_ChatId = 0; // Global config (SCHEMA-3: chat_id = 0 for global)
 
-        // Spam detection config (real structure, simplified)
-        public const string SpamDetectionConfigJson = """
-        {
-          "cas": {"apiUrl": "https://api.cas.chat", "enabled": true, "timeout": "00:00:05"},
-          "bayes": {"enabled": true, "minSpamProbability": 50},
-          "openAI": {"enabled": true, "vetoMode": true, "vetoThreshold": 95, "checkShortMessages": false},
-          "spacing": {"enabled": true, "minWordsCount": 5, "spaceRatioThreshold": 0.3},
-          "stopWords": {"enabled": true, "confidenceThreshold": 50},
-          "similarity": {"enabled": true, "threshold": 0.5},
-          "threatIntel": {"enabled": true, "timeout": "00:00:30", "useVirusTotal": true},
-          "autoBanThreshold": 80,
-          "firstMessageOnly": true,
-          "minMessageLength": 20
-        }
-        """;
-
         // Backup encryption config (real structure)
         public const string BackupEncryptionConfigJson = """
         {
@@ -396,6 +380,7 @@ public static class GoldenDataset
         await LoadSqlScriptAsync(context, "SQL.03_base_linked_channels.sql");
         await LoadSqlScriptAsync(context, "SQL.04_base_messages.sql");
         await LoadSqlScriptAsync(context, "SQL.05_base_detection_results.sql");
+        await LoadSqlScriptAsync(context, "SQL.06_base_content_detection_configs.sql");
 
         // Seed configs inline (requires runtime encryption of API keys)
         await SeedConfigsAsync(context, dataProtectionProvider);
@@ -421,13 +406,12 @@ public static class GoldenDataset
 
         await context.Database.ExecuteSqlRawAsync(
             """
-            INSERT INTO configs (id, chat_id, spam_detection_config, api_keys, backup_encryption_config, created_at)
+            INSERT INTO configs (id, chat_id, api_keys, backup_encryption_config, created_at)
             VALUES
-            ({0}, {1}, {2}::jsonb, {3}, {4}::jsonb, NOW() - INTERVAL '10 days')
+            ({0}, {1}, {2}, {3}::jsonb, NOW() - INTERVAL '10 days')
             """,
             Configs.Config1_Id,
             Configs.Config1_ChatId,
-            Configs.SpamDetectionConfigJson!,
             encryptedApiKeys!,
             Configs.BackupEncryptionConfigJson!
         );
@@ -456,6 +440,15 @@ public static class GoldenDataset
     public static async Task SeedBalancedTrainingDataAsync(AppDbContext context)
     {
         await LoadSqlScriptAsync(context, "SQL.11_training_full.sql");
+    }
+
+    /// <summary>
+    /// Seeds global content detection configuration (chat_id = 0).
+    /// Use for tests that need content detection settings without full base data.
+    /// </summary>
+    public static async Task SeedContentDetectionConfigAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.06_base_content_detection_configs.sql");
     }
 
     /// <summary>
