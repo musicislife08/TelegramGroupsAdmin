@@ -1,15 +1,17 @@
-@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Configuration
+@using TelegramGroupsAdmin.Configuration.Models.ContentDetection
+@using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Auth
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
-@inject IContentCheckConfigRepository CheckConfigRepository
+@inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 
 <MudGrid>
     <MudItem xs="12">
         <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mb-4">
-            <MudText Typo="Typo.subtitle2"><strong>Critical Checks (Phase 4.14)</strong></MudText>
+            <MudText Typo="Typo.subtitle2"><strong>Critical Checks</strong></MudText>
             <MudText Typo="Typo.body2">
                 Critical checks run for <strong>ALL users</strong>, including trusted users and admins.
                 When a critical check flags a message, it is deleted and the user is notified, but NO ban or warning is applied.
@@ -39,7 +41,8 @@
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudSwitch T="bool"
-                                      @bind-Value="check.AlwaysRun"
+                                      Value="@check.AlwaysRun"
+                                      ValueChanged="@(v => OnAlwaysRunChanged(check, v))"
                                       Color="@(check.AlwaysRun ? Color.Success : Color.Default)"
                                       Label="@check.DisplayName"
                                       Disabled="@(!_canEdit)" />
@@ -74,7 +77,8 @@
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudSwitch T="bool"
-                                      @bind-Value="check.AlwaysRun"
+                                      Value="@check.AlwaysRun"
+                                      ValueChanged="@(v => OnAlwaysRunChanged(check, v))"
                                       Color="@(check.AlwaysRun ? Color.Success : Color.Default)"
                                       Label="@check.DisplayName"
                                       Disabled="@(!_canEdit)" />
@@ -115,7 +119,8 @@
                             <MudItem xs="12" sm="6" md="4">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                     <MudSwitch T="bool"
-                                              @bind-Value="check.AlwaysRun"
+                                              Value="@check.AlwaysRun"
+                                              ValueChanged="@(v => OnAlwaysRunChanged(check, v))"
                                               Color="@(check.AlwaysRun ? Color.Success : Color.Default)"
                                               Label="@check.DisplayName"
                                               Disabled="@(!_canEdit)" />
@@ -181,6 +186,7 @@
     private bool _loading = true;
     private bool _saving;
     private bool _canEdit;
+    private ContentDetectionConfig _config = new();
     private List<CheckViewModel> _securityChecks = [];
     private List<CheckViewModel> _malwareChecks = [];
     private List<CheckViewModel> _contentChecks = [];
@@ -194,8 +200,8 @@
         var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
         var permissionLevel = permissionClaim != null && int.TryParse(permissionClaim.Value, out var level)
             ? (PermissionLevel)level
-            : PermissionLevel.Admin; // Default to the lowest permission level
-        _canEdit = permissionLevel >= PermissionLevel.GlobalAdmin; // Only GlobalAdmin and Owner can edit
+            : PermissionLevel.Admin;
+        _canEdit = permissionLevel >= PermissionLevel.GlobalAdmin;
 
         await LoadConfiguration();
     }
@@ -207,53 +213,36 @@
             _loading = true;
             StateHasChanged();
 
-            var configs = (await CheckConfigRepository.GetGlobalConfigsAsync()).ToList();
+            // Load global content detection config (chat_id = 0)
+            _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                      ?? new ContentDetectionConfig();
 
-            // Define ALL available checks with display info
-            var knownChecks = new Dictionary<string, (string DisplayName, string Description, string Category)>
-            {
-                // Security Checks
-                ["UrlBlocklist"] = ("URL Filtering", "Block malicious domains from 540K+ blocklists (hard-block mode)", "Security"),
-                ["FileScanning"] = ("File Scanning", "Scan files with ClamAV (10M+ signatures) + VirusTotal fallback (70+ engines)", "Security"),
+            // Build view models from config sub-configs
+            _securityChecks =
+            [
+                new() { CheckName = "UrlBlocklist", DisplayName = "URL Filtering", Description = "Block malicious domains from 540K+ blocklists (hard-block mode)", Category = "Security", Enabled = _config.UrlBlocklist.Enabled, AlwaysRun = _config.UrlBlocklist.AlwaysRun },
+                new() { CheckName = "ThreatIntel", DisplayName = "Threat Intelligence", Description = "VirusTotal URL scanning for malware detection", Category = "Security", Enabled = _config.ThreatIntel.Enabled, AlwaysRun = _config.ThreatIntel.AlwaysRun },
+                new() { CheckName = "FileScanning", DisplayName = "File Scanning", Description = "ClamAV + VirusTotal malware scanning for uploaded files", Category = "Security", Enabled = _config.FileScanning.Enabled, AlwaysRun = _config.FileScanning.AlwaysRun }
+            ];
 
-                // Malware Detection
-                ["VirusTotal"] = ("VirusTotal", "Malware and threat detection via VirusTotal API", "Malware"),
-                ["ImageSpam"] = ("Image Spam (Vision)", "OpenAI Vision API image content analysis", "Malware"),
+            _malwareChecks =
+            [
+                new() { CheckName = "ImageSpam", DisplayName = "Image Spam (Vision)", Description = "OpenAI Vision API image content analysis", Category = "Malware", Enabled = _config.ImageSpam.Enabled, AlwaysRun = _config.ImageSpam.AlwaysRun },
+                new() { CheckName = "VideoSpam", DisplayName = "Video Spam", Description = "Video content analysis for spam detection", Category = "Malware", Enabled = _config.VideoSpam.Enabled, AlwaysRun = _config.VideoSpam.AlwaysRun }
+            ];
 
-                // Spam Detection Algorithms
-                ["StopWords"] = ("Stop Words", "Pattern matching against banned keywords/phrases", "Spam"),
-                ["CAS"] = ("CAS (Combot)", "Check against Combot Anti-Spam database", "Spam"),
-                ["Similarity"] = ("Similarity (TF-IDF)", "Detect duplicate/similar spam messages", "Spam"),
-                ["Bayes"] = ("Bayesian Filter", "Statistical spam classification", "Spam"),
-                ["MultiLanguage"] = ("Multi-Language", "Detect excessive language mixing", "Spam"),
-                ["Spacing"] = ("Spacing Check", "Detect excessive spacing/formatting abuse", "Spam"),
-                ["InvisibleChars"] = ("Invisible Characters", "Detect hidden Unicode characters", "Spam"),
-                ["OpenAI"] = ("OpenAI Content Check", "GPT-4 semantic spam analysis", "Spam"),
-                ["SeoScraping"] = ("SEO Scraping", "Detect SEO spam and scraping patterns", "Spam"),
-
-                // Impersonation
-                ["Impersonation"] = ("Impersonation", "Photo hash + name Levenshtein distance", "Security")
-            };
-
-            // Create view models for ALL checks (not just those in DB)
-            var viewModels = new List<CheckViewModel>();
-            foreach (var (checkName, (displayName, description, category)) in knownChecks)
-            {
-                var config = configs.FirstOrDefault(c => c.CheckName == checkName);
-                viewModels.Add(new CheckViewModel
-                {
-                    CheckName = checkName,
-                    DisplayName = displayName,
-                    Description = description,
-                    Category = category,
-                    Enabled = config?.Enabled ?? true, // Default enabled if not in DB
-                    AlwaysRun = config?.AlwaysRun ?? false // Default NOT critical
-                });
-            }
-
-            _securityChecks = viewModels.Where(vm => vm.Category == "Security").ToList();
-            _malwareChecks = viewModels.Where(vm => vm.Category == "Malware").ToList();
-            _contentChecks = viewModels.Where(vm => vm.Category == "Spam").ToList();
+            _contentChecks =
+            [
+                new() { CheckName = "StopWords", DisplayName = "Stop Words", Description = "Pattern matching against banned keywords/phrases", Category = "Spam", Enabled = _config.StopWords.Enabled, AlwaysRun = _config.StopWords.AlwaysRun },
+                new() { CheckName = "Cas", DisplayName = "CAS (Combot)", Description = "Check against Combot Anti-Spam database", Category = "Spam", Enabled = _config.Cas.Enabled, AlwaysRun = _config.Cas.AlwaysRun },
+                new() { CheckName = "Similarity", DisplayName = "Similarity (TF-IDF)", Description = "Detect duplicate/similar spam messages", Category = "Spam", Enabled = _config.Similarity.Enabled, AlwaysRun = _config.Similarity.AlwaysRun },
+                new() { CheckName = "Bayes", DisplayName = "Bayesian Filter", Description = "Statistical spam classification", Category = "Spam", Enabled = _config.Bayes.Enabled, AlwaysRun = _config.Bayes.AlwaysRun },
+                new() { CheckName = "Translation", DisplayName = "Multi-Language", Description = "Detect excessive language mixing", Category = "Spam", Enabled = _config.Translation.Enabled, AlwaysRun = _config.Translation.AlwaysRun },
+                new() { CheckName = "Spacing", DisplayName = "Spacing Check", Description = "Detect excessive spacing/formatting abuse", Category = "Spam", Enabled = _config.Spacing.Enabled, AlwaysRun = _config.Spacing.AlwaysRun },
+                new() { CheckName = "InvisibleChars", DisplayName = "Invisible Characters", Description = "Detect hidden Unicode characters", Category = "Spam", Enabled = _config.InvisibleChars.Enabled, AlwaysRun = _config.InvisibleChars.AlwaysRun },
+                new() { CheckName = "AIVeto", DisplayName = "AI Veto", Description = "GPT-4 semantic spam analysis", Category = "Spam", Enabled = _config.AIVeto.Enabled, AlwaysRun = _config.AIVeto.AlwaysRun },
+                new() { CheckName = "SeoScraping", DisplayName = "SEO Scraping", Description = "Detect SEO spam and scraping patterns", Category = "Spam", Enabled = _config.SeoScraping.Enabled, AlwaysRun = _config.SeoScraping.AlwaysRun }
+            ];
         }
         catch (Exception ex)
         {
@@ -264,6 +253,32 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    private void OnAlwaysRunChanged(CheckViewModel check, bool newValue)
+    {
+        check.AlwaysRun = newValue;
+
+        // Update the corresponding sub-config in _config
+        switch (check.CheckName)
+        {
+            case "UrlBlocklist": _config.UrlBlocklist.AlwaysRun = newValue; break;
+            case "ThreatIntel": _config.ThreatIntel.AlwaysRun = newValue; break;
+            case "FileScanning": _config.FileScanning.AlwaysRun = newValue; break;
+            case "ImageSpam": _config.ImageSpam.AlwaysRun = newValue; break;
+            case "VideoSpam": _config.VideoSpam.AlwaysRun = newValue; break;
+            case "StopWords": _config.StopWords.AlwaysRun = newValue; break;
+            case "Cas": _config.Cas.AlwaysRun = newValue; break;
+            case "Similarity": _config.Similarity.AlwaysRun = newValue; break;
+            case "Bayes": _config.Bayes.AlwaysRun = newValue; break;
+            case "Translation": _config.Translation.AlwaysRun = newValue; break;
+            case "Spacing": _config.Spacing.AlwaysRun = newValue; break;
+            case "InvisibleChars": _config.InvisibleChars.AlwaysRun = newValue; break;
+            case "AIVeto": _config.AIVeto.AlwaysRun = newValue; break;
+            case "SeoScraping": _config.SeoScraping.AlwaysRun = newValue; break;
+        }
+
+        StateHasChanged();
     }
 
     private async Task SaveChanges()
@@ -279,20 +294,8 @@
             _saving = true;
             StateHasChanged();
 
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
-
-            // Save all checks
-            var allChecks = _securityChecks.Concat(_malwareChecks).Concat(_contentChecks);
-            foreach (var check in allChecks)
-            {
-                await CheckConfigRepository.SetAlwaysRunAsync(
-                    check.CheckName,
-                    check.AlwaysRun,
-                    userId ?? "unknown",
-                    CancellationToken.None);
-            }
+            // Save the entire config (which now includes AlwaysRun in each sub-config)
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, 0, _config);
 
             Snackbar.Add("Critical checks configuration saved successfully", Severity.Success);
         }

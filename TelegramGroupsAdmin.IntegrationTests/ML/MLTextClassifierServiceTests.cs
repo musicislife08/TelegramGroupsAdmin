@@ -468,7 +468,7 @@ public class MLTextClassifierServiceTests
         await using var context = _testHelper!.GetDbContext();
 
         // Truncate and reseed with high-spam dataset
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs CASCADE");
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
         await GoldenDataset.SeedWithoutTrainingDataAsync(context);
         await GoldenDataset.SeedHighSpamTrainingDataAsync(context);
 
@@ -492,7 +492,7 @@ public class MLTextClassifierServiceTests
         await using var context = _testHelper!.GetDbContext();
 
         // Truncate and reseed with high-ham dataset
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs CASCADE");
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
         await GoldenDataset.SeedWithoutTrainingDataAsync(context);
         await GoldenDataset.SeedHighHamTrainingDataAsync(context);
 
@@ -543,7 +543,7 @@ public class MLTextClassifierServiceTests
         await using var context = _testHelper!.GetDbContext();
 
         // Truncate and reseed with zero training data
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs CASCADE");
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
         await GoldenDataset.SeedWithoutTrainingDataAsync(context);
 
         // Create 10 test messages (5 spam + 5 ham)
@@ -591,7 +591,7 @@ public class MLTextClassifierServiceTests
         await using var context = _testHelper!.GetDbContext();
 
         // Truncate and reseed with zero training data
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs CASCADE");
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
         await GoldenDataset.SeedWithoutTrainingDataAsync(context);
 
         // Create 22 ham messages
@@ -626,7 +626,7 @@ public class MLTextClassifierServiceTests
         await using var context = _testHelper!.GetDbContext();
 
         // Truncate and reseed with zero training data
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs CASCADE");
+        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE training_labels, detection_results, messages, managed_chats, linked_channels, telegram_users, users, configs, content_detection_configs CASCADE");
         await GoldenDataset.SeedWithoutTrainingDataAsync(context);
 
         // Create 23 spam messages

@@ -780,45 +780,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("chat_admins");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatPromptRecordDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("AddedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("added_by");
-
-                    b.Property<DateTimeOffset>("AddedDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("added_date");
-
-                    b.Property<long>("ChatId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("chat_id");
-
-                    b.Property<string>("CustomPrompt")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("custom_prompt");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("enabled");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text")
-                        .HasColumnName("notes");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("chat_prompts");
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ConfigRecordDto", b =>
                 {
                     b.Property<long>("Id")
@@ -854,10 +815,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDefaultValue(0L)
                         .HasColumnName("chat_id");
 
-                    b.Property<string>("ContentDetectionConfig")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("spam_detection_config");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -879,10 +836,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<string>("ModerationConfig")
                         .HasColumnType("jsonb")
                         .HasColumnName("moderation_config");
-
-                    b.Property<string>("OpenAIConfig")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("openai_config");
 
                     b.Property<string>("PassphraseEncrypted")
                         .HasColumnType("text")
@@ -930,53 +883,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("configs");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ContentCheckConfigRecordDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<bool>("AlwaysRun")
-                        .HasColumnType("boolean")
-                        .HasColumnName("always_run");
-
-                    b.Property<long>("ChatId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("chat_id");
-
-                    b.Property<string>("CheckName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("check_name");
-
-                    b.Property<int?>("ConfidenceThreshold")
-                        .HasColumnType("integer")
-                        .HasColumnName("confidence_threshold");
-
-                    b.Property<string>("ConfigurationJson")
-                        .HasColumnType("text")
-                        .HasColumnName("configuration_json");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("enabled");
-
-                    b.Property<string>("ModifiedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("modified_by");
-
-                    b.Property<DateTimeOffset>("ModifiedDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modified_date");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("content_check_configs");
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ContentDetectionConfigRecordDto", b =>
                 {
                     b.Property<long>("Id")
@@ -990,11 +896,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
-                    b.Property<string>("ConfigJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("config_json");
-
                     b.Property<DateTimeOffset>("LastUpdated")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_updated");
@@ -1004,6 +905,11 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("updated_by");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChatId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_content_detection_configs_chat")
+                        .HasFilter("chat_id IS NOT NULL");
 
                     b.ToTable("content_detection_configs");
                 });
@@ -3097,6 +3003,429 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Navigation("ManagedChat");
 
                     b.Navigation("TelegramUser");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ContentDetectionConfigRecordDto", b =>
+                {
+                    b.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.ContentDetectionConfigData", "Config", b1 =>
+                        {
+                            b1.Property<long>("ContentDetectionConfigRecordDtoId");
+
+                            b1.Property<int>("AutoBanThreshold");
+
+                            b1.Property<int>("AutoTrustMinAccountAgeHours");
+
+                            b1.Property<int>("AutoTrustMinMessageLength");
+
+                            b1.Property<bool>("FirstMessageOnly");
+
+                            b1.Property<int>("FirstMessagesCount");
+
+                            b1.Property<int>("MaxConfidenceVetoThreshold");
+
+                            b1.Property<int>("MinMessageLength");
+
+                            b1.Property<int>("ReviewQueueThreshold");
+
+                            b1.Property<bool>("TrainingMode");
+
+                            b1.HasKey("ContentDetectionConfigRecordDtoId");
+
+                            b1.ToTable("content_detection_configs");
+
+                            b1.ToJson("config_json");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ContentDetectionConfigRecordDtoId");
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.AIVetoConfigData", "AIVeto", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("CheckShortMessages");
+
+                                    b2.Property<int>("ConfidenceThreshold");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<int>("MessageHistoryCount");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.HasJsonPropertyName("openAI");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.BayesConfigData", "Bayes", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<int>("ConfidenceThreshold");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<double>("MinSpamProbability");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.CasConfigData", "Cas", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<string>("ApiUrl")
+                                        .IsRequired();
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<TimeSpan>("Timeout");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.Property<string>("UserAgent");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.FileScanningDetectionConfigData", "FileScanning", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.ImageContentConfigData", "ImageSpam", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<int>("HashMatchConfidence");
+
+                                    b2.Property<double>("HashSimilarityThreshold");
+
+                                    b2.Property<int>("MaxTrainingSamplesToCompare");
+
+                                    b2.Property<int>("MinOcrTextLength");
+
+                                    b2.Property<int>("OcrConfidenceThreshold");
+
+                                    b2.Property<TimeSpan>("Timeout");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.Property<bool>("UseHashSimilarity");
+
+                                    b2.Property<bool>("UseOCR");
+
+                                    b2.Property<bool>("UseOpenAIVision");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.InvisibleCharsConfigData", "InvisibleChars", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.SeoScrapingConfigData", "SeoScraping", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<TimeSpan>("Timeout");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.SimilarityConfigData", "Similarity", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<double>("Threshold");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.SpacingConfigData", "Spacing", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<int>("ConfidenceThreshold");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<int>("MinWordsCount");
+
+                                    b2.Property<int>("ShortWordLength");
+
+                                    b2.Property<double>("ShortWordRatioThreshold");
+
+                                    b2.Property<double>("SpaceRatioThreshold");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.StopWordsConfigData", "StopWords", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<int>("ConfidenceThreshold");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.ThreatIntelConfigData", "ThreatIntel", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<TimeSpan>("Timeout");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.Property<bool>("UseVirusTotal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.TranslationConfigData", "Translation", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("CheckTranslatedContent");
+
+                                    b2.Property<int>("ConfidenceThreshold");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<double>("LanguageDetectionConfidenceThreshold");
+
+                                    b2.Property<double>("LatinScriptThreshold");
+
+                                    b2.Property<int>("MinMessageLength");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.Property<bool>("WarnNonEnglish");
+
+                                    b2.Property<string>("WarningMessage")
+                                        .IsRequired();
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.UrlBlocklistConfigData", "UrlBlocklist", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<TimeSpan>("CacheDuration");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.VideoContentConfigData", "VideoSpam", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<int>("HashMatchConfidence");
+
+                                    b2.Property<double>("HashSimilarityThreshold");
+
+                                    b2.Property<int>("MaxTrainingSamplesToCompare");
+
+                                    b2.Property<int>("MinOcrTextLength");
+
+                                    b2.Property<int>("OcrConfidenceThreshold");
+
+                                    b2.Property<TimeSpan>("Timeout");
+
+                                    b2.Property<bool>("UseGlobal");
+
+                                    b2.Property<bool>("UseHashSimilarity");
+
+                                    b2.Property<bool>("UseOCR");
+
+                                    b2.Property<bool>("UseOpenAIVision");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.Navigation("AIVeto")
+                                .IsRequired();
+
+                            b1.Navigation("Bayes")
+                                .IsRequired();
+
+                            b1.Navigation("Cas")
+                                .IsRequired();
+
+                            b1.Navigation("FileScanning")
+                                .IsRequired();
+
+                            b1.Navigation("ImageSpam")
+                                .IsRequired();
+
+                            b1.Navigation("InvisibleChars")
+                                .IsRequired();
+
+                            b1.Navigation("SeoScraping")
+                                .IsRequired();
+
+                            b1.Navigation("Similarity")
+                                .IsRequired();
+
+                            b1.Navigation("Spacing")
+                                .IsRequired();
+
+                            b1.Navigation("StopWords")
+                                .IsRequired();
+
+                            b1.Navigation("ThreatIntel")
+                                .IsRequired();
+
+                            b1.Navigation("Translation")
+                                .IsRequired();
+
+                            b1.Navigation("UrlBlocklist")
+                                .IsRequired();
+
+                            b1.Navigation("VideoSpam")
+                                .IsRequired();
+                        });
+
+                    b.Navigation("Config");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DetectionResultRecordDto", b =>

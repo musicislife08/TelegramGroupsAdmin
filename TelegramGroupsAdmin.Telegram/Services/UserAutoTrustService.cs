@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -17,20 +20,20 @@ public class UserAutoTrustService
 {
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly IUserActionsRepository _userActionsRepository;
-    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
+    private readonly IConfigService _configService;
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<UserAutoTrustService> _logger;
 
     public UserAutoTrustService(
         IDetectionResultsRepository detectionResultsRepository,
         IUserActionsRepository userActionsRepository,
-        IContentDetectionConfigRepository contentDetectionConfigRepository,
+        IConfigService configService,
         ITelegramUserRepository userRepository,
         ILogger<UserAutoTrustService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
         _userActionsRepository = userActionsRepository;
-        _contentDetectionConfigRepository = contentDetectionConfigRepository;
+        _configService = configService;
         _userRepository = userRepository;
         _logger = logger;
     }
@@ -50,8 +53,9 @@ public class UserAutoTrustService
 
         try
         {
-            // Get effective config (chat-specific overrides, global defaults)
-            var config = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+            // Get effective config via ConfigService (single entry point for all config)
+            var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
+                        ?? new ContentDetectionConfig();
 
             // Feature disabled - skip
             if (!config.FirstMessageOnly)

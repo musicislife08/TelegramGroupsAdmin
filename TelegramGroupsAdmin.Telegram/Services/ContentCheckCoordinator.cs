@@ -5,7 +5,7 @@ using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -63,7 +63,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         using var scope = _serviceProvider.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var contentCheckConfigRepo = scope.ServiceProvider.GetRequiredService<IContentCheckConfigRepository>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
         // REFACTOR-5: Check if user is explicitly trusted (source of truth: telegram_users.is_trusted)
         isUserTrusted = await userRepository.IsTrustedAsync(
@@ -81,12 +81,8 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             isUserAdmin);
 
         // Phase 4.14: 2-Phase Detection
-        // Phase 1: Get list of critical checks (always_run=true) for this chat
-        var criticalChecks = await contentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, cancellationToken);
-        var criticalCheckNames = criticalChecks
-            .Where(c => c.Enabled && c.AlwaysRun)
-            .Select(c => c.CheckName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Phase 1: Get list of critical checks (always_run=true) using optimized JSONB query
+        var criticalCheckNames = await configService.GetCriticalCheckNamesAsync(request.ChatId, cancellationToken);
 
         _logger.LogInformation(
             "{Chat} has {Count} critical (always_run) checks configured: {Checks}",

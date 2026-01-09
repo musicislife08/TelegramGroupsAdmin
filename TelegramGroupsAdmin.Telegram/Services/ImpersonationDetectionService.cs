@@ -7,7 +7,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -93,7 +93,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
         // 3. Check message count (only check first N messages per chat)
         var messageCount = await _messageHistoryRepository.GetMessageCountAsync(userId, chatId);
-        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, chatId)
+        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
                      ?? new ContentDetectionConfig();
 
         var threshold = config.FirstMessagesCount;

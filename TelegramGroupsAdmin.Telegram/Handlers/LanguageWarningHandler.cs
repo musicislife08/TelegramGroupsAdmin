@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -46,9 +48,10 @@ public class LanguageWarningHandler
             if (translation == null)
                 return;
 
-            // Get configuration
-            var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository>();
-            var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+            // Get configuration service - single entry point for all config access
+            var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+            var spamConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, message.Chat.Id)
+                            ?? new ContentDetectionConfig();
 
             // Check if language warnings are enabled
             if (!spamConfig.Translation.WarnNonEnglish)
@@ -68,7 +71,6 @@ public class LanguageWarningHandler
                 return;
 
             // Get warning system config for auto-ban threshold
-            var configService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Configuration.Services.IConfigService>();
             var warningConfig = await configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, message.Chat.Id)
                                ?? WarningSystemConfig.Default;
 

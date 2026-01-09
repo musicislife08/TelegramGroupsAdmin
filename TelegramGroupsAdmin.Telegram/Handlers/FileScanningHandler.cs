@@ -1,7 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -10,23 +15,38 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// Only scans Document types (PDF, EXE, ZIP, Office files, etc.)
 /// Excludes media files (Animation/GIF, Video, Audio, Voice, Sticker, VideoNote) which cannot contain executable malware.
 /// Photos are handled separately via image spam detection (OpenAI Vision).
+///
+/// Respects ContentDetectionConfig.FileScanning settings:
+/// - Enabled: If false, file scanning is completely disabled
+/// - AlwaysRun: If true, scans files even for trusted/admin users (security critical check)
+/// - UseGlobal: If true, uses global config; if false, uses chat-specific overrides
 /// </summary>
 public class FileScanningHandler
 {
     private readonly IJobScheduler _jobScheduler;
+    private readonly IConfigService _configService;
+    private readonly ITelegramUserRepository _userRepository;
+    private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly ILogger<FileScanningHandler> _logger;
 
     public FileScanningHandler(
         IJobScheduler jobScheduler,
+        IConfigService configService,
+        ITelegramUserRepository userRepository,
+        IChatAdminsRepository chatAdminsRepository,
         ILogger<FileScanningHandler> logger)
     {
         _jobScheduler = jobScheduler;
+        _configService = configService;
+        _userRepository = userRepository;
+        _chatAdminsRepository = chatAdminsRepository;
         _logger = logger;
     }
 
     /// <summary>
     /// Process message for file scanning: detect scannable documents and schedule background scan.
     /// Returns scan scheduling result if document found, null otherwise.
+    /// Respects FileScanning.Enabled and FileScanning.AlwaysRun configuration.
     /// </summary>
     public async Task<FileScanSchedulingResult?> ProcessFileScanningAsync(
         Message message,
@@ -38,6 +58,58 @@ public class FileScanningHandler
         if (detection == null)
         {
             return null;
+        }
+
+        // Get effective content detection config for this chat
+        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId);
+
+        // If no config exists, use defaults (file scanning enabled with AlwaysRun=true)
+        var fileScanningConfig = config?.FileScanning ?? new FileScanningDetectionConfig();
+
+        // Check if file scanning is enabled
+        if (!fileScanningConfig.Enabled)
+        {
+            _logger.LogInformation(
+                "File scanning disabled for {Chat}, skipping scan for '{FileName}'",
+                message.Chat.ToLogInfo(),
+                detection.FileName ?? "unknown");
+
+            return new FileScanSchedulingResult(
+                FileId: detection.FileId,
+                FileSize: detection.FileSize,
+                FileName: detection.FileName,
+                ContentType: detection.ContentType,
+                Scheduled: false,
+                SkipReason: "File scanning is disabled for this chat");
+        }
+
+        // Check trust/admin status for AlwaysRun bypass logic
+        if (!fileScanningConfig.AlwaysRun)
+        {
+            var isUserTrusted = await _userRepository.IsTrustedAsync(userId, cancellationToken);
+            var isUserAdmin = await _chatAdminsRepository.IsAdminAsync(chatId, userId, cancellationToken);
+
+            if (isUserTrusted || isUserAdmin)
+            {
+                var skipReason = isUserTrusted
+                    ? "User is trusted and FileScanning.AlwaysRun is disabled"
+                    : "User is admin and FileScanning.AlwaysRun is disabled";
+
+                _logger.LogInformation(
+                    "Skipping file scan for '{FileName}' from {User} in {Chat}: {Reason}",
+                    detection.FileName ?? "unknown",
+                    message.From.ToLogInfo(),
+                    message.Chat.ToLogInfo(),
+                    skipReason);
+
+                return new FileScanSchedulingResult(
+                    FileId: detection.FileId,
+                    FileSize: detection.FileSize,
+                    FileName: detection.FileName,
+                    ContentType: detection.ContentType,
+                    Scheduled: false,
+                    SkipReason: skipReason);
+            }
         }
 
         // Schedule file scan via Quartz.NET with 0s delay for instant execution
@@ -54,11 +126,11 @@ public class FileScanningHandler
         );
 
         _logger.LogInformation(
-            "Scheduling file scan for '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId}",
+            "Scheduling file scan for '{FileName}' ({FileSize} bytes) from {User} in {Chat}",
             detection.FileName ?? "unknown",
             detection.FileSize,
-            userId,
-            chatId);
+            message.From.ToLogInfo(),
+            message.Chat.ToLogInfo());
 
         await _jobScheduler.ScheduleJobAsync(
             "FileScan",
@@ -71,8 +143,8 @@ public class FileScanningHandler
             FileSize: detection.FileSize,
             FileName: detection.FileName,
             ContentType: detection.ContentType,
-            Scheduled: true
-        );
+            Scheduled: true,
+            SkipReason: null);
     }
 
     /// <summary>
@@ -131,5 +203,6 @@ public record FileScanSchedulingResult(
     long FileSize,
     string? FileName,
     string? ContentType,
-    bool Scheduled
+    bool Scheduled,
+    string? SkipReason = null
 );

@@ -2,6 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
@@ -133,8 +136,9 @@ public class MessageEditProcessor
         if (savedEdit == null)
             return;
 
-        var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository>();
-        var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var spamConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, editedMessage.Chat.Id)
+                        ?? new ContentDetectionConfig();
 
         // Check if translation is enabled and message meets minimum length
         if (!spamConfig.Translation.Enabled || newText.Length < spamConfig.Translation.MinMessageLength)

@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Telegram.Services;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -317,7 +317,7 @@ public class CasCheckServiceTests
         };
 
         _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, 0)
+            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
             .Returns(new ValueTask<ContentDetectionConfig?>(badConfig));
 
         // Act
@@ -401,7 +401,7 @@ public class CasCheckServiceTests
         };
 
         _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, 0)
+            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
             .Returns(new ValueTask<ContentDetectionConfig?>(config));
 
         _mockServer
@@ -439,7 +439,7 @@ public class CasCheckServiceTests
         };
 
         _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, 0)
+            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
             .Returns(new ValueTask<ContentDetectionConfig?>(config));
     }
 
@@ -455,7 +455,7 @@ public class CasCheckServiceTests
         };
 
         _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, 0)
+            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
             .Returns(new ValueTask<ContentDetectionConfig?>(config));
     }
 

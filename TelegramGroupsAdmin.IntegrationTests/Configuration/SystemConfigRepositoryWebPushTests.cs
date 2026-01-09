@@ -177,18 +177,22 @@ public class SystemConfigRepositoryWebPushTests
     [Test]
     public async Task SaveWebPushConfigAsync_ShouldNotAffectOtherConfigs()
     {
-        // Arrange - Save OpenAI config first
-        var openAIConfig = new OpenAIConfig { Model = "gpt-4o-mini" };
-        await _configRepo!.SaveOpenAIConfigAsync(openAIConfig);
+        // Arrange - Save AI provider config first
+        var aiProviderConfig = new AIProviderConfig
+        {
+            Connections = [new AIConnection { Id = "test", Provider = AIProviderType.OpenAI, Enabled = true }]
+        };
+        await _configRepo!.SaveAIProviderConfigAsync(aiProviderConfig);
 
         // Act - Save WebPush config
         var webPushConfig = new WebPushConfig { Enabled = true, ContactEmail = "test@example.com" };
         await _configRepo.SaveWebPushConfigAsync(webPushConfig);
 
-        // Assert - OpenAI config should still be there
-        var retrievedOpenAI = await _configRepo.GetOpenAIConfigAsync();
-        Assert.That(retrievedOpenAI, Is.Not.Null);
-        Assert.That(retrievedOpenAI!.Model, Is.EqualTo("gpt-4o-mini"));
+        // Assert - AI provider config should still be there
+        var retrievedAI = await _configRepo.GetAIProviderConfigAsync();
+        Assert.That(retrievedAI, Is.Not.Null);
+        Assert.That(retrievedAI!.Connections, Has.Count.EqualTo(1));
+        Assert.That(retrievedAI.Connections[0].Id, Is.EqualTo("test"));
     }
 
     #endregion

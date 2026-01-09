@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -40,7 +40,7 @@ public class CasCheckService : ICasCheckService
         // Load CAS config (global config with chat_id=0)
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var detectionConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, 0);
+        var detectionConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0);
         var casConfig = detectionConfig?.Cas ?? new CasConfig();
 
         if (!casConfig.Enabled)

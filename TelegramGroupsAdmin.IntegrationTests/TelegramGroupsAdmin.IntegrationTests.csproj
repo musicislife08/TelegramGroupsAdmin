@@ -50,6 +50,7 @@
     <EmbeddedResource Include="TestData\SQL\03_base_linked_channels.sql" />
     <EmbeddedResource Include="TestData\SQL\04_base_messages.sql" />
     <EmbeddedResource Include="TestData\SQL\05_base_detection_results.sql" />
+    <EmbeddedResource Include="TestData\SQL\06_base_content_detection_configs.sql" />
     <!-- Training data scripts -->
     <EmbeddedResource Include="TestData\SQL\10_training_minimal.sql" />
     <EmbeddedResource Include="TestData\SQL\11_training_full.sql" />

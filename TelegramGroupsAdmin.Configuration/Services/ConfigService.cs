@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.Configuration.Services;
@@ -11,9 +12,11 @@ namespace TelegramGroupsAdmin.Configuration.Services;
 /// <summary>
 /// Service for managing unified configuration storage with automatic global/chat merging
 /// PERF-CFG-1: Uses IMemoryCache for 95% query reduction (200+ queries/hr → 10-15)
+/// Routes ConfigType.ContentDetection to IContentDetectionConfigRepository (separate table)
 /// </summary>
 public class ConfigService(
     IConfigRepository configRepository,
+    IContentDetectionConfigRepository contentDetectionConfigRepository,
     IMemoryCache cache,
     IDataProtectionProvider dataProtectionProvider,
     ILogger<ConfigService> logger) : IConfigService
@@ -29,6 +32,26 @@ public class ConfigService(
     public async Task SaveAsync<T>(ConfigType configType, long chatId, T config) where T : class
     {
         ArgumentNullException.ThrowIfNull(config);
+
+        // Route ContentDetection to separate repository
+        if (configType == ConfigType.ContentDetection)
+        {
+            if (config is not ContentDetectionConfig cdConfig)
+                throw new ArgumentException($"Expected ContentDetectionConfig but got {typeof(T).Name}", nameof(config));
+
+            if (chatId == 0)
+                await contentDetectionConfigRepository.UpdateGlobalConfigAsync(cdConfig);
+            else
+                await contentDetectionConfigRepository.UpdateChatConfigAsync(chatId, cdConfig);
+
+            logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, chatId == 0 ? "global" : $"chat {chatId}");
+
+            // Invalidate cache
+            cache.Remove($"cfg_{configType}_{chatId}");
+            if (chatId != 0)
+                cache.Remove($"cfg_effective_{configType}_{chatId}");
+            return;
+        }
 
         var json = JsonSerializer.Serialize(config, JsonOptions);
         var record = await configRepository.GetAsync(chatId);
@@ -81,6 +104,22 @@ public class ConfigService(
             return cachedValue;
         }
 
+        // Route ContentDetection to separate repository
+        if (configType == ConfigType.ContentDetection)
+        {
+            ContentDetectionConfig? cdConfig;
+            if (chatId == 0)
+                cdConfig = await contentDetectionConfigRepository.GetGlobalConfigAsync();
+            else
+                cdConfig = await contentDetectionConfigRepository.GetByChatIdAsync(chatId);
+
+            if (cdConfig != null)
+            {
+                cache.Set(cacheKey, cdConfig, new MemoryCacheEntryOptions { SlidingExpiration = CacheDuration });
+            }
+            return cdConfig as T;
+        }
+
         // Slow path: cache miss - fetch from DB and populate cache
         var record = await configRepository.GetAsync(chatId);
         if (record == null)
@@ -107,6 +146,19 @@ public class ConfigService(
 
     public async ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long chatId) where T : class
     {
+        // Route ContentDetection to separate repository (has its own merge logic)
+        if (configType == ConfigType.ContentDetection)
+        {
+            var cdCacheKey = $"cfg_effective_{configType}_{chatId}";
+            if (cache.TryGetValue<T>(cdCacheKey, out var cachedCd))
+                return cachedCd;
+
+            // Repository handles global/chat merge with UseGlobal flags per sub-config
+            var cdConfig = await contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId);
+            cache.Set(cdCacheKey, cdConfig, new MemoryCacheEntryOptions { SlidingExpiration = CacheDuration });
+            return cdConfig as T;
+        }
+
         // If requesting global config, just return it directly (uses cached GetAsync)
         if (chatId == 0)
         {
@@ -157,6 +209,18 @@ public class ConfigService(
 
     public async Task DeleteAsync(ConfigType configType, long chatId)
     {
+        // Route ContentDetection to separate repository
+        if (configType == ConfigType.ContentDetection)
+        {
+            if (chatId != 0)
+                await contentDetectionConfigRepository.DeleteChatConfigAsync(chatId);
+            // Note: Can't delete global config (chat_id=0), it's the fallback
+
+            cache.Remove($"cfg_{configType}_{chatId}");
+            cache.Remove($"cfg_effective_{configType}_{chatId}");
+            return;
+        }
+
         var record = await configRepository.GetAsync(chatId);
         if (record == null)
         {
@@ -262,13 +326,33 @@ public class ConfigService(
         cache.Remove(cacheKey);
     }
 
+    /// <summary>
+    /// Get all content detection chat configurations (for admin UI listing).
+    /// Delegates to the ContentDetection repository since it's stored in separate table.
+    /// </summary>
+    public async Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default)
+    {
+        return await contentDetectionConfigRepository.GetAllChatConfigsAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Get the names of content detection checks that have AlwaysRun=true for the given chat.
+    /// Uses optimized JSONB query to efficiently extract only critical check names.
+    /// </summary>
+    public async Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default)
+    {
+        return await contentDetectionConfigRepository.GetCriticalCheckNamesAsync(chatId, cancellationToken);
+    }
+
     private static void SetConfigColumn(ConfigRecordDto record, ConfigType configType, string? json)
     {
         switch (configType)
         {
-            case ConfigType.SpamDetection:
-                record.ContentDetectionConfig = json;
-                break;
+            case ConfigType.ContentDetection:
+                // ContentDetection uses separate table via IContentDetectionConfigRepository
+                throw new InvalidOperationException(
+                    "ContentDetection config is stored in content_detection_configs table. " +
+                    "Use IContentDetectionConfigRepository instead of ConfigService.");
             case ConfigType.Welcome:
                 record.WelcomeConfig = json;
                 break;
@@ -296,7 +380,9 @@ public class ConfigService(
     {
         return configType switch
         {
-            ConfigType.SpamDetection => record.ContentDetectionConfig,
+            ConfigType.ContentDetection => throw new InvalidOperationException(
+                "ContentDetection config is stored in content_detection_configs table. " +
+                "Use IContentDetectionConfigRepository instead of ConfigService."),
             ConfigType.Welcome => record.WelcomeConfig,
             ConfigType.Log => record.LogConfig,
             ConfigType.Moderation => record.ModerationConfig,

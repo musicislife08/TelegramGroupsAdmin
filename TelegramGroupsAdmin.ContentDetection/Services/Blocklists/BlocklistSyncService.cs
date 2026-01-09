@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 
