@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Data.Services;
 
 namespace TelegramGroupsAdmin.Data.Extensions;
 
@@ -48,6 +49,9 @@ public static class ServiceCollectionExtensions
                 .ConfigureWarnings(w => w
                     .Ignore(RelationalEventId.PendingModelChangesWarning)
                     .Ignore(RelationalEventId.MultipleCollectionIncludeWarning))); // Quartz.NET internal queries
+
+        // Migration history compaction service (runs before EF Core migrations)
+        services.AddScoped<IMigrationHistoryCompactionService, MigrationHistoryCompactionService>();
 
         return services;
     }

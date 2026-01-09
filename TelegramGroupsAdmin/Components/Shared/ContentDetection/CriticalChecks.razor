@@ -64,42 +64,6 @@
             </MudPaper>
         </MudItem>
 
-        <!-- Malware Detection Group -->
-        <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="1">
-                <MudStack Spacing="3">
-                    <MudText Typo="Typo.h6" Color="Color.Primary">
-                        <MudIcon Icon="@Icons.Material.Filled.BugReport" Class="mr-2" />
-                        Malware Detection
-                    </MudText>
-
-                    @foreach (var check in _malwareChecks)
-                    {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudSwitch T="bool"
-                                      Value="@check.AlwaysRun"
-                                      ValueChanged="@(v => OnAlwaysRunChanged(check, v))"
-                                      Color="@(check.AlwaysRun ? Color.Success : Color.Default)"
-                                      Label="@check.DisplayName"
-                                      Disabled="@(!_canEdit)" />
-                            @if (check.AlwaysRun)
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Always Run</MudChip>
-                            }
-                        </MudStack>
-                        <MudText Typo="Typo.caption" Class="ml-10">@check.Description</MudText>
-
-                        @if (check is { Enabled: false, AlwaysRun: true })
-                        {
-                            <MudAlert Severity="Severity.Warning" Dense="true" Class="ml-10">
-                                This check is marked as critical but is <strong>disabled</strong>. It will not run.
-                            </MudAlert>
-                        }
-                    }
-                </MudStack>
-            </MudPaper>
-        </MudItem>
-
         <!-- Spam Detection Algorithms Group -->
         <MudItem xs="12">
             <MudPaper Class="pa-4" Elevation="1">
@@ -188,9 +152,8 @@
     private bool _canEdit;
     private ContentDetectionConfig _config = new();
     private List<CheckViewModel> _securityChecks = [];
-    private List<CheckViewModel> _malwareChecks = [];
     private List<CheckViewModel> _contentChecks = [];
-    private bool HasDisabledCriticalChecks => _securityChecks.Any(c => !c.AlwaysRun) || _malwareChecks.Any(c => !c.AlwaysRun);
+    private bool HasDisabledCriticalChecks => _securityChecks.Any(c => !c.AlwaysRun);
 
     protected override async Task OnInitializedAsync()
     {
@@ -225,22 +188,17 @@
                 new() { CheckName = "FileScanning", DisplayName = "File Scanning", Description = "ClamAV + VirusTotal malware scanning for uploaded files", Category = "Security", Enabled = _config.FileScanning.Enabled, AlwaysRun = _config.FileScanning.AlwaysRun }
             ];
 
-            _malwareChecks =
-            [
-                new() { CheckName = "ImageSpam", DisplayName = "Image Spam (Vision)", Description = "OpenAI Vision API image content analysis", Category = "Malware", Enabled = _config.ImageSpam.Enabled, AlwaysRun = _config.ImageSpam.AlwaysRun },
-                new() { CheckName = "VideoSpam", DisplayName = "Video Spam", Description = "Video content analysis for spam detection", Category = "Malware", Enabled = _config.VideoSpam.Enabled, AlwaysRun = _config.VideoSpam.AlwaysRun }
-            ];
-
             _contentChecks =
             [
                 new() { CheckName = "StopWords", DisplayName = "Stop Words", Description = "Pattern matching against banned keywords/phrases", Category = "Spam", Enabled = _config.StopWords.Enabled, AlwaysRun = _config.StopWords.AlwaysRun },
+                new() { CheckName = "ImageSpam", DisplayName = "Image Spam (Vision)", Description = "OpenAI Vision API image content analysis", Category = "Spam", Enabled = _config.ImageSpam.Enabled, AlwaysRun = _config.ImageSpam.AlwaysRun },
+                new() { CheckName = "VideoSpam", DisplayName = "Video Spam", Description = "Video content analysis for spam detection", Category = "Spam", Enabled = _config.VideoSpam.Enabled, AlwaysRun = _config.VideoSpam.AlwaysRun },
                 new() { CheckName = "Cas", DisplayName = "CAS (Combot)", Description = "Check against Combot Anti-Spam database", Category = "Spam", Enabled = _config.Cas.Enabled, AlwaysRun = _config.Cas.AlwaysRun },
                 new() { CheckName = "Similarity", DisplayName = "Similarity (TF-IDF)", Description = "Detect duplicate/similar spam messages", Category = "Spam", Enabled = _config.Similarity.Enabled, AlwaysRun = _config.Similarity.AlwaysRun },
                 new() { CheckName = "Bayes", DisplayName = "Bayesian Filter", Description = "Statistical spam classification", Category = "Spam", Enabled = _config.Bayes.Enabled, AlwaysRun = _config.Bayes.AlwaysRun },
                 new() { CheckName = "Translation", DisplayName = "Multi-Language", Description = "Detect excessive language mixing", Category = "Spam", Enabled = _config.Translation.Enabled, AlwaysRun = _config.Translation.AlwaysRun },
                 new() { CheckName = "Spacing", DisplayName = "Spacing Check", Description = "Detect excessive spacing/formatting abuse", Category = "Spam", Enabled = _config.Spacing.Enabled, AlwaysRun = _config.Spacing.AlwaysRun },
                 new() { CheckName = "InvisibleChars", DisplayName = "Invisible Characters", Description = "Detect hidden Unicode characters", Category = "Spam", Enabled = _config.InvisibleChars.Enabled, AlwaysRun = _config.InvisibleChars.AlwaysRun },
-                new() { CheckName = "AIVeto", DisplayName = "AI Veto", Description = "GPT-4 semantic spam analysis", Category = "Spam", Enabled = _config.AIVeto.Enabled, AlwaysRun = _config.AIVeto.AlwaysRun },
                 new() { CheckName = "SeoScraping", DisplayName = "SEO Scraping", Description = "Detect SEO spam and scraping patterns", Category = "Spam", Enabled = _config.SeoScraping.Enabled, AlwaysRun = _config.SeoScraping.AlwaysRun }
             ];
         }
@@ -274,7 +232,6 @@
             case "Translation": _config.Translation.AlwaysRun = newValue; break;
             case "Spacing": _config.Spacing.AlwaysRun = newValue; break;
             case "InvisibleChars": _config.InvisibleChars.AlwaysRun = newValue; break;
-            case "AIVeto": _config.AIVeto.AlwaysRun = newValue; break;
             case "SeoScraping": _config.SeoScraping.AlwaysRun = newValue; break;
         }
 

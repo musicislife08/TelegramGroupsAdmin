@@ -473,11 +473,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Explicit spam/ham labels for ML training (separate from detection_results)
         // ============================================================================
 
-        // TrainingLabels: label must be 'spam' or 'ham'
+        // TrainingLabels: label must be 0 (Spam) or 1 (Ham)
         modelBuilder.Entity<TrainingLabelDto>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_training_labels_label",
-                "label IN ('spam', 'ham')"));
+                "label IN (0, 1)"));
 
         // TrainingLabels → Messages (CASCADE delete when message is deleted)
         modelBuilder.Entity<TrainingLabelDto>()
@@ -813,6 +813,37 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     private static void ConfigureSpecialEntities(ModelBuilder modelBuilder)
     {
+        // Messages: Set database default for content_check_skip_reason (0 = NotSkipped)
+        // Required for raw SQL inserts in tests and data migrations
+        modelBuilder.Entity<MessageRecordDto>()
+            .Property(m => m.ContentCheckSkipReason)
+            .HasDefaultValue(ContentCheckSkipReason.NotSkipped);
+
+        // TelegramUsers: Set database defaults for boolean columns
+        // Required for raw SQL inserts in tests and data migrations
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsBot)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsActive)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsBanned)
+            .HasDefaultValue(false);
+
+        // Users (web users): Set database defaults for columns added in later migrations
+        modelBuilder.Entity<UserRecordDto>()
+            .Property(u => u.IsActive)
+            .HasDefaultValue(true);
+        modelBuilder.Entity<UserRecordDto>()
+            .Property(u => u.FailedLoginAttempts)
+            .HasDefaultValue(0);
+
+        // ManagedChats: Set database defaults for boolean columns
+        modelBuilder.Entity<ManagedChatRecordDto>()
+            .Property(c => c.IsDeleted)
+            .HasDefaultValue(false);
+
         // Configure configs table - id is PK, chat_id = 0 for global config
         modelBuilder.Entity<ConfigRecordDto>()
             .HasKey(c => c.Id);

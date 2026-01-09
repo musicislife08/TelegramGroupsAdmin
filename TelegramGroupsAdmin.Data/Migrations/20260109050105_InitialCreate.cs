@@ -13,24 +13,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(
-                name: "ticker");
-
-            migrationBuilder.CreateTable(
-                name: "audit_log",
-                columns: table => new
-                {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    event_type = table.Column<int>(type: "integer", nullable: false),
-                    timestamp = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    actor_user_id = table.Column<string>(type: "text", nullable: true),
-                    target_user_id = table.Column<string>(type: "text", nullable: true),
-                    value = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_audit_log", x => x.id);
-                });
+                name: "quartz");
 
             migrationBuilder.CreateTable(
                 name: "blocklist_subscriptions",
@@ -79,38 +62,29 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "chat_prompts",
-                columns: table => new
-                {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    chat_id = table.Column<long>(type: "bigint", nullable: false),
-                    custom_prompt = table.Column<string>(type: "text", nullable: false),
-                    enabled = table.Column<bool>(type: "boolean", nullable: false),
-                    added_date = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    added_by = table.Column<string>(type: "text", nullable: true),
-                    notes = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_chat_prompts", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "configs",
                 columns: table => new
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    chat_id = table.Column<long>(type: "bigint", nullable: true),
-                    spam_detection_config = table.Column<string>(type: "jsonb", nullable: true),
+                    chat_id = table.Column<long>(type: "bigint", nullable: false, defaultValue: 0L),
                     welcome_config = table.Column<string>(type: "jsonb", nullable: true),
                     log_config = table.Column<string>(type: "jsonb", nullable: true),
                     moderation_config = table.Column<string>(type: "jsonb", nullable: true),
                     bot_protection_config = table.Column<string>(type: "jsonb", nullable: true),
+                    telegram_bot_config = table.Column<string>(type: "jsonb", nullable: true),
                     file_scanning_config = table.Column<string>(type: "jsonb", nullable: true),
                     background_jobs_config = table.Column<string>(type: "jsonb", nullable: true),
+                    api_keys = table.Column<string>(type: "text", nullable: true),
+                    backup_encryption_config = table.Column<string>(type: "jsonb", nullable: true),
+                    passphrase_encrypted = table.Column<string>(type: "text", nullable: true),
                     invite_link = table.Column<string>(type: "text", nullable: true),
+                    telegram_bot_token_encrypted = table.Column<string>(type: "text", nullable: true),
+                    ai_provider_config = table.Column<string>(type: "jsonb", nullable: true),
+                    sendgrid_config = table.Column<string>(type: "jsonb", nullable: true),
+                    web_push_config = table.Column<string>(type: "jsonb", nullable: true),
+                    vapid_private_key_encrypted = table.Column<string>(type: "text", nullable: true),
+                    service_message_deletion_config = table.Column<string>(type: "jsonb", nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
                     updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
@@ -120,24 +94,19 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "CronTickers",
-                schema: "ticker",
+                name: "content_detection_configs",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Expression = table.Column<string>(type: "text", nullable: true),
-                    Request = table.Column<byte[]>(type: "bytea", nullable: true),
-                    Retries = table.Column<int>(type: "integer", nullable: false),
-                    RetryIntervals = table.Column<int[]>(type: "integer[]", nullable: true),
-                    Function = table.Column<string>(type: "text", nullable: true),
-                    Description = table.Column<string>(type: "text", nullable: true),
-                    InitIdentifier = table.Column<string>(type: "text", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    chat_id = table.Column<long>(type: "bigint", nullable: true),
+                    last_updated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    updated_by = table.Column<string>(type: "text", nullable: true),
+                    config_json = table.Column<string>(type: "jsonb", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_CronTickers", x => x.Id);
+                    table.PrimaryKey("PK_content_detection_configs", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -212,6 +181,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     is_admin = table.Column<bool>(type: "boolean", nullable: false),
                     added_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     is_active = table.Column<bool>(type: "boolean", nullable: false),
+                    is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     last_seen_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     settings_json = table.Column<string>(type: "text", nullable: true),
                     chat_icon_path = table.Column<string>(type: "text", nullable: true)
@@ -247,11 +217,29 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     media_file_name = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     media_mime_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     media_local_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    media_duration = table.Column<int>(type: "integer", nullable: true)
+                    media_duration = table.Column<int>(type: "integer", nullable: true),
+                    content_check_skip_reason = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    similarity_hash = table.Column<long>(type: "bigint", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_messages", x => x.message_id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "notification_preferences",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    user_id = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    config = table.Column<string>(type: "jsonb", nullable: false),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_notification_preferences", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -292,39 +280,103 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "spam_check_configs",
+                name: "qrtz_calendars",
+                schema: "quartz",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    chat_id = table.Column<long>(type: "bigint", nullable: false),
-                    check_name = table.Column<string>(type: "text", nullable: false),
-                    enabled = table.Column<bool>(type: "boolean", nullable: false),
-                    always_run = table.Column<bool>(type: "boolean", nullable: false),
-                    confidence_threshold = table.Column<int>(type: "integer", nullable: true),
-                    configuration_json = table.Column<string>(type: "text", nullable: true),
-                    modified_date = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    modified_by = table.Column<string>(type: "text", nullable: true)
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    calendar_name = table.Column<string>(type: "text", nullable: false),
+                    calendar = table.Column<byte[]>(type: "bytea", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_spam_check_configs", x => x.id);
+                    table.PrimaryKey("PK_qrtz_calendars", x => new { x.sched_name, x.calendar_name });
                 });
 
             migrationBuilder.CreateTable(
-                name: "spam_detection_configs",
+                name: "qrtz_fired_triggers",
+                schema: "quartz",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    chat_id = table.Column<long>(type: "bigint", nullable: true),
-                    config_json = table.Column<string>(type: "text", nullable: false),
-                    last_updated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    updated_by = table.Column<string>(type: "text", nullable: true)
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    entry_id = table.Column<string>(type: "text", nullable: false),
+                    trigger_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_group = table.Column<string>(type: "text", nullable: false),
+                    instance_name = table.Column<string>(type: "text", nullable: false),
+                    fired_time = table.Column<long>(type: "bigint", nullable: false),
+                    sched_time = table.Column<long>(type: "bigint", nullable: false),
+                    priority = table.Column<int>(type: "integer", nullable: false),
+                    state = table.Column<string>(type: "text", nullable: false),
+                    job_name = table.Column<string>(type: "text", nullable: true),
+                    job_group = table.Column<string>(type: "text", nullable: true),
+                    is_nonconcurrent = table.Column<bool>(type: "bool", nullable: false),
+                    requests_recovery = table.Column<bool>(type: "bool", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_spam_detection_configs", x => x.id);
+                    table.PrimaryKey("PK_qrtz_fired_triggers", x => new { x.sched_name, x.entry_id });
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_job_details",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    job_name = table.Column<string>(type: "text", nullable: false),
+                    job_group = table.Column<string>(type: "text", nullable: false),
+                    description = table.Column<string>(type: "text", nullable: true),
+                    job_class_name = table.Column<string>(type: "text", nullable: false),
+                    is_durable = table.Column<bool>(type: "bool", nullable: false),
+                    is_nonconcurrent = table.Column<bool>(type: "bool", nullable: false),
+                    is_update_data = table.Column<bool>(type: "bool", nullable: false),
+                    requests_recovery = table.Column<bool>(type: "bool", nullable: false),
+                    job_data = table.Column<byte[]>(type: "bytea", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_job_details", x => new { x.sched_name, x.job_name, x.job_group });
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_locks",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    lock_name = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_locks", x => new { x.sched_name, x.lock_name });
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_paused_trigger_grps",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_group = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_paused_trigger_grps", x => new { x.sched_name, x.trigger_group });
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_scheduler_state",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    instance_name = table.Column<string>(type: "text", nullable: false),
+                    last_checkin_time = table.Column<long>(type: "bigint", nullable: false),
+                    checkin_interval = table.Column<long>(type: "bigint", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_scheduler_state", x => new { x.sched_name, x.instance_name });
                 });
 
             migrationBuilder.CreateTable(
@@ -352,53 +404,21 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     user_photo_path = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
                     photo_hash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     photo_file_unique_id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    is_bot = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     is_trusted = table.Column<bool>(type: "boolean", nullable: false),
+                    is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    is_banned = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    ban_expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     bot_dm_enabled = table.Column<bool>(type: "boolean", nullable: false),
                     first_seen_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     last_seen_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    warnings = table.Column<string>(type: "jsonb", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_telegram_users", x => x.telegram_user_id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "TimeTickers",
-                schema: "ticker",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Status = table.Column<int>(type: "integer", nullable: false),
-                    LockHolder = table.Column<string>(type: "text", nullable: true),
-                    Request = table.Column<byte[]>(type: "bytea", nullable: true),
-                    ExecutionTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    LockedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    ExecutedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Exception = table.Column<string>(type: "text", nullable: true),
-                    ElapsedTime = table.Column<long>(type: "bigint", nullable: false),
-                    Retries = table.Column<int>(type: "integer", nullable: false),
-                    RetryCount = table.Column<int>(type: "integer", nullable: false),
-                    RetryIntervals = table.Column<int[]>(type: "integer[]", nullable: true),
-                    BatchParent = table.Column<Guid>(type: "uuid", nullable: true),
-                    BatchRunCondition = table.Column<int>(type: "integer", nullable: true),
-                    Function = table.Column<string>(type: "text", nullable: true),
-                    Description = table.Column<string>(type: "text", nullable: true),
-                    InitIdentifier = table.Column<string>(type: "text", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_TimeTickers", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_TimeTickers_TimeTickers_BatchParent",
-                        column: x => x.BatchParent,
-                        principalSchema: "ticker",
-                        principalTable: "TimeTickers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -412,7 +432,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     security_stamp = table.Column<string>(type: "text", nullable: false),
                     permission_level = table.Column<int>(type: "integer", nullable: false),
                     invited_by = table.Column<string>(type: "character varying(450)", nullable: true),
-                    is_active = table.Column<bool>(type: "boolean", nullable: false),
+                    is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     totp_secret = table.Column<string>(type: "text", nullable: true),
                     totp_enabled = table.Column<bool>(type: "boolean", nullable: false),
                     totp_setup_started_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -426,6 +446,8 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     email_verification_token_expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     password_reset_token = table.Column<string>(type: "text", nullable: true),
                     password_reset_token_expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    locked_until = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    failed_login_attempts = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     InvitedByUserId = table.Column<string>(type: "character varying(450)", nullable: true)
                 },
                 constraints: table =>
@@ -445,75 +467,24 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "welcome_responses",
+                name: "linked_channels",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
+                    id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    chat_id = table.Column<long>(type: "bigint", nullable: false),
-                    user_id = table.Column<long>(type: "bigint", nullable: false),
-                    username = table.Column<string>(type: "text", nullable: true),
-                    welcome_message_id = table.Column<int>(type: "integer", nullable: false),
-                    response = table.Column<int>(type: "integer", nullable: false),
-                    responded_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    dm_sent = table.Column<bool>(type: "boolean", nullable: false),
-                    dm_fallback = table.Column<bool>(type: "boolean", nullable: false),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    timeout_job_id = table.Column<Guid>(type: "uuid", nullable: true)
+                    managed_chat_id = table.Column<long>(type: "bigint", nullable: false),
+                    channel_id = table.Column<long>(type: "bigint", nullable: false),
+                    channel_name = table.Column<string>(type: "text", nullable: true),
+                    channel_icon_path = table.Column<string>(type: "text", nullable: true),
+                    photo_hash = table.Column<byte[]>(type: "bytea", nullable: true),
+                    last_synced = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_welcome_responses", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "CronTickerOccurrences",
-                schema: "ticker",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Status = table.Column<int>(type: "integer", nullable: false),
-                    LockHolder = table.Column<string>(type: "text", nullable: true),
-                    ExecutionTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    CronTickerId = table.Column<Guid>(type: "uuid", nullable: false),
-                    LockedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    ExecutedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Exception = table.Column<string>(type: "text", nullable: true),
-                    ElapsedTime = table.Column<long>(type: "bigint", nullable: false),
-                    RetryCount = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_CronTickerOccurrences", x => x.Id);
+                    table.PrimaryKey("PK_linked_channels", x => x.id);
                     table.ForeignKey(
-                        name: "FK_CronTickerOccurrences_CronTickers_CronTickerId",
-                        column: x => x.CronTickerId,
-                        principalSchema: "ticker",
-                        principalTable: "CronTickers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "chat_admins",
-                columns: table => new
-                {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    chat_id = table.Column<long>(type: "bigint", nullable: false),
-                    telegram_id = table.Column<long>(type: "bigint", nullable: false),
-                    username = table.Column<string>(type: "text", nullable: true),
-                    is_creator = table.Column<bool>(type: "boolean", nullable: false),
-                    promoted_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    last_verified_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    is_active = table.Column<bool>(type: "boolean", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_chat_admins", x => x.id);
-                    table.ForeignKey(
-                        name: "FK_chat_admins_managed_chats_chat_id",
-                        column: x => x.chat_id,
+                        name: "FK_linked_channels_managed_chats_managed_chat_id",
+                        column: x => x.managed_chat_id,
                         principalTable: "managed_chats",
                         principalColumn: "chat_id",
                         onDelete: ReferentialAction.Cascade);
@@ -541,6 +512,159 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         principalTable: "messages",
                         principalColumn: "message_id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "video_training_samples",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    message_id = table.Column<long>(type: "bigint", nullable: false),
+                    video_path = table.Column<string>(type: "text", nullable: false),
+                    duration_seconds = table.Column<decimal>(type: "numeric(5,2)", nullable: false),
+                    file_size_bytes = table.Column<int>(type: "integer", nullable: false),
+                    width = table.Column<int>(type: "integer", nullable: false),
+                    height = table.Column<int>(type: "integer", nullable: false),
+                    keyframe_hashes = table.Column<string>(type: "jsonb", nullable: false),
+                    has_audio = table.Column<bool>(type: "boolean", nullable: false),
+                    is_spam = table.Column<bool>(type: "boolean", nullable: false),
+                    marked_by_web_user_id = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    marked_by_telegram_user_id = table.Column<long>(type: "bigint", nullable: true),
+                    marked_by_system_identifier = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    marked_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_video_training_samples", x => x.id);
+                    table.CheckConstraint("CK_video_training_exclusive_actor", "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1");
+                    table.ForeignKey(
+                        name: "FK_video_training_samples_messages_message_id",
+                        column: x => x.message_id,
+                        principalTable: "messages",
+                        principalColumn: "message_id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_triggers",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_group = table.Column<string>(type: "text", nullable: false),
+                    job_name = table.Column<string>(type: "text", nullable: false),
+                    job_group = table.Column<string>(type: "text", nullable: false),
+                    description = table.Column<string>(type: "text", nullable: true),
+                    next_fire_time = table.Column<long>(type: "bigint", nullable: true),
+                    prev_fire_time = table.Column<long>(type: "bigint", nullable: true),
+                    priority = table.Column<int>(type: "integer", nullable: true),
+                    trigger_state = table.Column<string>(type: "text", nullable: false),
+                    trigger_type = table.Column<string>(type: "text", nullable: false),
+                    start_time = table.Column<long>(type: "bigint", nullable: false),
+                    end_time = table.Column<long>(type: "bigint", nullable: true),
+                    calendar_name = table.Column<string>(type: "text", nullable: true),
+                    misfire_instr = table.Column<short>(type: "smallint", nullable: true),
+                    job_data = table.Column<byte[]>(type: "bytea", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_triggers", x => new { x.sched_name, x.trigger_name, x.trigger_group });
+                    table.ForeignKey(
+                        name: "FK_qrtz_triggers_qrtz_job_details_sched_name_job_name_job_group",
+                        columns: x => new { x.sched_name, x.job_name, x.job_group },
+                        principalSchema: "quartz",
+                        principalTable: "qrtz_job_details",
+                        principalColumns: new[] { "sched_name", "job_name", "job_group" },
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "chat_admins",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    chat_id = table.Column<long>(type: "bigint", nullable: false),
+                    telegram_id = table.Column<long>(type: "bigint", nullable: false),
+                    is_creator = table.Column<bool>(type: "boolean", nullable: false),
+                    promoted_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    last_verified_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    is_active = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_chat_admins", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_chat_admins_managed_chats_chat_id",
+                        column: x => x.chat_id,
+                        principalTable: "managed_chats",
+                        principalColumn: "chat_id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_chat_admins_telegram_users_telegram_id",
+                        column: x => x.telegram_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "training_labels",
+                columns: table => new
+                {
+                    message_id = table.Column<long>(type: "bigint", nullable: false),
+                    label = table.Column<short>(type: "smallint", nullable: false),
+                    labeled_by_user_id = table.Column<long>(type: "bigint", nullable: true),
+                    labeled_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    reason = table.Column<string>(type: "text", nullable: true),
+                    audit_log_id = table.Column<long>(type: "bigint", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_training_labels", x => x.message_id);
+                    table.CheckConstraint("CK_training_labels_label", "label IN (0, 1)");
+                    table.ForeignKey(
+                        name: "FK_training_labels_messages_message_id",
+                        column: x => x.message_id,
+                        principalTable: "messages",
+                        principalColumn: "message_id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_training_labels_telegram_users_labeled_by_user_id",
+                        column: x => x.labeled_by_user_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "welcome_responses",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    chat_id = table.Column<long>(type: "bigint", nullable: false),
+                    user_id = table.Column<long>(type: "bigint", nullable: false),
+                    username = table.Column<string>(type: "text", nullable: true),
+                    welcome_message_id = table.Column<int>(type: "integer", nullable: false),
+                    response = table.Column<int>(type: "integer", nullable: false),
+                    responded_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    dm_sent = table.Column<bool>(type: "boolean", nullable: false),
+                    dm_fallback = table.Column<bool>(type: "boolean", nullable: false),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    timeout_job_id = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_welcome_responses", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_welcome_responses_telegram_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -584,6 +708,53 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "audit_log",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    event_type = table.Column<int>(type: "integer", nullable: false),
+                    timestamp = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    actor_web_user_id = table.Column<string>(type: "character varying(450)", nullable: true),
+                    actor_telegram_user_id = table.Column<long>(type: "bigint", nullable: true),
+                    actor_system_identifier = table.Column<string>(type: "text", nullable: true),
+                    target_web_user_id = table.Column<string>(type: "character varying(450)", nullable: true),
+                    target_telegram_user_id = table.Column<long>(type: "bigint", nullable: true),
+                    target_system_identifier = table.Column<string>(type: "text", nullable: true),
+                    value = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_audit_log", x => x.id);
+                    table.CheckConstraint("CK_audit_log_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
+                    table.CheckConstraint("CK_audit_log_exclusive_target", "(target_web_user_id IS NULL AND target_telegram_user_id IS NULL AND target_system_identifier IS NULL) OR ((target_web_user_id IS NOT NULL)::int + (target_telegram_user_id IS NOT NULL)::int + (target_system_identifier IS NOT NULL)::int = 1)");
+                    table.ForeignKey(
+                        name: "FK_audit_log_telegram_users_actor_telegram_user_id",
+                        column: x => x.actor_telegram_user_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_audit_log_telegram_users_target_telegram_user_id",
+                        column: x => x.target_telegram_user_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_audit_log_users_actor_web_user_id",
+                        column: x => x.actor_web_user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_audit_log_users_target_web_user_id",
+                        column: x => x.target_web_user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "detection_results",
                 columns: table => new
                 {
@@ -601,7 +772,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     system_identifier = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     used_for_training = table.Column<bool>(type: "boolean", nullable: false),
                     net_confidence = table.Column<int>(type: "integer", nullable: false),
-                    check_results_json = table.Column<string>(type: "text", nullable: true),
+                    check_results_json = table.Column<string>(type: "jsonb", nullable: true),
                     edit_version = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
@@ -623,6 +794,48 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     table.ForeignKey(
                         name: "FK_detection_results_users_web_user_id",
                         column: x => x.web_user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "image_training_samples",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    message_id = table.Column<long>(type: "bigint", nullable: false),
+                    photo_path = table.Column<string>(type: "text", nullable: false),
+                    photo_hash = table.Column<byte[]>(type: "bytea", nullable: false),
+                    file_size_bytes = table.Column<int>(type: "integer", nullable: false),
+                    width = table.Column<int>(type: "integer", nullable: false),
+                    height = table.Column<int>(type: "integer", nullable: false),
+                    is_spam = table.Column<bool>(type: "boolean", nullable: false),
+                    marked_by_web_user_id = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    marked_by_telegram_user_id = table.Column<long>(type: "bigint", nullable: true),
+                    marked_by_system_identifier = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    marked_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_image_training_samples", x => x.id);
+                    table.CheckConstraint("CK_image_training_exclusive_actor", "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1");
+                    table.ForeignKey(
+                        name: "FK_image_training_samples_messages_message_id",
+                        column: x => x.message_id,
+                        principalTable: "messages",
+                        principalColumn: "message_id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_image_training_samples_telegram_users_marked_by_telegram_us~",
+                        column: x => x.marked_by_telegram_user_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_image_training_samples_users_marked_by_web_user_id",
+                        column: x => x.marked_by_web_user_id,
                         principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.SetNull);
@@ -705,6 +918,30 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "push_subscriptions",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    user_id = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    endpoint = table.Column<string>(type: "text", nullable: false),
+                    p256dh = table.Column<string>(type: "text", nullable: false),
+                    auth = table.Column<string>(type: "text", nullable: false),
+                    user_agent = table.Column<string>(type: "text", nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_push_subscriptions", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_push_subscriptions_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -834,11 +1071,49 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 {
                     table.PrimaryKey("PK_telegram_user_mappings", x => x.id);
                     table.ForeignKey(
+                        name: "FK_telegram_user_mappings_telegram_users_telegram_id",
+                        column: x => x.telegram_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id");
+                    table.ForeignKey(
                         name: "FK_telegram_user_mappings_users_user_id",
                         column: x => x.user_id,
                         principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "threshold_recommendations",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    algorithm_name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    current_threshold = table.Column<decimal>(type: "numeric", nullable: true),
+                    recommended_threshold = table.Column<decimal>(type: "numeric", nullable: false),
+                    confidence_score = table.Column<decimal>(type: "numeric", nullable: false),
+                    veto_rate_before = table.Column<decimal>(type: "numeric", nullable: false),
+                    estimated_veto_rate_after = table.Column<decimal>(type: "numeric", nullable: true),
+                    sample_vetoed_message_ids = table.Column<long[]>(type: "bigint[]", nullable: true),
+                    spam_flags_count = table.Column<int>(type: "integer", nullable: false),
+                    vetoed_count = table.Column<int>(type: "integer", nullable: false),
+                    training_period_start = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    training_period_end = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    reviewed_by_user_id = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    reviewed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    review_notes = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_threshold_recommendations", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_threshold_recommendations_users_reviewed_by_user_id",
+                        column: x => x.reviewed_by_user_id,
+                        principalTable: "users",
+                        principalColumn: "id");
                 });
 
             migrationBuilder.CreateTable(
@@ -873,6 +1148,12 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         principalTable: "telegram_users",
                         principalColumn: "telegram_user_id",
                         onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_user_actions_telegram_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "telegram_users",
+                        principalColumn: "telegram_user_id",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_user_actions_users_web_user_id",
                         column: x => x.web_user_id,
@@ -947,6 +1228,165 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "web_notifications",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    user_id = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: false),
+                    subject = table.Column<string>(type: "text", nullable: false),
+                    message = table.Column<string>(type: "text", nullable: false),
+                    event_type = table.Column<int>(type: "integer", nullable: false),
+                    is_read = table.Column<bool>(type: "boolean", nullable: false),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    read_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_web_notifications", x => x.id);
+                    table.ForeignKey(
+                        name: "FK_web_notifications_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "message_translations",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    message_id = table.Column<long>(type: "bigint", nullable: true),
+                    edit_id = table.Column<long>(type: "bigint", nullable: true),
+                    translated_text = table.Column<string>(type: "text", nullable: false),
+                    detected_language = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    confidence = table.Column<decimal>(type: "numeric", nullable: true),
+                    translated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    similarity_hash = table.Column<long>(type: "bigint", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_message_translations", x => x.id);
+                    table.CheckConstraint("CK_message_translations_exclusive_source", "(message_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1");
+                    table.ForeignKey(
+                        name: "FK_message_translations_message_edits_edit_id",
+                        column: x => x.edit_id,
+                        principalTable: "message_edits",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_message_translations_messages_message_id",
+                        column: x => x.message_id,
+                        principalTable: "messages",
+                        principalColumn: "message_id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_blob_triggers",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_group = table.Column<string>(type: "text", nullable: false),
+                    blob_data = table.Column<byte[]>(type: "bytea", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_blob_triggers", x => new { x.sched_name, x.trigger_name, x.trigger_group });
+                    table.ForeignKey(
+                        name: "FK_qrtz_blob_triggers_qrtz_triggers_sched_name_trigger_name_tr~",
+                        columns: x => new { x.sched_name, x.trigger_name, x.trigger_group },
+                        principalSchema: "quartz",
+                        principalTable: "qrtz_triggers",
+                        principalColumns: new[] { "sched_name", "trigger_name", "trigger_group" },
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_cron_triggers",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_group = table.Column<string>(type: "text", nullable: false),
+                    cron_expression = table.Column<string>(type: "text", nullable: false),
+                    time_zone_id = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_cron_triggers", x => new { x.sched_name, x.trigger_name, x.trigger_group });
+                    table.ForeignKey(
+                        name: "FK_qrtz_cron_triggers_qrtz_triggers_sched_name_trigger_name_tr~",
+                        columns: x => new { x.sched_name, x.trigger_name, x.trigger_group },
+                        principalSchema: "quartz",
+                        principalTable: "qrtz_triggers",
+                        principalColumns: new[] { "sched_name", "trigger_name", "trigger_group" },
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_simple_triggers",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_group = table.Column<string>(type: "text", nullable: false),
+                    repeat_count = table.Column<long>(type: "bigint", nullable: false),
+                    repeat_interval = table.Column<long>(type: "bigint", nullable: false),
+                    times_triggered = table.Column<long>(type: "bigint", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_simple_triggers", x => new { x.sched_name, x.trigger_name, x.trigger_group });
+                    table.ForeignKey(
+                        name: "FK_qrtz_simple_triggers_qrtz_triggers_sched_name_trigger_name_~",
+                        columns: x => new { x.sched_name, x.trigger_name, x.trigger_group },
+                        principalSchema: "quartz",
+                        principalTable: "qrtz_triggers",
+                        principalColumns: new[] { "sched_name", "trigger_name", "trigger_group" },
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "qrtz_simprop_triggers",
+                schema: "quartz",
+                columns: table => new
+                {
+                    sched_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_name = table.Column<string>(type: "text", nullable: false),
+                    trigger_group = table.Column<string>(type: "text", nullable: false),
+                    str_prop_1 = table.Column<string>(type: "text", nullable: true),
+                    str_prop_2 = table.Column<string>(type: "text", nullable: true),
+                    str_prop_3 = table.Column<string>(type: "text", nullable: true),
+                    int_prop_1 = table.Column<int>(type: "integer", nullable: true),
+                    int_prop_2 = table.Column<int>(type: "integer", nullable: true),
+                    long_prop_1 = table.Column<long>(type: "bigint", nullable: true),
+                    long_prop_2 = table.Column<long>(type: "bigint", nullable: true),
+                    dec_prop_1 = table.Column<decimal>(type: "numeric", nullable: true),
+                    dec_prop_2 = table.Column<decimal>(type: "numeric", nullable: true),
+                    bool_prop_1 = table.Column<bool>(type: "bool", nullable: true),
+                    bool_prop_2 = table.Column<bool>(type: "bool", nullable: true),
+                    time_zone_id = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_qrtz_simprop_triggers", x => new { x.sched_name, x.trigger_name, x.trigger_group });
+                    table.ForeignKey(
+                        name: "FK_qrtz_simprop_triggers_qrtz_triggers_sched_name_trigger_name~",
+                        columns: x => new { x.sched_name, x.trigger_name, x.trigger_group },
+                        principalSchema: "quartz",
+                        principalTable: "qrtz_triggers",
+                        principalColumns: new[] { "sched_name", "trigger_name", "trigger_group" },
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_admin_notes_actor_telegram_user_id",
                 table: "admin_notes",
@@ -971,6 +1411,26 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 name: "IX_admin_notes_telegram_user_id",
                 table: "admin_notes",
                 column: "telegram_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_audit_log_actor_telegram_user_id",
+                table: "audit_log",
+                column: "actor_telegram_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_audit_log_actor_web_user_id",
+                table: "audit_log",
+                column: "actor_web_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_audit_log_target_telegram_user_id",
+                table: "audit_log",
+                column: "target_telegram_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_audit_log_target_web_user_id",
+                table: "audit_log",
+                column: "target_web_user_id");
 
             migrationBuilder.CreateIndex(
                 name: "IX_blocklist_subscriptions_block_mode",
@@ -1021,46 +1481,44 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 column: "telegram_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_configs_chat_id",
+                name: "idx_configs_chat_specific",
                 table: "configs",
                 column: "chat_id",
-                unique: true);
+                unique: true,
+                filter: "chat_id != 0");
 
             migrationBuilder.CreateIndex(
-                name: "IX_CronTickerOccurrence_CronTickerId",
-                schema: "ticker",
-                table: "CronTickerOccurrences",
-                column: "CronTickerId");
+                name: "idx_content_detection_configs_chat",
+                table: "content_detection_configs",
+                column: "chat_id",
+                unique: true,
+                filter: "chat_id IS NOT NULL");
 
             migrationBuilder.CreateIndex(
-                name: "IX_CronTickerOccurrence_ExecutionTime",
-                schema: "ticker",
-                table: "CronTickerOccurrences",
-                column: "ExecutionTime");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_CronTickerOccurrence_Status_ExecutionTime",
-                schema: "ticker",
-                table: "CronTickerOccurrences",
-                columns: new[] { "Status", "ExecutionTime" });
-
-            migrationBuilder.CreateIndex(
-                name: "UQ_CronTickerId_ExecutionTime",
-                schema: "ticker",
-                table: "CronTickerOccurrences",
-                columns: new[] { "CronTickerId", "ExecutionTime" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_CronTickers_Expression",
-                schema: "ticker",
-                table: "CronTickers",
-                column: "Expression");
+                name: "ix_detection_results_check_results_json_gin",
+                table: "detection_results",
+                column: "check_results_json")
+                .Annotation("Npgsql:IndexMethod", "gin");
 
             migrationBuilder.CreateIndex(
                 name: "IX_detection_results_detected_at",
                 table: "detection_results",
                 column: "detected_at");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_detection_results_detection_source",
+                table: "detection_results",
+                column: "detection_source");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_detection_results_is_spam",
+                table: "detection_results",
+                column: "is_spam");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_detection_results_is_spam_detected_at",
+                table: "detection_results",
+                columns: new[] { "is_spam", "detected_at" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_detection_results_message_id",
@@ -1120,6 +1578,27 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 columns: new[] { "scanner", "scanned_at" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_image_training_samples_is_spam_marked_at",
+                table: "image_training_samples",
+                columns: new[] { "is_spam", "marked_at" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_image_training_samples_marked_by_telegram_user_id",
+                table: "image_training_samples",
+                column: "marked_by_telegram_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_image_training_samples_marked_by_web_user_id",
+                table: "image_training_samples",
+                column: "marked_by_web_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_image_training_samples_message_id",
+                table: "image_training_samples",
+                column: "message_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_impersonation_alerts_chat_id",
                 table: "impersonation_alerts",
                 column: "chat_id");
@@ -1161,9 +1640,45 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 column: "UserRecordDtoId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_linked_channels_channel_id",
+                table: "linked_channels",
+                column: "channel_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_linked_channels_managed_chat_id",
+                table: "linked_channels",
+                column: "managed_chat_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_message_edits_message_id",
                 table: "message_edits",
                 column: "message_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_message_translations_detected_language",
+                table: "message_translations",
+                column: "detected_language");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_message_translations_edit_id",
+                table: "message_translations",
+                column: "edit_id",
+                unique: true,
+                filter: "edit_id IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_message_translations_message_id",
+                table: "message_translations",
+                column: "message_id",
+                unique: true,
+                filter: "message_id IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_message_translations_similarity_hash",
+                table: "message_translations",
+                column: "similarity_hash",
+                filter: "similarity_hash IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_messages_chat_id",
@@ -1179,6 +1694,12 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 name: "IX_messages_reply_to_message_id",
                 table: "messages",
                 column: "reply_to_message_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_messages_similarity_hash",
+                table: "messages",
+                column: "similarity_hash",
+                filter: "similarity_hash IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_messages_timestamp",
@@ -1211,9 +1732,99 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 column: "telegram_user_id");
 
             migrationBuilder.CreateIndex(
+                name: "IX_push_subscriptions_user_id",
+                table: "push_subscriptions",
+                column: "user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_push_subscriptions_user_id_endpoint",
+                table: "push_subscriptions",
+                columns: new[] { "user_id", "endpoint" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_ft_job_group",
+                schema: "quartz",
+                table: "qrtz_fired_triggers",
+                column: "job_group");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_ft_job_name",
+                schema: "quartz",
+                table: "qrtz_fired_triggers",
+                column: "job_name");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_ft_job_req_recovery",
+                schema: "quartz",
+                table: "qrtz_fired_triggers",
+                column: "requests_recovery");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_ft_trig_group",
+                schema: "quartz",
+                table: "qrtz_fired_triggers",
+                column: "trigger_group");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_ft_trig_inst_name",
+                schema: "quartz",
+                table: "qrtz_fired_triggers",
+                column: "instance_name");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_ft_trig_name",
+                schema: "quartz",
+                table: "qrtz_fired_triggers",
+                column: "trigger_name");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_ft_trig_nm_gp",
+                schema: "quartz",
+                table: "qrtz_fired_triggers",
+                columns: new[] { "sched_name", "trigger_name", "trigger_group" });
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_j_req_recovery",
+                schema: "quartz",
+                table: "qrtz_job_details",
+                column: "requests_recovery");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_t_next_fire_time",
+                schema: "quartz",
+                table: "qrtz_triggers",
+                column: "next_fire_time");
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_t_nft_st",
+                schema: "quartz",
+                table: "qrtz_triggers",
+                columns: new[] { "next_fire_time", "trigger_state" });
+
+            migrationBuilder.CreateIndex(
+                name: "idx_qrtz_t_state",
+                schema: "quartz",
+                table: "qrtz_triggers",
+                column: "trigger_state");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_qrtz_triggers_sched_name_job_name_job_group",
+                schema: "quartz",
+                table: "qrtz_triggers",
+                columns: new[] { "sched_name", "job_name", "job_group" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_recovery_codes_user_id",
                 table: "recovery_codes",
                 column: "user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_reports_unique_pending_per_message",
+                table: "reports",
+                columns: new[] { "message_id", "chat_id" },
+                unique: true,
+                filter: "status = 0");
 
             migrationBuilder.CreateIndex(
                 name: "IX_reports_web_user_id",
@@ -1257,6 +1868,17 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_telegram_users_is_active",
+                table: "telegram_users",
+                column: "is_active",
+                filter: "is_active = false");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_telegram_users_is_banned",
+                table: "telegram_users",
+                column: "is_banned");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_telegram_users_is_trusted",
                 table: "telegram_users",
                 column: "is_trusted");
@@ -1272,22 +1894,39 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 column: "username");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TimeTicker_ExecutionTime",
-                schema: "ticker",
-                table: "TimeTickers",
-                column: "ExecutionTime");
+                name: "IX_threshold_recommendations_algorithm_name_status",
+                table: "threshold_recommendations",
+                columns: new[] { "algorithm_name", "status" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_TimeTicker_Status_ExecutionTime",
-                schema: "ticker",
-                table: "TimeTickers",
-                columns: new[] { "Status", "ExecutionTime" });
+                name: "IX_threshold_recommendations_created_at",
+                table: "threshold_recommendations",
+                column: "created_at");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TimeTickers_BatchParent",
-                schema: "ticker",
-                table: "TimeTickers",
-                column: "BatchParent");
+                name: "IX_threshold_recommendations_reviewed_by_user_id",
+                table: "threshold_recommendations",
+                column: "reviewed_by_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_threshold_recommendations_status",
+                table: "threshold_recommendations",
+                column: "status");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_training_labels_label",
+                table: "training_labels",
+                column: "label");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_training_labels_label_labeled_at",
+                table: "training_labels",
+                columns: new[] { "label", "labeled_at" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_training_labels_labeled_by_user_id",
+                table: "training_labels",
+                column: "labeled_by_user_id");
 
             migrationBuilder.CreateIndex(
                 name: "IX_user_actions_issued_at",
@@ -1361,10 +2000,31 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
+                name: "IX_video_training_samples_is_spam_marked_at",
+                table: "video_training_samples",
+                columns: new[] { "is_spam", "marked_at" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_video_training_samples_message_id",
+                table: "video_training_samples",
+                column: "message_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_web_notifications_user_id_created_at",
+                table: "web_notifications",
+                columns: new[] { "user_id", "created_at" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_welcome_responses_timeout_job_id",
                 table: "welcome_responses",
                 column: "timeout_job_id",
                 filter: "timeout_job_id IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_welcome_responses_user_id",
+                table: "welcome_responses",
+                column: "user_id");
         }
 
         /// <inheritdoc />
@@ -1386,14 +2046,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 name: "chat_admins");
 
             migrationBuilder.DropTable(
-                name: "chat_prompts");
-
-            migrationBuilder.DropTable(
                 name: "configs");
 
             migrationBuilder.DropTable(
-                name: "CronTickerOccurrences",
-                schema: "ticker");
+                name: "content_detection_configs");
 
             migrationBuilder.DropTable(
                 name: "detection_results");
@@ -1408,13 +2064,22 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 name: "file_scan_results");
 
             migrationBuilder.DropTable(
+                name: "image_training_samples");
+
+            migrationBuilder.DropTable(
                 name: "impersonation_alerts");
 
             migrationBuilder.DropTable(
                 name: "invites");
 
             migrationBuilder.DropTable(
-                name: "message_edits");
+                name: "linked_channels");
+
+            migrationBuilder.DropTable(
+                name: "message_translations");
+
+            migrationBuilder.DropTable(
+                name: "notification_preferences");
 
             migrationBuilder.DropTable(
                 name: "pending_notifications");
@@ -1423,16 +2088,49 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 name: "prompt_versions");
 
             migrationBuilder.DropTable(
+                name: "push_subscriptions");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_blob_triggers",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_calendars",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_cron_triggers",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_fired_triggers",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_locks",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_paused_trigger_grps",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_scheduler_state",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_simple_triggers",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_simprop_triggers",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
                 name: "recovery_codes");
 
             migrationBuilder.DropTable(
                 name: "reports");
-
-            migrationBuilder.DropTable(
-                name: "spam_check_configs");
-
-            migrationBuilder.DropTable(
-                name: "spam_detection_configs");
 
             migrationBuilder.DropTable(
                 name: "stop_words");
@@ -1447,8 +2145,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 name: "telegram_user_mappings");
 
             migrationBuilder.DropTable(
-                name: "TimeTickers",
-                schema: "ticker");
+                name: "threshold_recommendations");
+
+            migrationBuilder.DropTable(
+                name: "training_labels");
 
             migrationBuilder.DropTable(
                 name: "user_actions");
@@ -1460,23 +2160,36 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 name: "verification_tokens");
 
             migrationBuilder.DropTable(
+                name: "video_training_samples");
+
+            migrationBuilder.DropTable(
+                name: "web_notifications");
+
+            migrationBuilder.DropTable(
                 name: "welcome_responses");
 
             migrationBuilder.DropTable(
                 name: "managed_chats");
 
             migrationBuilder.DropTable(
-                name: "CronTickers",
-                schema: "ticker");
+                name: "message_edits");
 
             migrationBuilder.DropTable(
-                name: "messages");
+                name: "qrtz_triggers",
+                schema: "quartz");
+
+            migrationBuilder.DropTable(
+                name: "users");
 
             migrationBuilder.DropTable(
                 name: "telegram_users");
 
             migrationBuilder.DropTable(
-                name: "users");
+                name: "messages");
+
+            migrationBuilder.DropTable(
+                name: "qrtz_job_details",
+                schema: "quartz");
         }
     }
 }
