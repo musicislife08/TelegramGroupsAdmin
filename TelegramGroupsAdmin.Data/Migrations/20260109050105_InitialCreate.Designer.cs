@@ -12,8 +12,8 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260108220734_ConsolidateConfigTables")]
-    partial class ConsolidateConfigTables
+    [Migration("20260109050105_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -783,45 +783,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("chat_admins");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatPromptRecordDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("AddedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("added_by");
-
-                    b.Property<DateTimeOffset>("AddedDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("added_date");
-
-                    b.Property<long>("ChatId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("chat_id");
-
-                    b.Property<string>("CustomPrompt")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("custom_prompt");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("enabled");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text")
-                        .HasColumnName("notes");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("chat_prompts");
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ConfigRecordDto", b =>
                 {
                     b.Property<long>("Id")
@@ -878,10 +839,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<string>("ModerationConfig")
                         .HasColumnType("jsonb")
                         .HasColumnName("moderation_config");
-
-                    b.Property<string>("OpenAIConfig")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("openai_config");
 
                     b.Property<string>("PassphraseEncrypted")
                         .HasColumnType("text")
@@ -1516,7 +1473,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("is_admin");
 
                     b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
+                        .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
                     b.Property<DateTimeOffset?>("LastSeenAt")
@@ -1588,7 +1547,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("chat_id");
 
                     b.Property<int>("ContentCheckSkipReason")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("content_check_skip_reason");
 
                     b.Property<string>("ContentHash")
@@ -2208,15 +2169,21 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("first_seen_at");
 
                     b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
+                        .HasDefaultValue(false)
                         .HasColumnName("is_active");
 
                     b.Property<bool>("IsBanned")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
+                        .HasDefaultValue(false)
                         .HasColumnName("is_banned");
 
                     b.Property<bool>("IsBot")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
+                        .HasDefaultValue(false)
                         .HasColumnName("is_bot");
 
                     b.Property<bool>("IsTrusted")
@@ -2440,7 +2407,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.ToTable("training_labels", t =>
                         {
-                            t.HasCheckConstraint("CK_training_labels_label", "label IN ('spam', 'ham')");
+                            t.HasCheckConstraint("CK_training_labels_label", "label IN (0, 1)");
                         });
                 });
 
@@ -2539,7 +2506,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("email_verified");
 
                     b.Property<int>("FailedLoginAttempts")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
+                        .HasDefaultValue(0)
                         .HasColumnName("failed_login_attempts");
 
                     b.Property<string>("InvitedBy")
@@ -2550,7 +2519,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("character varying(450)");
 
                     b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
+                        .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
                     b.Property<DateTimeOffset?>("LastLoginAt")
@@ -3098,15 +3069,11 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.Property<int>("MessageHistoryCount");
 
-                                    b2.Property<string>("SystemPrompt");
-
                                     b2.Property<bool>("UseGlobal");
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
                                     b2.ToTable("content_detection_configs");
-
-                                    b2.HasJsonPropertyName("openAI");
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3145,11 +3112,29 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.Property<bool>("Enabled");
 
-                                    b2.Property<TimeSpan>("Timeout");
+                                    b2.Property<double>("TimeoutSeconds");
 
                                     b2.Property<bool>("UseGlobal");
 
                                     b2.Property<string>("UserAgent");
+
+                                    b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.ToTable("content_detection_configs");
+
+                                    b2.WithOwner()
+                                        .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+                                });
+
+                            b1.OwnsOne("TelegramGroupsAdmin.Data.Models.Configs.FileScanningDetectionConfigData", "FileScanning", b2 =>
+                                {
+                                    b2.Property<long>("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
+
+                                    b2.Property<bool>("AlwaysRun");
+
+                                    b2.Property<bool>("Enabled");
+
+                                    b2.Property<bool>("UseGlobal");
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
@@ -3177,7 +3162,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.Property<int>("OcrConfidenceThreshold");
 
-                                    b2.Property<TimeSpan>("Timeout");
+                                    b2.Property<double>("TimeoutSeconds");
 
                                     b2.Property<bool>("UseGlobal");
 
@@ -3221,7 +3206,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.Property<bool>("Enabled");
 
-                                    b2.Property<TimeSpan>("Timeout");
+                                    b2.Property<double>("TimeoutSeconds");
 
                                     b2.Property<bool>("UseGlobal");
 
@@ -3309,7 +3294,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.Property<bool>("Enabled");
 
-                                    b2.Property<TimeSpan>("Timeout");
+                                    b2.Property<double>("TimeoutSeconds");
 
                                     b2.Property<bool>("UseGlobal");
 
@@ -3362,7 +3347,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.Property<bool>("AlwaysRun");
 
-                                    b2.Property<TimeSpan>("CacheDuration");
+                                    b2.Property<double>("CacheDurationSeconds");
 
                                     b2.Property<bool>("Enabled");
 
@@ -3394,7 +3379,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.Property<int>("OcrConfidenceThreshold");
 
-                                    b2.Property<TimeSpan>("Timeout");
+                                    b2.Property<double>("TimeoutSeconds");
 
                                     b2.Property<bool>("UseGlobal");
 
@@ -3419,6 +3404,9 @@ namespace TelegramGroupsAdmin.Data.Migrations
                                 .IsRequired();
 
                             b1.Navigation("Cas")
+                                .IsRequired();
+
+                            b1.Navigation("FileScanning")
                                 .IsRequired();
 
                             b1.Navigation("ImageSpam")

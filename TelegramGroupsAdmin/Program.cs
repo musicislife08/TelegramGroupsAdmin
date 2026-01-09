@@ -171,7 +171,7 @@ if (!string.IsNullOrEmpty(otlpEndpoint))
 var app = builder.Build();
 
 // Run database migrations
-await app.RunDatabaseMigrationsAsync(connectionString);
+await app.RunDatabaseMigrationsAsync();
 
 // Initialize Serilog configuration from database (now that migrations have run)
 if (serilogConfig != null)

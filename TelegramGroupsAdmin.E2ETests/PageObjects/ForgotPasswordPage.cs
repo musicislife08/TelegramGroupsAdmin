@@ -117,6 +117,11 @@ public class ForgotPasswordPage
     }
 
     /// <summary>
+    /// Gets the error alert locator for Expect assertions.
+    /// </summary>
+    public ILocator ErrorAlertLocator => _page.Locator(ErrorAlert);
+
+    /// <summary>
     /// Gets the error message text.
     /// </summary>
     public async Task<string?> GetErrorMessageAsync()

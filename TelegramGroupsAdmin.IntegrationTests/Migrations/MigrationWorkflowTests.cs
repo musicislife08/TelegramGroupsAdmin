@@ -130,8 +130,12 @@ public class MigrationWorkflowTests
     ///
     /// **Scope**: Tests the most recent migration (safer to test, less complex dependencies).
     /// Full history rollback testing would be more comprehensive but time-intensive.
+    ///
+    /// NOTE: This test requires at least 2 migrations to be meaningful. With only InitialCreate,
+    /// rolling back drops the entire schema. Re-enable when a second migration is added.
     /// </summary>
     [Test]
+    [Ignore("Requires at least 2 migrations - consolidated to single InitialCreate")]
     public async Task RollbackSafety_ShouldRevertMostRecentMigration()
     {
         // Arrange - Create database and apply all migrations
