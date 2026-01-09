@@ -1,16 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -30,8 +33,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
     private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
-    private readonly ModerationActionService _moderationActionService;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ModerationOrchestrator _moderationActionService;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
@@ -49,8 +52,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
         IImpersonationAlertsRepository impersonationAlertsRepository,
-        ModerationActionService moderationActionService,
-        TelegramBotClientFactory botClientFactory,
+        ModerationOrchestrator moderationActionService,
+        ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
     {
@@ -72,9 +75,11 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     {
         // 1. Check if user is globally trusted (bypass all checks)
         var user = await _telegramUserRepository.GetByTelegramIdAsync(userId);
+        var chat = await _managedChatsRepository.GetByChatIdAsync(chatId);
+
         if (user?.IsTrusted == true)
         {
-            _logger.LogDebug("User {UserId} is trusted, skipping impersonation check", userId);
+            _logger.LogDebug("{User} is trusted, skipping impersonation check", user.ToLogDebug());
             return false;
         }
 
@@ -82,41 +87,39 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         var hasPendingAlert = await _impersonationAlertsRepository.HasPendingAlertAsync(userId);
         if (hasPendingAlert)
         {
-            _logger.LogDebug("User {UserId} already has pending impersonation alert", userId);
+            _logger.LogDebug("{User} already has pending impersonation alert", user.ToLogDebug());
             return false;
         }
 
         // 3. Check message count (only check first N messages per chat)
         var messageCount = await _messageHistoryRepository.GetMessageCountAsync(userId, chatId);
-        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, chatId)
+        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
                      ?? new ContentDetectionConfig();
 
         var threshold = config.FirstMessagesCount;
         if (messageCount >= threshold)
         {
             _logger.LogDebug(
-                "User {UserId} has {MessageCount} messages in chat {ChatId}, threshold {Threshold}, skipping check",
-                userId, messageCount, chatId, threshold);
+                "{User} has {MessageCount} messages in {Chat}, threshold {Threshold}, skipping check",
+                user.ToLogDebug(), messageCount, chat.ToLogDebug(), threshold);
             return false;
         }
 
         _logger.LogDebug(
-            "User {UserId} should be checked for impersonation (messages: {MessageCount}/{Threshold})",
-            userId, messageCount, threshold);
+            "{User} should be checked for impersonation (messages: {MessageCount}/{Threshold})",
+            user.ToLogDebug(), messageCount, threshold);
         return true;
     }
 
     /// <inheritdoc/>
     public async Task<ImpersonationCheckResult?> CheckUserAsync(
-        long userId,
-        long chatId,
-        string? firstName,
-        string? lastName,
+        User user,
+        Chat chat,
         string? photoPath)
     {
         _logger.LogDebug(
-            "Checking user {UserId} for impersonation in chat {ChatId}",
-            userId, chatId);
+            "Checking {User} for impersonation in {Chat}",
+            user.ToLogDebug(), chat.ToLogDebug());
 
         // Get all admins from all managed chats
         var allAdmins = await GetAllAdminsWithDataAsync();
@@ -134,7 +137,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         foreach (var admin in allAdmins)
         {
             // Skip self-match (user can't impersonate themselves)
-            if (admin.TelegramUserId == userId)
+            if (admin.TelegramUserId == user.Id)
                 continue;
 
             int score = 0;
@@ -143,10 +146,10 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             double? photoSimilarity = null;
 
             // Check name similarity (50 points)
-            if (!string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(admin.FirstName))
+            if (!string.IsNullOrWhiteSpace(user.FirstName) && !string.IsNullOrWhiteSpace(admin.FirstName))
             {
                 var nameSimilarity = StringUtilities.CalculateNameSimilarity(
-                    firstName, lastName,
+                    user.FirstName, user.LastName,
                     admin.FirstName, admin.LastName);
 
                 if (nameSimilarity >= NameSimilarityThreshold)
@@ -154,10 +157,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                     nameMatch = true;
                     score += 50;
                     _logger.LogDebug(
-                        "Name match detected: User {UserId} '{UserName}' vs Admin {AdminId} '{AdminName}' (similarity: {Similarity:F2})",
-                        userId, $"{firstName} {lastName}".Trim(),
-                        admin.TelegramUserId, $"{admin.FirstName} {admin.LastName}".Trim(),
-                        nameSimilarity);
+                        "Name match detected: {User} vs Admin {Admin} (similarity: {Similarity:F2})",
+                        user.ToLogDebug(), admin.ToLogDebug(), nameSimilarity);
                 }
             }
 
@@ -170,8 +171,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 photoMatch = true;
                 score += 50;
                 _logger.LogDebug(
-                    "Photo match detected: User {UserId} vs Admin {AdminId} (similarity: {Similarity:F2})",
-                    userId, admin.TelegramUserId, photoSim);
+                    "Photo match detected: {User} vs Admin {Admin} (similarity: {Similarity:F2})",
+                    user.ToLogDebug(), admin.ToLogDebug(), photoSim);
             }
 
             // Track highest scoring match
@@ -182,12 +183,12 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 {
                     TotalScore = score,
                     RiskLevel = score >= 100 ? ImpersonationRiskLevel.Critical : ImpersonationRiskLevel.Medium,
-                    SuspectedUserId = userId,
+                    SuspectedUser = user,
+                    DetectionChat = chat,
                     TargetUserId = admin.TelegramUserId,
                     TargetEntityType = ProtectedEntityType.User,
                     TargetEntityId = admin.TelegramUserId,
                     TargetEntityName = $"{admin.FirstName} {admin.LastName}".Trim(),
-                    ChatId = chatId,
                     NameMatch = nameMatch,
                     PhotoMatch = photoMatch,
                     PhotoSimilarityScore = photoSimilarity
@@ -197,7 +198,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
         // Also check against protected entities (chat names and linked channels)
         bestMatch = await CheckUserAgainstProtectedEntitiesAsync(
-            userId, chatId, firstName, lastName, photoPath, highestScore, bestMatch);
+            user, chat, photoPath, highestScore, bestMatch);
 
         // Only return if score >= 50 (at least one attribute matched)
         if (bestMatch != null && bestMatch.TotalScore >= 50)
@@ -207,12 +208,12 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 : $"{bestMatch.TargetEntityType} '{bestMatch.TargetEntityName}' ({bestMatch.TargetEntityId})";
 
             _logger.LogWarning(
-                "Impersonation detected: User {UserId} vs {TargetDescription} in chat {ChatId} (score: {Score}, risk: {Risk})",
-                userId, targetDescription, chatId, bestMatch.TotalScore, bestMatch.RiskLevel);
+                "Impersonation detected: {User} vs {TargetDescription} in {Chat} (score: {Score}, risk: {Risk})",
+                user.ToLogDebug(), targetDescription, chat.ToLogDebug(), bestMatch.TotalScore, bestMatch.RiskLevel);
             return bestMatch;
         }
 
-        _logger.LogDebug("No impersonation detected for user {UserId} in chat {ChatId}", userId, chatId);
+        _logger.LogDebug("No impersonation detected for {User} in {Chat}", user.ToLogDebug(), chat.ToLogDebug());
         return null;
     }
 
@@ -224,9 +225,9 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             // 1. Create alert record
             var alert = new ImpersonationAlertRecord
             {
-                SuspectedUserId = result.SuspectedUserId,
+                SuspectedUserId = result.SuspectedUser.Id,
                 TargetUserId = result.TargetUserId,
-                ChatId = result.ChatId,
+                ChatId = result.DetectionChat.Id,
                 TotalScore = result.TotalScore,
                 RiskLevel = result.RiskLevel,
                 NameMatch = result.NameMatch,
@@ -239,19 +240,17 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             var alertId = await _impersonationAlertsRepository.CreateAlertAsync(alert);
 
             _logger.LogInformation(
-                "Created impersonation alert #{AlertId}: User {SuspectedUserId} → Admin {TargetUserId} (score: {Score})",
-                alertId, result.SuspectedUserId, result.TargetUserId, result.TotalScore);
+                "Created impersonation alert #{AlertId}: {SuspectedUser} → Admin ({TargetUserId}) (score: {Score})",
+                alertId, result.SuspectedUser.ToLogInfo(), result.TargetUserId, result.TotalScore);
 
             // 2. Auto-ban if score >= 100 (high confidence)
             if (result.ShouldAutoBan)
             {
                 var reason = $"Auto-banned: Impersonation detected (name match: {result.NameMatch}, photo match: {result.PhotoMatch}, score: {result.TotalScore})";
 
-                var botClient = await _botClientFactory.GetBotClientAsync();
                 var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
-                    botClient: botClient,
-                    userId: result.SuspectedUserId,
+                    userId: result.SuspectedUser.Id,
                     messageId: null,
                     executor: executor,
                     reason: reason);
@@ -259,14 +258,14 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 if (banResult.Success)
                 {
                     _logger.LogWarning(
-                        "Auto-banned user {UserId} for impersonation (score: {Score}, chats affected: {ChatsAffected})",
-                        result.SuspectedUserId, result.TotalScore, banResult.ChatsAffected);
+                        "Auto-banned {User} for impersonation (score: {Score}, chats affected: {ChatsAffected})",
+                        result.SuspectedUser.ToLogDebug(), result.TotalScore, banResult.ChatsAffected);
                 }
                 else
                 {
                     _logger.LogError(
-                        "Failed to auto-ban user {UserId} for impersonation: {Error}",
-                        result.SuspectedUserId, banResult.ErrorMessage);
+                        "Failed to auto-ban {User} for impersonation: {Error}",
+                        result.SuspectedUser.ToLogDebug(), banResult.ErrorMessage);
                 }
             }
             else
@@ -279,8 +278,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Failed to execute impersonation action for user {UserId}",
-                result.SuspectedUserId);
+                "Failed to execute impersonation action for {User}",
+                result.SuspectedUser.ToLogDebug());
             throw;
         }
     }
@@ -327,6 +326,13 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
         public string? UserPhotoPath { get; set; }
+
+        // Computed log formatting (matches extension method pattern)
+        public string ToLogInfo()
+            => LogDisplayName.UserInfo(FirstName, LastName, null, TelegramUserId);
+
+        public string ToLogDebug()
+            => LogDisplayName.UserDebug(FirstName, LastName, null, TelegramUserId);
     }
 
     /// <summary>
@@ -379,10 +385,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     /// Check user against protected entities (chat names and linked channels)
     /// </summary>
     private async Task<ImpersonationCheckResult?> CheckUserAgainstProtectedEntitiesAsync(
-        long userId,
-        long chatId,
-        string? firstName,
-        string? lastName,
+        User user,
+        Chat chat,
         string? photoPath,
         int currentHighestScore,
         ImpersonationCheckResult? currentBestMatch)
@@ -407,7 +411,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to compute photo hash for user {UserId}", userId);
+                _logger.LogWarning(ex, "Failed to compute photo hash for {User}", user.ToLogDebug());
             }
         }
 
@@ -420,9 +424,9 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
             // Check name similarity against entity name (50 points)
             // Compare user's first name + last name against entity name
-            if (!string.IsNullOrWhiteSpace(firstName))
+            if (!string.IsNullOrWhiteSpace(user.FirstName))
             {
-                var userName = $"{firstName} {lastName}".Trim();
+                var userName = $"{user.FirstName} {user.LastName}".Trim();
                 var similarity = StringUtilities.CalculateStringSimilarity(userName, entity.Name);
 
                 if (similarity >= NameSimilarityThreshold)
@@ -430,8 +434,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                     nameMatch = true;
                     score += 50;
                     _logger.LogDebug(
-                        "Name match detected: User {UserId} '{UserName}' vs {EntityType} '{EntityName}' (similarity: {Similarity:F2})",
-                        userId, userName, entity.Type, entity.Name, similarity);
+                        "Name match detected: {User} vs {EntityType} '{EntityName}' (similarity: {Similarity:F2})",
+                        user.ToLogDebug(), entity.Type, entity.Name, similarity);
                 }
             }
 
@@ -445,8 +449,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 photoMatch = true;
                 score += 50;
                 _logger.LogDebug(
-                    "Photo match detected: User {UserId} vs {EntityType} {EntityId} (similarity: {Similarity:F2})",
-                    userId, entity.Type, entity.Id, photoSim);
+                    "Photo match detected: {User} vs {EntityType} ({EntityId}) (similarity: {Similarity:F2})",
+                    user.ToLogDebug(), entity.Type, entity.Id, photoSim);
             }
 
             // Track highest scoring match
@@ -457,12 +461,12 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 {
                     TotalScore = score,
                     RiskLevel = score >= 100 ? ImpersonationRiskLevel.Critical : ImpersonationRiskLevel.Medium,
-                    SuspectedUserId = userId,
+                    SuspectedUser = user,
+                    DetectionChat = chat,
                     TargetUserId = 0, // Not a user
                     TargetEntityType = entity.Type,
                     TargetEntityId = entity.Id,
                     TargetEntityName = entity.Name,
-                    ChatId = chatId,
                     NameMatch = nameMatch,
                     PhotoMatch = photoMatch,
                     PhotoSimilarityScore = photoSimilarity

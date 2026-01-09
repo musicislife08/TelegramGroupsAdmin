@@ -27,7 +27,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     /// </summary>
     private static AIFeatureConfig CreateFeatureConfig(
         string? connectionId = null,
-        string? model = null,
+        string model = "gpt-4o-mini",
         string? azureDeploymentName = null,
         int maxTokens = 500,
         double temperature = 0.7)
@@ -73,7 +73,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection>();
+        List<AIConnection> connections = [];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -94,7 +94,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection>();
+        List<AIConnection> connections = [];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -114,7 +114,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection>();
+        List<AIConnection> connections = [];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -135,7 +135,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection>();
+        List<AIConnection> connections = [];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -157,7 +157,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection> { CreateConnection() };
+        List<AIConnection> connections = [CreateConnection()];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -175,11 +175,11 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection>
-        {
+        List<AIConnection> connections =
+        [
             CreateConnection(id: "openai-prod", enabled: true),
             CreateConnection(id: "openai-dev", enabled: false) // disabled shouldn't show
-        };
+        ];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -203,7 +203,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig(connectionId: null);
-        var connections = new List<AIConnection> { CreateConnection() };
+        List<AIConnection> connections = [CreateConnection()];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -221,7 +221,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig(connectionId: null);
-        var connections = new List<AIConnection> { CreateConnection() };
+        List<AIConnection> connections = [CreateConnection()];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -248,7 +248,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
             new AIModelInfo { Id = "gpt-4o-mini" }
         ];
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -267,7 +267,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection(provider: AIProviderType.AzureOpenAI);
         var config = CreateFeatureConfig(connectionId: connection.Id);
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -290,7 +290,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -309,7 +309,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -332,7 +332,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -351,7 +351,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -369,7 +369,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig(connectionId: null);
-        var connections = new List<AIConnection> { CreateConnection() };
+        List<AIConnection> connections = [CreateConnection()];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -394,7 +394,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -415,7 +415,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         _mockTestService.TestFeatureAsync(
             Arg.Any<AIFeatureType>(),
@@ -447,7 +447,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         _mockTestService.TestFeatureAsync(
             Arg.Any<AIFeatureType>(),
@@ -479,7 +479,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         _mockTestService.TestFeatureAsync(
             Arg.Any<AIFeatureType>(),
@@ -510,7 +510,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
         // Arrange
         var connection = CreateConnection();
         var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
-        var connections = new List<AIConnection> { connection };
+        List<AIConnection> connections = [connection];
 
         _mockTestService.TestFeatureAsync(
             Arg.Any<AIFeatureType>(),
@@ -544,7 +544,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection>();
+        List<AIConnection> connections = [];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p
@@ -562,7 +562,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     {
         // Arrange
         var config = CreateFeatureConfig();
-        var connections = new List<AIConnection>();
+        List<AIConnection> connections = [];
 
         // Act
         var cut = Render<AIFeatureCard>(p => p

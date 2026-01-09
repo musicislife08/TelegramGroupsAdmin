@@ -16,9 +16,14 @@ public record ContentCheckRequest
     public required long UserId { get; init; }
 
     /// <summary>
-    /// Telegram username (may be null)
+    /// Pre-formatted user display name for logging (e.g., "John Doe (123)")
     /// </summary>
     public string? UserName { get; init; }
+
+    /// <summary>
+    /// Pre-formatted chat display name for logging (e.g., "My Group (-123)")
+    /// </summary>
+    public string? ChatName { get; init; }
 
     /// <summary>
     /// Message metadata from Telegram

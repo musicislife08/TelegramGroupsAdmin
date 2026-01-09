@@ -1,6 +1,4 @@
-@using TelegramGroupsAdmin.ContentDetection.Configuration
-@using TelegramGroupsAdmin.ContentDetection.Repositories
-@inject IContentDetectionConfigRepository ConfigRepository
+@inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="1">
@@ -50,7 +48,8 @@
         try
         {
             // Always load global config for comparison/fallback
-            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+            _globalConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                            ?? new ContentDetectionConfig();
 
             if (IsGlobalView)
             {
@@ -60,7 +59,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, ChatId!.Value);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }

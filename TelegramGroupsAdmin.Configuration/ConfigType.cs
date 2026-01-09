@@ -7,10 +7,11 @@ namespace TelegramGroupsAdmin.Configuration;
 public enum ConfigType
 {
     /// <summary>
-    /// Content detection configuration (spam_detection_config column)
+    /// Content detection configuration (content_detection_configs table)
     /// Contains: ContentDetectionConfig model
+    /// Stored in separate table, routed via IContentDetectionConfigRepository
     /// </summary>
-    SpamDetection,
+    ContentDetection,
 
     /// <summary>
     /// Welcome message configuration (welcome_config column)
@@ -46,5 +47,13 @@ public enum ConfigType
     /// Controls whether the bot polling service is active
     /// GLOBAL ONLY - not available for per-chat configuration
     /// </summary>
-    TelegramBot
+    TelegramBot,
+
+    /// <summary>
+    /// Service message deletion configuration (service_message_deletion_config column)
+    /// Contains: ServiceMessageDeletionConfig model
+    /// Controls which service messages (join/leave, photo changes, etc.) are auto-deleted
+    /// Supports per-chat overrides
+    /// </summary>
+    ServiceMessageDeletion
 }

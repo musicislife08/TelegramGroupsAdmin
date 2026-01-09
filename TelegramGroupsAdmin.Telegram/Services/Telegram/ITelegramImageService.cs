@@ -2,5 +2,5 @@ namespace TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 public interface ITelegramImageService
 {
-    Task<Stream?> DownloadPhotoAsync(string fileId, CancellationToken ct = default);
+    Task<Stream?> DownloadPhotoAsync(string fileId, CancellationToken cancellationToken = default);
 }

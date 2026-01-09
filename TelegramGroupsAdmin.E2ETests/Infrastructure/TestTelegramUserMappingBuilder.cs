@@ -92,9 +92,10 @@ public class TestTelegramUserMappingBuilder
 
     /// <summary>
     /// Builds and persists the Telegram user mapping to the database.
+    /// First creates the telegram_user record (FK requirement), then creates the mapping.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if LinkedToWebUser() was not called.</exception>
-    public async Task<TelegramUserMappingRecord> BuildAsync(CancellationToken ct = default)
+    public async Task<TelegramUserMappingRecord> BuildAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))
         {
@@ -102,8 +103,32 @@ public class TestTelegramUserMappingBuilder
         }
 
         using var scope = _services.CreateScope();
+        var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var mappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
+        // Create the telegram_user first (FK constraint requires this)
+        var now = DateTimeOffset.UtcNow;
+        var telegramUser = new TelegramUser(
+            TelegramUserId: _telegramId,
+            Username: _telegramUsername,
+            FirstName: _telegramUsername ?? "Test",
+            LastName: "User",
+            UserPhotoPath: null,
+            PhotoHash: null,
+            PhotoFileUniqueId: null,
+            IsBot: false,
+            IsTrusted: false,
+            IsBanned: false,
+            BotDmEnabled: false,
+            FirstSeenAt: now,
+            LastSeenAt: now,
+            CreatedAt: now,
+            UpdatedAt: now,
+            IsActive: true
+        );
+        await userRepository.UpsertAsync(telegramUser, cancellationToken);
+
+        // Now create the mapping
         var mapping = new TelegramUserMappingRecord(
             Id: 0, // Will be set by database
             TelegramId: _telegramId,
@@ -113,7 +138,7 @@ public class TestTelegramUserMappingBuilder
             IsActive: _isActive
         );
 
-        var id = await mappingRepository.InsertAsync(mapping, ct);
+        var id = await mappingRepository.InsertAsync(mapping, cancellationToken);
 
         // Return with the generated ID
         return mapping with { Id = id };

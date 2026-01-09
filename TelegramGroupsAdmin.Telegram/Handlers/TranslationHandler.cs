@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -16,18 +19,18 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class TranslationHandler
 {
-    private readonly IContentDetectionConfigRepository _configRepository;
+    private readonly IConfigService _configService;
     private readonly IAITranslationService _translationService;
     private readonly ILanguageDetectionService _languageDetectionService;
     private readonly ILogger<TranslationHandler> _logger;
 
     public TranslationHandler(
-        IContentDetectionConfigRepository configRepository,
+        IConfigService configService,
         IAITranslationService translationService,
         ILanguageDetectionService languageDetectionService,
         ILogger<TranslationHandler> logger)
     {
-        _configRepository = configRepository;
+        _configService = configService;
         _translationService = translationService;
         _languageDetectionService = languageDetectionService;
         _logger = logger;
@@ -48,8 +51,9 @@ public class TranslationHandler
             return null;
         }
 
-        // Load translation configuration
-        var spamConfig = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+        // Load translation configuration via ConfigService (single entry point for all config)
+        var spamConfig = await _configService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                        ?? new ContentDetectionConfig();
 
         // Check if translation is enabled and message meets minimum length
         if (!spamConfig.Translation.Enabled ||
@@ -62,7 +66,7 @@ public class TranslationHandler
         // Tier 1: Latin script ratio for obvious non-Latin scripts (Cyrillic, Chinese, Arabic)
         var latinRatio = CalculateLatinScriptRatio(text);
 
-        if (latinRatio < 0.3)
+        if (latinRatio < TranslationConstants.NonLatinScriptThreshold)
         {
             // Definitely non-Latin script (e.g., Russian, Chinese, Arabic, Hebrew)
             // Skip language detection, proceed directly to translation
@@ -187,7 +191,7 @@ public class TranslationHandler
 
                 // Latin script: Basic Latin (0x0000-0x007F) + Latin-1 Supplement (0x0080-0x00FF) +
                 // Latin Extended-A (0x0100-0x017F) + Latin Extended-B (0x0180-0x024F)
-                if ((c >= 0x0000 && c <= 0x024F))
+                if ((c >= TranslationConstants.LatinScriptRangeStart && c <= TranslationConstants.LatinScriptRangeEnd))
                 {
                     latinChars++;
                 }

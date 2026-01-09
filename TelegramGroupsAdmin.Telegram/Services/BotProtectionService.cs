@@ -1,12 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -15,16 +14,19 @@ public class BotProtectionService : IBotProtectionService
 {
     private readonly ILogger<BotProtectionService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public BotProtectionService(
         ILogger<BotProtectionService> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _botClientFactory = botClientFactory;
     }
 
-    public async Task<bool> ShouldAllowBotAsync(long chatId, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default)
+    public async Task<bool> ShouldAllowBotAsync(Chat chat, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default)
     {
         // Not a bot - always allow
         if (!user.IsBot)
@@ -38,14 +40,14 @@ public class BotProtectionService : IBotProtectionService
 
         // Get effective config for this chat (chat-specific overrides global)
         // Note: IConfigService doesn't support CancellationToken (configuration library)
-        var config = await configService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.UrlFilter, chatId)
+        var config = await configService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.UrlFilter, chat.Id)
                     ?? BotProtectionConfig.Default;
 
         // Bot protection disabled - allow all bots
         if (!config.Enabled || !config.AutoBanBots)
         {
-            _logger.LogDebug("Bot protection disabled for chat {ChatId}, allowing bot {BotDisplayName}",
-                chatId, TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
+            _logger.LogDebug("Bot protection disabled for {Chat}, allowing bot {Bot}",
+                chat.ToLogDebug(), user.ToLogDebug());
             return true;
         }
 
@@ -54,8 +56,8 @@ public class BotProtectionService : IBotProtectionService
         if (!string.IsNullOrEmpty(botUsername) && config.WhitelistedBots.Any(wb =>
             wb.TrimStart('@').Equals(botUsername, StringComparison.OrdinalIgnoreCase)))
         {
-            _logger.LogInformation("Bot {BotUsername} ({BotId}) is whitelisted in chat {ChatId}",
-                user.Username, user.Id, chatId);
+            _logger.LogInformation("Bot {Bot} is whitelisted in {Chat}",
+                user.ToLogInfo(), chat.ToLogInfo());
             return true;
         }
 
@@ -66,23 +68,19 @@ public class BotProtectionService : IBotProtectionService
             if (invitedBy != null)
             {
                 // Check if inviter is a chat admin
-                var admins = await chatAdminsRepository.GetChatAdminsAsync(chatId, cancellationToken);
+                var admins = await chatAdminsRepository.GetChatAdminsAsync(chat.Id, cancellationToken);
                 var isInviterAdmin = admins.Any(admin => admin.TelegramId == invitedBy.Id);
 
                 if (isInviterAdmin)
                 {
-                    _logger.LogInformation("Bot {BotDisplayName} was invited by admin {AdminDisplayName} in chat {ChatId}",
-                        TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id),
-                        TelegramDisplayName.Format(invitedBy.FirstName, invitedBy.LastName, invitedBy.Username, invitedBy.Id),
-                        chatId);
+                    _logger.LogInformation("Bot {Bot} was invited by admin {Admin} in {Chat}",
+                        user.ToLogInfo(), invitedBy.ToLogInfo(), chat.ToLogInfo());
                     return true;
                 }
                 else
                 {
-                    _logger.LogWarning("Bot {BotDisplayName} was invited by non-admin {UserDisplayName} in chat {ChatId} - will be banned",
-                        TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id),
-                        TelegramDisplayName.Format(invitedBy.FirstName, invitedBy.LastName, invitedBy.Username, invitedBy.Id),
-                        chatId);
+                    _logger.LogWarning("Bot {Bot} was invited by non-admin {User} in {Chat} - will be banned",
+                        user.ToLogDebug(), invitedBy.ToLogDebug(), chat.ToLogDebug());
                 }
             }
         }
@@ -91,7 +89,7 @@ public class BotProtectionService : IBotProtectionService
         return false;
     }
 
-    public async Task BanBotAsync(ITelegramBotClient botClient, long chatId, User bot, string reason, CancellationToken cancellationToken = default)
+    public async Task BanBotAsync(Chat chat, User bot, string reason, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -110,6 +108,7 @@ public class BotProtectionService : IBotProtectionService
                 PhotoFileUniqueId: null,
                 IsBot: true, // This is a bot
                 IsTrusted: false,
+                IsBanned: false, // Will be set by moderation after ban
                 BotDmEnabled: false, // Bots don't accept DMs
                 FirstSeenAt: now,
                 LastSeenAt: now,
@@ -119,10 +118,11 @@ public class BotProtectionService : IBotProtectionService
             await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
 
             // Ban the bot
-            await botClient.BanChatMember(chatId, bot.Id, cancellationToken: cancellationToken);
+            var operations = await _botClientFactory.GetOperationsAsync();
+            await operations.BanChatMemberAsync(chat.Id, bot.Id, cancellationToken: cancellationToken);
 
-            _logger.LogWarning("Banned unauthorized bot {BotDisplayName} from chat {ChatId}. Reason: {Reason}",
-                TelegramDisplayName.Format(bot.FirstName, bot.LastName, bot.Username, bot.Id), chatId, reason);
+            _logger.LogWarning("Banned unauthorized bot {Bot} from {Chat}. Reason: {Reason}",
+                bot.ToLogDebug(), chat.ToLogDebug(), reason);
 
             // Log to user_actions table for audit trail
             var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
@@ -140,12 +140,12 @@ public class BotProtectionService : IBotProtectionService
 
             await userActionsRepository.InsertAsync(action, cancellationToken);
 
-            _logger.LogInformation("Logged bot ban to audit trail for bot {BotId} in chat {ChatId}", bot.Id, chatId);
+            _logger.LogInformation("Logged bot ban to audit trail for {Bot} in {Chat}", bot.ToLogInfo(), chat.ToLogInfo());
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to ban bot {BotDisplayName} from chat {ChatId}",
-                TelegramDisplayName.Format(bot.FirstName, bot.LastName, bot.Username, bot.Id), chatId);
+            _logger.LogError(ex, "Failed to ban bot {Bot} from {Chat}",
+                bot.ToLogDebug(), chat.ToLogDebug());
             throw;
         }
     }

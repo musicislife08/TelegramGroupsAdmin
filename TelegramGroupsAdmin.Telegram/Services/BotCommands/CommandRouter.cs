@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -19,7 +19,6 @@ public record CommandResult(string? Response, bool DeleteCommandMessage, int? De
 public partial class CommandRouter
 {
     private readonly ILogger<CommandRouter> _logger;
-    private readonly Dictionary<string, Type> _commandTypes;
     private readonly IServiceProvider _serviceProvider;
 
     [GeneratedRegex(@"^/(\w+)(?:@\w+)?(?:\s+(.*))?$", RegexOptions.Compiled)]
@@ -31,14 +30,6 @@ public partial class CommandRouter
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
-
-        // Resolve commands from a temporary scope to discover their types and names
-        // (we can't inject IEnumerable<IBotCommand> because commands are Scoped and router is Singleton)
-        using var scope = serviceProvider.CreateScope();
-        var commands = scope.ServiceProvider.GetServices<IBotCommand>();
-        _commandTypes = commands.ToDictionary(
-            c => c.Name.ToLowerInvariant(),
-            c => c.GetType());
     }
 
     /// <summary>
@@ -49,14 +40,13 @@ public partial class CommandRouter
         if (message.Text == null) return false;
 
         var match = CommandPattern().Match(message.Text);
-        return match.Success && _commandTypes.ContainsKey(match.Groups[1].Value.ToLowerInvariant());
+        return match.Success && CommandNames.All.Contains(match.Groups[1].Value);
     }
 
     /// <summary>
     /// Route and execute bot command
     /// </summary>
     public async Task<CommandResult?> RouteCommandAsync(
-        ITelegramBotClient botClient,
         Message message,
         CancellationToken cancellationToken = default)
     {
@@ -76,16 +66,16 @@ public partial class CommandRouter
             ? match.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             : [];
 
-        if (!_commandTypes.TryGetValue(commandName, out var commandType))
+        if (!CommandNames.All.Contains(commandName))
         {
             return new CommandResult("❌ Unknown command. Use /help to see available commands.", false);
         }
 
         try
         {
-            // Create a scope to resolve the command (commands are Scoped to allow injecting Scoped services)
+            // Create a scope and resolve command by key (keyed services pattern)
             using var scope = _serviceProvider.CreateScope();
-            var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
+            var command = scope.ServiceProvider.GetRequiredKeyedService<IBotCommand>(commandName);
 
             // Get actual permission level for all commands
             var actualPermissionLevel = await GetPermissionLevelAsync(message.Chat.Id, message.From.Id, cancellationToken);
@@ -136,14 +126,14 @@ public partial class CommandRouter
                 commandName, TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                 string.Join(", ", args));
 
-            var result = await command.ExecuteAsync(botClient, message, args, permissionLevel, cancellationToken);
+            var result = await command.ExecuteAsync(message, args, permissionLevel, cancellationToken);
 
             // Commands can now return dynamic CommandResult or use defaults from interface properties
             return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing command /{Command} by user {UserId}", commandName, message.From?.Id);
+            _logger.LogError(ex, "Error executing command /{Command} by {User}", commandName, message.From.ToLogDebug());
             return new CommandResult($"❌ Error executing command: {ex.Message}", false);
         }
     }
@@ -157,9 +147,9 @@ public partial class CommandRouter
         using var scope = _serviceProvider.CreateScope();
 
         var commands = new List<IBotCommand>();
-        foreach (var commandType in _commandTypes.Values)
+        foreach (var commandName in CommandNames.All)
         {
-            var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
+            var command = scope.ServiceProvider.GetRequiredKeyedService<IBotCommand>(commandName);
             if (command.MinPermissionLevel <= permissionLevel)
             {
                 commands.Add(command);

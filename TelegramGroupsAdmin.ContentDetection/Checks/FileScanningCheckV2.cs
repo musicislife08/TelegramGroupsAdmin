@@ -5,8 +5,11 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
@@ -65,8 +68,8 @@ public class FileScanningCheckV2 : IContentCheckV2
             // Check file size limit
             if (req.FileSize > _config.General.MaxFileSizeBytes)
             {
-                _logger.LogWarning("File exceeds size limit for user {UserId}: {Size} > {Limit} bytes",
-                    req.UserId, req.FileSize, _config.General.MaxFileSizeBytes);
+                _logger.LogWarning("File exceeds size limit for {User}: {Size} > {Limit} bytes",
+                    LogDisplayName.UserDebug(req.UserName, req.UserId), req.FileSize, _config.General.MaxFileSizeBytes);
                 
                 return new ContentCheckResponseV2
                 {
@@ -154,8 +157,8 @@ public class FileScanningCheckV2 : IContentCheckV2
                 var threats = tier1Result.ThreatNames ?? [];
                 var detectedBy = tier1Result.DetectedBy ?? [];
 
-                _logger.LogWarning("File scanning THREAT for user {UserId}: {Threats} detected by {Scanners} (Tier 1)",
-                    req.UserId,
+                _logger.LogWarning("File scanning THREAT for {User}: {Threats} detected by {Scanners} (Tier 1)",
+                    LogDisplayName.UserDebug(req.UserName, req.UserId),
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
                 
@@ -170,8 +173,8 @@ public class FileScanningCheckV2 : IContentCheckV2
             }
 
             // Tier 1 reported clean - proceed to Tier 2 cloud queue
-            _logger.LogInformation("Tier 1 scan CLEAN for user {UserId}, proceeding to Tier 2 cloud queue",
-                req.UserId);
+            _logger.LogInformation("Tier 1 scan CLEAN for {User}, proceeding to Tier 2 cloud queue",
+                req.UserName ?? $"User {req.UserId}");
 
             var tier2Result = await _tier2Coordinator.ScanFileAsync(
                 req.FilePath,
@@ -224,8 +227,8 @@ public class FileScanningCheckV2 : IContentCheckV2
                 var threats = tier2Result.ThreatNames ?? [];
                 var detectedBy = tier2Result.DetectedBy ?? [];
 
-                _logger.LogWarning("File scanning THREAT for user {UserId}: {Threats} detected by {Scanners} (Tier 2)",
-                    req.UserId,
+                _logger.LogWarning("File scanning THREAT for {User}: {Threats} detected by {Scanners} (Tier 2)",
+                    LogDisplayName.UserDebug(req.UserName, req.UserId),
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
 
@@ -241,8 +244,8 @@ public class FileScanningCheckV2 : IContentCheckV2
 
             // File is clean (both Tier 1 and Tier 2)
             int totalDuration = tier1Result.TotalDurationMs + tier2Result.TotalDurationMs;
-            _logger.LogInformation("File scanning CLEAN for user {UserId} (Tier 1 + Tier 2, total: {Duration}ms)",
-                req.UserId, totalDuration);
+            _logger.LogInformation("File scanning CLEAN for {User} (Tier 1 + Tier 2, total: {Duration}ms)",
+                req.UserName ?? $"User {req.UserId}", totalDuration);
 
             return new ContentCheckResponseV2
             {
@@ -255,7 +258,7 @@ public class FileScanningCheckV2 : IContentCheckV2
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception during file scanning for user {UserId}", req.UserId);
+            _logger.LogError(ex, "Exception during file scanning for {User}", LogDisplayName.UserDebug(req.UserName, req.UserId));
 
             // Fail-open: abstain on infrastructure errors
             return new ContentCheckResponseV2

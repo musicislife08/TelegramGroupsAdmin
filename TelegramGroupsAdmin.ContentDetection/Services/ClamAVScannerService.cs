@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using nClam;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.Core.Telemetry;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -78,9 +79,8 @@ public class ClamAVScannerService : IFileScannerService
             var fileInfo = new FileInfo(filePath);
             var fileSize = fileInfo.Length;
 
-            // ClamAV has a hard 2GB limit (2147483647 bytes) - skip files larger than this
-            const long maxClamAVSize = 2147483647L; // 2 GiB - 1 byte
-            if (fileSize > maxClamAVSize)
+            // ClamAV has a hard 2GB limit - skip files larger than this
+            if (fileSize > FileScanningConstants.MaxClamAVSizeBytes)
             {
                 _logger.LogWarning("File size ({Size} bytes) exceeds ClamAV's 2GB limit, skipping ClamAV scan (will use VirusTotal only)",
                     fileSize);
@@ -105,8 +105,8 @@ public class ClamAVScannerService : IFileScannerService
                 fileBytes.Length, fileName ?? "unknown");
 
             ClamScanResult? scanResult = null;
-            var maxRetries = 3;
-            var retryDelay = TimeSpan.FromMilliseconds(500); // Start with 500ms
+            var maxRetries = FileScanningConstants.ClamAVMaxRetries;
+            var retryDelay = TimeSpan.FromMilliseconds(FileScanningConstants.ClamAVInitialRetryDelayMs);
 
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {

@@ -1,11 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using TelegramGroupsAdmin.Data.Models.Configs;
 
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
 /// EF Core entity for content_detection_configs table
-/// Global and per-chat content detection configuration (stored as JSON)
+/// Global and per-chat content detection configuration (stored as JSONB)
 /// </summary>
 [Table("content_detection_configs")]
 public class ContentDetectionConfigRecordDto
@@ -17,9 +18,13 @@ public class ContentDetectionConfigRecordDto
     [Column("chat_id")]
     public long? ChatId { get; set; }
 
-    [Column("config_json")]
-    [Required]
-    public string ConfigJson { get; set; } = string.Empty;
+    /// <summary>
+    /// Content detection configuration as strongly-typed object.
+    /// EF Core maps this via OwnsOne().ToJson() to JSONB column "config_json".
+    /// Column attribute required for backup service compatibility (identifies JSONB columns).
+    /// </summary>
+    [Column("config_json", TypeName = "jsonb")]
+    public ContentDetectionConfigData? Config { get; set; }
 
     [Column("last_updated")]
     public DateTimeOffset LastUpdated { get; set; }

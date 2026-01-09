@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -14,7 +14,7 @@ public class SpamCommand : IBotCommand
 {
     private readonly ILogger<SpamCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
 
     public string Name => "spam";
     public string Description => "Mark message as spam and delete it";
@@ -27,7 +27,7 @@ public class SpamCommand : IBotCommand
     public SpamCommand(
         ILogger<SpamCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService)
+        ModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -35,7 +35,6 @@ public class SpamCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -61,7 +60,6 @@ public class SpamCommand : IBotCommand
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
 
         // Check if target user is an admin (can't mark admin messages as spam)
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value, cancellationToken);
@@ -70,12 +68,9 @@ public class SpamCommand : IBotCommand
             return new CommandResult("❌ Cannot mark admin messages as spam.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        // Check if target user is trusted (can't mark trusted messages as spam)
-        var isTrusted = await userActionsRepository.IsUserTrustedAsync(spamUserId.Value, message.Chat.Id, cancellationToken);
-        if (isTrusted)
-        {
-            return new CommandResult("❌ Cannot mark trusted user messages as spam.", DeleteCommandMessage, DeleteResponseAfterSeconds);
-        }
+        // NOTE: Trust status is intentionally NOT checked here.
+        // Trust only bypasses automatic spam detection - admins can always manually mark trusted users as spam
+        // if they start posting spam after building up trust.
 
         // Get executor actor
         var executor = Core.Models.Actor.FromTelegramUser(
@@ -87,14 +82,13 @@ public class SpamCommand : IBotCommand
         // Execute spam and ban action via centralized service
         var reason = $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}";
         var result = await _moderationService.MarkAsSpamAndBanAsync(
-            botClient,
-            spamMessage.MessageId,
-            spamUserId.Value,
-            message.Chat.Id,
-            executor,
-            reason,
-            spamMessage, // Pass the Telegram message for backfilling if not in database
-            cancellationToken);
+            messageId: spamMessage.MessageId,
+            userId: spamUserId.Value,
+            chatId: message.Chat.Id,
+            executor: executor,
+            reason: reason,
+            telegramMessage: spamMessage, // Pass for backfill if message not in database
+            cancellationToken: cancellationToken);
 
         if (!result.Success)
         {

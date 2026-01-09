@@ -32,7 +32,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ManagedChatRecordDto> ManagedChats => Set<ManagedChatRecordDto>();
     public DbSet<LinkedChannelRecordDto> LinkedChannels => Set<LinkedChannelRecordDto>();
     public DbSet<ChatAdminRecordDto> ChatAdmins => Set<ChatAdminRecordDto>();
-    public DbSet<ChatPromptRecordDto> ChatPrompts => Set<ChatPromptRecordDto>();
 
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
@@ -42,8 +41,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
     // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
+    public DbSet<TrainingLabelDto> TrainingLabels => Set<TrainingLabelDto>();
     public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
-    public DbSet<ContentCheckConfigRecordDto> ContentCheckConfigs => Set<ContentCheckConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
     public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
     public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
@@ -95,6 +94,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     private static void ConfigureRelationships(ModelBuilder modelBuilder)
     {
+        // TelegramUsers → Warnings (JSONB embedded collection)
+        // See WarningEntry class for architectural rationale (REFACTOR-5)
+        modelBuilder.Entity<TelegramUserDto>()
+            .OwnsMany(tu => tu.Warnings, warnings =>
+            {
+                warnings.ToJson("warnings"); // Use snake_case for consistency
+            });
+
         // Messages → DetectionResults (one-to-many)
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasOne(d => d.Message)
@@ -148,6 +155,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany(u => u.TelegramMappings)
             .HasForeignKey(tum => tum.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // TelegramUsers → TelegramUserMappings (one-to-many via TelegramId)
+        // Navigation only - no FK constraint in database (just index exists)
+        modelBuilder.Entity<TelegramUserMappingRecordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany(tu => tu.UserMappings)
+            .HasForeignKey(tum => tum.TelegramId)
+            .HasPrincipalKey(tu => tu.TelegramUserId)
+            .OnDelete(DeleteBehavior.NoAction); // No cascade - we don't delete mappings when TG user deleted
 
         // Users → TelegramLinkTokens (one-to-many)
         modelBuilder.Entity<TelegramLinkTokenRecordDto>()
@@ -451,6 +467,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(wn => wn.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // ============================================================================
+        // TrainingLabels Configuration (ML.NET SDCA Refactor)
+        // Explicit spam/ham labels for ML training (separate from detection_results)
+        // ============================================================================
+
+        // TrainingLabels: label must be 'spam' or 'ham'
+        modelBuilder.Entity<TrainingLabelDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_training_labels_label",
+                "label IN ('spam', 'ham')"));
+
+        // TrainingLabels → Messages (CASCADE delete when message is deleted)
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasOne(tl => tl.Message)
+            .WithMany()
+            .HasForeignKey(tl => tl.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // TrainingLabels → TelegramUsers (SET NULL when user is deleted)
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasOne(tl => tl.LabeledByUser)
+            .WithMany()
+            .HasForeignKey(tl => tl.LabeledByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -507,6 +549,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasMethod("gin")
             .HasDatabaseName("ix_detection_results_check_results_json_gin");
 
+        // TrainingLabels indexes (ML.NET SDCA Refactor)
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasIndex(tl => tl.Label);
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasIndex(tl => new { tl.Label, tl.LabeledAt });
+
         // UserActions indexes
         modelBuilder.Entity<UserActionRecordDto>()
             .HasIndex(ua => ua.UserId);
@@ -524,7 +572,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.IsTrusted);
         modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.IsBanned);
+        modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.LastSeenAt);
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.IsActive)
+            .HasFilter("is_active = false")
+            .HasDatabaseName("ix_telegram_users_is_active"); // Partial index for inactive users (UI filtering)
 
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()
@@ -664,6 +718,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<WebNotificationDto>()
             .HasIndex(wn => new { wn.UserId, wn.CreatedAt })
             .HasDatabaseName("ix_web_notifications_user_id_created_at");  // Primary query: recent notifications by user
+
+        // SimHash indexes for O(1) training data deduplication
+        // Partial indexes: only index rows with computed hashes (skip empty/null text)
+        modelBuilder.Entity<MessageRecordDto>()
+            .HasIndex(m => m.SimilarityHash)
+            .HasFilter("similarity_hash IS NOT NULL")
+            .HasDatabaseName("ix_messages_similarity_hash");
+
+        modelBuilder.Entity<MessageTranslationDto>()
+            .HasIndex(mt => mt.SimilarityHash)
+            .HasFilter("similarity_hash IS NOT NULL")
+            .HasDatabaseName("ix_message_translations_similarity_hash");
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)
@@ -733,6 +799,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(w => w.TimeoutJobId)
             .HasFilter("timeout_job_id IS NOT NULL"); // Partial index for active jobs only
 
+        // WelcomeResponseDto FK to TelegramUserDto (user must exist after backfill migration)
+        modelBuilder.Entity<WelcomeResponseDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(wr => wr.UserId)
+            .HasPrincipalKey(tu => tu.TelegramUserId)
+            .OnDelete(DeleteBehavior.Restrict); // Don't cascade delete users when welcome response deleted
+
         // VerificationTokenDto stores token_type as string in DB but exposes as enum
         // The entity already handles this with TokenTypeString property
     }
@@ -782,5 +856,45 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<RawAlgorithmPerformanceStatsDto>()
             .HasNoKey()
             .ToView(null);
+
+        // ============================================================================
+        // Content Detection Config JSON Mapping (Issue #252)
+        // Uses EF Core OwnsOne().ToJson() for strongly-typed JSONB column mapping
+        // ============================================================================
+        modelBuilder.Entity<ContentDetectionConfigRecordDto>()
+            .OwnsOne(c => c.Config, config =>
+            {
+                config.ToJson("config_json");
+
+                // Map all nested sub-configs
+                config.OwnsOne(x => x.StopWords);
+                config.OwnsOne(x => x.Similarity);
+                config.OwnsOne(x => x.Cas);
+                config.OwnsOne(x => x.Bayes);
+                config.OwnsOne(x => x.InvisibleChars);
+                config.OwnsOne(x => x.Translation);
+                config.OwnsOne(x => x.Spacing);
+                config.OwnsOne(x => x.AIVeto);
+                config.OwnsOne(x => x.UrlBlocklist);
+                config.OwnsOne(x => x.ThreatIntel);
+                config.OwnsOne(x => x.SeoScraping);
+                config.OwnsOne(x => x.ImageSpam);
+                config.OwnsOne(x => x.VideoSpam);
+                config.OwnsOne(x => x.FileScanning);
+            });
+
+        // Partial unique index: Only ONE global content detection config (chat_id IS NULL)
+        modelBuilder.Entity<ContentDetectionConfigRecordDto>()
+            .HasIndex(c => c.ChatId)
+            .HasFilter("chat_id IS NULL")
+            .IsUnique()
+            .HasDatabaseName("idx_content_detection_configs_global");
+
+        // Partial unique index: Each chat can have only ONE content detection config
+        modelBuilder.Entity<ContentDetectionConfigRecordDto>()
+            .HasIndex(c => c.ChatId)
+            .HasFilter("chat_id IS NOT NULL")
+            .IsUnique()
+            .HasDatabaseName("idx_content_detection_configs_chat");
     }
 }

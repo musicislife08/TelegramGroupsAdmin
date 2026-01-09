@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -14,13 +13,16 @@ public class AdminMentionHandler
 {
     private readonly ILogger<AdminMentionHandler> _logger;
     private readonly IChatAdminsRepository _chatAdminsRepository;
+    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public AdminMentionHandler(
         ILogger<AdminMentionHandler> logger,
-        IChatAdminsRepository chatAdminsRepository)
+        IChatAdminsRepository chatAdminsRepository,
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _chatAdminsRepository = chatAdminsRepository;
+        _botClientFactory = botClientFactory;
     }
 
     /// <summary>
@@ -38,12 +40,13 @@ public class AdminMentionHandler
     /// Send notification to all admins in the chat by replying to the message with HTML text mentions
     /// </summary>
     public async Task NotifyAdminsAsync(
-        ITelegramBotClient botClient,
         Message message,
         CancellationToken cancellationToken = default)
     {
         try
         {
+            var operations = await _botClientFactory.GetOperationsAsync();
+
             // Get all active admins for this chat
             var admins = await _chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
 
@@ -65,7 +68,7 @@ public class AdminMentionHandler
                     continue;
 
                 // Skip the bot itself (bots can't receive notifications anyway)
-                if (admin.TelegramId == botClient.BotId)
+                if (admin.TelegramId == operations.BotId)
                     continue;
 
                 // Create HTML text mention with username or fallback to generic name
@@ -90,7 +93,7 @@ public class AdminMentionHandler
                                    "you've been mentioned in this conversation.";
 
             // Reply to the original message with admin mentions
-            await botClient.SendMessage(
+            await operations.SendMessageAsync(
                 chatId: message.Chat.Id,
                 text: notificationText,
                 parseMode: ParseMode.Html,

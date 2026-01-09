@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Quartz;
 using System.Text.Json;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services;
@@ -37,7 +38,7 @@ public class JobTriggerService(
         var payloadJson = JsonSerializer.Serialize(payload);
         var jobData = new JobDataMap
         {
-            { "payload", payloadJson }
+            { JobDataKeys.PayloadJson, payloadJson }
         };
 
         // Create trigger that fires immediately
@@ -89,7 +90,7 @@ public class JobTriggerService(
         var payloadJson = JsonSerializer.Serialize(payload);
         var jobData = new JobDataMap
         {
-            { "payload", payloadJson }
+            { JobDataKeys.PayloadJson, payloadJson }
         };
 
         // Create trigger that fires once at specified time

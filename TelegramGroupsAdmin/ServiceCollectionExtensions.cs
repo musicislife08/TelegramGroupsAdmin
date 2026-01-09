@@ -7,6 +7,7 @@ using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
@@ -53,7 +54,7 @@ public static class ServiceCollectionExtensions
             // Configure SignalR Hub options for Blazor Server (increase message size for image paste)
             services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options =>
             {
-                options.MaximumReceiveMessageSize = 20 * 1024 * 1024; // 20MB (allow for base64 overhead)
+                options.MaximumReceiveMessageSize = BlazorConstants.MaxSignalRMessageSize;
             });
 
             services.AddMudServices();
@@ -90,7 +91,7 @@ public static class ServiceCollectionExtensions
                         ? CookieSecurePolicy.None
                         : CookieSecurePolicy.Always;
                     options.Cookie.SameSite = SameSiteMode.Lax;
-                    options.ExpireTimeSpan = TimeSpan.FromDays(30);
+                    options.ExpireTimeSpan = AuthenticationConstants.CookieExpiration;
                     options.SlidingExpiration = true;
                     options.LoginPath = "/login";
                     options.LogoutPath = "/logout";
@@ -122,9 +123,10 @@ public static class ServiceCollectionExtensions
             services.AddMemoryCache();
 
             // Auth services
-            services.AddScoped<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
+            services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
             services.AddScoped<TelegramGroupsAdmin.Services.Auth.ITotpService, TelegramGroupsAdmin.Services.Auth.TotpService>();
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IIntermediateAuthService, TelegramGroupsAdmin.Services.Auth.IntermediateAuthService>();
+            services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPendingRecoveryCodesService, TelegramGroupsAdmin.Services.Auth.PendingRecoveryCodesService>();
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IRateLimitService, TelegramGroupsAdmin.Services.Auth.RateLimitService>(); // SECURITY-5
             services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAccountLockoutService, TelegramGroupsAdmin.Services.Auth.AccountLockoutService>(); // SECURITY-6
 
@@ -154,13 +156,12 @@ public static class ServiceCollectionExtensions
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
             services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
             services.AddHostedService<VapidKeyGenerationService>(); // Auto-generates VAPID keys on first startup
-            services.AddHostedService<AIProviderMigrationService>(); // Migrates OpenAI config to multi-provider format
 
             // Push subscriptions repository (browser push endpoints)
             services.AddScoped<Core.Repositories.IPushSubscriptionsRepository, Core.Repositories.PushSubscriptionsRepository>();
 
-            // Message history adapter for spam detection library
-            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
+            // Message context adapter for spam detection library
+            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageContextProvider, MessageContextAdapter>();
 
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
             services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Telegram.Services.Media.MediaNotificationService>();
@@ -173,6 +174,8 @@ public static class ServiceCollectionExtensions
             // API key migration service (one-time migration from env vars to encrypted database storage)
             services.AddScoped<ApiKeyMigrationService>();
 
+            // Similarity hash backfill service (one-time migration for SimHash deduplication)
+            services.AddScoped<SimilarityHashBackfillService>();
 
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
@@ -190,13 +193,13 @@ public static class ServiceCollectionExtensions
             // HybridCache for blocklists
             services.AddHybridCache(options =>
             {
-                options.MaximumPayloadBytes = 10 * 1024 * 1024; // 10 MB
+                options.MaximumPayloadBytes = HttpConstants.HybridCacheMaxPayloadBytes;
             });
 
             // HTTP clients
             services.AddHttpClient<SeoPreviewScraper>(client =>
             {
-                client.Timeout = TimeSpan.FromSeconds(5);
+                client.Timeout = HttpConstants.SeoScraperTimeout;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SeoPreviewScraper/1.0)");
             });
 
@@ -207,11 +210,11 @@ public static class ServiceCollectionExtensions
                     partitionKey: "virustotal",
                     factory: _ => new SlidingWindowRateLimiterOptions
                     {
-                        PermitLimit = 4,
-                        Window = TimeSpan.FromMinutes(1),
-                        SegmentsPerWindow = 4,  // 15-second segments for smoother rate limiting
+                        PermitLimit = HttpConstants.VirusTotalPermitLimit,
+                        Window = HttpConstants.VirusTotalWindow,
+                        SegmentsPerWindow = HttpConstants.VirusTotalSegmentsPerWindow,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                        QueueLimit = 10  // Queue up to 10 requests (analysis polling can generate 5-10 requests per file)
+                        QueueLimit = HttpConstants.VirusTotalQueueLimit
                     }));
 
             var limiterOptions = new RateLimiterStrategyOptions
@@ -268,7 +271,7 @@ public static class ServiceCollectionExtensions
         {
             // Spam Detection repositories (from ContentDetection library)
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.StopWordsRepository>();
-            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.ContentDetectionConfigRepository>();
+            services.AddScoped<TelegramGroupsAdmin.Configuration.Repositories.IContentDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.ContentDetectionConfigRepository>();
 
             // Analytics repository (Phase 5: Performance metrics, from ContentDetection library)
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IAnalyticsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.AnalyticsRepository>();

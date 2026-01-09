@@ -1,12 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -22,15 +23,18 @@ public class ContentDetectionOrchestrator
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly DetectionActionService _spamActionService;
+    private readonly SimHashService _simHashService;
     private readonly ILogger<ContentDetectionOrchestrator> _logger;
 
     public ContentDetectionOrchestrator(
         IServiceProvider serviceProvider,
         DetectionActionService spamActionService,
+        SimHashService simHashService,
         ILogger<ContentDetectionOrchestrator> logger)
     {
         _serviceProvider = serviceProvider;
         _spamActionService = spamActionService;
+        _simHashService = simHashService;
         _logger = logger;
     }
 
@@ -39,7 +43,6 @@ public class ContentDetectionOrchestrator
     /// Handles: critical violations, detection result storage, auto-trust, language warnings, spam actions.
     /// </summary>
     public async Task RunDetectionAsync(
-        ITelegramBotClient botClient,
         Message message,
         string? text,
         string? photoLocalPath,
@@ -81,8 +84,10 @@ public class ContentDetectionOrchestrator
             {
                 Message = text ?? "", // Empty string for image-only messages
                 UserId = message.From?.Id ?? 0,
-                UserName = message.From?.Username,
+                // Pass pre-formatted display names for logging
+                UserName = message.From.ToLogDebug(),
                 ChatId = message.Chat.Id,
+                ChatName = message.Chat.ToLogDebug(),
                 PhotoLocalPath = photoFullPath // Pass full for ImageSpamCheck layers
             };
 
@@ -101,7 +106,6 @@ public class ContentDetectionOrchestrator
                 // Use DetectionActionService to handle critical violations
                 // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
                 await _spamActionService.HandleCriticalCheckViolationAsync(
-                    botClient,
                     message,
                     result.CriticalCheckViolations,
                     cancellationToken);
@@ -118,14 +122,15 @@ public class ContentDetectionOrchestrator
                     detectionResultsRepo,
                     message,
                     result.SpamResult,
+                    text, // Pass analyzed text for deduplication check
                     editVersion,
                     cancellationToken);
 
                 // Check for auto-trust after storing non-spam detection result
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                if (!result.SpamResult.IsSpam && message.From != null)
                 {
                     var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
-                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From, message.Chat, cancellationToken);
                 }
 
                 // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
@@ -135,7 +140,7 @@ public class ContentDetectionOrchestrator
                     // Language warning is handled by LanguageWarningHandler (REFACTOR-2 Phase 2.2)
                     // This will be extracted to handler in next phase
                     var languageWarningHandler = scope.ServiceProvider.GetRequiredService<LanguageWarningHandler>();
-                    await languageWarningHandler.HandleWarningAsync(botClient, message, scope, cancellationToken);
+                    await languageWarningHandler.HandleWarningAsync(message, scope, cancellationToken);
                 }
 
                 // Phase 2.7: Handle spam actions based on net confidence
@@ -154,15 +159,44 @@ public class ContentDetectionOrchestrator
 
     /// <summary>
     /// Store spam detection result to database for analytics and training.
+    /// Phase 4.23 (#168): Auto-deduplicates training samples at insert time using SimHash.
     /// </summary>
     private async Task<DetectionResultRecord> StoreDetectionResultAsync(
         IDetectionResultsRepository detectionResultsRepo,
         Message message,
         ContentDetectionResult spamResult,
+        string? analyzedText,
         int editVersion,
         CancellationToken cancellationToken)
     {
+        using var scope = _serviceProvider.CreateScope();
+        var messageHistoryRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+
         var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
+        var isTrainingWorthy = DetectionActionService.DetermineIfTrainingWorthy(spamResult);
+
+        // Phase 4.23 (#168): Auto-deduplicate training samples at insert time using SimHash
+        // Only check for auto-detected samples that would be used for training
+        // Manual samples (/spam command) bypass deduplication (admin intent)
+        if (isTrainingWorthy && !string.IsNullOrWhiteSpace(analyzedText))
+        {
+            var hash = _simHashService.ComputeHash(analyzedText);
+            var isDuplicate = await messageHistoryRepo.HasSimilarTrainingHashAsync(
+                hash,
+                spamResult.IsSpam,
+                SimHashService.DefaultMaxDistance,
+                cancellationToken);
+
+            if (isDuplicate)
+            {
+                isTrainingWorthy = false;
+                _logger.LogDebug(
+                    "Skipping training for message {MessageId}: SimHash within {MaxDistance} bits of existing {Class} sample",
+                    message.MessageId,
+                    SimHashService.DefaultMaxDistance,
+                    spamResult.IsSpam ? "spam" : "ham");
+            }
+        }
 
         var detectionResult = new DetectionResultRecord
         {
@@ -176,7 +210,7 @@ public class ContentDetectionOrchestrator
             Confidence = spamResult.MaxConfidence,
             Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
             AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
-            UsedForTraining = DetectionActionService.DetermineIfTrainingWorthy(spamResult),
+            UsedForTraining = isTrainingWorthy,
             NetConfidence = spamResult.NetConfidence,
             CheckResultsJson = CheckResultsSerializer.Serialize(spamResult.CheckResults),
             EditVersion = editVersion

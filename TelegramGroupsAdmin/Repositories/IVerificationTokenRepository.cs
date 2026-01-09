@@ -11,30 +11,30 @@ public interface IVerificationTokenRepository
     /// <summary>
     /// Create a new verification token and return its ID
     /// </summary>
-    Task<long> CreateAsync(DataModels.VerificationTokenDto verificationToken, CancellationToken ct = default);
+    Task<long> CreateAsync(DataModels.VerificationTokenDto verificationToken, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a verification token by its token string
     /// </summary>
-    Task<UiModels.VerificationToken?> GetByTokenAsync(string token, CancellationToken ct = default);
+    Task<UiModels.VerificationToken?> GetByTokenAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a valid (unused and not expired) verification token by token string and type
     /// </summary>
-    Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken ct = default);
+    Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Mark a verification token as used
     /// </summary>
-    Task MarkAsUsedAsync(string token, CancellationToken ct = default);
+    Task MarkAsUsedAsync(string token, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Clean up expired verification tokens and return count of deleted records
     /// </summary>
-    Task<int> CleanupExpiredAsync(CancellationToken ct = default);
+    Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete all verification tokens for a specific user and return count of deleted records
     /// </summary>
-    Task<int> DeleteByUserIdAsync(string userId, CancellationToken ct = default);
+    Task<int> DeleteByUserIdAsync(string userId, CancellationToken cancellationToken = default);
 }

@@ -9,23 +9,23 @@ namespace TelegramGroupsAdmin.Core.Repositories;
 public class NotificationPreferencesRepository(IDbContextFactory<AppDbContext> contextFactory)
     : INotificationPreferencesRepository
 {
-    public async Task<NotificationConfig?> GetByUserIdAsync(string userId, CancellationToken ct = default)
+    public async Task<NotificationConfig?> GetByUserIdAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = await context.NotificationPreferences
             .AsNoTracking()
-            .FirstOrDefaultAsync(np => np.UserId == userId, ct);
+            .FirstOrDefaultAsync(np => np.UserId == userId, cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task<NotificationConfig> GetOrCreateAsync(string userId, CancellationToken ct = default)
+    public async Task<NotificationConfig> GetOrCreateAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = await context.NotificationPreferences
-            .FirstOrDefaultAsync(np => np.UserId == userId, ct);
+            .FirstOrDefaultAsync(np => np.UserId == userId, cancellationToken);
 
         if (entity != null)
         {
@@ -42,17 +42,17 @@ public class NotificationPreferencesRepository(IDbContextFactory<AppDbContext> c
         };
 
         context.NotificationPreferences.Add(newEntity);
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
 
         return new NotificationConfig();
     }
 
-    public async Task SaveAsync(string userId, NotificationConfig config, CancellationToken ct = default)
+    public async Task SaveAsync(string userId, NotificationConfig config, CancellationToken cancellationToken = default)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = await context.NotificationPreferences
-            .FirstOrDefaultAsync(np => np.UserId == userId, ct);
+            .FirstOrDefaultAsync(np => np.UserId == userId, cancellationToken);
 
         var configJson = config.ToConfigJson();
 
@@ -63,7 +63,7 @@ public class NotificationPreferencesRepository(IDbContextFactory<AppDbContext> c
                 .Where(np => np.UserId == userId)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(np => np.Config, configJson)
-                    .SetProperty(np => np.UpdatedAt, DateTimeOffset.UtcNow), ct);
+                    .SetProperty(np => np.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
         }
         else
         {
@@ -77,7 +77,7 @@ public class NotificationPreferencesRepository(IDbContextFactory<AppDbContext> c
             };
 
             context.NotificationPreferences.Add(newEntity);
-            await context.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 }

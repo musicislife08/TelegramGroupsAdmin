@@ -1,9 +1,7 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -17,22 +15,18 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteMessageJob(
     ILogger<DeleteMessageJob> logger,
-    TelegramBotClientFactory botClientFactory) : IJob
+    ITelegramBotClientFactory botClientFactory) : IJob
 {
     private readonly ILogger<DeleteMessageJob> _logger = logger;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
 
     /// <summary>
     /// Execute delayed message deletion (Quartz.NET entry point)
     /// </summary>
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<DeleteMessagePayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize DeleteMessagePayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteMessagePayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
@@ -54,10 +48,10 @@ public class DeleteMessageJob(
                 payload.ChatId,
                 payload.Reason);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
-            await botClient.DeleteMessage(
+            await operations.DeleteMessageAsync(
                 chatId: payload.ChatId,
                 messageId: payload.MessageId,
                 cancellationToken: cancellationToken);

@@ -215,7 +215,7 @@
         }
     }
 
-    private Task<IEnumerable<string>> SearchUserNames(string value, CancellationToken ct)
+    private Task<IEnumerable<string>> SearchUserNames(string value, CancellationToken cancellationToken)
     {
         // If no value, return all
         if (string.IsNullOrWhiteSpace(value))
@@ -229,7 +229,7 @@
         return Task.FromResult<IEnumerable<string>>(filtered);
     }
 
-    private Task<IEnumerable<string>> SearchChatNames(string value, CancellationToken ct)
+    private Task<IEnumerable<string>> SearchChatNames(string value, CancellationToken cancellationToken)
     {
         // If no value, return all
         if (string.IsNullOrWhiteSpace(value))

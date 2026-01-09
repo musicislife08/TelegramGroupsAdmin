@@ -58,4 +58,9 @@ public record ContentDetectionResult
     /// Non-null indicates instant ban without OpenAI veto
     /// </summary>
     public HardBlockResult? HardBlock { get; init; }
+
+    /// <summary>
+    /// OCR-extracted text from image (populated by ImageContentCheckV2 for downstream veto use)
+    /// </summary>
+    public string? OcrExtractedText { get; init; }
 }

@@ -20,13 +20,6 @@ public class StopWordsContentCheckV2(
     IDbContextFactory<AppDbContext> dbContextFactory,
     ITokenizerService tokenizerService) : IContentCheckV2
 {
-    private const int MAX_STOP_WORDS = 10_000;
-
-    // SpamAssassin-style scoring (from research)
-    private const double ScoreMild = 0.5;       // Single match in long message
-    private const double ScoreModerate = 1.0;   // 1-2 matches
-    private const double ScoreSevere = 2.0;     // 3+ matches or short message with match
-
     public CheckName CheckName => CheckName.StopWords;
 
     public bool ShouldExecute(ContentCheckRequest request)
@@ -64,7 +57,7 @@ public class StopWordsContentCheckV2(
                 .AsNoTracking()
                 .Where(w => w.Enabled)
                 .OrderBy(w => w.Id)
-                .Take(MAX_STOP_WORDS)
+                .Take(StopWordsConstants.MaxStopWords)
                 .Select(w => w.Word)
                 .ToListAsync(req.CancellationToken);
 
@@ -170,21 +163,21 @@ public class StopWordsContentCheckV2(
     {
         // 3+ matches = severe (especially username/userID matches)
         if (matchCount >= 3)
-            return ScoreSevere; // 2.0 points
+            return ScoringConstants.ScoreStopWordsSevere;
 
         // 2 matches = moderate
         if (matchCount == 2)
-            return ScoreModerate; // 1.0 points
+            return ScoringConstants.ScoreStopWordsModerate;
 
         // Single match in short message (<50 chars) = moderate
         if (matchCount == 1 && messageLength < 50)
-            return ScoreModerate; // 1.0 points
+            return ScoringConstants.ScoreStopWordsModerate;
 
         // Single match in long message (>200 chars) = mild
         if (matchCount == 1 && messageLength > 200)
-            return ScoreMild; // 0.5 points
+            return ScoringConstants.ScoreStopWordsMild;
 
         // Default: 1 match in normal-length message = moderate
-        return ScoreModerate; // 1.0 points
+        return ScoringConstants.ScoreStopWordsModerate;
     }
 }

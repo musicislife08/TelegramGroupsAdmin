@@ -2,6 +2,8 @@ using System.Text.Json;
 using Lib.Net.Http.WebPush;
 using Lib.Net.Http.WebPush.Authentication;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Constants;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Repositories;
@@ -19,55 +21,55 @@ public interface IWebPushNotificationService
     /// Send an in-app notification to a user
     /// </summary>
     Task<bool> SendAsync(
-        string userId,
+        UserRecord user,
         NotificationEventType eventType,
         string subject,
         string message,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get recent notifications for a user
     /// </summary>
     Task<IReadOnlyList<WebNotification>> GetRecentAsync(
         string userId,
-        int limit = 20,
-        int offset = 0,
-        CancellationToken ct = default);
+        int limit = NotificationConstants.DefaultNotificationLimit,
+        int offset = NotificationConstants.DefaultNotificationOffset,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get unread notification count for a user
     /// </summary>
-    Task<int> GetUnreadCountAsync(string userId, CancellationToken ct = default);
+    Task<int> GetUnreadCountAsync(string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Mark a notification as read
     /// </summary>
-    Task MarkAsReadAsync(long notificationId, CancellationToken ct = default);
+    Task MarkAsReadAsync(long notificationId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Mark all notifications as read for a user
     /// </summary>
-    Task MarkAllAsReadAsync(string userId, CancellationToken ct = default);
+    Task MarkAllAsReadAsync(string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete old read notifications (for cleanup job)
     /// </summary>
-    Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken ct = default);
+    Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete a single notification
     /// </summary>
-    Task DeleteAsync(long notificationId, CancellationToken ct = default);
+    Task DeleteAsync(long notificationId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete all notifications for a user
     /// </summary>
-    Task DeleteAllAsync(string userId, CancellationToken ct = default);
+    Task DeleteAllAsync(string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get VAPID public key for browser subscription (returns null if not configured)
     /// </summary>
-    Task<string?> GetVapidPublicKeyAsync(CancellationToken ct = default);
+    Task<string?> GetVapidPublicKeyAsync(CancellationToken cancellationToken = default);
 }
 
 public class WebPushNotificationService : IWebPushNotificationService
@@ -100,18 +102,18 @@ public class WebPushNotificationService : IWebPushNotificationService
     }
 
     public async Task<bool> SendAsync(
-        string userId,
+        UserRecord user,
         NotificationEventType eventType,
         string subject,
         string message,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         try
         {
             // 1. Always save to database (for in-app bell)
             var notification = new WebNotification
             {
-                UserId = userId,
+                UserId = user.Id,
                 EventType = eventType,
                 Subject = subject,
                 Message = message,
@@ -119,44 +121,44 @@ public class WebPushNotificationService : IWebPushNotificationService
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            await _notificationRepository.CreateAsync(notification, ct);
+            await _notificationRepository.CreateAsync(notification, cancellationToken);
 
-            _logger.LogDebug("Created web notification for user {UserId}, event {EventType}",
-                userId, eventType);
+            _logger.LogDebug("Created web notification for {User}, event {EventType}",
+                user.ToLogDebug(), eventType);
 
             // 2. Send browser push to all user's subscribed devices (if VAPID configured)
-            await SendBrowserPushAsync(userId, subject, message, ct);
+            await SendBrowserPushAsync(user, subject, message, cancellationToken);
 
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create web notification for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to create web notification for {User}", user.ToLogDebug());
             return false;
         }
     }
 
     private async Task SendBrowserPushAsync(
-        string userId,
+        UserRecord user,
         string title,
         string body,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         try
         {
             // Load VAPID keys from database (cached after first load)
-            var vapidAuth = await GetOrCreateVapidAuthAsync(ct);
+            var vapidAuth = await GetOrCreateVapidAuthAsync(cancellationToken);
             if (vapidAuth == null)
             {
                 _logger.LogDebug("VAPID not configured, skipping browser push");
                 return;
             }
 
-            var subscriptions = await _subscriptionRepository.GetByUserIdAsync(userId, ct);
+            var subscriptions = await _subscriptionRepository.GetByUserIdAsync(user.Id, cancellationToken);
 
             if (!subscriptions.Any())
             {
-                _logger.LogDebug("User {UserId} has no push subscriptions", userId);
+                _logger.LogDebug("{User} has no push subscriptions", user.ToLogDebug());
                 return;
             }
 
@@ -192,33 +194,33 @@ public class WebPushNotificationService : IWebPushNotificationService
                     await _pushServiceClient.RequestPushMessageDeliveryAsync(
                         pushSubscription,
                         message,
-                        ct);
+                        cancellationToken);
 
-                    _logger.LogDebug("Sent browser push to user {UserId}", userId);
+                    _logger.LogDebug("Sent browser push to {User}", user.ToLogDebug());
                 }
                 catch (PushServiceClientException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
                 {
                     // Subscription expired or unsubscribed - remove it
                     _logger.LogInformation(
-                        "Push subscription expired for user {UserId}, removing endpoint",
-                        userId);
-                    await _subscriptionRepository.DeleteByEndpointAsync(subscription.Endpoint, ct);
+                        "Push subscription expired for {User}, removing endpoint",
+                        user.ToLogInfo());
+                    await _subscriptionRepository.DeleteByEndpointAsync(subscription.Endpoint, cancellationToken);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex,
-                        "Failed to send browser push to user {UserId}",
-                        userId);
+                        "Failed to send browser push to {User}",
+                        user.ToLogDebug());
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send browser push notifications to user {UserId}", userId);
+            _logger.LogError(ex, "Failed to send browser push notifications to {User}", user.ToLogDebug());
         }
     }
 
-    private async Task<VapidAuthentication?> GetOrCreateVapidAuthAsync(CancellationToken ct)
+    private async Task<VapidAuthentication?> GetOrCreateVapidAuthAsync(CancellationToken cancellationToken)
     {
         if (_vapidAuth != null)
             return _vapidAuth;
@@ -226,7 +228,7 @@ public class WebPushNotificationService : IWebPushNotificationService
         try
         {
             // Check if WebPush is enabled
-            var webPushConfig = await _configRepository.GetWebPushConfigAsync(ct);
+            var webPushConfig = await _configRepository.GetWebPushConfigAsync(cancellationToken);
             if (webPushConfig?.Enabled != true)
             {
                 _logger.LogDebug("Web Push is disabled in config");
@@ -234,14 +236,14 @@ public class WebPushNotificationService : IWebPushNotificationService
             }
 
             // Check if VAPID keys exist
-            if (!await _configRepository.HasVapidKeysAsync(ct))
+            if (!await _configRepository.HasVapidKeysAsync(cancellationToken))
             {
                 _logger.LogDebug("VAPID keys not configured, Web Push disabled");
                 return null;
             }
 
             var publicKey = webPushConfig.VapidPublicKey;
-            var privateKey = await _configRepository.GetVapidPrivateKeyAsync(ct);
+            var privateKey = await _configRepository.GetVapidPrivateKeyAsync(cancellationToken);
 
             if (string.IsNullOrWhiteSpace(publicKey) || string.IsNullOrWhiteSpace(privateKey))
             {
@@ -254,7 +256,7 @@ public class WebPushNotificationService : IWebPushNotificationService
             var contactEmail = webPushConfig.ContactEmail;
             if (string.IsNullOrEmpty(contactEmail))
             {
-                contactEmail = await _userRepository.GetPrimaryOwnerEmailAsync(ct);
+                contactEmail = await _userRepository.GetPrimaryOwnerEmailAsync(cancellationToken);
             }
 
             if (string.IsNullOrEmpty(contactEmail))
@@ -281,7 +283,7 @@ public class WebPushNotificationService : IWebPushNotificationService
         }
     }
 
-    public async Task<string?> GetVapidPublicKeyAsync(CancellationToken ct = default)
+    public async Task<string?> GetVapidPublicKeyAsync(CancellationToken cancellationToken = default)
     {
         if (_cachedPublicKey != null)
         {
@@ -291,7 +293,7 @@ public class WebPushNotificationService : IWebPushNotificationService
 
         try
         {
-            var webPushConfig = await _configRepository.GetWebPushConfigAsync(ct);
+            var webPushConfig = await _configRepository.GetWebPushConfigAsync(cancellationToken);
             _cachedPublicKey = webPushConfig?.VapidPublicKey;
             _logger.LogDebug("Loaded VAPID public key (length: {Length})", _cachedPublicKey?.Length ?? 0);
             return _cachedPublicKey;
@@ -305,40 +307,40 @@ public class WebPushNotificationService : IWebPushNotificationService
 
     public Task<IReadOnlyList<WebNotification>> GetRecentAsync(
         string userId,
-        int limit = 20,
-        int offset = 0,
-        CancellationToken ct = default)
+        int limit = NotificationConstants.DefaultNotificationLimit,
+        int offset = NotificationConstants.DefaultNotificationOffset,
+        CancellationToken cancellationToken = default)
     {
-        return _notificationRepository.GetRecentAsync(userId, limit, offset, ct);
+        return _notificationRepository.GetRecentAsync(userId, limit, offset, cancellationToken);
     }
 
-    public Task<int> GetUnreadCountAsync(string userId, CancellationToken ct = default)
+    public Task<int> GetUnreadCountAsync(string userId, CancellationToken cancellationToken = default)
     {
-        return _notificationRepository.GetUnreadCountAsync(userId, ct);
+        return _notificationRepository.GetUnreadCountAsync(userId, cancellationToken);
     }
 
-    public Task MarkAsReadAsync(long notificationId, CancellationToken ct = default)
+    public Task MarkAsReadAsync(long notificationId, CancellationToken cancellationToken = default)
     {
-        return _notificationRepository.MarkAsReadAsync(notificationId, ct);
+        return _notificationRepository.MarkAsReadAsync(notificationId, cancellationToken);
     }
 
-    public Task MarkAllAsReadAsync(string userId, CancellationToken ct = default)
+    public Task MarkAllAsReadAsync(string userId, CancellationToken cancellationToken = default)
     {
-        return _notificationRepository.MarkAllAsReadAsync(userId, ct);
+        return _notificationRepository.MarkAllAsReadAsync(userId, cancellationToken);
     }
 
-    public Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken ct = default)
+    public Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken cancellationToken = default)
     {
-        return _notificationRepository.DeleteOldReadNotificationsAsync(olderThan, ct);
+        return _notificationRepository.DeleteOldReadNotificationsAsync(olderThan, cancellationToken);
     }
 
-    public Task DeleteAsync(long notificationId, CancellationToken ct = default)
+    public Task DeleteAsync(long notificationId, CancellationToken cancellationToken = default)
     {
-        return _notificationRepository.DeleteAsync(notificationId, ct);
+        return _notificationRepository.DeleteAsync(notificationId, cancellationToken);
     }
 
-    public Task DeleteAllAsync(string userId, CancellationToken ct = default)
+    public Task DeleteAllAsync(string userId, CancellationToken cancellationToken = default)
     {
-        return _notificationRepository.DeleteAllAsync(userId, ct);
+        return _notificationRepository.DeleteAllAsync(userId, cancellationToken);
     }
 }

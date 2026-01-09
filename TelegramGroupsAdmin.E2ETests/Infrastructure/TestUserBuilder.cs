@@ -183,7 +183,7 @@ public class TestUserBuilder
     /// Builds and persists the user to the database.
     /// Returns a TestUser containing the user record and credentials for testing.
     /// </summary>
-    public async Task<TestUser> BuildAsync(CancellationToken ct = default)
+    public async Task<TestUser> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<IUserRepository>();
@@ -229,7 +229,7 @@ public class TestUserBuilder
             LockedUntil: _lockedUntil
         );
 
-        await userRepository.CreateAsync(userRecord, ct);
+        await userRepository.CreateAsync(userRecord, cancellationToken);
 
         return new TestUser(userRecord, password, unencryptedTotpSecret);
     }

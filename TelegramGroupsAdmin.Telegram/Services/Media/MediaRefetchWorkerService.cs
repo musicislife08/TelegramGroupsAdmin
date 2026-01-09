@@ -1,6 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -14,21 +18,18 @@ public class MediaRefetchWorkerService : BackgroundService
 {
     private readonly MediaRefetchQueueService _queueService;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly MessageProcessingService _messageProcessingService;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly IMessageProcessingService _messageProcessingService;
     private readonly ILogger<MediaRefetchWorkerService> _logger;
 
     public MediaRefetchWorkerService(
         IMediaRefetchQueueService queueService,
         IServiceScopeFactory scopeFactory,
-        MessageProcessingService messageProcessingService,
-        TelegramBotClientFactory botClientFactory,
+        IMessageProcessingService messageProcessingService,
         ILogger<MediaRefetchWorkerService> logger)
     {
         _queueService = (MediaRefetchQueueService)queueService;
         _scopeFactory = scopeFactory;
         _messageProcessingService = messageProcessingService;
-        _botClientFactory = botClientFactory;
         _logger = logger;
     }
 
@@ -90,6 +91,18 @@ public class MediaRefetchWorkerService : BackgroundService
     private async Task ProcessMediaRequestAsync(RefetchRequest request, int workerId)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
+
+        // Check if bot is enabled before making Telegram API calls
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+                        ?? TelegramBotConfig.Default;
+
+        if (!botConfig.BotEnabled)
+        {
+            _logger.LogDebug("Worker {WorkerId} skipping media refetch - bot is disabled", workerId);
+            return;
+        }
+
         var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
         var mediaService = scope.ServiceProvider.GetRequiredService<TelegramMediaService>();
 
@@ -133,23 +146,33 @@ public class MediaRefetchWorkerService : BackgroundService
     private async Task ProcessUserPhotoRequestAsync(RefetchRequest request, int workerId)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
+
+        // Check if bot is enabled before making Telegram API calls
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+                        ?? TelegramBotConfig.Default;
+
+        if (!botConfig.BotEnabled)
+        {
+            _logger.LogDebug("Worker {WorkerId} skipping user photo refetch - bot is disabled", workerId);
+            return;
+        }
+
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
-
-        _logger.LogInformation("Worker {WorkerId} refetching user photo: user {UserId}", workerId, request.UserId);
-
-        // Get singleton bot client from factory (same instance used by TelegramAdminBotService)
-        var botClient = await _botClientFactory.GetBotClientAsync();
 
         // Get user's current file_unique_id from database
         var user = await userRepo.GetByIdAsync(request.UserId!.Value);
         var knownPhotoId = user?.PhotoFileUniqueId;
 
+        _logger.LogInformation("Worker {WorkerId} refetching user photo: {User}",
+            workerId, user.ToLogInfo(request.UserId!.Value));
+
         // Download photo (will check if changed)
         var result = await photoService.GetUserPhotoWithMetadataAsync(
-            botClient,
             request.UserId!.Value,
-            knownPhotoId);
+            knownPhotoId,
+            user);
 
         if (result != null)
         {
@@ -159,7 +182,8 @@ public class MediaRefetchWorkerService : BackgroundService
                 result.FileUniqueId,
                 result.RelativePath);
 
-            _logger.LogInformation("Worker {WorkerId} completed user photo refetch: {UserId}", workerId, request.UserId);
+            _logger.LogInformation("Worker {WorkerId} completed user photo refetch: {User}",
+                workerId, user.ToLogInfo(request.UserId!.Value));
 
             // User photo updates don't have a UI event yet (would need OnUserPhotoUpdated event)
             // For now, users refresh page to see updated photos

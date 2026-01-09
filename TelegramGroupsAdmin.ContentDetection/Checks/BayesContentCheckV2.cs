@@ -1,11 +1,12 @@
 using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -19,21 +20,9 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class BayesContentCheckV2(
     ILogger<BayesContentCheckV2> logger,
-    IDbContextFactory<AppDbContext> dbContextFactory,
+    IMLTrainingDataRepository trainingDataRepository,
     ITokenizerService tokenizerService) : IContentCheckV2
 {
-    private const int MAX_TRAINING_SAMPLES = 10_000;
-
-    // SpamAssassin-style scoring (from research)
-    private const double ScoreBayes99 = 5.0;   // 99%+ probability
-    private const double ScoreBayes95 = 3.5;   // 95-99% probability
-    private const double ScoreBayes80 = 2.0;   // 80-95% probability
-    private const double ScoreBayes70 = 1.0;   // 70-80% probability
-
-    // Abstention thresholds
-    private const int UncertaintyLowerBound = 40; // <40% = likely ham, abstain (no negative scores)
-    private const int UncertaintyUpperBound = 60; // 40-60% = uncertain, abstain
-
     private BayesClassifier? _classifier;
     private DateTime _lastTrainingUpdate = DateTime.MinValue;
     private readonly TimeSpan _retrainingInterval = TimeSpan.FromHours(1);
@@ -102,8 +91,8 @@ public class BayesContentCheckV2(
             var (spamProbability, details, certainty) = _classifier.ClassifyMessage(processedMessage);
             var spamProbabilityPercent = (int)(spamProbability * 100);
 
-            // V2 FIX: Abstain when uncertain (40-60%) or likely ham (<40%)
-            if (spamProbabilityPercent < UncertaintyLowerBound)
+            // V2 FIX: Abstain when uncertain or likely ham
+            if (spamProbabilityPercent < BayesConstants.UncertaintyLowerBound)
             {
                 return new ContentCheckResponseV2
                 {
@@ -115,7 +104,7 @@ public class BayesContentCheckV2(
                 };
             }
 
-            if (spamProbabilityPercent is >= UncertaintyLowerBound and <= UncertaintyUpperBound)
+            if (spamProbabilityPercent is >= BayesConstants.UncertaintyLowerBound and <= BayesConstants.UncertaintyUpperBound)
             {
                 return new ContentCheckResponseV2
                 {
@@ -162,11 +151,11 @@ public class BayesContentCheckV2(
     {
         return spamProbabilityPercent switch
         {
-            >= 99 => ScoreBayes99,  // 5.0 points (strongest signal)
-            >= 95 => ScoreBayes95,  // 3.5 points
-            >= 80 => ScoreBayes80,  // 2.0 points
-            >= 70 => ScoreBayes70,  // 1.0 points
-            _ => 0.5                 // 60-70% = weak signal (0.5 points)
+            >= BayesConstants.ProbabilityThreshold99 => ScoringConstants.ScoreBayes99,
+            >= BayesConstants.ProbabilityThreshold95 => ScoringConstants.ScoreBayes95,
+            >= BayesConstants.ProbabilityThreshold80 => ScoringConstants.ScoreBayes80,
+            >= BayesConstants.ProbabilityThreshold70 => ScoringConstants.ScoreBayes70,
+            _ => 0.5  // 60-70% = weak signal
         };
     }
 
@@ -180,35 +169,33 @@ public class BayesContentCheckV2(
 
         try
         {
-            // Load training data (reuse V1 logic - same database query)
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            // Load training data using IMLTrainingDataRepository (shares logic with ML.NET classifier)
+            var labeledMessageIds = await trainingDataRepository.GetLabeledMessageIdsAsync(cancellationToken);
+            var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
+            var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
 
-            var manualSamples = await (
-                from dr in dbContext.DetectionResults
-                join m in dbContext.Messages on dr.MessageId equals m.MessageId
-                join mt in dbContext.MessageTranslations on m.MessageId equals mt.MessageId into translations
-                from mt in translations.DefaultIfEmpty()
-                where dr.UsedForTraining && (dr.DetectionSource == "manual" || dr.DetectionSource == "Manual")
-                orderby dr.DetectedAt descending
-                select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam, dr.DetectionSource }
-            ).AsNoTracking().ToListAsync(cancellationToken);
-
-            var autoSamples = await (
-                from dr in dbContext.DetectionResults
-                join m in dbContext.Messages on dr.MessageId equals m.MessageId
-                join mt in dbContext.MessageTranslations on m.MessageId equals mt.MessageId into translations
-                from mt in translations.DefaultIfEmpty()
-                where dr.UsedForTraining && dr.DetectionSource != "manual" && dr.DetectionSource != "Manual"
-                orderby dr.DetectedAt descending
-                select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam, dr.DetectionSource }
-            ).AsNoTracking().Take(MAX_TRAINING_SAMPLES).ToListAsync(cancellationToken);
-
-            var trainingSet = manualSamples.Concat(autoSamples).ToList();
-
-            if (!trainingSet.Any())
+            if (spamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass || hamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass)
             {
-                logger.LogWarning("No training samples available for Bayes V2 classifier");
-                return;
+                logger.LogWarning(
+                    "Insufficient training data for Bayes (spam: {Spam}, ham: {Ham}, minimum: {Min})",
+                    spamSamples.Count, hamSamples.Count, SpamClassifierMetadata.MinimumSamplesPerClass);
+                return;  // _classifier stays null → abstains on all checks
+            }
+
+            var allSamples = spamSamples.Concat(hamSamples).ToList();
+
+            // Log balance status after collecting samples
+            var totalSamples = spamSamples.Count + hamSamples.Count;
+            var spamRatio = totalSamples > 0 ? (double)spamSamples.Count / totalSamples : 0.0;
+            var isBalanced = spamRatio >= SpamClassifierMetadata.MinBalancedSpamRatio &&
+                             spamRatio <= SpamClassifierMetadata.MaxBalancedSpamRatio;
+
+            if (!isBalanced)
+            {
+                logger.LogWarning(
+                    "Bayes classifier training with imbalanced data: {Spam} spam + {Ham} ham = {SpamRatio:P1} spam ratio " +
+                    "(recommended: 20-80%). Accuracy may be reduced.",
+                    spamSamples.Count, hamSamples.Count, spamRatio);
             }
 
             // Create and train classifier
@@ -216,20 +203,26 @@ public class BayesContentCheckV2(
 
             var spamCount = 0;
             var hamCount = 0;
+            var explicitCount = 0;
 
-            foreach (var sample in trainingSet)
+            foreach (var sample in allSamples)
             {
-                _classifier.Train(sample.MessageText, sample.IsSpam);
-                if (sample.IsSpam)
+                var isSpam = sample.Label == Core.Models.TrainingLabel.Spam;
+                _classifier.Train(sample.Text, isSpam);
+
+                if (isSpam)
                     spamCount++;
                 else
                     hamCount++;
+
+                if (sample.Source == TrainingSampleSource.Explicit)
+                    explicitCount++;
             }
 
             _lastTrainingUpdate = DateTime.UtcNow;
             logger.LogInformation(
-                "Bayes V2 classifier trained with {Total} samples ({Manual} manual, {Auto} auto, {Spam} spam, {Ham} ham)",
-                trainingSet.Count, manualSamples.Count, autoSamples.Count, spamCount, hamCount);
+                "Bayes V2 classifier trained with {Total} samples ({Explicit} explicit labels, {Implicit} implicit auto, {Spam} spam, {Ham} ham)",
+                allSamples.Count, explicitCount, allSamples.Count - explicitCount, spamCount, hamCount);
         }
         catch (Exception ex)
         {

@@ -1,8 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -14,7 +15,7 @@ public class WarnCommand : IBotCommand
 {
     private readonly ILogger<WarnCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
     private readonly IUserMessagingService _messagingService;
 
     public string Name => "warn";
@@ -28,7 +29,7 @@ public class WarnCommand : IBotCommand
     public WarnCommand(
         ILogger<WarnCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService,
+        ModerationOrchestrator moderationService,
         IUserMessagingService messagingService)
     {
         _logger = logger;
@@ -38,7 +39,6 @@ public class WarnCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -105,12 +105,11 @@ public class WarnCommand : IBotCommand
             }
 
             var messageResult = await _messagingService.SendToUserAsync(
-                botClient,
                 userId: targetUser.Id,
-                chatId: message.Chat.Id,
+                chat: message.Chat,
                 messageText: warningNotification,
                 replyToMessageId: message.ReplyToMessage.MessageId,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             // Build admin confirmation response
             var username = targetUser.Username ?? targetUser.FirstName ?? targetUser.Id.ToString();
@@ -131,7 +130,8 @@ public class WarnCommand : IBotCommand
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to warn user {UserId}", targetUser.Id);
+            _logger.LogError(ex, "Failed to warn {User}",
+                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
             return new CommandResult($"❌ Failed to issue warning: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

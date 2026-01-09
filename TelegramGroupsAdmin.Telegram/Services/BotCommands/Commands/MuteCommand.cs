@@ -1,9 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -14,12 +15,12 @@ public class MuteCommand : IBotCommand
 {
     private readonly ILogger<MuteCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
 
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
     public string Usage => "/mute (reply to message) <5m|1h|24h> [reason]";
-    public int MinPermissionLevel => 1; // Admin required
+    public int MinPermissionLevel => ModerationConstants.AdminPermissionLevel; // Admin required
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -27,7 +28,7 @@ public class MuteCommand : IBotCommand
     public MuteCommand(
         ILogger<MuteCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService)
+        ModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -35,7 +36,6 @@ public class MuteCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -63,7 +63,7 @@ public class MuteCommand : IBotCommand
         }
 
         // Parse duration (default 5 minutes if not specified or invalid)
-        TimeSpan duration = TimeSpan.FromMinutes(5);
+        TimeSpan duration = CommandConstants.DefaultMuteDuration;
         string? reason = null;
 
         if (args.Length > 0)
@@ -94,13 +94,12 @@ public class MuteCommand : IBotCommand
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(
-                botClient,
-                targetUser.Id,
-                message.ReplyToMessage.MessageId,
-                executor,
-                reason,
-                duration,
-                cancellationToken);
+                userId: targetUser.Id,
+                messageId: message.ReplyToMessage.MessageId,
+                executor: executor,
+                reason: reason,
+                duration: duration,
+                cancellationToken: cancellationToken);
 
             if (!result.Success)
             {
@@ -114,14 +113,17 @@ public class MuteCommand : IBotCommand
                           $"⚠️ Will be automatically unmuted at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC";
 
             _logger.LogInformation(
-                "User {TargetId} ({TargetUsername}) muted by {ExecutorId} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
-                targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, duration, reason);
+                "{TargetUser} muted by {Executor} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
+                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                result.ChatsAffected, duration, reason);
 
             return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to mute user {UserId}", targetUser.Id);
+            _logger.LogError(ex, "Failed to mute {User}",
+                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
             return new CommandResult($"❌ Failed to mute user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

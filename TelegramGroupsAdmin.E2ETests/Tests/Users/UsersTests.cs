@@ -120,6 +120,8 @@ public class UsersTests : SharedAuthenticatedTestBase
             "Should have 'Trusted' tab");
         Assert.That(tabNames.Any(t => t.Contains("BANNED", StringComparison.OrdinalIgnoreCase)),
             "Should have 'Banned' tab");
+        Assert.That(tabNames.Any(t => t.Contains("INACTIVE", StringComparison.OrdinalIgnoreCase)),
+            "Should have 'Inactive' tab");
     }
 
     [Test]
@@ -309,6 +311,25 @@ public class UsersTests : SharedAuthenticatedTestBase
         // Tagged users list may be empty initially
         Assert.That(displayedCount, Is.GreaterThanOrEqualTo(0),
             "Tagged tab should display user list (may be empty)");
+    }
+
+    [Test]
+    public async Task Users_CanSwitchToInactiveTab()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        // Act
+        await _usersPage.NavigateAsync();
+        await _usersPage.WaitForLoadAsync();
+
+        // Switch to Inactive tab
+        await _usersPage.SelectTabAsync("Inactive");
+
+        // Assert - Inactive tab displays (may be empty)
+        var displayedCount = await _usersPage.GetDisplayedUserCountAsync();
+        Assert.That(displayedCount, Is.GreaterThanOrEqualTo(0),
+            "Inactive tab should display user list (may be empty)");
     }
 
     [Test]

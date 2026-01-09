@@ -272,16 +272,13 @@
                 <!-- Critical Check Integration -->
                 <MudStack Spacing="2">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudText Typo="Typo.subtitle2">Critical Check Integration (Phase 4.14)</MudText>
+                        <MudText Typo="Typo.subtitle2">Critical Check Integration</MudText>
                         <HelpTooltip Text="Critical checks bypass trust/admin exemptions because malware threats apply to everyone. Even admins can accidentally share infected files. This setting ensures comprehensive security without false trust assumptions." />
                     </MudStack>
-                    <MudSwitch T="bool" Value="@_config.General.AlwaysRunForAllUsers" Disabled="true" Color="Color.Success" Label="Always run for all users (bypass trust/admin status)" />
-
-                    <ConceptualAlert Title="Security Policy" Severity="Severity.Warning" Dense="true">
-                        When enabled, file scanning runs for <strong>ALL users</strong> including trusted users and admins.
-                        Infected files are <strong>always deleted</strong> and user notified via DM, but NO ban/warn applied to trusted/admin users.
-                        This prevents accidental malware spread while respecting trust levels.
-                    </ConceptualAlert>
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Configure file scanning as a critical check in <MudLink Href="/settings/detection/critical" Style="text-decoration: underline;"><strong>Content Detection → Critical Checks</strong></MudLink>.
+                        Critical checks run for <strong>ALL users</strong> (including trusted users and admins) but do not apply bans/warns.
+                    </MudAlert>
                 </MudStack>
             </MudStack>
         </MudPaper>

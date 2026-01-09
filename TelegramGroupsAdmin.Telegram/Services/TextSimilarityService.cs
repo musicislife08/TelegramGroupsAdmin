@@ -1,12 +1,12 @@
-using System.Text.RegularExpressions;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Service for calculating text similarity using Jaccard index
-/// Reuses tokenization logic from SimilaritySpamCheckV2 for consistency
+/// Service for calculating text similarity using Jaccard index.
+/// Uses shared TextTokenizer for consistent word extraction.
 /// </summary>
-public partial class TextSimilarityService
+public class TextSimilarityService
 {
     /// <summary>
     /// Calculate Jaccard similarity between two texts (0.0 = no overlap, 1.0 = identical)
@@ -17,8 +17,8 @@ public partial class TextSimilarityService
         if (string.IsNullOrWhiteSpace(text1) || string.IsNullOrWhiteSpace(text2))
             return 0.0;
 
-        var tokens1 = TokenizeText(text1);
-        var tokens2 = TokenizeText(text2);
+        var tokens1 = TextTokenizer.TokenizeToSet(text1);
+        var tokens2 = TextTokenizer.TokenizeToSet(text2);
 
         if (tokens1.Count == 0 || tokens2.Count == 0)
             return 0.0;
@@ -29,27 +29,4 @@ public partial class TextSimilarityService
 
         return union > 0 ? (double)intersection / union : 0.0;
     }
-
-    /// <summary>
-    /// Tokenize text into normalized word set (lowercase, alphanumeric only)
-    /// Matches SimilaritySpamCheckV2 tokenization for consistency
-    /// </summary>
-    private HashSet<string> TokenizeText(string text)
-    {
-        // Lowercase and split on whitespace/punctuation
-        var normalized = text.ToLowerInvariant();
-        var words = WhitespaceAndPunctuation().Split(normalized);
-
-        // Filter out empty strings and very short tokens (single characters)
-        return words
-            .Where(w => w.Length > 1)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Source-generated regex for splitting text on whitespace and punctuation
-    /// Matches SimilaritySpamCheckV2 pattern
-    /// </summary>
-    [GeneratedRegex(@"[\s\p{P}]+", RegexOptions.Compiled)]
-    private static partial Regex WhitespaceAndPunctuation();
 }

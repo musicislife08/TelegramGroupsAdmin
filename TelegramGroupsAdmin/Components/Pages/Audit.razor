@@ -501,7 +501,7 @@
                 eventTypeFilter: _filterEventType,
                 actorUserIdFilter: _filterActorUserId,
                 targetUserIdFilter: _filterTargetUserId,
-                ct: cancellationToken);
+                cancellationToken: cancellationToken);
 
             // Build Telegram users cache for this page (actors and targets)
             var telegramUserIds = events

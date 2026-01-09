@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Configuration.Repositories;
+
 namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
@@ -11,9 +13,9 @@ public interface IConfigService
     /// </summary>
     /// <typeparam name="T">Configuration type (must be serializable to JSON)</typeparam>
     /// <param name="configType">Type of config (enum for type safety)</param>
-    /// <param name="chatId">Chat ID (null for global config)</param>
+    /// <param name="chatId">Chat ID (0 for global config)</param>
     /// <param name="config">Configuration object</param>
-    Task SaveAsync<T>(ConfigType configType, long? chatId, T config) where T : class;
+    Task SaveAsync<T>(ConfigType configType, long chatId, T config) where T : class;
 
     /// <summary>
     /// Get a configuration value for a specific config type and chat
@@ -21,9 +23,9 @@ public interface IConfigService
     /// </summary>
     /// <typeparam name="T">Configuration type</typeparam>
     /// <param name="configType">Type of config (enum for type safety)</param>
-    /// <param name="chatId">Chat ID (null for global config)</param>
+    /// <param name="chatId">Chat ID (0 for global config)</param>
     /// <returns>Configuration object or null if not found</returns>
-    ValueTask<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class;
+    ValueTask<T?> GetAsync<T>(ConfigType configType, long chatId) where T : class;
 
     /// <summary>
     /// Get effective configuration for a chat by merging global and chat-specific settings
@@ -31,16 +33,16 @@ public interface IConfigService
     /// </summary>
     /// <typeparam name="T">Configuration type</typeparam>
     /// <param name="configType">Type of config (enum for type safety)</param>
-    /// <param name="chatId">Chat ID (returns global config if null)</param>
+    /// <param name="chatId">Chat ID (returns global config if 0)</param>
     /// <returns>Merged configuration object or null if no config exists</returns>
-    ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long? chatId) where T : class;
+    ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long chatId) where T : class;
 
     /// <summary>
     /// Delete a configuration value for a specific config type and chat
     /// </summary>
     /// <param name="configType">Type of config (enum for type safety)</param>
-    /// <param name="chatId">Chat ID (null for global config)</param>
-    Task DeleteAsync(ConfigType configType, long? chatId);
+    /// <param name="chatId">Chat ID (0 for global config)</param>
+    Task DeleteAsync(ConfigType configType, long chatId);
 
     /// <summary>
     /// Get the encrypted Telegram bot token from database (global config only, chat_id = 0)
@@ -52,4 +54,17 @@ public interface IConfigService
     /// Save the Telegram bot token to database (encrypted, global config only, chat_id = 0)
     /// </summary>
     Task SaveTelegramBotTokenAsync(string botToken);
+
+    /// <summary>
+    /// Get all content detection chat configurations (for admin UI listing).
+    /// Returns metadata about which chats have custom configs.
+    /// </summary>
+    Task<IEnumerable<ChatConfigInfo>> GetAllContentDetectionConfigsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get the names of content detection checks that have AlwaysRun=true for the given chat.
+    /// Uses optimized JSONB query to efficiently extract only critical check names.
+    /// Handles UseGlobal merging at the database level.
+    /// </summary>
+    Task<HashSet<string>> GetCriticalCheckNamesAsync(long chatId, CancellationToken cancellationToken = default);
 }

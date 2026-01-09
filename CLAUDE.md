@@ -154,7 +154,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 ```plain
 ┌─────────────────────────────────────┐
 │  TelegramGroupsAdmin Container      │
-│  ├─ TelegramAdminBotService         │ ← Telegram polling (SINGLETON enforced by API)
+│  ├─ TelegramBotPollingHost          │ ← Telegram polling (SINGLETON enforced by API)
 │  ├─ Blazor Server UI                │
 │  ├─ API Endpoints                   │
 │  └─ Quartz.NET Background Jobs      │
@@ -215,7 +215,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - Fallback: Env vars used for first-time setup only
 - UI: Settings pages allow live editing without restart
 
-**Background Services**: TelegramAdminBotService (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
+**Background Services**: TelegramBotPollingHost (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
 
 ## Configuration
 
@@ -252,6 +252,8 @@ When `SEQ_URL` is configured, the application automatically enables:
 **File Scanning Streaming Architecture**: FileScanJob passes file paths (not loaded into memory). ClamAVScannerService validates size <20MB, VirusTotalScannerService uses StreamContent. Supports files up to 20MB with minimal memory.
 
 **Quartz.NET Job Architecture**: Jobs in BackgroundJobs project, payloads in Abstractions (breaks circular deps). Jobs re-throw exceptions for retry/logging. Job configs stored in database (configs.background_jobs_config JSONB column).
+
+**Quartz.NET Payload Access**: Always use `context.MergedJobDataMap` (not `JobDetail.JobDataMap`) to access trigger-level data. On-demand jobs triggered via `TriggerNowAsync` store payloads in the trigger's JobDataMap, which is only accessible via `MergedJobDataMap`. Use `JobPayloadHelper.TryGetPayloadAsync<T>()` for defensive payload extraction with automatic stale trigger cleanup.
 
 **Translation Storage**: Exclusive arc pattern (message_id XOR edit_id) in message_translations table. MessageProcessingService translates before save (≥10 chars, <80% Latin script). Reused by spam detection.
 
@@ -349,6 +351,12 @@ When `SEQ_URL` is configured, the application automatically enables:
 **Migration Tests**: NUnit + Testcontainers.PostgreSQL, validates all migrations against real PostgreSQL 17 (tests always passing)
 
 **E2E Tests**: Playwright + Testcontainers.PostgreSQL for browser-based UI testing. Uses .NET 10's `WebApplicationFactory.UseKestrel()` for real HTTP server. See [E2E_TESTING.md](E2E_TESTING.md) for full documentation.
+
+**Test Execution Best Practices**:
+- **ALWAYS run test commands without pipes initially** - pipes hide failures and require re-running to see errors
+- ❌ Bad: `dotnet test --no-build | tail -20` (hides failures, requires second run to see errors)
+- ✅ Good: `dotnet test --no-build` (see all output immediately, diagnose failures on first run)
+- Only add pipes (`| tail`, `| grep`, etc.) when you need to filter known-passing output for readability
 
 ## CRITICAL RULES
 

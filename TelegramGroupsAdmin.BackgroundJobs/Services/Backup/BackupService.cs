@@ -148,7 +148,7 @@ public class BackupService : IBackupService
                     message: $"Critical: Database backup failed while exporting table '{tableName}'.\n\n" +
                              $"Error: {ex.Message}\n\n" +
                              $"Please investigate the database connection and ensure all tables are accessible.",
-                    ct: CancellationToken.None);
+                    cancellationToken: CancellationToken.None);
 
                 throw;
             }
@@ -262,6 +262,37 @@ public class BackupService : IBackupService
         }
 
         return encryptedDto;
+    }
+
+    /// <summary>
+    /// Build DynamicParameters for Dapper, serializing complex JSONB properties to JSON strings.
+    /// Can't modify the DTO directly since property types don't match (e.g., List → string).
+    /// </summary>
+    private static DynamicParameters BuildDapperParameters(
+        object dto,
+        List<(string PropertyName, string? ColumnName)> columnMappings,
+        List<PropertyInfo> jsonbProperties)
+    {
+        var parameters = new DynamicParameters();
+        var dtoType = dto.GetType();
+
+        foreach (var mapping in columnMappings)
+        {
+            var prop = dtoType.GetProperty(mapping.PropertyName);
+            if (prop == null) continue;
+
+            var value = prop.GetValue(dto);
+
+            // If this is a complex JSONB property, serialize to JSON string
+            if (value != null && jsonbProperties.Contains(prop))
+            {
+                value = JsonSerializer.Serialize(value);
+            }
+
+            parameters.Add(mapping.PropertyName, value);
+        }
+
+        return parameters;
     }
 
     public async Task RestoreAsync(byte[] backupBytes)
@@ -514,19 +545,31 @@ public class BackupService : IBackupService
             .Where(p => p.GetCustomAttribute<ProtectedDataAttribute>() != null)
             .ToList();
 
+        // Find JSONB properties that are complex types (not string) - need to serialize before insert
+        var jsonbProperties = columnMappings
+            .Where(m => m.ColumnName != null && jsonbColumnSet.Contains(m.ColumnName))
+            .Select(m => properties.First(p => p.Name == m.PropertyName))
+            .Where(p => p.PropertyType != typeof(string) && Nullable.GetUnderlyingType(p.PropertyType) != typeof(string))
+            .ToList();
+
         foreach (var record in records)
         {
             // Convert object back to DTO type via JSON round-trip (handles JsonElement → DTO)
             var jsonElement = (JsonElement)record;
-            var dto = JsonSerializer.Deserialize(jsonElement.GetRawText(), dtoType, jsonOptions);
+            var dto = JsonSerializer.Deserialize(jsonElement.GetRawText(), dtoType, jsonOptions)!;
 
             // Encrypt any [ProtectedData] properties for the new machine
             if (protectedProperties.Any())
             {
-                dto = EncryptProtectedData(dto, dtoType, protectedProperties);
+                dto = EncryptProtectedData(dto, dtoType, protectedProperties)!;
             }
 
-            await connection.ExecuteAsync(sql, dto, transaction);
+            // Build parameters, serializing complex JSONB properties to JSON strings
+            var parameters = jsonbProperties.Count > 0
+                ? BuildDapperParameters(dto, columnMappings.Select(m => (m.PropertyName, m.ColumnName)).ToList(), jsonbProperties)
+                : dto;
+
+            await connection.ExecuteAsync(sql, parameters, transaction);
         }
 
         // Re-enable FK constraints

@@ -1,9 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -17,10 +18,14 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class LanguageWarningHandler
 {
+    private readonly ITelegramBotClientFactory _botFactory;
     private readonly ILogger<LanguageWarningHandler> _logger;
 
-    public LanguageWarningHandler(ILogger<LanguageWarningHandler> logger)
+    public LanguageWarningHandler(
+        ITelegramBotClientFactory botFactory,
+        ILogger<LanguageWarningHandler> logger)
     {
+        _botFactory = botFactory;
         _logger = logger;
     }
 
@@ -29,7 +34,6 @@ public class LanguageWarningHandler
     /// Checks translation, config, user status, then issues warning via moderation system.
     /// </summary>
     public async Task HandleWarningAsync(
-        ITelegramBotClient botClient,
         Message message,
         IServiceScope scope,
         CancellationToken cancellationToken)
@@ -44,9 +48,10 @@ public class LanguageWarningHandler
             if (translation == null)
                 return;
 
-            // Get configuration
-            var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository>();
-            var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+            // Get configuration service - single entry point for all config access
+            var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+            var spamConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, message.Chat.Id)
+                            ?? new ContentDetectionConfig();
 
             // Check if language warnings are enabled
             if (!spamConfig.Translation.WarnNonEnglish)
@@ -60,18 +65,17 @@ public class LanguageWarningHandler
                 return;
 
             // Check if user is admin in this chat
-            var chatMember = await botClient.GetChatMember(message.Chat.Id, message.From.Id, cancellationToken);
+            var operations = await _botFactory.GetOperationsAsync();
+            var chatMember = await operations.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
                 return;
 
             // Get warning system config for auto-ban threshold
-            var configService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Configuration.Services.IConfigService>();
             var warningConfig = await configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, message.Chat.Id)
                                ?? WarningSystemConfig.Default;
 
-            // Get current warning count
-            var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-            var currentWarnings = await userActionsRepo.GetWarnCountAsync(message.From.Id, message.Chat.Id, cancellationToken);
+            // REFACTOR-5: Get current warning count from source of truth (JSONB warnings on telegram_users)
+            var currentWarnings = await userRepo.GetActiveWarningCountAsync(message.From.Id, cancellationToken);
 
             // Calculate warnings remaining
             var warningsRemaining = warningConfig.AutoBanThreshold - currentWarnings;
@@ -86,7 +90,7 @@ public class LanguageWarningHandler
                 .Replace("{warnings_remaining}", warningsRemaining.ToString());
 
             // Issue warning using moderation system
-            var moderationService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
+            var moderationService = scope.ServiceProvider.GetRequiredService<Services.Moderation.ModerationOrchestrator>();
             await moderationService.WarnUserAsync(
                 userId: message.From.Id,
                 messageId: message.MessageId,
@@ -98,9 +102,8 @@ public class LanguageWarningHandler
             // Send warning to user via DM with chat fallback
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
             await messagingService.SendToUserAsync(
-                botClient: botClient,
                 userId: message.From.Id,
-                chatId: message.Chat.Id,
+                chat: message.Chat,
                 messageText: warningMessage,
                 replyToMessageId: message.MessageId,
                 cancellationToken: cancellationToken);

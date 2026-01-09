@@ -162,6 +162,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             PhotoFileUniqueId: null,
             IsBot: false,
             IsTrusted: false,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-7),
             LastSeenAt: DateTimeOffset.UtcNow.AddHours(-3),
@@ -174,7 +175,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region Basic Rendering Tests
 
     [Test]
-    public async Task DisplaysReportStatus_Pending()
+    public void DisplaysReportStatus_Pending()
     {
         // Arrange
         var report = CreateReport(status: ReportStatus.Pending);
@@ -189,16 +190,12 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        // Wait for async operations
-        await Task.Delay(50);
-        cut.Render();
-
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("Pending"));
+        // Assert - WaitForAssertion handles async component loading
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Pending")));
     }
 
     [Test]
-    public async Task DisplaysReportStatus_Reviewed()
+    public void DisplaysReportStatus_Reviewed()
     {
         // Arrange
         var report = CreateReport(status: ReportStatus.Reviewed, actionTaken: "spam");
@@ -213,16 +210,16 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Reviewed"));
-        Assert.That(cut.Markup, Does.Contain("Action taken: spam"));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Reviewed"));
+            Assert.That(cut.Markup, Does.Contain("Action taken: spam"));
+        });
     }
 
     [Test]
-    public async Task DisplaysMessageText()
+    public void DisplaysMessageText()
     {
         // Arrange
         var report = CreateReport();
@@ -237,15 +234,12 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Buy crypto now!"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Buy crypto now!")));
     }
 
     [Test]
-    public async Task DisplaysNoText_WhenMessageTextNull()
+    public void DisplaysNoText_WhenMessageTextNull()
     {
         // Arrange
         var report = CreateReport();
@@ -260,11 +254,8 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("[No text]"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("[No text]")));
     }
 
     #endregion
@@ -272,7 +263,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region Message Not Found Tests
 
     [Test]
-    public async Task DisplaysWarning_WhenMessageNotFound()
+    public void DisplaysWarning_WhenMessageNotFound()
     {
         // Arrange
         var report = CreateReport();
@@ -284,11 +275,8 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Message not found in cache"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Message not found in cache")));
     }
 
     #endregion
@@ -296,7 +284,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region Photo and Deleted Badge Tests
 
     [Test]
-    public async Task DisplaysHasImageChip_WhenPhotoAttached()
+    public void DisplaysHasImageChip_WhenPhotoAttached()
     {
         // Arrange
         var report = CreateReport();
@@ -311,15 +299,12 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Has Image"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Has Image")));
     }
 
     [Test]
-    public async Task DisplaysDeletedChip_WhenMessageDeleted()
+    public void DisplaysDeletedChip_WhenMessageDeleted()
     {
         // Arrange
         var report = CreateReport();
@@ -336,11 +321,8 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Deleted"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Deleted")));
     }
 
     #endregion
@@ -348,7 +330,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region Action Buttons Tests
 
     [Test]
-    public async Task ShowsActionButtons_WhenStatusPending()
+    public void ShowsActionButtons_WhenStatusPending()
     {
         // Arrange
         var report = CreateReport(status: ReportStatus.Pending);
@@ -363,18 +345,18 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert - should show action buttons
-        Assert.That(cut.Markup, Does.Contain("Delete as Spam"));
-        Assert.That(cut.Markup, Does.Contain("Ban User"));
-        Assert.That(cut.Markup, Does.Contain("Warn"));
-        Assert.That(cut.Markup, Does.Contain("Dismiss"));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Delete as Spam"));
+            Assert.That(cut.Markup, Does.Contain("Ban User"));
+            Assert.That(cut.Markup, Does.Contain("Warn"));
+            Assert.That(cut.Markup, Does.Contain("Dismiss"));
+        });
     }
 
     [Test]
-    public async Task HidesActionButtons_WhenStatusReviewed()
+    public void HidesActionButtons_WhenStatusReviewed()
     {
         // Arrange
         var report = CreateReport(status: ReportStatus.Reviewed, actionTaken: "spam");
@@ -389,12 +371,13 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
-        // Assert - should NOT show action buttons
-        Assert.That(cut.Markup, Does.Not.Contain("Delete as Spam"));
-        Assert.That(cut.Markup, Does.Not.Contain("Ban User"));
+        // Assert - should NOT show action buttons (wait for "Reviewed" to appear first)
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Reviewed"));
+            Assert.That(cut.Markup, Does.Not.Contain("Delete as Spam"));
+            Assert.That(cut.Markup, Does.Not.Contain("Ban User"));
+        });
     }
 
     #endregion
@@ -402,7 +385,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region Reporter Display Tests
 
     [Test]
-    public async Task DisplaysTelegramReporter()
+    public void DisplaysTelegramReporter()
     {
         // Arrange
         var report = CreateReport(
@@ -419,16 +402,16 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("ReporterUser"));
-        Assert.That(cut.Markup, Does.Contain("ID: 935157741"));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("ReporterUser"));
+            Assert.That(cut.Markup, Does.Contain("ID: 935157741"));
+        });
     }
 
     [Test]
-    public async Task DisplaysSystemReporter_ForAutoDetection()
+    public void DisplaysSystemReporter_ForAutoDetection()
     {
         // Arrange - Auto-detection report (no user ID)
         const long specificReporterId = 935157741;
@@ -446,17 +429,17 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert - Auto-Detection reporter should NOT show a Telegram user ID
         // Note: The spammer's user ID is still shown, so we check specifically for reporter ID format
-        Assert.That(cut.Markup, Does.Contain("Auto-Detection"));
-        Assert.That(cut.Markup, Does.Not.Contain($"ID: {specificReporterId}")); // No reporter ID shown
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Auto-Detection"));
+            Assert.That(cut.Markup, Does.Not.Contain($"ID: {specificReporterId}")); // No reporter ID shown
+        });
     }
 
     [Test]
-    public async Task DisplaysWebReporter()
+    public void DisplaysWebReporter()
     {
         // Arrange - Web UI report
         var report = CreateReport(
@@ -474,12 +457,12 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert
-        Assert.That(cut.Markup, Does.Contain("WebAdmin"));
-        Assert.That(cut.Markup, Does.Contain("Web User"));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("WebAdmin"));
+            Assert.That(cut.Markup, Does.Contain("Web User"));
+        });
     }
 
     #endregion
@@ -487,7 +470,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region Telegram Link Tests
 
     [Test]
-    public async Task ShowsTelegramLink_ForSupergroup()
+    public void ShowsTelegramLink_ForSupergroup()
     {
         // Arrange - Supergroup chat ID starts with -100
         var report = CreateReport(chatId: -1001329174109, messageId: 212408);
@@ -502,16 +485,16 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert - should have Telegram link (https://t.me/c/{numericId}/{messageId})
-        Assert.That(cut.Markup, Does.Contain("Open in Telegram"));
-        Assert.That(cut.Markup, Does.Contain("t.me/c/1329174109/212408"));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Open in Telegram"));
+            Assert.That(cut.Markup, Does.Contain("t.me/c/1329174109/212408"));
+        });
     }
 
     [Test]
-    public async Task HidesTelegramLink_ForNonSupergroup()
+    public void HidesTelegramLink_ForNonSupergroup()
     {
         // Arrange - Regular group (doesn't start with -100)
         var report = CreateReport(chatId: -123456789);
@@ -526,11 +509,12 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
-        // Assert - should NOT have Telegram link
-        Assert.That(cut.Markup, Does.Not.Contain("Open in Telegram"));
+        // Assert - should NOT have Telegram link (wait for message content to appear first)
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("crypto")); // Message text is present
+            Assert.That(cut.Markup, Does.Not.Contain("Open in Telegram"));
+        });
     }
 
     #endregion
@@ -538,7 +522,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region User Display Tests
 
     [Test]
-    public async Task DisplaysUserFromRepository()
+    public void DisplaysUserFromRepository()
     {
         // Arrange
         var report = CreateReport();
@@ -554,15 +538,12 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert - uses TelegramDisplayName.Format which prefers full name
-        Assert.That(cut.Markup, Does.Contain("John Spammer"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("John Spammer")));
     }
 
     [Test]
-    public async Task DisplaysUserFromMessage_WhenRepositoryReturnsNull()
+    public void DisplaysUserFromMessage_WhenRepositoryReturnsNull()
     {
         // Arrange
         var report = CreateReport();
@@ -577,11 +558,8 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-        cut.Render();
-
         // Assert - falls back to message data
-        Assert.That(cut.Markup, Does.Contain("Crypto Spammer"));
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Crypto Spammer")));
     }
 
     #endregion
@@ -606,8 +584,8 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             .Add(x => x.OnAction, EventCallback.Factory.Create<(Report, string)>(
                 this, args => receivedAction = args)));
 
-        await Task.Delay(50);
-        cut.Render();
+        // Wait for component to load before finding button
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Delete as Spam")));
 
         // Act - find and click the "Delete as Spam" button
         var spamButton = cut.FindAll("button").First(b => b.TextContent.Contains("Delete as Spam"));
@@ -637,8 +615,8 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             .Add(x => x.OnAction, EventCallback.Factory.Create<(Report, string)>(
                 this, args => receivedAction = args)));
 
-        await Task.Delay(50);
-        cut.Render();
+        // Wait for component to load before finding button
+        cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Dismiss")));
 
         // Act
         var dismissButton = cut.FindAll("button").First(b => b.TextContent.Contains("Dismiss"));
@@ -654,7 +632,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     #region Repository Interaction Tests
 
     [Test]
-    public async Task CallsMessageRepository_OnRender()
+    public void CallsMessageRepository_OnRender()
     {
         // Arrange
         var report = CreateReport(messageId: 12345);
@@ -666,14 +644,13 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-
-        // Assert
-        await MessageRepository.Received(1).GetMessageAsync(12345, Arg.Any<CancellationToken>());
+        // Assert - wait for repository to be called
+        cut.WaitForAssertion(() =>
+            MessageRepository.Received(1).GetMessageAsync(12345, Arg.Any<CancellationToken>()));
     }
 
     [Test]
-    public async Task CallsUserRepository_WhenMessageFound()
+    public void CallsUserRepository_WhenMessageFound()
     {
         // Arrange
         var report = CreateReport();
@@ -686,14 +663,13 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-
-        // Assert
-        await UserRepository.Received(1).GetByTelegramIdAsync(999888777, Arg.Any<CancellationToken>());
+        // Assert - wait for repository to be called
+        cut.WaitForAssertion(() =>
+            UserRepository.Received(1).GetByTelegramIdAsync(999888777, Arg.Any<CancellationToken>()));
     }
 
     [Test]
-    public async Task DoesNotCallUserRepository_WhenMessageNotFound()
+    public void DoesNotCallUserRepository_WhenMessageNotFound()
     {
         // Arrange
         var report = CreateReport();
@@ -705,10 +681,12 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report));
 
-        await Task.Delay(50);
-
-        // Assert
-        await UserRepository.DidNotReceive().GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        // Assert - wait for "Message not found" to appear (proves loading completed)
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Message not found"));
+            UserRepository.DidNotReceive().GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        });
     }
 
     #endregion

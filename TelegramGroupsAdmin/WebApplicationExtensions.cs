@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Endpoints;
 
@@ -114,6 +115,17 @@ public static class WebApplicationExtensions
             catch (Exception ex)
             {
                 app.Logger.LogWarning(ex, "Failed to migrate API keys from environment variables (non-fatal)");
+            }
+
+            // One-time backfill: Populate similarity_hash columns for SimHash deduplication
+            try
+            {
+                var hashBackfill = scope.ServiceProvider.GetRequiredService<SimilarityHashBackfillService>();
+                await hashBackfill.BackfillAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to backfill similarity hashes (non-fatal)");
             }
         }
     }

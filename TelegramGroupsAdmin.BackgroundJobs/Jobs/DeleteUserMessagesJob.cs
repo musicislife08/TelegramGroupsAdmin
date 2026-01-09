@@ -1,9 +1,7 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -18,21 +16,17 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
-    TelegramBotClientFactory botClientFactory,
+    ITelegramBotClientFactory botClientFactory,
     IMessageHistoryRepository messageHistoryRepository) : IJob
 {
     private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<DeleteUserMessagesPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize DeleteUserMessagesPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteUserMessagesPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
@@ -53,8 +47,8 @@ public class DeleteUserMessagesJob(
                 "Starting cross-chat message cleanup for user {UserId}",
                 payload.TelegramUserId);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             // Fetch all user messages (non-deleted only)
             var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(
@@ -93,7 +87,7 @@ public class DeleteUserMessagesJob(
 
                 try
                 {
-                    await botClient.DeleteMessage(
+                    await operations.DeleteMessageAsync(
                         chatId: message.ChatId,
                         messageId: (int)message.MessageId,
                         cancellationToken: cancellationToken);

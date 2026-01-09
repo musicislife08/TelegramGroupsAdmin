@@ -58,6 +58,8 @@ public class ChatAdminsRepository : IChatAdminsRepository
         var entities = await context.ChatAdmins
             .AsNoTracking()
             .Include(ca => ca.TelegramUser)
+                .ThenInclude(tu => tu!.UserMappings.Where(m => m.IsActive))
+                    .ThenInclude(m => m.User)
             .Where(ca => ca.ChatId == chatId && ca.IsActive == true)
             .OrderByDescending(ca => ca.IsCreator)
             .ThenBy(ca => ca.PromotedAt)

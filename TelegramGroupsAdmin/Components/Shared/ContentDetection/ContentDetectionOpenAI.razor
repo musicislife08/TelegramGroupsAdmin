@@ -1,8 +1,6 @@
-@using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Services
-@inject IContentDetectionConfigRepository ConfigRepository
+@inject IConfigService ConfigService
 @inject IPromptVersionRepository PromptVersionRepository
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -11,96 +9,76 @@
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudText Typo="Typo.h6" Color="Color.Primary">OpenAI Integration</MudText>
-            <HelpTooltip Text="Uses GPT-4 to analyze message context and intent. Best accuracy for nuanced spam detection. Two modes: Veto Mode (confirms other algorithms' detections) or Detection Mode (actively searches for spam). Slow (~1.2s avg) but high quality." />
+            <MudText Typo="Typo.h6" Color="Color.Primary">AI Veto Check</MudText>
+            <HelpTooltip Text="Uses AI to verify spam detected by other algorithms. Acts as quality control to reduce false positives - only runs on messages already flagged as potential spam. Slow (~1.2s avg) but high quality." />
         </MudStack>
 
         @if (!IsGlobalView)
         {
             <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                <MudSwitch T="bool" @bind-Value="_config.OpenAI.UseGlobal"
-                          Label="@(_config.OpenAI.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
-                          Color="@(_config.OpenAI.UseGlobal ? Color.Default : Color.Primary)" />
+                <MudSwitch T="bool" @bind-Value="_config.AIVeto.UseGlobal"
+                          Label="@(_config.AIVeto.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                          Color="@(_config.AIVeto.UseGlobal ? Color.Default : Color.Primary)" />
             </MudPaper>
         }
 
         @{
-            var openAiConfig = (IsGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
-            var openAiReadOnly = !IsGlobalView && _config.OpenAI.UseGlobal;
+            var aiVetoConfig = (IsGlobalView || !_config.AIVeto.UseGlobal) ? _config.AIVeto : _globalConfig.AIVeto;
+            var aiVetoReadOnly = !IsGlobalView && _config.AIVeto.UseGlobal;
         }
 
-        <MudSwitch T="bool" @bind-Value="openAiConfig.Enabled"
-                  Label="Enable OpenAI Check"
+        <MudSwitch T="bool" @bind-Value="aiVetoConfig.Enabled"
+                  Label="Enable AI Veto Check"
                   Color="Color.Primary"
-                  Disabled="@openAiReadOnly" />
+                  Disabled="@aiVetoReadOnly" />
 
-        @if (openAiConfig.Enabled)
+        @if (aiVetoConfig.Enabled)
         {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                <MudSwitch T="bool" @bind-Value="openAiConfig.VetoMode"
-                          Label="Veto Mode (Confirm Spam)"
-                          Color="Color.Primary"
-                          Disabled="@openAiReadOnly" />
-                <HelpTooltip Text="Veto Mode ON: OpenAI reviews other algorithms' detections and can override false positives (reduces false positives, recommended). Veto Mode OFF: OpenAI actively searches for spam and contributes to confidence voting (more aggressive, higher costs)." />
-            </MudStack>
-
-            <ConceptualAlert Severity="@(openAiConfig.VetoMode ? Severity.Success : Severity.Warning)" Dense="true">
-                @if (openAiConfig.VetoMode)
-                {
-                    <text>
-                        <strong>Veto Mode Enabled:</strong> OpenAI acts as quality control. Other algorithms flag spam, OpenAI confirms or vetoes.
-                        Reduces false positives while keeping costs lower (only runs on suspicious messages).
-                    </text>
-                }
-                else
-                {
-                    <text>
-                        <strong>Detection Mode:</strong> OpenAI actively searches for spam on every message.
-                        Higher accuracy but significantly higher API costs. Consider enabling only for high-risk communities.
-                    </text>
-                }
+            <ConceptualAlert Severity="Severity.Success" Dense="true">
+                <strong>AI Veto Mode:</strong> AI acts as quality control for spam detection.
+                Other algorithms flag potential spam, AI confirms or vetoes the detection.
+                This reduces false positives while keeping API costs low (only runs on suspicious messages).
             </ConceptualAlert>
 
-            @if (openAiConfig.VetoMode)
-            {
-                <FieldWithHelp HelpText="OpenAI veto check runs only when other algorithms' combined confidence is BELOW this threshold. Set to 100 to always run veto checks. Set to 85 to skip veto on high-confidence detections (saves API calls).">
-                    <MudNumericField @bind-Value="openAiConfig.VetoThreshold"
-                                    Label="Veto Threshold"
-                                    Min="50" Max="100"
-                                    Disabled="@openAiReadOnly"
-                                    HelperText="@(openAiReadOnly ? $"Using global value: {openAiConfig.VetoThreshold}" : "OpenAI veto runs only if spam confidence is below this (higher = more vetos)")" />
-                </FieldWithHelp>
-            }
-
-            <MudSwitch T="bool" @bind-Value="openAiConfig.CheckShortMessages"
+            <MudSwitch T="bool" @bind-Value="aiVetoConfig.CheckShortMessages"
                       Label="Check Short Messages"
                       Color="Color.Primary"
-                      Disabled="@openAiReadOnly" />
+                      Disabled="@aiVetoReadOnly" />
 
-            <FieldWithHelp HelpText="Number of recent messages to include as context for OpenAI analysis. Higher values provide more conversation context but increase API costs. 0 = no history, 3-5 recommended for most groups.">
-                <MudNumericField @bind-Value="openAiConfig.MessageHistoryCount"
+            <FieldWithHelp HelpText="Number of recent messages to include as context for AI analysis. Higher values provide more conversation context but increase API costs. 0 = no history, 3-5 recommended for most groups.">
+                <MudNumericField @bind-Value="aiVetoConfig.MessageHistoryCount"
                                 Label="Message History Count"
                                 Min="0" Max="10"
-                                Disabled="@openAiReadOnly"
-                                HelperText="@(openAiReadOnly ? $"Using global value: {openAiConfig.MessageHistoryCount}" : "Recent messages sent to OpenAI for context (0-10)")" />
+                                Disabled="@aiVetoReadOnly"
+                                HelperText="@(aiVetoReadOnly ? $"Using global value: {aiVetoConfig.MessageHistoryCount}" : "Recent messages sent to AI for context (0-10)")" />
             </FieldWithHelp>
 
-            <MudTextField @bind-Value="openAiConfig.SystemPrompt"
-                         Label="Custom System Prompt (Optional)"
-                         Lines="5"
-                         AutoGrow="true"
-                         Variant="Variant.Outlined"
-                         Disabled="@openAiReadOnly"
-                         HelperText="@(openAiReadOnly ? "Using global prompt" : "Topic-specific instructions for this group")" />
+            @* Active prompt from prompt_versions table (use AI Prompt Builder below to create/modify) *@
+            @if (!string.IsNullOrEmpty(_activePromptText))
+            {
+                <MudTextField Value="@_activePromptText"
+                             Label="Active System Prompt"
+                             Lines="4"
+                             AutoGrow="true"
+                             Variant="Variant.Outlined"
+                             ReadOnly="true"
+                             HelperText="Use AI Prompt Builder below to generate or modify prompts" />
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                    No custom prompt configured. Use the AI Prompt Builder below to generate one, or the default prompt will be used.
+                </MudAlert>
+            }
 
-            <MudNumericField @bind-Value="openAiConfig.ConfidenceThreshold"
+            <MudNumericField @bind-Value="aiVetoConfig.ConfidenceThreshold"
                             Label="Confidence Threshold"
                             Min="1" Max="100"
-                            Disabled="@openAiReadOnly"
-                            HelperText="@(openAiReadOnly ? $"Using global value: {openAiConfig.ConfidenceThreshold}" : "Confidence level for OpenAI spam classification")" />
+                            Disabled="@aiVetoReadOnly"
+                            HelperText="@(aiVetoReadOnly ? $"Using global value: {aiVetoConfig.ConfidenceThreshold}" : "Confidence level for AI spam classification")" />
 
             @* AI Prompt Builder - NOW AVAILABLE FOR BOTH GLOBAL AND PER-CHAT *@
-            @if (!openAiReadOnly)
+            @if (!aiVetoReadOnly)
             {
                 <MudDivider Class="my-2" />
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -181,6 +159,7 @@
     private ContentDetectionConfig _config = new();
     private ContentDetectionConfig _globalConfig = new();
     private List<PromptVersion> _promptVersions = [];
+    private string? _activePromptText; // Current active prompt from prompt_versions table
     private bool IsGlobalView => ChatId is null or 0;
 
     protected override async Task OnInitializedAsync()
@@ -194,7 +173,8 @@
         try
         {
             // Always load global config for comparison/fallback
-            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+            _globalConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                            ?? new ContentDetectionConfig();
 
             if (IsGlobalView)
             {
@@ -204,7 +184,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, ChatId!.Value);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }
@@ -221,7 +201,7 @@
         // Ensure global configs always have UseGlobal=true
         if (IsGlobalView)
         {
-            _config.OpenAI.UseGlobal = true;
+            _config.AIVeto.UseGlobal = true;
         }
 
         return _config;
@@ -235,6 +215,8 @@
         try
         {
             _promptVersions = await PromptVersionRepository.GetVersionHistoryByChatIdAsync(targetChatId);
+            // Set active prompt text for display
+            _activePromptText = _promptVersions.FirstOrDefault(v => v.IsActive)?.PromptText;
         }
         catch (Exception ex)
         {
@@ -276,11 +258,7 @@
                     null
                 );
 
-                // Update the config to use the new prompt
-                var configToUpdate = (IsGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
-                configToUpdate.SystemPrompt = generatedPrompt;
-
-                // Reload versions to show the new one
+                // Prompt saved to prompt_versions table - reload versions to show the new one
                 await LoadPromptVersions();
 
                 Snackbar.Add($"Prompt v{newVersion.Version} created and activated!", Severity.Success);
@@ -298,11 +276,7 @@
         {
             var restoredVersion = await PromptVersionRepository.RestoreVersionAsync(versionId);
 
-            // Update the config to use the restored prompt
-            var configToUpdate = (IsGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
-            configToUpdate.SystemPrompt = restoredVersion.PromptText;
-
-            // Reload versions to update UI
+            // Reload versions to update UI (prompt stored in prompt_versions table)
             await LoadPromptVersions();
 
             Snackbar.Add($"Prompt v{restoredVersion.Version} restored and activated!", Severity.Success);
@@ -357,11 +331,7 @@
                     null
                 );
 
-                // Update the config to use the new improved prompt
-                var configToUpdate = (IsGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
-                configToUpdate.SystemPrompt = improvedPrompt;
-
-                // Reload versions to show the new one
+                // Prompt saved to prompt_versions table - reload versions to show the new one
                 await LoadPromptVersions();
 
                 Snackbar.Add($"Improved prompt saved as v{newVersion.Version} and activated!", Severity.Success);

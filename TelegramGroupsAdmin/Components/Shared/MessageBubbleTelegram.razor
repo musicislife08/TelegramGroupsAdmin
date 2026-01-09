@@ -7,8 +7,8 @@
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
-    @* User profile photo *@
-    <div class="tg-avatar-container">
+    @* User profile photo (clickable to view user details) *@
+    <div class="tg-avatar-container" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" style="cursor: pointer;" title="View user details">
         @if (!string.IsNullOrEmpty(Message.UserPhotoPath))
         {
             <img src="@GetImagePath(Message.UserPhotoPath)" alt="@GetUserDisplayName()" class="tg-avatar" loading="lazy" />
@@ -28,7 +28,7 @@
         <div class="tg-bubble-inner">
             @* Telegram-style Header: User name + timestamp + badges *@
             <div class="tg-header">
-                <span class="tg-user-name" @onclick="() => OnFilterByUser.InvokeAsync(Message.UserId)" title="Filter by this user">
+                <span class="tg-user-name" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" title="View user details">
                     @GetUserDisplayName()
                 </span>
                 <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
@@ -357,6 +357,13 @@
                                 </div>
                             </MudMenuItem>
 
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnWarn.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <div class="tg-menu-item tg-menu-item-warning">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
+                                    <span>Warn User</span>
+                                </div>
+                            </MudMenuItem>
+
                             @* Phase 4.20: Manual translation button (for messages that didn't auto-translate) *@
                             @if (Message.Translation == null && !string.IsNullOrWhiteSpace(Message.MessageText))
                             {
@@ -411,8 +418,11 @@
     [Parameter]
     public EventCallback<MessageRecord> OnViewDetections { get; set; }
 
+    /// <summary>
+    /// Click on username or avatar to view user details in a dialog
+    /// </summary>
     [Parameter]
-    public EventCallback<long> OnFilterByUser { get; set; }
+    public EventCallback<long> OnViewUserDetail { get; set; }
 
     [Parameter]
     public EventCallback<long> OnFilterByChat { get; set; }
@@ -422,6 +432,9 @@
 
     [Parameter]
     public EventCallback<MessageRecord> OnTempBan { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnWarn { get; set; }
 
     [Parameter]
     public bool IsCurrentUser { get; set; }

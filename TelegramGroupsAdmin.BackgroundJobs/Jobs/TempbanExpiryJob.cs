@@ -1,10 +1,8 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -21,20 +19,16 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class TempbanExpiryJob(
     ILogger<TempbanExpiryJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    TelegramBotClientFactory botClientFactory) : IJob
+    ITelegramBotClientFactory botClientFactory) : IJob
 {
     private readonly ILogger<TempbanExpiryJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<TempbanExpiryJobPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize TempbanExpiryJobPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<TempbanExpiryJobPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
@@ -58,15 +52,15 @@ public class TempbanExpiryJob(
                 payload.Reason,
                 payload.ExpiresAt);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             try
             {
-                // Get all managed chats to unban user from
+                // Get all managed chats to unban user from (only active, non-deleted)
                 await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
                 var managedChats = await dbContext.ManagedChats
-                    .Where(c => c.IsActive)
+                    .Where(c => c.IsActive && !c.IsDeleted)
                     .ToListAsync(cancellationToken);
 
                 _logger.LogInformation(
@@ -81,7 +75,7 @@ public class TempbanExpiryJob(
                 {
                     try
                     {
-                        await botClient.UnbanChatMember(
+                        await operations.UnbanChatMemberAsync(
                             chatId: chat.ChatId,
                             userId: payload.UserId,
                             onlyIfBanned: true,

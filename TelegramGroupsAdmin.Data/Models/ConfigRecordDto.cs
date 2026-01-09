@@ -26,11 +26,8 @@ public class ConfigRecordDto
     [Column("chat_id")]
     public long ChatId { get; set; } = 0;
 
-    /// <summary>
-    /// Content detection configuration (JSONB)
-    /// </summary>
-    [Column("spam_detection_config", TypeName = "jsonb")]
-    public string? ContentDetectionConfig { get; set; }
+    // NOTE: spam_detection_config column REMOVED - it was abandoned
+    // Content detection config is stored in content_detection_configs table
 
     /// <summary>
     /// Welcome message configuration (JSONB)
@@ -129,15 +126,7 @@ public class ConfigRecordDto
     [ProtectedData(Purpose = DataProtectionPurposes.TelegramBotToken)]
     public string? TelegramBotTokenEncrypted { get; set; }
 
-    /// <summary>
-    /// OpenAI service configuration (JSONB)
-    /// Model selection, max tokens, and other non-sensitive settings
-    /// API key stored in api_keys column (encrypted)
-    /// Only used for global config (chat_id = 0)
-    /// DEPRECATED: Will be migrated to ai_provider_config on first startup
-    /// </summary>
-    [Column("openai_config", TypeName = "jsonb")]
-    public string? OpenAIConfig { get; set; }
+    // openai_config column removed - superseded by ai_provider_config
 
     /// <summary>
     /// AI provider configuration (JSONB)
@@ -178,6 +167,14 @@ public class ConfigRecordDto
     [Column("vapid_private_key_encrypted")]
     [ProtectedData(Purpose = DataProtectionPurposes.VapidPrivateKey)]
     public string? VapidPrivateKeyEncrypted { get; set; }
+
+    /// <summary>
+    /// Service message deletion configuration (JSONB)
+    /// Controls which types of Telegram service messages are auto-deleted (join/leave, photo changes, etc.)
+    /// Supports per-chat overrides (chat_id > 0)
+    /// </summary>
+    [Column("service_message_deletion_config", TypeName = "jsonb")]
+    public string? ServiceMessageDeletionConfig { get; set; }
 
     /// <summary>
     /// When this config was created (UTC timestamp)

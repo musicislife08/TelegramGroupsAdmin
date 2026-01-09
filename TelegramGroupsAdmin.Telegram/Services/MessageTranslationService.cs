@@ -5,6 +5,8 @@ using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
+using TelegramGroupsAdmin.Core.Utilities;
+
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
@@ -14,10 +16,14 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class MessageTranslationService : IMessageTranslationService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly SimHashService _simHashService;
 
-    public MessageTranslationService(IDbContextFactory<AppDbContext> contextFactory)
+    public MessageTranslationService(
+        IDbContextFactory<AppDbContext> contextFactory,
+        SimHashService simHashService)
     {
         _contextFactory = contextFactory;
+        _simHashService = simHashService;
     }
 
     public async Task<MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default)
@@ -46,6 +52,9 @@ public class MessageTranslationService : IMessageTranslationService
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
+        // Compute SimHash for the translated text (used for near-duplicate detection)
+        var hash = _simHashService.ComputeHash(translation.TranslatedText);
+
         // Check if translation already exists (unique constraint on message_id or edit_id)
         DataModels.MessageTranslationDto? existing = null;
         if (translation.MessageId.HasValue)
@@ -66,11 +75,13 @@ public class MessageTranslationService : IMessageTranslationService
             existing.DetectedLanguage = translation.DetectedLanguage;
             existing.Confidence = translation.Confidence;
             existing.TranslatedAt = translation.TranslatedAt;
+            existing.SimilarityHash = hash;
         }
         else
         {
             // Insert new translation
             var dto = translation.ToDto();
+            dto.SimilarityHash = hash;
             context.MessageTranslations.Add(dto);
         }
 

@@ -1,22 +1,24 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
-/// /trust - Whitelist user to bypass spam detection (permanent)
+/// /trust - Toggle trust status: trust user if not trusted, untrust if already trusted.
+/// Trusted users bypass spam detection globally.
 /// </summary>
 public class TrustCommand : IBotCommand
 {
     private readonly ILogger<TrustCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
 
     public string Name => "trust";
-    public string Description => "Whitelist user (bypass spam detection)";
+    public string Description => "Toggle trust status (bypass spam detection)";
     public string Usage => "/trust (reply to message) OR /trust <username>";
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => false;
@@ -26,7 +28,7 @@ public class TrustCommand : IBotCommand
     public TrustCommand(
         ILogger<TrustCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService)
+        ModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -34,7 +36,6 @@ public class TrustCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -69,18 +70,12 @@ public class TrustCommand : IBotCommand
         }
 
         using var scope = _serviceProvider.CreateScope();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+        var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
-        // Check if user is already trusted
-        var isAlreadyTrusted = await userActionsRepository.IsUserTrustedAsync(
+        // Check current trust status to determine toggle direction
+        var isAlreadyTrusted = await userRepository.IsTrustedAsync(
             targetUser.Id,
-            message.Chat.Id,
             cancellationToken);
-
-        if (isAlreadyTrusted)
-        {
-            return new CommandResult($"ℹ️ User @{targetUser.Username ?? targetUser.Id.ToString()} is already trusted.", DeleteCommandMessage, DeleteResponseAfterSeconds);
-        }
 
         // Create executor actor from Telegram user
         var executor = Core.Models.Actor.FromTelegramUser(
@@ -91,30 +86,63 @@ public class TrustCommand : IBotCommand
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
-        var reason = $"Trusted by admin in chat {chatName}";
+        var userDisplay = targetUser.Username ?? targetUser.Id.ToString();
 
-        // Execute trust action via centralized service
-        var result = await _moderationService.TrustUserAsync(
-            userId: targetUser.Id,
-            executor: executor,
-            reason: reason,
-            cancellationToken: cancellationToken);
-
-        // Build response based on result
-        if (!result.Success)
+        if (isAlreadyTrusted)
         {
-            _logger.LogError("Failed to trust user {UserId}: {Error}", targetUser.Id, result.ErrorMessage);
-            return new CommandResult($"❌ Failed to trust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            // UNTRUST: User is currently trusted, remove trust
+            var reason = $"Untrusted by admin in chat {chatName}";
+
+            var result = await _moderationService.UntrustUserAsync(
+                userId: targetUser.Id,
+                executor: executor,
+                reason: reason,
+                cancellationToken: cancellationToken);
+
+            if (!result.Success)
+            {
+                _logger.LogError("Failed to untrust {User}: {Error}",
+                    LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                    result.ErrorMessage);
+                return new CommandResult($"❌ Failed to untrust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            }
+
+            _logger.LogInformation(
+                "{TargetUser} untrusted by {Executor} in {Chat}",
+                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id));
+
+            return new CommandResult($"✅ User @{userDisplay} is no longer trusted\n\n" +
+                   $"This user's messages will now be subject to spam detection.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
+        else
+        {
+            // TRUST: User is not trusted, add trust
+            var reason = $"Trusted by admin in chat {chatName}";
 
-        _logger.LogInformation(
-            "User {TargetId} (@{TargetUsername}) trusted by {ExecutorId} in chat {ChatId}",
-            targetUser.Id,
-            targetUser.Username,
-            message.From?.Id,
-            message.Chat.Id);
+            var result = await _moderationService.TrustUserAsync(
+                userId: targetUser.Id,
+                executor: executor,
+                reason: reason,
+                cancellationToken: cancellationToken);
 
-        return new CommandResult($"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} marked as trusted\n\n" +
-               $"This user's messages will bypass spam detection globally.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            if (!result.Success)
+            {
+                _logger.LogError("Failed to trust {User}: {Error}",
+                    LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                    result.ErrorMessage);
+                return new CommandResult($"❌ Failed to trust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
+            }
+
+            _logger.LogInformation(
+                "{TargetUser} trusted by {Executor} in {Chat}",
+                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id));
+
+            return new CommandResult($"✅ User @{userDisplay} marked as trusted\n\n" +
+                   $"This user's messages will bypass spam detection globally.", DeleteCommandMessage, DeleteResponseAfterSeconds);
+        }
     }
 }

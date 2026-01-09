@@ -1,7 +1,12 @@
 @page "/logout"
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authentication.Cookies
+@using System.Security.Claims
+@using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.Auth
 @inject IHttpContextAccessor HttpContextAccessor
+@inject IAuthService AuthService
+@inject IAuthCookieService AuthCookieService
+@inject ILogger<Logout> Logger
 @inject NavigationManager Navigation
 @attribute [AllowAnonymous]
 
@@ -11,8 +16,26 @@
         var httpContext = HttpContextAccessor.HttpContext;
         if (httpContext != null)
         {
-            // Sign out the user
-            await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            // Get user info from claims before signing out (for audit log)
+            var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var email = httpContext.User.FindFirstValue(ClaimTypes.Email) ?? "unknown";
+
+            // Audit logout (best-effort - don't block signout if this fails)
+            if (!string.IsNullOrEmpty(userId))
+            {
+                try
+                {
+                    await AuthService.AuditLogoutAsync(userId, email);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Failed to audit logout for {User}, proceeding with signout",
+                        LogDisplayName.WebUserDebug(email, userId));
+                }
+            }
+
+            // Sign out the user (critical path - always execute)
+            await AuthCookieService.SignOutAsync(httpContext);
         }
 
         // Redirect to login page

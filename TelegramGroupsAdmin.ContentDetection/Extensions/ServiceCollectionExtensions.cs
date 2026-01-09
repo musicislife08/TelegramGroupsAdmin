@@ -3,7 +3,9 @@ using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 
 namespace TelegramGroupsAdmin.ContentDetection.Extensions;
 
@@ -25,17 +27,17 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IContentDetectionEngine, ContentDetectionEngineV2>();
 
             // Register core services
-            services.AddScoped<ITokenizerService, TokenizerService>();
+            services.AddSingleton<ITokenizerService, TokenizerService>();
             // Note: IAITranslationService is registered in Core (depends on IChatService)
             services.AddSingleton<ILanguageDetectionService, FastTextLanguageDetectionService>(); // FastText language detection (Singleton: model loaded once, thread-safe)
             services.AddScoped<IUrlContentScrapingService, UrlContentScrapingService>();
             services.AddSingleton<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service (Singleton: binary path lookup happens once)
             services.AddSingleton<IVideoFrameExtractionService, VideoFrameExtractionService>(); // ML-6: FFmpeg frame extraction (Singleton: binary path lookup happens once)
-                                                                                                // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
+                                                                                                // NOTE: IMessageContextProvider is registered by the main app (MessageContextAdapter)
 
             // Register repositories (needed by engine for config)
             services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
-            services.AddScoped<IContentCheckConfigRepository, ContentCheckConfigRepository>(); // Phase 4.14: Critical checks
+            // NOTE: ContentCheckConfigRepository removed - critical checks now extracted via GetCriticalCheckNamesAsync() from ContentDetectionConfig
 
             // Register detection results repository
             services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
@@ -84,22 +86,30 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IFileScanningTestService, FileScanningTestService>();  // UI testing service
 
             // Register ML.NET threshold optimization services
-            services.AddScoped<FeatureExtractionService>();
+            services.AddSingleton<FeatureExtractionService>();
             services.AddScoped<IThresholdRecommendationService, ThresholdRecommendationService>();
             services.AddScoped<IStopWordRecommendationService, StopWordRecommendationService>(); // ML-6: Stop word recommendations
+
+            // Register ML.NET text classifier (Singleton: thread-safe model loading/retraining)
+            services.AddSingleton<IMLTextClassifierService, MLTextClassifierService>();
 
             // Register stop words repository
             services.AddScoped<IStopWordsRepository, StopWordsRepository>();
 
-            // Register V2 spam detection engine (SpamAssassin-style additive scoring)
-            // Fixes critical bug where abstentions voted "Clean" and cancelled spam signals
-            services.AddScoped<ContentDetectionEngineV2>();
+            // Register training labels repository (Phase 1: ML.NET training labels)
+            services.AddScoped<ITrainingLabelsRepository, TrainingLabelsRepository>();
+
+            // Register ML training data repository (aggregates training data from multiple tables)
+            // Scoped: Matches standard pattern used by all other repositories
+            services.AddScoped<IMLTrainingDataRepository, MLTrainingDataRepository>();
+
+            // Note: ContentDetectionEngineV2 registered above (line 25) with IContentDetectionEngine interface
 
             // Register V2 content checks (proper abstention support)
             // Key fix: Return Score=0 when finding nothing (not "Clean 20%")
+            // Note: CAS check moved to user join flow (WelcomeService) - checks USER not MESSAGE
             services.AddScoped<IContentCheckV2, Checks.InvisibleCharsContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.StopWordsContentCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.CasContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.SimilarityContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.BayesContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.SpacingContentCheckV2>();

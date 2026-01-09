@@ -417,7 +417,7 @@
             _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
                 permissionLevel,
-                CancellationToken.None);
+                cancellationToken: CancellationToken.None);
         }
 
         await LoadLast30Days();
@@ -520,7 +520,7 @@
                 Labels = new XAxisLabels { Format = "MMM dd" }
             },
             Yaxis = [new YAxis { Title = new AxisTitle { Text = "Messages" } }],
-            Fill = new Fill { Type = new List<FillType> { FillType.Gradient } }
+            Fill = new Fill { Type = [FillType.Gradient] }
         };
 
         // Per-chat chart

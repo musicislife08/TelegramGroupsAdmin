@@ -1,12 +1,16 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TgUser = Telegram.Bot.Types.User;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
@@ -19,8 +23,7 @@ public class UserAutoTrustServiceTests
 {
     private IDetectionResultsRepository _detectionResultsRepo = null!;
     private IUserActionsRepository _userActionsRepo = null!;
-    private IContentDetectionConfigRepository _configRepo = null!;
-    private IAuditLogRepository _auditLogRepo = null!;
+    private IConfigService _configService = null!;
     private ITelegramUserRepository _userRepo = null!;
     private ILogger<UserAutoTrustService> _logger = null!;
     private UserAutoTrustService _service = null!;
@@ -33,16 +36,14 @@ public class UserAutoTrustServiceTests
     {
         _detectionResultsRepo = Substitute.For<IDetectionResultsRepository>();
         _userActionsRepo = Substitute.For<IUserActionsRepository>();
-        _configRepo = Substitute.For<IContentDetectionConfigRepository>();
-        _auditLogRepo = Substitute.For<IAuditLogRepository>();
+        _configService = Substitute.For<IConfigService>();
         _userRepo = Substitute.For<ITelegramUserRepository>();
         _logger = Substitute.For<ILogger<UserAutoTrustService>>();
 
         _service = new UserAutoTrustService(
             _detectionResultsRepo,
             _userActionsRepo,
-            _configRepo,
-            _auditLogRepo,
+            _configService,
             _userRepo,
             _logger);
     }
@@ -52,11 +53,11 @@ public class UserAutoTrustServiceTests
     {
         // Arrange
         var config = new ContentDetectionConfig { FirstMessageOnly = false };
-        _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
+        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
             .Returns(config);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - should not even check user or messages
         await _userRepo.DidNotReceive().GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
@@ -68,13 +69,13 @@ public class UserAutoTrustServiceTests
     {
         // Arrange
         var config = new ContentDetectionConfig { FirstMessageOnly = true };
-        _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
+        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
             .Returns(config);
         _userRepo.GetByIdAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns((UiModels.TelegramUser?)null);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert
         await _userActionsRepo.DidNotReceive().InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
@@ -91,7 +92,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
+        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 1); // Only 1 hour old
@@ -99,7 +100,7 @@ public class UserAutoTrustServiceTests
             .Returns(user);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - should not even check messages since account is too young
         await _detectionResultsRepo.DidNotReceive()
@@ -118,7 +119,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
+        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 48);
@@ -130,7 +131,7 @@ public class UserAutoTrustServiceTests
             .Returns(CreateDetectionResults(2));
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert
         await _userActionsRepo.DidNotReceive().InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
@@ -147,7 +148,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
+        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 48);
@@ -162,7 +163,7 @@ public class UserAutoTrustServiceTests
             .Returns(1L);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - trust action should be created
         await _userActionsRepo.Received(1).InsertAsync(
@@ -182,7 +183,7 @@ public class UserAutoTrustServiceTests
             FirstMessagesCount = 3,
             AutoTrustMinMessageLength = 20
         };
-        _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
+        _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, TestChatId)
             .Returns(config);
 
         var user = CreateTestUser(firstSeenHoursAgo: 0); // Brand new account
@@ -196,13 +197,34 @@ public class UserAutoTrustServiceTests
             .Returns(1L);
 
         // Act
-        await _service.CheckAndApplyAutoTrustAsync(TestUserId, TestChatId);
+        await _service.CheckAndApplyAutoTrustAsync(CreateTgUser(), CreateTestChat());
 
         // Assert - should trust despite 0 age because age check is disabled
         await _userActionsRepo.Received(1).InsertAsync(Arg.Any<UserActionRecord>(), Arg.Any<CancellationToken>());
     }
 
     #region Helpers
+
+    /// <summary>
+    /// Creates a Telegram SDK User object for testing
+    /// </summary>
+    private static TgUser CreateTgUser() => new()
+    {
+        Id = TestUserId,
+        FirstName = "Test",
+        LastName = "User",
+        Username = "testuser"
+    };
+
+    /// <summary>
+    /// Creates a Telegram SDK Chat object for testing
+    /// </summary>
+    private static Chat CreateTestChat() => new()
+    {
+        Id = TestChatId,
+        Type = ChatType.Supergroup,
+        Title = "Test Chat"
+    };
 
     private static UiModels.TelegramUser CreateTestUser(int firstSeenHoursAgo)
     {
@@ -217,6 +239,7 @@ public class UserAutoTrustServiceTests
             PhotoFileUniqueId: null,
             IsBot: false,
             IsTrusted: false,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: now.AddHours(-firstSeenHoursAgo),
             LastSeenAt: now,

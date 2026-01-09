@@ -21,7 +21,7 @@ public static class EmailVerificationEndpoints
         IUserRepository userRepository,
         IAuditService auditLog,
         ILogger<Program> logger,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -29,7 +29,7 @@ public static class EmailVerificationEndpoints
         }
 
         // Find verification token
-        var verificationToken = await verificationTokenRepository.GetValidTokenAsync(token, (DataModels.TokenType)TokenType.EmailVerification, ct);
+        var verificationToken = await verificationTokenRepository.GetValidTokenAsync(token, (DataModels.TokenType)TokenType.EmailVerification, cancellationToken);
 
         if (verificationToken == null)
         {
@@ -38,7 +38,7 @@ public static class EmailVerificationEndpoints
         }
 
         // Get user
-        var user = await userRepository.GetByIdAsync(verificationToken.UserId, ct);
+        var user = await userRepository.GetByIdAsync(verificationToken.UserId, cancellationToken);
         if (user == null)
         {
             logger.LogWarning("Verification token {Token} references non-existent user {UserId}", token, verificationToken.UserId);
@@ -60,10 +60,10 @@ public static class EmailVerificationEndpoints
             ModifiedAt = DateTimeOffset.UtcNow
         };
 
-        await userRepository.UpdateAsync(updatedUser, ct);
+        await userRepository.UpdateAsync(updatedUser, cancellationToken);
 
         // Mark token as used
-        await verificationTokenRepository.MarkAsUsedAsync(token, ct);
+        await verificationTokenRepository.MarkAsUsedAsync(token, cancellationToken);
 
         logger.LogInformation("Email verified for user {UserId}", user.Id);
 
@@ -73,7 +73,7 @@ public static class EmailVerificationEndpoints
             actor: Actor.FromWebUser(user.Id),
             target: Actor.FromWebUser(user.Id),
             value: user.Email,
-            ct: ct);
+            cancellationToken: cancellationToken);
 
         return Results.Redirect("/login?verified=success");
     }
@@ -83,7 +83,7 @@ public static class EmailVerificationEndpoints
         IAuthService authService,
         IRateLimitService rateLimitService,
         ILogger<Program> logger,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Email))
         {
@@ -91,16 +91,16 @@ public static class EmailVerificationEndpoints
         }
 
         // Rate limiting (SECURITY-5)
-        var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Email, "resend_verification", ct);
+        var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Email, "resend_verification", cancellationToken);
         if (!rateLimitCheck.IsAllowed)
         {
             return Results.BadRequest($"Too many verification email requests. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes.");
         }
 
         // Record attempt for rate limiting
-        await rateLimitService.RecordAttemptAsync(request.Email, "resend_verification", ct);
+        await rateLimitService.RecordAttemptAsync(request.Email, "resend_verification", cancellationToken);
 
-        var success = await authService.ResendVerificationEmailAsync(request.Email, ct);
+        var success = await authService.ResendVerificationEmailAsync(request.Email, cancellationToken);
 
         if (success)
         {

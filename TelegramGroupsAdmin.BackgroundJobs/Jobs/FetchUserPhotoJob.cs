@@ -1,14 +1,16 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -22,27 +24,25 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class FetchUserPhotoJob(
     ILogger<FetchUserPhotoJob> logger,
-    TelegramBotClientFactory botClientFactory,
+    ITelegramBotClientFactory botClientFactory,
     TelegramPhotoService photoService,
     ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
+    IConfigService configService,
     IOptions<MessageHistoryOptions> historyOptions) : IJob
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramPhotoService _photoService = photoService;
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
+    private readonly IConfigService _configService = configService;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<FetchUserPhotoPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize FetchUserPhotoPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<FetchUserPhotoPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
@@ -59,18 +59,29 @@ public class FetchUserPhotoJob(
 
         try
         {
-            _logger.LogDebug(
-                "Fetching user photo for user {UserId} (message {MessageId})",
-                payload.UserId,
-                payload.MessageId);
+            // Check if bot is enabled before making Telegram API calls
+            var botConfig = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+                            ?? TelegramBotConfig.Default;
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            if (!botConfig.BotEnabled)
+            {
+                _logger.LogInformation("Skipping user photo fetch - bot is disabled");
+                success = true; // Not a failure, just skipped
+                return;
+            }
+
+            // Get user for logging context
+            var user = await _telegramUserRepository.GetByTelegramIdAsync(payload.UserId, cancellationToken);
+
+            _logger.LogDebug(
+                "Fetching user photo for {User} (message {MessageId})",
+                user.ToLogDebug(payload.UserId),
+                payload.MessageId);
 
             try
             {
                 // Fetch user photo (cached if already downloaded)
-                var userPhotoPath = await _photoService.GetUserPhotoAsync(botClient, payload.UserId);
+                var userPhotoPath = await _photoService.GetUserPhotoAsync(payload.UserId, user);
 
                 if (userPhotoPath != null)
                 {
@@ -85,8 +96,8 @@ public class FetchUserPhotoJob(
                         {
                             photoHashBase64 = Convert.ToBase64String(photoHashBytes);
                             _logger.LogDebug(
-                                "Computed pHash for user {UserId} (8 bytes → 12 char Base64)",
-                                payload.UserId);
+                                "Computed pHash for {User} (8 bytes → 12 char Base64)",
+                                user.ToLogDebug(payload.UserId));
                         }
                     }
                     catch (Exception hashEx)
@@ -94,8 +105,8 @@ public class FetchUserPhotoJob(
                         // Log but don't fail job if hash computation fails
                         _logger.LogWarning(
                             hashEx,
-                            "Failed to compute photo hash for user {UserId}, continuing without hash",
-                            payload.UserId);
+                            "Failed to compute photo hash for {User}, continuing without hash",
+                            user.ToLogDebug(payload.UserId));
                     }
 
                     // Update telegram_users table with photo path and pHash (centralized storage)
@@ -106,16 +117,16 @@ public class FetchUserPhotoJob(
                         cancellationToken);
 
                     _logger.LogInformation(
-                        "Cached user photo for user {UserId}: {PhotoPath} (pHash: {HasHash})",
-                        payload.UserId,
+                        "Cached user photo for {User}: {PhotoPath} (pHash: {HasHash})",
+                        user.ToLogInfo(payload.UserId),
                         userPhotoPath,
                         photoHashBase64 != null ? "stored" : "none");
                 }
                 else
                 {
                     _logger.LogDebug(
-                        "User {UserId} has no profile photo",
-                        payload.UserId);
+                        "User {User} has no profile photo",
+                        user.ToLogDebug(payload.UserId));
                 }
 
                 success = true;
@@ -124,9 +135,9 @@ public class FetchUserPhotoJob(
             {
                 _logger.LogError(
                     ex,
-                    "Failed to fetch user photo for user {UserId} (message {MessageId})",
-                    payload?.UserId,
-                    payload?.MessageId);
+                    "Failed to fetch user photo for {User} (message {MessageId})",
+                    user.ToLogDebug(payload.UserId),
+                    payload.MessageId);
                 throw; // Re-throw for retry logic and exception recording
             }
         }

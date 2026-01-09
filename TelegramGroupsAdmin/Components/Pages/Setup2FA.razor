@@ -1,9 +1,6 @@
 @page "/login/setup-2fa"
 @using System.ComponentModel.DataAnnotations
-@using System.Security.Claims
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authentication.Cookies
-@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Services
@@ -11,8 +8,10 @@
 @using QRCoder
 @inject IAuthService AuthService
 @inject IIntermediateAuthService IntermediateAuthService
+@inject IAuthCookieService AuthCookieService
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IUserRepository UserRepository
+@inject IPendingRecoveryCodesService PendingRecoveryCodesService
 @inject ILogger<Setup2FA> Logger
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -28,7 +27,45 @@
         <div class="alert-error">@_errorMessage</div>
     }
 
-    @if (_totpSetupResult == null)
+    @if (_showRecoveryCodes)
+    {
+        <!-- Step 4: Recovery Codes -->
+        <div class="recovery-codes-section">
+            <h3>⚠️ Save Your Recovery Codes</h3>
+            <p class="warning-text">
+                <strong>These codes can only be viewed once.</strong> If you lose access to your authenticator app,
+                you'll need one of these codes to sign in. Each code can only be used once.
+            </p>
+            <p class="warning-text">
+                Store these codes in a safe place, such as a password manager or printed copy in a secure location.
+            </p>
+            @if (_recoveryCodes != null)
+            {
+                <div class="recovery-codes">
+                    @foreach (var recoveryCode in _recoveryCodes)
+                    {
+                        <div class="recovery-code">@recoveryCode</div>
+                    }
+                </div>
+            }
+            <EditForm Model="@ConfirmForm" FormName="confirm-form" OnValidSubmit="CompleteSetupAsync" method="post">
+                <DataAnnotationsValidator />
+                <div class="confirm-checkbox">
+                    <label class="checkbox-label">
+                        <input type="checkbox"
+                               id="confirmed"
+                               name="ConfirmForm.Confirmed"
+                               value="true"
+                               checked="@ConfirmForm!.Confirmed" />
+                        <span>I have saved my recovery codes in a secure location</span>
+                    </label>
+                    <ValidationMessage For="@(() => ConfirmForm!.Confirmed)" />
+                </div>
+                <button type="submit" class="btn-primary">Complete Setup</button>
+            </EditForm>
+        </div>
+    }
+    else if (_totpSetupResult == null)
     {
         <div class="loading-container">
             <div class="spinner"></div>
@@ -107,6 +144,9 @@
     [SupplyParameterFromForm]
     private VerifyModel? Model { get; set; }
 
+    [SupplyParameterFromForm]
+    private ConfirmModel? ConfirmForm { get; set; }
+
     [SupplyParameterFromQuery(Name = "userId")]
     private string? UserId { get; set; }
 
@@ -116,12 +156,18 @@
     [SupplyParameterFromQuery(Name = "returnUrl")]
     private string? ReturnUrl { get; set; }
 
+    [SupplyParameterFromQuery(Name = "step")]
+    private string? Step { get; set; }
+
     private string? _errorMessage;
     private TotpSetupResult? _totpSetupResult;
+    private IReadOnlyList<string>? _recoveryCodes;
+    private bool _showRecoveryCodes;
 
     protected override async Task OnInitializedAsync()
     {
         Model ??= new VerifyModel();
+        ConfirmForm ??= new ConfirmModel();
 
         // SECURITY: Validate that user has a valid intermediate authentication token
         // This prevents attackers from accessing /login/setup-2fa?userId=VICTIM_ID
@@ -138,6 +184,36 @@
         {
             _errorMessage = "Invalid or expired authentication session. Please log in again.";
             HttpContextAccessor.HttpContext?.Response.Redirect("/login");
+            return;
+        }
+
+        // Check if we're on the recovery codes step (redirected here after TOTP verification)
+        if (Step == "recovery")
+        {
+            var httpContext = HttpContextAccessor.HttpContext;
+            var isPostRequest = httpContext?.Request.Method == "POST";
+
+            if (isPostRequest)
+            {
+                // This is a form submission (confirm-form) - codes were already shown on GET
+                // Just set the flag so the form handler can run
+                _showRecoveryCodes = true;
+                return;
+            }
+
+            // GET request - retrieve recovery codes from temporary cache
+            _recoveryCodes = PendingRecoveryCodesService.RetrieveRecoveryCodes(IntermediateToken, UserId);
+            if (_recoveryCodes != null)
+            {
+                _showRecoveryCodes = true;
+                Logger.LogInformation("Displaying recovery codes for user {UserId}", UserId);
+                return;
+            }
+
+            // Codes not found or expired - redirect back to start
+            Logger.LogWarning("Recovery codes not found for user {UserId}, redirecting to setup", UserId);
+            var setupUrl = UrlHelpers.BuildSetup2FAUrl(UserId, IntermediateToken, ReturnUrl);
+            httpContext?.Response.Redirect(setupUrl);
             return;
         }
 
@@ -200,52 +276,20 @@
                 return;
             }
 
-            Logger.LogInformation("TOTP verification successful for user {UserId}, completing authentication", UserId);
+            Logger.LogInformation("TOTP verification successful for user {UserId}, generating recovery codes", UserId);
 
-            // SECURITY: Consume token after successful authentication to prevent reuse
-            IntermediateAuthService.ConsumeToken(IntermediateToken);
+            // Generate recovery codes - user must save these before completing setup
+            var recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(UserId);
+            Logger.LogInformation("Generated {Count} recovery codes for user {UserId}", recoveryCodes.Count, UserId);
 
-            // Get user data
-            var user = await UserRepository.GetByIdAsync(UserId);
-            if (user == null)
-            {
-                _errorMessage = "Unable to complete setup.";
-                return;
-            }
+            // Store recovery codes in temporary cache and redirect to recovery step
+            // This enables URL-based state for static SSR (state doesn't persist between form posts)
+            PendingRecoveryCodesService.StoreRecoveryCodes(IntermediateToken, UserId, recoveryCodes);
 
-            // Sign in the user
-            var httpContext = HttpContextAccessor.HttpContext;
-            if (httpContext == null)
-            {
-                _errorMessage = "Unable to complete authentication. Please try again.";
-                return;
-            }
-
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, user.Id),
-                new(ClaimTypes.Email, user.Email),
-                new(ClaimTypes.Role, GetRoleName(user.PermissionLevelInt)),
-                new(CustomClaimTypes.PermissionLevel, user.PermissionLevelInt.ToString())
-            };
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-            var authProperties = new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-            };
-
-            await httpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
-
-            // Redirect (validate URL to prevent open redirect attacks)
-            var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
-            httpContext.Response.Redirect(safeReturnUrl);
+            // Redirect to recovery step - the page will reload and display codes from cache
+            var recoveryUrl = UrlHelpers.BuildSetup2FAUrl(UserId, IntermediateToken, ReturnUrl, step: "recovery");
+            HttpContextAccessor.HttpContext?.Response.Redirect(recoveryUrl);
+            return;
         }
         catch (Exception ex)
         {
@@ -267,13 +311,35 @@
         return $"data:image/png;base64,{base64}";
     }
 
-    private static string GetRoleName(int permissionLevel) => permissionLevel switch
+    private async Task CompleteSetupAsync()
     {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Admin"
-    };
+        Logger.LogInformation("User {UserId} confirmed recovery codes saved, completing authentication", UserId);
+
+        // SECURITY: Consume token after successful authentication to prevent reuse
+        IntermediateAuthService.ConsumeToken(IntermediateToken!);
+
+        // Get user data
+        var user = await UserRepository.GetByIdAsync(UserId!);
+        if (user == null)
+        {
+            _errorMessage = "Unable to complete setup.";
+            return;
+        }
+
+        // Sign in the user
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext == null)
+        {
+            _errorMessage = "Unable to complete authentication. Please try again.";
+            return;
+        }
+
+        await AuthCookieService.SignInAsync(httpContext, user.Id, user.Email, (PermissionLevel)user.PermissionLevelInt);
+
+        // Redirect (validate URL to prevent open redirect attacks)
+        var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+        httpContext.Response.Redirect(safeReturnUrl);
+    }
 
     public class VerifyModel
     {
@@ -281,5 +347,12 @@
         [StringLength(6, MinimumLength = 6, ErrorMessage = "Code must be 6 digits")]
         [RegularExpression("^[0-9]{6}$", ErrorMessage = "Code must be 6 digits")]
         public string Code { get; set; } = string.Empty;
+    }
+
+    public class ConfirmModel
+    {
+        [Required(ErrorMessage = "You must confirm you have saved your recovery codes")]
+        [Range(typeof(bool), "true", "true", ErrorMessage = "You must confirm you have saved your recovery codes")]
+        public bool Confirmed { get; set; }
     }
 }

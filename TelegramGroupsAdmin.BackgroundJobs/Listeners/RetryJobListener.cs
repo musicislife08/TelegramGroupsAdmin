@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Listeners;
@@ -13,10 +14,6 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
 {
     private readonly ILogger<RetryJobListener> _logger = logger;
     private readonly ISchedulerFactory _schedulerFactory = schedulerFactory;
-
-    // Configuration
-    private const int MaxRetries = 3;
-    private static readonly TimeSpan BaseBackoffInterval = TimeSpan.FromSeconds(10);
 
     public string Name => "RetryJobListener";
 
@@ -55,18 +52,19 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
             ? context.JobDetail.JobDataMap.GetInt(JobDataKeys.RetryCount)
             : 0;
 
-        if (retryCount >= MaxRetries)
+        if (retryCount >= RetryConstants.MaxRetries)
         {
             _logger.LogError(
                 jobException,
                 "Job {JobName} failed after {MaxRetries} retry attempts. Giving up.",
                 context.JobDetail.Key.Name,
-                MaxRetries);
+                RetryConstants.MaxRetries);
             return;
         }
 
         // Calculate exponential backoff delay: baseInterval * 2^retryCount
-        var backoffDelay = TimeSpan.FromTicks(BaseBackoffInterval.Ticks * (long)Math.Pow(2, retryCount));
+        var baseBackoffInterval = TimeSpan.FromSeconds(RetryConstants.BaseBackoffSeconds);
+        var backoffDelay = TimeSpan.FromTicks(baseBackoffInterval.Ticks * (long)Math.Pow(2, retryCount));
         var nextRetryCount = retryCount + 1;
 
         _logger.LogWarning(
@@ -74,7 +72,7 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
             "Job {JobName} failed (attempt {CurrentAttempt}/{MaxAttempts}). Retrying in {Delay}...",
             context.JobDetail.Key.Name,
             nextRetryCount,
-            MaxRetries + 1, // Total attempts = MaxRetries + initial attempt
+            RetryConstants.MaxRetries + 1, // Total attempts = MaxRetries + initial attempt
             backoffDelay);
 
         // Create new trigger for retry with exponential backoff
@@ -106,7 +104,7 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
         _logger.LogInformation(
             "Scheduled retry {RetryCount}/{MaxRetries} for job {JobName} at {RetryTime}",
             nextRetryCount,
-            MaxRetries,
+            RetryConstants.MaxRetries,
             context.JobDetail.Key.Name,
             retryTrigger.StartTimeUtc);
     }

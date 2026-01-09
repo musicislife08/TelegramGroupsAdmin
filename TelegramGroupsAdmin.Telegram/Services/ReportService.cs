@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -21,8 +20,6 @@ public class ReportService(
     IAuditService auditService,
     IUserMessagingService messagingService,
     IChatAdminsRepository chatAdminsRepository,
-    TelegramBotClientFactory botFactory,
-    TelegramConfigLoader configLoader,
     ILogger<ReportService> logger) : IReportService
 {
     public async Task<ReportCreationResult> CreateReportAsync(
@@ -62,7 +59,7 @@ public class ReportService(
             actor,
             target,
             value: $"Report #{reportId} for message {report.MessageId} in chat {report.ChatId}",
-            ct: cancellationToken);
+            cancellationToken: cancellationToken);
 
         // 3. Send notification via INotificationService (respects user preferences)
         var chatName = originalMessage?.Chat.Title ?? $"Chat {report.ChatId}";
@@ -147,16 +144,12 @@ public class ReportService(
                   (string.IsNullOrEmpty(jumpLink) ? "" : $"{jumpLink}\n\n") +
                   $"Review in the Reports tab or use moderation commands.";
 
-            var botToken = await configLoader.LoadConfigAsync();
-            var botClient = botFactory.GetOrCreate(botToken);
-
             var results = await messagingService.SendToMultipleUsersAsync(
-                botClient,
                 userIds: adminUserIds,
-                chatId: report.ChatId,
+                chat: originalMessage!.Chat,
                 messageText: reportNotification,
-                replyToMessageId: originalMessage?.MessageId,
-                cancellationToken);
+                replyToMessageId: originalMessage.MessageId,
+                cancellationToken: cancellationToken);
 
             var dmCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.PrivateDm);
             var mentionCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.ChatMention);

@@ -1,10 +1,8 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -20,23 +18,19 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class WelcomeTimeoutJob(
     ILogger<WelcomeTimeoutJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    TelegramBotClientFactory botClientFactory) : IJob
+    ITelegramBotClientFactory botClientFactory) : IJob
 {
     private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
 
     /// <summary>
     /// Quartz.NET entry point - extracts payload and delegates to ExecuteAsync
     /// </summary>
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<WelcomeTimeoutPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize WelcomeTimeoutPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<WelcomeTimeoutPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
@@ -58,8 +52,8 @@ public class WelcomeTimeoutJob(
                 payload.UserId,
                 payload.ChatId);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             // Check if user has responded
             await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -86,11 +80,11 @@ public class WelcomeTimeoutJob(
             // Kick user for timeout (ban then immediately unban)
             try
             {
-                await botClient.BanChatMember(
+                await operations.BanChatMemberAsync(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
                     cancellationToken: cancellationToken);
-                await botClient.UnbanChatMember(
+                await operations.UnbanChatMemberAsync(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
                     cancellationToken: cancellationToken);
@@ -113,7 +107,7 @@ public class WelcomeTimeoutJob(
             // Delete welcome message
             try
             {
-                await botClient.DeleteMessage(
+                await operations.DeleteMessageAsync(
                     chatId: payload.ChatId,
                     messageId: payload.WelcomeMessageId,
                     cancellationToken: cancellationToken);

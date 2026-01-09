@@ -1,9 +1,14 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TgUser = Telegram.Bot.Types.User;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -15,23 +20,20 @@ public class UserAutoTrustService
 {
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly IUserActionsRepository _userActionsRepository;
-    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
-    private readonly IAuditLogRepository _auditLogRepository;
+    private readonly IConfigService _configService;
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<UserAutoTrustService> _logger;
 
     public UserAutoTrustService(
         IDetectionResultsRepository detectionResultsRepository,
         IUserActionsRepository userActionsRepository,
-        IContentDetectionConfigRepository contentDetectionConfigRepository,
-        IAuditLogRepository auditLogRepository,
+        IConfigService configService,
         ITelegramUserRepository userRepository,
         ILogger<UserAutoTrustService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
         _userActionsRepository = userActionsRepository;
-        _contentDetectionConfigRepository = contentDetectionConfigRepository;
-        _auditLogRepository = auditLogRepository;
+        _configService = configService;
         _userRepository = userRepository;
         _logger = logger;
     }
@@ -41,23 +43,27 @@ public class UserAutoTrustService
     /// Called after storing a non-spam detection result.
     /// Uses AddOrUpdate pattern - safe to call even if user already trusted.
     /// </summary>
-    /// <param name="userId">Telegram user ID</param>
-    /// <param name="chatId">Chat ID where message was posted (used for config lookup)</param>
+    /// <param name="tgUser">Telegram SDK User object</param>
+    /// <param name="chat">Telegram SDK Chat object (used for config lookup)</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    public async Task CheckAndApplyAutoTrustAsync(long userId, long chatId, CancellationToken cancellationToken = default)
+    public async Task CheckAndApplyAutoTrustAsync(TgUser tgUser, Chat chat, CancellationToken cancellationToken = default)
     {
+        var userId = tgUser.Id;
+        var chatId = chat.Id;
+
         try
         {
-            // Get effective config (chat-specific overrides, global defaults)
-            var config = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+            // Get effective config via ConfigService (single entry point for all config)
+            var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
+                        ?? new ContentDetectionConfig();
 
             // Feature disabled - skip
             if (!config.FirstMessageOnly)
             {
                 _logger.LogDebug(
-                    "FirstMessageOnly disabled for chat {ChatId}, skipping auto-trust check for user {UserId}",
-                    chatId,
-                    userId);
+                    "FirstMessageOnly disabled for {Chat}, skipping auto-trust check for {User}",
+                    chat.ToLogDebug(),
+                    tgUser.ToLogDebug());
                 return;
             }
 
@@ -68,7 +74,8 @@ public class UserAutoTrustService
                 var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
                 if (user == null)
                 {
-                    _logger.LogDebug("User {UserId} not found in telegram_users, skipping auto-trust", userId);
+                    _logger.LogDebug("{User} not found in telegram_users, skipping auto-trust",
+                        tgUser.ToLogDebug());
                     return;
                 }
 
@@ -77,8 +84,8 @@ public class UserAutoTrustService
                 if (accountAge < requiredAge)
                 {
                     _logger.LogDebug(
-                        "User {UserId} account age {AgeHours:F1}h < required {RequiredHours}h, not yet eligible for auto-trust",
-                        userId,
+                        "{User} account age {AgeHours:F1}h < required {RequiredHours}h, not yet eligible for auto-trust",
+                        tgUser.ToLogDebug(),
                         accountAge.TotalHours,
                         config.AutoTrustMinAccountAgeHours);
                     return;
@@ -97,8 +104,8 @@ public class UserAutoTrustService
             if (recentResults.Count < config.FirstMessagesCount)
             {
                 _logger.LogDebug(
-                    "User {UserId} has {Count}/{Threshold} qualifying messages (min {MinLength} chars), not yet eligible for auto-trust",
-                    userId,
+                    "{User} has {Count}/{Threshold} qualifying messages (min {MinLength} chars), not yet eligible for auto-trust",
+                    tgUser.ToLogDebug(),
                     recentResults.Count,
                     config.FirstMessagesCount,
                     config.AutoTrustMinMessageLength);
@@ -124,25 +131,17 @@ public class UserAutoTrustService
             await _userRepository.UpdateTrustStatusAsync(userId, isTrusted: true, cancellationToken);
 
             _logger.LogInformation(
-                "Auto-trusted user {UserId} after {Count} non-spam messages (action ID: {ActionId})",
-                userId,
+                "Auto-trusted {User} after {Count} non-spam messages (action ID: {ActionId})",
+                tgUser.ToLogInfo(),
                 config.FirstMessagesCount,
                 actionId);
-
-            // Log to audit log (Telegram user as target)
-            await _auditLogRepository.LogEventAsync(
-                Data.Models.AuditEventType.UserAutoWhitelisted,
-                Actor.AutoTrust,  // System actor - shows "SYSTEM" chip in Audit UI
-                Actor.FromTelegramUser(userId), // Telegram user as target
-                value: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages",
-                cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Failed to check/apply auto-trust for user {UserId} in chat {ChatId}",
-                userId,
-                chatId);
+                "Failed to check/apply auto-trust for {User} in {Chat}",
+                tgUser.ToLogDebug(),
+                chat.ToLogDebug());
         }
     }
 }

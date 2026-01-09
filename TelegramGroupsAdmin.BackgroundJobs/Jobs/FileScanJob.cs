@@ -1,15 +1,14 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -30,14 +29,14 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class FileScanJob(
     ILogger<FileScanJob> logger,
-    TelegramBotClientFactory botClientFactory,
+    ITelegramBotClientFactory botClientFactory,
     IEnumerable<IContentCheckV2> contentChecks,
     ITelegramUserRepository telegramUserRepository,
     IMessageHistoryRepository messageHistoryRepository,
     IDetectionResultsRepository detectionResultsRepository) : IJob
 {
     private readonly ILogger<FileScanJob> _logger = logger;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly IContentCheckV2 _fileScanningCheck = contentChecks.First(c => c.CheckName == CheckName.FileScanning);
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
@@ -45,12 +44,8 @@ public class FileScanJob(
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<FileScanJobPayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize FileScanJobPayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<FileScanJobPayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
@@ -75,8 +70,8 @@ public class FileScanJob(
                 payload.ChatId,
                 payload.MessageId);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             string? tempFilePath = null;
 
@@ -88,7 +83,7 @@ public class FileScanJob(
                 _logger.LogDebug("Downloading file {FileId} to {TempPath}", payload.FileId, tempFilePath);
 
                 // First get file info to get the file path
-                var fileInfo = await botClient.GetFile(payload.FileId, cancellationToken);
+                var fileInfo = await operations.GetFileAsync(payload.FileId, cancellationToken);
 
                 if (fileInfo.FilePath == null)
                 {
@@ -99,7 +94,7 @@ public class FileScanJob(
                 // Download file to temp location
                 await using (var fileStream = File.Create(tempFilePath))
                 {
-                    await botClient.DownloadFile(fileInfo.FilePath, fileStream, cancellationToken);
+                    await operations.DownloadFileAsync(fileInfo.FilePath, fileStream, cancellationToken);
                 }
 
                 // Step 2: Calculate SHA256 hash for cache lookup and audit trail
@@ -121,7 +116,8 @@ public class FileScanJob(
                 {
                     Message = $"File attachment: {payload.FileName ?? "unknown"}",
                     UserId = payload.UserId,
-                    UserName = user?.Username,
+                    // Pass pre-formatted display name for logging (REFACTOR-10 will rename to UserDisplayName)
+                    UserName = TelegramDisplayName.Format(user?.FirstName, user?.LastName, user?.Username, payload.UserId),
                     ChatId = payload.ChatId,
                     FilePath = tempFilePath,
                     FileName = payload.FileName ?? "unknown",
@@ -134,8 +130,8 @@ public class FileScanJob(
 
                 // V2 scoring: 5.0 = malware detected, 0.0 = clean/abstained
                 // Map to V1 concepts: Score >= 4.0 = Infected, < 4.0 = Clean
-                bool isInfected = !scanResult.Abstained && scanResult.Score >= 4.0;
-                int confidenceV1 = (int)(scanResult.Score * 20); // Map 0-5.0 to 0-100
+                bool isInfected = !scanResult.Abstained && scanResult.Score >= FileScanConstants.InfectedScoreThreshold;
+                int confidenceV1 = (int)(scanResult.Score * FileScanConstants.ScoreToConfidenceMultiplier); // Map 0-5.0 to 0-100
 
                 _logger.LogInformation(
                     "File scan complete for message {MessageId}: Score={Score}, Abstained={Abstained}, Infected={Infected}, Details={Details}",
@@ -173,7 +169,7 @@ public class FileScanJob(
                 // Step 6: Take action if file is infected
                 if (isInfected)
                 {
-                    await HandleInfectedFileAsync(botClient, payload, scanResult, cancellationToken);
+                    await HandleInfectedFileAsync(operations, payload, scanResult, cancellationToken);
                 }
             }
             catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
@@ -243,7 +239,7 @@ public class FileScanJob(
     /// No ban/warn for trusted/admin users (handled by ContentActionService in future)
     /// </summary>
     private async Task HandleInfectedFileAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         FileScanJobPayload payload,
         ContentCheckResponseV2 scanResult,
         CancellationToken cancellationToken)
@@ -258,7 +254,7 @@ public class FileScanJob(
         try
         {
             // Delete the message containing infected file
-            await botClient.DeleteMessage(payload.ChatId, (int)payload.MessageId, cancellationToken);
+            await operations.DeleteMessageAsync(payload.ChatId, (int)payload.MessageId, cancellationToken);
 
             _logger.LogWarning(
                 "Deleted infected file message {MessageId} from chat {ChatId}",
@@ -301,7 +297,7 @@ public class FileScanJob(
         }
 
         // Notify user via DM (or fallback to chat if DM blocked)
-        await NotifyUserAsync(botClient, payload, scanResult, cancellationToken);
+        await NotifyUserAsync(operations, payload, scanResult, cancellationToken);
     }
 
     /// <summary>
@@ -309,7 +305,7 @@ public class FileScanJob(
     /// Phase 4.14: Implements bot_dm_enabled check and fallback pattern
     /// </summary>
     private async Task NotifyUserAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         FileScanJobPayload payload,
         ContentCheckResponseV2 scanResult,
         CancellationToken cancellationToken)
@@ -330,7 +326,7 @@ public class FileScanJob(
                 // Try to send DM
                 try
                 {
-                    await botClient.SendMessage(
+                    await operations.SendMessageAsync(
                         chatId: payload.UserId,
                         text: notificationText,
                         parseMode: ParseMode.Markdown,
@@ -356,7 +352,7 @@ public class FileScanJob(
             // Fallback: Send message in chat (mentions user)
             var chatNotificationText = $"⚠️ @{telegramUser?.Username ?? payload.UserId.ToString()}: {notificationText}";
 
-            await botClient.SendMessage(
+            await operations.SendMessageAsync(
                 chatId: payload.ChatId,
                 text: chatNotificationText,
                 parseMode: ParseMode.Markdown,

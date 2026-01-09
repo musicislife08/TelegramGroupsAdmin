@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
@@ -35,7 +37,6 @@ public class MessageEditProcessor
     /// Returns the edit record for event raising (or null if no actual edit occurred).
     /// </summary>
     public async Task<MessageEditRecord?> ProcessEditAsync(
-        ITelegramBotClient botClient,
         Message editedMessage,
         IServiceScope scope,
         CancellationToken cancellationToken = default)
@@ -109,7 +110,7 @@ public class MessageEditProcessor
             editedMessage.Chat.Id);
 
         // Schedule spam re-scan in background
-        await ScheduleSpamReScanAsync(botClient, editedMessage, newText);
+        await ScheduleSpamReScanAsync(editedMessage, newText);
 
         return editRecord;
     }
@@ -135,8 +136,9 @@ public class MessageEditProcessor
         if (savedEdit == null)
             return;
 
-        var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository>();
-        var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var spamConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, editedMessage.Chat.Id)
+                        ?? new ContentDetectionConfig();
 
         // Check if translation is enabled and message meets minimum length
         if (!spamConfig.Translation.Enabled || newText.Length < spamConfig.Translation.MinMessageLength)
@@ -177,7 +179,6 @@ public class MessageEditProcessor
     /// Detects "post innocent, edit to spam" tactic.
     /// </summary>
     private Task ScheduleSpamReScanAsync(
-        ITelegramBotClient botClient,
         Message editedMessage,
         string? newText)
     {
@@ -198,7 +199,7 @@ public class MessageEditProcessor
                     : 0;
 
                 var contentOrchestrator = scope.ServiceProvider.GetRequiredService<ContentDetectionOrchestrator>();
-                await contentOrchestrator.RunDetectionAsync(botClient, editedMessage, newText, photoLocalPath: null, editVersion: maxEditVersion + 1, CancellationToken.None);
+                await contentOrchestrator.RunDetectionAsync(editedMessage, newText, photoLocalPath: null, editVersion: maxEditVersion + 1, CancellationToken.None);
             }
             catch (Exception ex)
             {

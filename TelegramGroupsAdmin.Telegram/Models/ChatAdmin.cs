@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
@@ -22,6 +23,12 @@ public class ChatAdmin
     public DateTimeOffset PromotedAt { get; init; }
     public DateTimeOffset LastVerifiedAt { get; init; }
     public bool IsActive { get; init; }
+
+    /// <summary>
+    /// Web user account linked to this Telegram admin via telegram_user_mappings.
+    /// Null if the Telegram user has not linked a web account.
+    /// </summary>
+    public UserRecord? LinkedWebUser { get; init; }
 
     /// <summary>
     /// Formatted display name following Telegram conventions

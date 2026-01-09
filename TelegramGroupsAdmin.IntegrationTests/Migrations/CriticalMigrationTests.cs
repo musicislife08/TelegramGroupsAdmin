@@ -231,17 +231,11 @@ public class CriticalMigrationTests
         await helper.CreateDatabaseAndMigrateToAsync("20251025031236_AddUniqueConstraintToMessageTranslations");
 
         // Create a managed chat (required for FK constraint in chat_admins)
-        await using (var context = helper.GetDbContext())
-        {
-            context.ManagedChats.Add(new ManagedChatRecordDto
-            {
-                ChatId = 100,
-                ChatName = "Test Chat",
-                IsActive = true,
-                AddedAt = DateTimeOffset.UtcNow
-            });
-            await context.SaveChangesAsync();
-        }
+        // Use raw SQL to avoid EF Core trying to insert is_deleted column (added in later migration)
+        await helper.ExecuteSqlAsync(@"
+            INSERT INTO managed_chats (chat_id, chat_name, is_active, added_at, chat_type, bot_status, is_admin)
+            VALUES (100, 'Test Chat', true, NOW(), 0, 0, false);
+        ");
 
         // Create telegram users with different statuses
         // Use raw SQL to avoid EF Core trying to insert is_bot column (added in later migration)

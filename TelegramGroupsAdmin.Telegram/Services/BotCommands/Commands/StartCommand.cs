@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -8,6 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -21,19 +21,22 @@ public class StartCommand : IBotCommand
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IPendingNotificationsRepository _pendingNotificationsRepository;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ITelegramBotClientFactory _botFactory;
 
     public StartCommand(
         ILogger<StartCommand> logger,
         IWelcomeResponsesRepository welcomeResponsesRepository,
         ITelegramUserRepository telegramUserRepository,
         IPendingNotificationsRepository pendingNotificationsRepository,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ITelegramBotClientFactory botFactory)
     {
         _logger = logger;
         _welcomeResponsesRepository = welcomeResponsesRepository;
         _telegramUserRepository = telegramUserRepository;
         _pendingNotificationsRepository = pendingNotificationsRepository;
         _serviceProvider = serviceProvider;
+        _botFactory = botFactory;
     }
 
     public string Name => "start";
@@ -45,7 +48,6 @@ public class StartCommand : IBotCommand
     public int? DeleteResponseAfterSeconds => null;
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -57,6 +59,8 @@ public class StartCommand : IBotCommand
             return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
         }
 
+        var operations = await _botFactory.GetOperationsAsync();
+
         // User started a private conversation with the bot - enable DM notifications
         // This allows the bot to send private messages to this user in the future
         if (message.From != null)
@@ -64,13 +68,13 @@ public class StartCommand : IBotCommand
             await _telegramUserRepository.SetBotDmEnabledAsync(message.From.Id, enabled: true, cancellationToken);
 
             // Deliver any pending notifications
-            await DeliverPendingNotificationsAsync(botClient, message.From.Id, cancellationToken);
+            await DeliverPendingNotificationsAsync(operations, message.From.Id, cancellationToken);
         }
 
         // Check if this is a deep link for welcome system
         if (args.Length > 0 && args[0].StartsWith("welcome_"))
         {
-            return await HandleWelcomeDeepLinkAsync(botClient, message, args[0], cancellationToken);
+            return await HandleWelcomeDeepLinkAsync(operations, message, args[0], cancellationToken);
         }
 
         // Default /start response
@@ -83,7 +87,7 @@ public class StartCommand : IBotCommand
     }
 
     private async Task<CommandResult> HandleWelcomeDeepLinkAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         Message message,
         string payload,
         CancellationToken cancellationToken)
@@ -108,10 +112,10 @@ public class StartCommand : IBotCommand
         }
 
         // Get chat info
-        Chat chat;
+        ChatFullInfo chat;
         try
         {
-            chat = await botClient.GetChat(chatId, cancellationToken);
+            chat = await operations.GetChatAsync(chatId, cancellationToken);
         }
         catch (Exception)
         {
@@ -140,7 +144,7 @@ public class StartCommand : IBotCommand
             .Replace("{chat_name}", chatName)
             .Replace("{timeout}", config.TimeoutSeconds.ToString());
 
-        await botClient.SendMessage(
+        await operations.SendMessageAsync(
             chatId: message.Chat.Id,
             text: messageText,
             parseMode: ParseMode.Html,
@@ -156,7 +160,7 @@ public class StartCommand : IBotCommand
             ]
         ]);
 
-        await botClient.SendMessage(
+        await operations.SendMessageAsync(
             chatId: message.Chat.Id,
             text: "👇 Click below to accept the rules:",
             replyMarkup: keyboard,
@@ -183,7 +187,7 @@ public class StartCommand : IBotCommand
     /// Deliver all pending notifications to user when they enable DMs
     /// </summary>
     private async Task DeliverPendingNotificationsAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         long telegramUserId,
         CancellationToken cancellationToken)
     {
@@ -208,7 +212,7 @@ public class StartCommand : IBotCommand
             {
                 try
                 {
-                    await botClient.SendMessage(
+                    await operations.SendMessageAsync(
                         chatId: telegramUserId,
                         text: notification.MessageText,
                         cancellationToken: cancellationToken);

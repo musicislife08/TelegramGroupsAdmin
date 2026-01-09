@@ -33,9 +33,9 @@ public class AIServiceFactory : IAIServiceFactory
     }
 
     /// <inheritdoc />
-    public async Task<AIFeatureStatus> GetFeatureStatusAsync(AIFeatureType feature, CancellationToken ct = default)
+    public async Task<AIFeatureStatus> GetFeatureStatusAsync(AIFeatureType feature, CancellationToken cancellationToken = default)
     {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
+        var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         if (config == null)
         {
             return new AIFeatureStatus(false, false, false, null, null);
@@ -66,16 +66,16 @@ public class AIServiceFactory : IAIServiceFactory
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<AIConnection>> GetConnectionsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<AIConnection>> GetConnectionsAsync(CancellationToken cancellationToken = default)
     {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
+        var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         return config?.Connections ?? [];
     }
 
     /// <inheritdoc />
-    public async Task<AIFeatureConfig?> GetFeatureConfigAsync(AIFeatureType feature, CancellationToken ct = default)
+    public async Task<AIFeatureConfig?> GetFeatureConfigAsync(AIFeatureType feature, CancellationToken cancellationToken = default)
     {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
+        var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         if (config == null)
         {
             return null;
@@ -86,9 +86,9 @@ public class AIServiceFactory : IAIServiceFactory
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<AIModelInfo>> RefreshModelsAsync(string connectionId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AIModelInfo>> RefreshModelsAsync(string connectionId, CancellationToken cancellationToken = default)
     {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
+        var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);
         if (config == null)
         {
             _logger.LogWarning("Cannot refresh models: AI provider config not found");
@@ -111,14 +111,14 @@ public class AIServiceFactory : IAIServiceFactory
 
         try
         {
-            var models = await FetchModelsAsync(connection, ct);
+            var models = await FetchModelsAsync(connection, cancellationToken);
 
             // Update connection with fetched models
             connection.AvailableModels = models.ToList();
             connection.ModelsLastFetched = DateTimeOffset.UtcNow;
 
             // Save updated config
-            await _configRepository.SaveAIProviderConfigAsync(config, ct);
+            await _configRepository.SaveAIProviderConfigAsync(config, cancellationToken);
 
             _logger.LogInformation("Refreshed {Count} models for connection {ConnectionId}",
                 models.Count, connectionId);
@@ -135,9 +135,9 @@ public class AIServiceFactory : IAIServiceFactory
     /// <summary>
     /// Fetch models from provider API
     /// </summary>
-    private async Task<IReadOnlyList<AIModelInfo>> FetchModelsAsync(AIConnection connection, CancellationToken ct)
+    private async Task<IReadOnlyList<AIModelInfo>> FetchModelsAsync(AIConnection connection, CancellationToken cancellationToken)
     {
-        var apiKeys = await _configRepository.GetApiKeysAsync(ct);
+        var apiKeys = await _configRepository.GetApiKeysAsync(cancellationToken);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
         // Determine endpoint based on provider
@@ -145,7 +145,7 @@ public class AIServiceFactory : IAIServiceFactory
             ? "https://api.openai.com"
             : connection.LocalEndpoint!;
 
-        return await FetchOpenAICompatibleModelsAsync(endpoint, apiKey, ct);
+        return await FetchOpenAICompatibleModelsAsync(endpoint, apiKey, cancellationToken);
     }
 
     /// <summary>
@@ -155,7 +155,7 @@ public class AIServiceFactory : IAIServiceFactory
     private async Task<IReadOnlyList<AIModelInfo>> FetchOpenAICompatibleModelsAsync(
         string endpoint,
         string? apiKey,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         using var client = _httpClientFactory.CreateClient();
 
@@ -171,7 +171,7 @@ public class AIServiceFactory : IAIServiceFactory
         {
             try
             {
-                var ollamaModels = await FetchOllamaModelsAsync(client, baseUri, ct);
+                var ollamaModels = await FetchOllamaModelsAsync(client, baseUri, cancellationToken);
                 if (ollamaModels.Count > 0)
                 {
                     return ollamaModels;
@@ -190,14 +190,14 @@ public class AIServiceFactory : IAIServiceFactory
                 ? $"{endpoint}/models"
                 : $"{endpoint.TrimEnd('/')}/v1/models";
 
-            var response = await client.GetAsync(modelsUrl, ct);
+            var response = await client.GetAsync(modelsUrl, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Failed to fetch models from {Endpoint}: {StatusCode}", endpoint, response.StatusCode);
                 return [];
             }
 
-            var content = await response.Content.ReadAsStringAsync(ct);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
             var modelsResponse = JsonSerializer.Deserialize<OpenAIModelsResponse>(content, JsonOptions);
 
             // Return ALL models - no filtering (UI handles capability filtering)
@@ -219,17 +219,17 @@ public class AIServiceFactory : IAIServiceFactory
     private async Task<IReadOnlyList<AIModelInfo>> FetchOllamaModelsAsync(
         HttpClient client,
         Uri baseUri,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var ollamaUrl = $"{baseUri.Scheme}://{baseUri.Host}:{baseUri.Port}/api/tags";
 
-        var response = await client.GetAsync(ollamaUrl, ct);
+        var response = await client.GetAsync(ollamaUrl, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             return [];
         }
 
-        var content = await response.Content.ReadAsStringAsync(ct);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
         var ollamaResponse = JsonSerializer.Deserialize<OllamaModelsResponse>(content, JsonOptions);
 
         return ollamaResponse?.Models?

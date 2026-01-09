@@ -1,7 +1,8 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Helpers
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @inject TelegramUserManagementService UserManagementService
-@inject ModerationActionService ModerationService
+@inject ModerationOrchestrator ModerationService
 @inject IAdminNotesRepository AdminNotesRepository
 @inject IUserTagsRepository UserTagsRepository
 @inject ITagDefinitionsRepository TagDefinitionsRepository
@@ -143,6 +144,14 @@
                                        OnClick="@TempBanUser"
                                        Size="Size.Small">
                                 Temp Ban
+                            </MudButton>
+
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Warning"
+                                       StartIcon="@Icons.Material.Filled.Warning"
+                                       OnClick="@WarnUser"
+                                       Size="Size.Small">
+                                Warn
                             </MudButton>
                         }
                         else
@@ -608,6 +617,72 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error temp banning user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task WarnUser()
+    {
+        if (_userDetail == null) return;
+
+        // Show warn dialog
+        var parameters = new DialogParameters<WarnDialog>
+        {
+            { x => x.UserId, _userDetail.TelegramUserId },
+            { x => x.Username, _userDetail.DisplayName },
+            { x => x.CurrentWarningCount, _userDetail.ActiveWarningCount }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<WarnDialog>("Issue Warning", parameters, options);
+        var result = await dialog.Result;
+
+        if (result == null || result.Canceled || result.Data is not WarnDialog.WarnResult warnResult)
+            return;
+
+        try
+        {
+            // Get Actor for audit trail
+            Actor executor;
+            try
+            {
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
+
+            // Use first chat membership as context, or 0 for global
+            var chatId = _userDetail.ChatMemberships.FirstOrDefault()?.ChatId ?? 0;
+
+            // Call moderation service to warn the user
+            var warnResultFromService = await ModerationService.WarnUserAsync(
+                _userDetail.TelegramUserId,
+                null, // No specific message ID
+                executor,
+                warnResult.Reason ?? "Warning issued via UI",
+                chatId);
+
+            if (warnResultFromService.Success)
+            {
+                Snackbar.Add($"Warning issued to {_userDetail.DisplayName}", Severity.Success);
+                await LoadUserDetailAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to warn user: {warnResultFromService.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error warning user: {ex.Message}", Severity.Error);
         }
     }
 

@@ -2,18 +2,14 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Core.BackgroundJobs
-@using TelegramGroupsAdmin.Core.JobPayloads
-@inject TelegramAdminBotService BotService
+@using TelegramGroupsAdmin.Telegram.Services
+@inject ITelegramBotService BotService
+@inject IChatManagementService ChatManagementService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IContentDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
-@inject IServiceProvider ServiceProvider
-@inject IJobScheduler JobScheduler
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
-@inject IDialogService DialogService
-@inject ILogger<Chats> Logger
 @attribute [Authorize]
 @implements IDisposable
 
@@ -34,8 +30,13 @@
         <MudAlert Severity="Severity.Info" Class="mt-4">
             <MudText Typo="Typo.h6">No chats available</MudText>
             <MudText Typo="Typo.body2">
-                You don't have access to any chats yet. If you're an Admin user, you need to link your Telegram account
-                to see chats where you have admin permissions. Visit your Profile page to link your Telegram account.
+                You don't have access to any chats yet. Add the bot to a Telegram group to get started.
+                Chats where the bot is added (even without admin permissions) will appear here for pre-configuration.
+                Spam detection and moderation only runs when the bot has admin permissions.
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mt-2">
+                If you're an Admin user, you also need to link your Telegram account to see chats where you have admin permissions.
+                Visit your Profile page to link your Telegram account.
             </MudText>
         </MudAlert>
     }
@@ -45,6 +46,11 @@
             <ToolBarContent>
                 <MudText Typo="Typo.h6">Managed Chats</MudText>
                 <MudSpacer />
+                <MudCheckBox @bind-Value="_showDeletedChats"
+                            Label="Show deleted chats"
+                            Color="Color.Primary"
+                            Dense="true"
+                            Class="mr-4" />
                 <MudTextField @bind-Value="_searchString" Placeholder="Search chats" Adornment="Adornment.Start"
                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
             </ToolBarContent>
@@ -59,31 +65,15 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Chat Name">
-                    <div>
-                        <MudText Typo="Typo.body2">@context.Chat.ChatName</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.Chat.ChatId</MudText>
-                    </div>
-                    @if (!context.Chat.IsActive)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Inactive</MudChip>
-                    }
+                    <ChatInfoCell Chat="@context.Chat" />
                 </MudTd>
                 <MudTd DataLabel="Type">@context.Chat.ChatType.ToString()</MudTd>
                 <MudTd DataLabel="Bot Status">
-                    <MudChip T="string" Size="Size.Small" Color="@GetBotStatusColor(context.Chat.BotStatus)">
-                        @context.Chat.BotStatus.ToString()
-                    </MudChip>
+                    <ChatStatusChip BotStatus="@context.Chat.BotStatus" />
                 </MudTd>
                 <MudTd DataLabel="Health">
-                    <MudChip T="string" Size="Size.Small" Color="@GetHealthColor(context.HealthStatus.Status)">
-                        @context.HealthStatus.Status.ToString()
-                    </MudChip>
-                    @if (context.HealthStatus.Warnings.Count > 0)
-                    {
-                        <MudTooltip Text="@string.Join(", ", context.HealthStatus.Warnings)">
-                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
-                        </MudTooltip>
-                    }
+                    <ChatStatusChip HealthStatus="@context.HealthStatus.Status"
+                                   Warnings="@context.HealthStatus.Warnings" />
                 </MudTd>
                 <MudTd DataLabel="Custom Config">
                     @if (context.HasCustomSpamConfig)
@@ -106,17 +96,10 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Actions">
-                    <MudStack Row="true" Spacing="1">
-                        <MudIconButton Icon="@Icons.Material.Filled.Refresh"
-                                      Size="Size.Small"
-                                      Color="Color.Info"
-                                      OnClick="@(() => RefreshChatHealthAsync(context.Chat.ChatId))"
-                                      title="Refresh health status" />
-                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                  OnClick="@(() => OpenChatConfig(context))">
-                            Configure
-                        </MudButton>
-                    </MudStack>
+                    <ChatActionsCell ChatInfo="@context"
+                                    OnChatLeft="@LoadChatsAsync"
+                                    OnConfigured="@HandleConfigured"
+                                    OnHealthRefreshQueued="@StateHasChanged" />
                 </MudTd>
             </RowTemplate>
             <PagerContent>
@@ -130,6 +113,7 @@
     private List<ManagedChatInfo> _chats = [];
     private bool _loading = true;
     private string _searchString = "";
+    private bool _showDeletedChats;
 
     protected override async Task OnInitializedAsync()
     {
@@ -155,9 +139,11 @@
             }
 
             // Load chats accessible to this user (filtered by permission level)
+            // Include deleted chats - UI toggle controls visibility
             var chats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
-                permissionLevel);
+                permissionLevel,
+                includeDeleted: true);
 
             // Check which chats have custom spam configs
             var allConfigs = await SpamConfigRepository.GetAllChatConfigsAsync();
@@ -169,24 +155,26 @@
             _chats = [];
             foreach (var chat in chats)
             {
-                // Get cached health status from bot service
-                var health = BotService.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
+                // Get cached health status from chat management service
+                var health = ChatManagementService.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
                 {
                     ChatId = chat.ChatId,
                     Status = ChatHealthStatusType.Unknown,
                     IsReachable = true
                 };
 
-                // Check if this chat has a custom welcome config
+                // Check if this chat has custom configs
                 var configRecord = await ConfigRepository.GetAsync(chat.ChatId);
                 var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
+                var hasServiceMsgConfig = !string.IsNullOrEmpty(configRecord?.ServiceMessageDeletionConfig);
 
                 _chats.Add(new ManagedChatInfo
                 {
                     Chat = chat,
                     HealthStatus = health,
                     HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId),
-                    HasCustomWelcomeConfig = hasWelcomeConfig
+                    HasCustomWelcomeConfig = hasWelcomeConfig,
+                    HasCustomServiceMsgConfig = hasServiceMsgConfig
                 });
             }
         }
@@ -211,6 +199,14 @@
         }
     }
 
+    private async Task HandleConfigured(bool saved)
+    {
+        if (saved)
+        {
+            await LoadChatsAsync();
+        }
+    }
+
     public void Dispose()
     {
         // Unsubscribe from events
@@ -219,6 +215,10 @@
 
     private bool FilterFunc(ManagedChatInfo chat)
     {
+        // Filter by deleted status first
+        if (!_showDeletedChats && chat.Chat.IsDeleted)
+            return false;
+
         if (string.IsNullOrWhiteSpace(_searchString))
             return true;
 
@@ -230,63 +230,5 @@
             return true;
 
         return false;
-    }
-
-    private Color GetBotStatusColor(BotChatStatus status)
-    {
-        return status switch
-        {
-            BotChatStatus.Administrator => Color.Success,
-            BotChatStatus.Member => Color.Info,
-            BotChatStatus.Left => Color.Default,
-            BotChatStatus.Kicked => Color.Error,
-            _ => Color.Default
-        };
-    }
-
-    private Color GetHealthColor(ChatHealthStatusType status)
-    {
-        return status switch
-        {
-            ChatHealthStatusType.Healthy => Color.Success,
-            ChatHealthStatusType.Warning => Color.Warning,
-            ChatHealthStatusType.Error => Color.Error,
-            _ => Color.Default
-        };
-    }
-
-    private async Task RefreshChatHealthAsync(long chatId)
-    {
-        try
-        {
-            // Schedule a ChatHealthCheckJob for this specific chat
-            var payload = new ChatHealthCheckPayload { ChatId = chatId };
-
-            var jobId = await JobScheduler.ScheduleJobAsync(
-                BackgroundJobNames.ChatHealthCheck,
-                payload,
-                delaySeconds: 0); // Run immediately
-
-            Snackbar.Add("Chat health refresh queued", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to refresh chat health: {ex.Message}", Severity.Error);
-        }
-    }
-
-    private async Task OpenChatConfig(ManagedChatInfo chatInfo)
-    {
-        var parameters = new DialogParameters { ["ChatInfo"] = chatInfo };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
-
-        var dialog = await DialogService.ShowAsync<ChatConfigModal>($"Configure: {chatInfo.Chat.ChatName}", parameters, options);
-        var result = await dialog.Result;
-
-        if (result is { Canceled: false })
-        {
-            // Reload chats after modal closes
-            await LoadChatsAsync();
-        }
     }
 }

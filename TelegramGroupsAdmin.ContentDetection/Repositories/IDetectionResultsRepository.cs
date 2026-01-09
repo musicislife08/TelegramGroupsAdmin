@@ -46,10 +46,14 @@ public interface IDetectionResultsRepository
     Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Check if user is trusted (bypasses spam detection)
-    /// Checks user_actions table for active 'trust' action
+    /// Get ham (non-spam) samples for similarity check
+    /// Returns only ham messages (is_spam=false)
+    /// Used for deduplicating new ham training samples at insert time
     /// </summary>
-    Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default);
+    Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
+
+    // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
+    // Source of truth is telegram_users.is_trusted column
 
     /// <summary>
     /// Get recent non-spam detection results for a user (global, not per-chat)
@@ -104,16 +108,6 @@ public interface IDetectionResultsRepository
     /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
     /// </summary>
     Task InvalidateTrainingDataForMessageAsync(long messageId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Atomically invalidate old training data and insert a new detection result.
-    /// This ensures both operations happen in a single transaction - if either fails, both are rolled back.
-    /// Used by ModerationActionService.MarkAsSpamAndBanAsync to prevent ML training data corruption.
-    /// </summary>
-    /// <param name="messageId">The message ID to invalidate old training data for</param>
-    /// <param name="result">The new detection result to insert</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task InsertWithTrainingInvalidationAsync(long messageId, DetectionResultRecord result, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)

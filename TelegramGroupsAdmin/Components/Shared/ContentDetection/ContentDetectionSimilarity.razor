@@ -1,13 +1,11 @@
-@using TelegramGroupsAdmin.ContentDetection.Configuration
-@using TelegramGroupsAdmin.ContentDetection.Repositories
-@inject IContentDetectionConfigRepository ConfigRepository
+@inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-            <MudText Typo="Typo.h6" Color="Color.Primary">Spam Similarity Detection</MudText>
-            <HelpTooltip Text="Uses TF-IDF (Term Frequency-Inverse Document Frequency) cosine similarity to compare new messages against known spam samples. Detects copycat spam and slight variations of trained spam patterns. Requires training samples to be effective." />
+            <MudText Typo="Typo.h6" Color="Color.Primary">ML Text Classifier (SDCA)</MudText>
+            <HelpTooltip Text="Uses ML.NET SDCA (Stochastic Dual Coordinate Ascent) logistic regression with TF-IDF features to classify spam vs ham. Trained automatically on your spam/ham samples. Retrains every 8 hours to adapt to new patterns." />
         </MudStack>
 
         @if (!IsGlobalView)
@@ -32,7 +30,7 @@
         }
 
         <MudSwitch T="bool" @bind-Value="activeConfig.Enabled"
-                  Label="Enable Similarity Check"
+                  Label="Enable ML Text Classifier"
                   Color="Color.Primary"
                   Disabled="@isReadOnly" />
 
@@ -40,8 +38,8 @@
         {
             <MudStack Spacing="1">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText>Similarity Threshold: @activeConfig.Threshold.ToString("F2")</MudText>
-                    <HelpTooltip Text="Cosine similarity score from 0.0 (completely different) to 1.0 (identical). Recommended: 0.7-0.8 for balanced detection. Lower = more sensitive (catches variations but more false positives). Higher = stricter (only near-exact matches)." />
+                    <MudText>Spam Probability Threshold: @activeConfig.Threshold.ToString("F2")</MudText>
+                    <HelpTooltip Text="Minimum spam probability (0.0-1.0) required to contribute points. ML model outputs probability from 0% (definitely ham) to 100% (definitely spam). Recommended: 0.5-0.7 for balanced detection. Lower = more sensitive (catches more spam but more false positives). Higher = stricter (only high-confidence spam)." />
                 </MudStack>
                 <MudSlider @bind-Value="activeConfig.Threshold"
                           Min="0.1" Max="1.0" Step="0.05"
@@ -57,8 +55,10 @@
                 else
                 {
                     <text>
-                        <strong>How it works:</strong> Compares word patterns between new messages and your training samples.
-                        Score of 0.70 = 70% similarity. Requires diverse spam training samples for best accuracy.
+                        <strong>How it works:</strong> ML.NET SDCA model analyzes message text and outputs spam probability (0-100%).
+                        Messages above threshold contribute points: ≥95% → 5pts, ≥85% → 3.5pts, ≥70% → 2pts, ≥60% → 1pt.
+                        Model retrains automatically every 8 hours with your latest spam/ham samples.
+                        <MudLink Href="/settings/background-jobs" Color="Color.Info">Trigger manual retraining</MudLink>
                     </text>
                 }
             </ConceptualAlert>
@@ -92,7 +92,8 @@
         try
         {
             // Always load global config for comparison/fallback
-            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+            _globalConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                            ?? new ContentDetectionConfig();
 
             if (IsGlobalView)
             {
@@ -102,7 +103,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, ChatId!.Value);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }

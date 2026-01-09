@@ -1,4 +1,7 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
@@ -208,6 +211,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
 
         await _messagesPage.SelectChatByNameAsync("Test Group");
 
+        // Wait for Blazor re-render to apply .active class
+        await _messagesPage.WaitForChatViewActiveAsync();
+
         // Assert - chat view becomes active
         Assert.That(await _messagesPage.IsChatViewActiveAsync(), Is.True,
             "Chat view should be active after selecting a chat");
@@ -280,10 +286,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Active Chat");
 
-        // Wait for MudVirtualize to render messages (may need more time)
-        await Page.WaitForTimeoutAsync(1500);
+        // Assert - wait for messages to appear using Playwright's auto-retry assertions
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
 
-        // Assert - messages are displayed (using virtualization, may not all be visible)
         var messageCount = await _messagesPage.GetMessageCountAsync();
         Assert.That(messageCount, Is.GreaterThan(0),
             "Should display messages for chat with messages");
@@ -402,4 +407,152 @@ public class MessagesTests : SharedAuthenticatedTestBase
         Assert.That(await _messagesPage.IsChatViewActiveAsync(), Is.True,
             "Chat should be auto-selected when chatId is in query string");
     }
+
+    #region User Detail Dialog Tests (#107)
+
+    [Test]
+    public async Task Messages_OpensUserDetailDialog_WhenUsernameClicked()
+    {
+        // Arrange - create chat with message
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(SharedFactory.Services)
+            .WithTitle("Test Chat")
+            .BuildAsync();
+
+        await new TestMessageBuilder(SharedFactory.Services)
+            .InChat(chat)
+            .FromUser(123456789, "testuser", "TestUser")
+            .WithText("Hello world!")
+            .BuildAsync();
+
+        // Act - navigate, select chat, click username
+        await _messagesPage.NavigateAsync();
+        await _messagesPage.WaitForLoadAsync();
+        await _messagesPage.SelectChatByNameAsync("Test Chat");
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
+
+        await _messagesPage.ClickUsernameInMessageAsync();
+        await _messagesPage.WaitForUserDetailDialogAsync();
+
+        // Assert - dialog opens with correct title
+        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.True,
+            "User detail dialog should be visible after clicking username");
+
+        var dialogTitle = await _messagesPage.GetUserDetailDialogTitleAsync();
+        Assert.That(dialogTitle, Does.Contain("User Details"),
+            "Dialog should have 'User Details' title");
+    }
+
+    [Test]
+    public async Task Messages_UserDetailDialog_ShowsCorrectUser()
+    {
+        // Arrange - create chat with message from specific user
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(SharedFactory.Services)
+            .WithTitle("Dialog User Test")
+            .BuildAsync();
+
+        // Create the telegram_users record (required for UserDetailDialog lookup)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
+            .WithUserId(987654321)
+            .WithUsername("specificuser")
+            .WithName("SpecificUser", "Smith")
+            .BuildAsync();
+
+        await new TestMessageBuilder(SharedFactory.Services)
+            .InChat(chat)
+            .FromUser(987654321, "specificuser", "SpecificUser", "Smith")
+            .WithText("Test message from specific user")
+            .BuildAsync();
+
+        // Act
+        await _messagesPage.NavigateAsync();
+        await _messagesPage.WaitForLoadAsync();
+        await _messagesPage.SelectChatByNameAsync("Dialog User Test");
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
+
+        await _messagesPage.ClickUsernameInMessageAsync();
+        await _messagesPage.WaitForUserDetailDialogAsync();
+
+        // Assert - dialog shows user info (wait for async content load)
+        // Use Playwright's Expect with auto-retry for async content
+        var dialog = Page.GetByRole(Microsoft.Playwright.AriaRole.Dialog);
+        await Expect(dialog).ToContainTextAsync("SpecificUser", new() { Timeout = 5000 });
+    }
+
+    [Test]
+    public async Task Messages_UserDetailDialog_ClosesOnEscapeKey()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(SharedFactory.Services)
+            .WithTitle("Escape Test Chat")
+            .BuildAsync();
+
+        await new TestMessageBuilder(SharedFactory.Services)
+            .InChat(chat)
+            .FromUser(111, "escapeuser", "EscapeUser")
+            .WithText("Test escape close")
+            .BuildAsync();
+
+        // Act - open dialog
+        await _messagesPage.NavigateAsync();
+        await _messagesPage.WaitForLoadAsync();
+        await _messagesPage.SelectChatByNameAsync("Escape Test Chat");
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
+
+        await _messagesPage.ClickUsernameInMessageAsync();
+        await _messagesPage.WaitForUserDetailDialogAsync();
+        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.True,
+            "Dialog should be open before pressing Escape");
+
+        // Press Escape to close
+        await _messagesPage.CloseUserDetailDialogByEscapeAsync();
+        await _messagesPage.WaitForUserDetailDialogHiddenAsync();
+
+        // Assert - dialog closed
+        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.False,
+            "Dialog should close when Escape is pressed");
+    }
+
+    [Test]
+    public async Task Messages_UserDetailDialog_ClosesOnCloseButton()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(SharedFactory.Services)
+            .WithTitle("Close Button Test")
+            .BuildAsync();
+
+        await new TestMessageBuilder(SharedFactory.Services)
+            .InChat(chat)
+            .FromUser(222, "closeuser", "CloseUser")
+            .WithText("Test close button")
+            .BuildAsync();
+
+        // Act - open dialog
+        await _messagesPage.NavigateAsync();
+        await _messagesPage.WaitForLoadAsync();
+        await _messagesPage.SelectChatByNameAsync("Close Button Test");
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
+
+        await _messagesPage.ClickUsernameInMessageAsync();
+        await _messagesPage.WaitForUserDetailDialogAsync();
+        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.True,
+            "Dialog should be open before clicking close button");
+
+        // Click close button
+        await _messagesPage.CloseUserDetailDialogByButtonAsync();
+        await _messagesPage.WaitForUserDetailDialogHiddenAsync();
+
+        // Assert - dialog closed
+        Assert.That(await _messagesPage.IsUserDetailDialogVisibleAsync(), Is.False,
+            "Dialog should close when close button is clicked");
+    }
+
+    #endregion
 }

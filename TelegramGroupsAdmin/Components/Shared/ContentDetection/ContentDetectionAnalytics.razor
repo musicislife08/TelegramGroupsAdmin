@@ -83,7 +83,7 @@
                 <MudStack Spacing="1">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Info" />
-                        <MudText Typo="Typo.body1" Style="flex: 1;">Detection Results Used for Training</MudText>
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Admin-Labeled Training Samples</MudText>
                         <MudText Typo="Typo.h6">@_totalTrainingSamples</MudText>
                     </MudStack>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
@@ -99,23 +99,23 @@
             </MudStack>
         </MudPaper>
 
-        <!-- Training Data Quality (from detection_results.used_for_training) -->
+        <!-- Training Data Quality (from training_labels table) -->
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">Training Data Overview</MudText>
                 <MudAlert Severity="Severity.Info">
-                    Training data is now automatically managed from detection results marked as training samples.
-                    View the <strong>Messages</strong> page to mark messages as spam/ham for training.
+                    Training data is managed via explicit admin labels (training_labels table).
+                    Mark messages as spam/ham from the <strong>Messages</strong> page to improve ML accuracy.
                 </MudAlert>
                 <MudGrid>
                     <MudItem xs="12" md="6">
                         <MudStack Spacing="2">
                             <MudStack Row="true" Justify="Justify.SpaceBetween">
-                                <MudText Typo="Typo.body1">Total Training Samples</MudText>
+                                <MudText Typo="Typo.body1">Explicit Training Labels</MudText>
                                 <MudText Typo="Typo.body1" Class="font-weight-bold">@_totalTrainingSamples</MudText>
                             </MudStack>
                             <MudText Typo="Typo.caption" Color="Color.Info">
-                                Loaded from detection_results table (used_for_training = true)
+                                Admin-labeled spam/ham samples for ML training
                             </MudText>
                         </MudStack>
                     </MudItem>
@@ -424,15 +424,16 @@
     {
         try
         {
-            // Query detection_results for training data count (used_for_training = true)
+            // Query training_labels table (explicit admin labels)
             await using var context = await DbContextFactory.CreateDbContextAsync();
-            _totalTrainingSamples = await context.DetectionResults
-                .AsNoTracking()
-                .CountAsync(dr => dr.UsedForTraining);
 
-            _totalSpamSamples = await context.DetectionResults
+            _totalTrainingSamples = await context.TrainingLabels
                 .AsNoTracking()
-                .CountAsync(dr => dr.UsedForTraining && dr.IsSpam);
+                .CountAsync();
+
+            _totalSpamSamples = await context.TrainingLabels
+                .AsNoTracking()
+                .CountAsync(tl => tl.Label == 0); // 0 = Spam
         }
         catch (Exception ex)
         {

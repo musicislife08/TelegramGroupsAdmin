@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Data;
@@ -20,16 +22,6 @@ public class StopWordRecommendationService : IStopWordRecommendationService
     private readonly IStopWordsRepository _stopWordsRepository;
     private readonly ITokenizerService _tokenizerService;
     private readonly ILogger<StopWordRecommendationService> _logger;
-
-    // Configuration constants
-    private const decimal MinimumSpamFrequencyPercent = 5.0m; // Word must appear in ≥5% of spam samples
-    private const decimal MaximumLegitFrequencyPercent = 1.0m; // Word must appear in <1% of legit messages
-    private const int MinimumSpamSamples = 50; // Need at least 50 spam samples
-    private const int MinimumLegitMessages = 100; // Need at least 100 legit messages
-    private const decimal MinimumPrecisionPercent = 70.0m; // Recommend removal if precision <70%
-    private const int MinimumTriggers = 5; // Need at least 5 triggers for reliable statistics
-    private const int DaysConsideredInactive = 30; // Remove if not triggered in 30 days
-    private const decimal PerformanceThresholdMs = 200.0m; // Trigger performance cleanup if >200ms avg
 
     public StopWordRecommendationService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -146,16 +138,16 @@ public class StopWordRecommendationService : IStopWordRecommendationService
             .CountAsync(cancellationToken);
 
         // Validate minimum requirements
-        if (spamSampleCount < MinimumSpamSamples)
+        if (spamSampleCount < MLConstants.MinimumSpamSamples)
         {
             return (spamSampleCount, legitMessageCount, detectionResultCount,
-                $"Insufficient spam samples: {spamSampleCount} found, need at least {MinimumSpamSamples}");
+                $"Insufficient spam samples: {spamSampleCount} found, need at least {MLConstants.MinimumSpamSamples}");
         }
 
-        if (legitMessageCount < MinimumLegitMessages)
+        if (legitMessageCount < MLConstants.MinimumLegitMessages)
         {
             return (spamSampleCount, legitMessageCount, detectionResultCount,
-                $"Insufficient legitimate messages: {legitMessageCount} found, need at least {MinimumLegitMessages}");
+                $"Insufficient legitimate messages: {legitMessageCount} found, need at least {MLConstants.MinimumLegitMessages}");
         }
 
         return (spamSampleCount, legitMessageCount, detectionResultCount, null);
@@ -275,8 +267,8 @@ public class StopWordRecommendationService : IStopWordRecommendationService
             var legitFreqPercent = (decimal)legitCount / totalLegitMessages * 100m;
 
             // Filter by frequency thresholds
-            if (spamFreqPercent < MinimumSpamFrequencyPercent ||
-                legitFreqPercent >= MaximumLegitFrequencyPercent)
+            if (spamFreqPercent < MLConstants.MinimumSpamFrequencyPercent ||
+                legitFreqPercent >= MLConstants.MaximumLegitFrequencyPercent)
             {
                 continue;
             }
@@ -390,7 +382,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
                 continue;
             }
 
-            if (totalTriggers < MinimumTriggers)
+            if (totalTriggers < MLConstants.MinimumTriggers)
             {
                 // Skip - insufficient data for reliable statistics
                 continue;
@@ -408,12 +400,12 @@ public class StopWordRecommendationService : IStopWordRecommendationService
             var shouldRemove = false;
             var removalReason = "";
 
-            if (precisionPercent < MinimumPrecisionPercent)
+            if (precisionPercent < MLConstants.MinimumPrecisionPercent)
             {
                 shouldRemove = true;
                 removalReason = $"Low precision ({precisionPercent:F1}%) - causes too many false positives";
             }
-            else if (daysSinceLastTrigger.HasValue && daysSinceLastTrigger.Value > DaysConsideredInactive)
+            else if (daysSinceLastTrigger.HasValue && daysSinceLastTrigger.Value > MLConstants.DaysConsideredInactive)
             {
                 shouldRemove = true;
                 removalReason = $"Not triggered in {daysSinceLastTrigger} days (inactive)";
@@ -452,7 +444,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         // Step 1: Check if performance cleanup is needed
         var avgExecutionTime = await GetAverageStopWordsExecutionTimeAsync(since, cancellationToken);
 
-        if (!avgExecutionTime.HasValue || avgExecutionTime.Value <= PerformanceThresholdMs)
+        if (!avgExecutionTime.HasValue || avgExecutionTime.Value <= MLConstants.PerformanceThresholdMs)
         {
             // Performance is acceptable - no cleanup needed
             return [];
@@ -460,7 +452,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
 
         _logger.LogInformation(
             "StopWords check average execution time ({AvgMs}ms) exceeds threshold ({ThresholdMs}ms) - generating performance cleanup recommendations",
-            avgExecutionTime.Value, PerformanceThresholdMs);
+            avgExecutionTime.Value, MLConstants.PerformanceThresholdMs);
 
         // Step 2: Reuse removal recommendations logic to get word statistics
         var removalRecommendations = await GenerateRemovalRecommendationsAsync(since, cancellationToken);

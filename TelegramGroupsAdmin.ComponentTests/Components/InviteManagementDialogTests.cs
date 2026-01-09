@@ -231,7 +231,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite() };
+        List<InviteWithCreator> invites = [CreateTestInvite()];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -249,7 +249,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite() };
+        List<InviteWithCreator> invites = [CreateTestInvite()];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -272,7 +272,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite() };
+        List<InviteWithCreator> invites = [CreateTestInvite()];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -294,7 +294,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(status: InviteStatus.Pending) };
+        List<InviteWithCreator> invites = [CreateTestInvite(status: InviteStatus.Pending)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -312,7 +312,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(status: InviteStatus.Used) };
+        List<InviteWithCreator> invites = [CreateTestInvite(status: InviteStatus.Used)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -330,7 +330,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(status: InviteStatus.Revoked) };
+        List<InviteWithCreator> invites = [CreateTestInvite(status: InviteStatus.Revoked)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -352,7 +352,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.Admin) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.Admin)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -370,7 +370,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.Owner) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.Owner)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -388,7 +388,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.GlobalAdmin) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.GlobalAdmin)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -410,7 +410,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange - Admin user viewing an Admin-level invite
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.Admin) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.Admin)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -432,7 +432,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange - Admin user viewing a GlobalAdmin-level invite
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.GlobalAdmin) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.GlobalAdmin)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -455,7 +455,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange - Admin user viewing an Owner-level invite
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.Owner) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.Owner)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -478,7 +478,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange - GlobalAdmin user viewing an Admin-level invite
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.Admin) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.Admin)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -499,7 +499,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange - GlobalAdmin user viewing a GlobalAdmin-level invite
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.GlobalAdmin) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.GlobalAdmin)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -520,7 +520,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange - GlobalAdmin user viewing an Owner-level invite
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(permissionLevel: PermissionLevel.Owner) };
+        List<InviteWithCreator> invites = [CreateTestInvite(permissionLevel: PermissionLevel.Owner)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act
@@ -608,7 +608,7 @@ public class InviteManagementDialogTests : InviteManagementDialogTestContext
     {
         // Arrange
         var provider = RenderDialogProvider();
-        var invites = new List<InviteWithCreator> { CreateTestInvite(status: InviteStatus.Pending) };
+        List<InviteWithCreator> invites = [CreateTestInvite(status: InviteStatus.Pending)];
         InviteService.GetAllInvitesAsync(Arg.Any<string>()).Returns(invites);
 
         // Act

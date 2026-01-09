@@ -15,14 +15,14 @@ public interface IChatService
     /// <param name="systemPrompt">System prompt defining AI behavior</param>
     /// <param name="userPrompt">User message/query</param>
     /// <param name="options">Optional parameters for the completion</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Completion result or null if the feature is not configured or the request failed</returns>
     Task<ChatCompletionResult?> GetCompletionAsync(
         AIFeatureType feature,
         string systemPrompt,
         string userPrompt,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a vision-based chat completion for a specific feature (for models that support images)
@@ -33,7 +33,7 @@ public interface IChatService
     /// <param name="imageData">Image bytes</param>
     /// <param name="mimeType">Image MIME type (e.g., "image/jpeg", "image/png")</param>
     /// <param name="options">Optional parameters for the completion</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Completion result or null if the feature is not configured, vision not supported, or request failed</returns>
     Task<ChatCompletionResult?> GetVisionCompletionAsync(
         AIFeatureType feature,
@@ -42,15 +42,15 @@ public interface IChatService
         byte[] imageData,
         string mimeType,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Check if a feature is configured and ready to use
     /// </summary>
     /// <param name="feature">The AI feature type</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if the feature is configured with a valid, enabled connection</returns>
-    Task<bool> IsFeatureAvailableAsync(AIFeatureType feature, CancellationToken ct = default);
+    Task<bool> IsFeatureAvailableAsync(AIFeatureType feature, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Invalidate cached kernel for a connection (call when connection config changes)
@@ -68,7 +68,7 @@ public interface IChatService
     /// <param name="systemPrompt">System prompt for the test</param>
     /// <param name="userPrompt">User prompt for the test</param>
     /// <param name="options">Optional parameters</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Completion result or null if the test failed</returns>
     Task<ChatCompletionResult?> TestCompletionAsync(
         string connectionId,
@@ -77,7 +77,7 @@ public interface IChatService
         string systemPrompt,
         string userPrompt,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Test a vision completion with a specific connection and model (for Settings UI testing)
@@ -91,7 +91,7 @@ public interface IChatService
     /// <param name="imageData">Test image bytes</param>
     /// <param name="mimeType">Image MIME type</param>
     /// <param name="options">Optional parameters</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Completion result or null if the test failed</returns>
     Task<ChatCompletionResult?> TestVisionCompletionAsync(
         string connectionId,
@@ -102,5 +102,5 @@ public interface IChatService
         byte[] imageData,
         string mimeType,
         ChatCompletionOptions? options = null,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 }

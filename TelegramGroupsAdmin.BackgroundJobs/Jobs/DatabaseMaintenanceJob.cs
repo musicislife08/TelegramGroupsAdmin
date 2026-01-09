@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -133,7 +134,7 @@ public class DatabaseMaintenanceJob : IJob
         var startTime = DateTime.UtcNow;
 
         await using var cmd = new NpgsqlCommand(command, connection);
-        cmd.CommandTimeout = 600; // 10 minutes - maintenance can take time on large databases
+        cmd.CommandTimeout = DatabaseMaintenanceConstants.CommandTimeoutSeconds;
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 

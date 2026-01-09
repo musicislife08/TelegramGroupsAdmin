@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Services;
@@ -39,6 +41,10 @@ public class ImpersonationDetectionServiceTests
     private const long TestAdminId = 789012;
     private const long TestChannelId = -1009876543210;
 
+    // Helper methods to create test SDK objects
+    private static User CreateTestSdkUser(long id = TestUserId) => new() { Id = id, FirstName = "Test", LastName = "User" };
+    private static Chat CreateTestSdkChat(long id = TestChatId) => new() { Id = id, Type = ChatType.Supergroup, Title = "Test Chat" };
+
     [SetUp]
     public void SetUp()
     {
@@ -49,7 +55,7 @@ public class ImpersonationDetectionServiceTests
         _mockConfigService = Substitute.For<IConfigService>();
 
         // Default config: check first 5 messages
-        _mockConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, Arg.Any<long>())
+        _mockConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Arg.Any<long>())
             .Returns(new ContentDetectionConfig { FirstMessagesCount = 5 });
 
         // Note: Full service instantiation requires concrete dependencies that can't be mocked.
@@ -186,6 +192,7 @@ public class ImpersonationDetectionServiceTests
             PhotoFileUniqueId: null,
             IsBot: false,
             IsTrusted: isTrusted,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow,
             LastSeenAt: DateTimeOffset.UtcNow,
@@ -205,9 +212,9 @@ public class ImpersonationDetectionServiceTests
         {
             TotalScore = 50,
             RiskLevel = ImpersonationRiskLevel.Medium,
-            SuspectedUserId = TestUserId,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             TargetUserId = TestAdminId,
-            ChatId = TestChatId,
             NameMatch = true,
             PhotoMatch = false
         };
@@ -228,9 +235,9 @@ public class ImpersonationDetectionServiceTests
         {
             TotalScore = 100,
             RiskLevel = ImpersonationRiskLevel.Critical,
-            SuspectedUserId = TestUserId,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             TargetUserId = TestAdminId,
-            ChatId = TestChatId,
             NameMatch = true,
             PhotoMatch = true,
             PhotoSimilarityScore = 0.95
@@ -253,9 +260,9 @@ public class ImpersonationDetectionServiceTests
         {
             TotalScore = 49,
             RiskLevel = ImpersonationRiskLevel.Medium, // Medium is lowest risk level in enum
-            SuspectedUserId = TestUserId,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             TargetUserId = TestAdminId,
-            ChatId = TestChatId,
             NameMatch = false,
             PhotoMatch = false
         };
@@ -275,10 +282,10 @@ public class ImpersonationDetectionServiceTests
         var result = new ImpersonationCheckResult
         {
             TotalScore = 50,
-            SuspectedUserId = TestUserId,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             TargetUserId = TestAdminId,
-            TargetEntityType = ProtectedEntityType.User,
-            ChatId = TestChatId
+            TargetEntityType = ProtectedEntityType.User
             // TargetEntityId not set - should default to 0
         };
 
@@ -293,12 +300,12 @@ public class ImpersonationDetectionServiceTests
         var result = new ImpersonationCheckResult
         {
             TotalScore = 50,
-            SuspectedUserId = TestUserId,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             TargetUserId = 0,
             TargetEntityType = ProtectedEntityType.Channel,
             TargetEntityId = TestChannelId,
-            TargetEntityName = "Official Channel",
-            ChatId = TestChatId
+            TargetEntityName = "Official Channel"
         };
 
         // Assert
@@ -317,12 +324,12 @@ public class ImpersonationDetectionServiceTests
         var result = new ImpersonationCheckResult
         {
             TotalScore = 50,
-            SuspectedUserId = TestUserId,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             TargetUserId = 0,
             TargetEntityType = ProtectedEntityType.Chat,
             TargetEntityId = TestChatId,
-            TargetEntityName = "Main Group",
-            ChatId = TestChatId
+            TargetEntityName = "Main Group"
         };
 
         // Assert
@@ -331,6 +338,29 @@ public class ImpersonationDetectionServiceTests
             Assert.That(result.TargetEntityType, Is.EqualTo(ProtectedEntityType.Chat));
             Assert.That(result.TargetEntityId, Is.EqualTo(TestChatId));
             Assert.That(result.TargetEntityName, Is.EqualTo("Main Group"));
+        });
+    }
+
+    [Test]
+    public void ImpersonationCheckResult_SdkObjects_ProvideUserAndChatContext()
+    {
+        // Verify that SDK objects are stored and accessible for logging/context
+        var user = CreateTestSdkUser(999);
+        var chat = CreateTestSdkChat(-1001111111111);
+
+        var result = new ImpersonationCheckResult
+        {
+            TotalScore = 50,
+            SuspectedUser = user,
+            DetectionChat = chat,
+            TargetUserId = TestAdminId
+        };
+
+        // Assert - access IDs directly from SDK objects
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.SuspectedUser.Id, Is.EqualTo(999), "SuspectedUser.Id should be accessible");
+            Assert.That(result.DetectionChat.Id, Is.EqualTo(-1001111111111), "DetectionChat.Id should be accessible");
         });
     }
 
@@ -346,6 +376,8 @@ public class ImpersonationDetectionServiceTests
         {
             TotalScore = 50,
             RiskLevel = ImpersonationRiskLevel.Medium,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             NameMatch = true,
             PhotoMatch = false
         };
@@ -361,6 +393,8 @@ public class ImpersonationDetectionServiceTests
         {
             TotalScore = 100,
             RiskLevel = ImpersonationRiskLevel.Critical,
+            SuspectedUser = CreateTestSdkUser(),
+            DetectionChat = CreateTestSdkChat(),
             NameMatch = true,
             PhotoMatch = true
         };

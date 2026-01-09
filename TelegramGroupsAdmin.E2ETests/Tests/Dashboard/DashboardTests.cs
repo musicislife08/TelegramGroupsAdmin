@@ -124,8 +124,8 @@ public class DashboardTests : AuthenticatedTestBase
         // async lambdas don't work correctly with Assert.Multiple (NUnit doesn't await them)
         Assert.That(await _homePage.IsViewMessagesButtonVisibleAsync(), Is.True,
             "View Messages button should be visible");
-        Assert.That(await _homePage.IsRefreshStatsButtonVisibleAsync(), Is.True,
-            "Refresh Stats button should be visible");
+        Assert.That(await _homePage.IsRefreshButtonVisibleAsync(), Is.True,
+            "Refresh button should be visible");
     }
 
     [Test]
@@ -144,15 +144,15 @@ public class DashboardTests : AuthenticatedTestBase
     }
 
     [Test]
-    public async Task Dashboard_RefreshStats_ReloadsData()
+    public async Task Dashboard_RefreshButton_ReloadsData()
     {
         // Arrange
         await LoginAsOwnerAsync();
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        // Act - click Refresh Stats
-        await _homePage.ClickRefreshStatsAsync();
+        // Act - click Refresh
+        await _homePage.ClickRefreshAsync();
 
         // Assert - loading indicator appears briefly then data reloads
         // We verify by checking that the stats are still visible after refresh
@@ -201,4 +201,114 @@ public class DashboardTests : AuthenticatedTestBase
         Assert.That(await _homePage.AreStatsVisibleAsync(), Is.True,
             "GlobalAdmin should be able to view dashboard stats");
     }
+
+    #region Enhanced Dashboard Tests (#173)
+
+    [Test]
+    public async Task Dashboard_ShowsNewStatCards_WhenLoaded()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        // Act
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Assert - new stat cards have values (even if 0)
+        var spam24h = await _homePage.GetSpam24hAsync();
+        var activeBans = await _homePage.GetActiveBansAsync();
+        var trustedUsers = await _homePage.GetTrustedUsersAsync();
+        var pendingReports = await _homePage.GetPendingReportsCountAsync();
+
+        Assert.That(spam24h, Is.Not.Null.And.Not.Empty,
+            "Spam (24h) stat should have a value");
+        Assert.That(activeBans, Is.Not.Null.And.Not.Empty,
+            "Active Bans stat should have a value");
+        Assert.That(trustedUsers, Is.Not.Null.And.Not.Empty,
+            "Trusted Users stat should have a value");
+        Assert.That(pendingReports, Is.Not.Null.And.Not.Empty,
+            "Pending Reports stat should have a value");
+    }
+
+    [Test]
+    public async Task Dashboard_ShowsZeroPendingReports_WhenNoPendingReports()
+    {
+        // Arrange - fresh database has 0 reports
+        await LoginAsOwnerAsync();
+
+        // Act
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Assert
+        var pendingReports = await _homePage.GetPendingReportsCountAsync();
+        Assert.That(pendingReports, Is.EqualTo("0"),
+            "Fresh database should show 0 pending reports");
+    }
+
+    [Test]
+    public async Task Dashboard_PendingReportsCard_NavigatesToReports_WhenClicked()
+    {
+        // Arrange - fresh database has 0 reports
+        await LoginAsOwnerAsync();
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Act - click should navigate to reports (always clickable, even when 0)
+        await _homePage.ClickPendingReportsCardAsync();
+
+        // Assert - should navigate to reports page
+        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/reports"));
+    }
+
+    [Test]
+    public async Task Dashboard_ShowsActivityFeedSection()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        // Act
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Assert - Recent Activity section should be visible
+        Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
+            "Recent Activity section should be visible");
+    }
+
+    [Test]
+    public async Task Dashboard_ShowsEmptyActivityFeed_WhenNoActions()
+    {
+        // Arrange - fresh database
+        await LoginAsOwnerAsync();
+
+        // Act
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Assert - Activity feed section should show but be empty
+        Assert.That(await _homePage.IsActivityFeedVisibleAsync(), Is.True,
+            "Activity feed section should be visible");
+        // With no actions, the list item count should be 0
+        var itemCount = await _homePage.GetActivityFeedItemCountAsync();
+        Assert.That(itemCount, Is.EqualTo(0),
+            "Activity feed should have no items when database is empty");
+    }
+
+    [Test]
+    public async Task Dashboard_ShowsReviewReportsButton()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        // Act
+        await _homePage.NavigateAsync();
+        await _homePage.WaitForLoadAsync();
+
+        // Assert - Review Reports button should be visible
+        Assert.That(await _homePage.IsReviewReportsButtonVisibleAsync(), Is.True,
+            "Review Reports button should be visible");
+    }
+
+    #endregion
 }

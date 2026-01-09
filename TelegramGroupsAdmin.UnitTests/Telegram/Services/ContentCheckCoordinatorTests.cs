@@ -4,8 +4,8 @@ using NSubstitute;
 using NUnit.Framework;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -23,9 +23,9 @@ public class ContentCheckCoordinatorTests
     private IContentDetectionEngine _mockSpamDetectionEngine = null!;
     private IServiceProvider _mockServiceProvider = null!;
     private ILogger<ContentCheckCoordinator> _mockLogger = null!;
-    private IUserActionsRepository _mockUserActionsRepository = null!;
+    private ITelegramUserRepository _mockUserRepository = null!;
     private IChatAdminsRepository _mockChatAdminsRepository = null!;
-    private IContentCheckConfigRepository _mockContentCheckConfigRepo = null!;
+    private IConfigService _mockConfigService = null!;
     private IServiceScope _mockScope = null!;
     private ContentCheckCoordinator _coordinator = null!;
 
@@ -36,21 +36,22 @@ public class ContentCheckCoordinatorTests
         _mockSpamDetectionEngine = Substitute.For<IContentDetectionEngine>();
         _mockServiceProvider = Substitute.For<IServiceProvider>();
         _mockLogger = Substitute.For<ILogger<ContentCheckCoordinator>>();
-        _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
+        _mockUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockChatAdminsRepository = Substitute.For<IChatAdminsRepository>();
-        _mockContentCheckConfigRepo = Substitute.For<IContentCheckConfigRepository>();
+        _mockConfigService = Substitute.For<IConfigService>();
         _mockScope = Substitute.For<IServiceScope>();
 
         // Create a mock scope service provider
         var mockScopeServiceProvider = Substitute.For<IServiceProvider>();
 
         // Setup scope service provider to return mocked repositories
-        mockScopeServiceProvider.GetService(typeof(IUserActionsRepository))
-            .Returns(_mockUserActionsRepository);
+        // REFACTOR-5: Use ITelegramUserRepository for trust checks (source of truth)
+        mockScopeServiceProvider.GetService(typeof(ITelegramUserRepository))
+            .Returns(_mockUserRepository);
         mockScopeServiceProvider.GetService(typeof(IChatAdminsRepository))
             .Returns(_mockChatAdminsRepository);
-        mockScopeServiceProvider.GetService(typeof(IContentCheckConfigRepository))
-            .Returns(_mockContentCheckConfigRepo);
+        mockScopeServiceProvider.GetService(typeof(IConfigService))
+            .Returns(_mockConfigService);
 
         // Setup scope to return the mocked scope service provider
         _mockScope.ServiceProvider.Returns(mockScopeServiceProvider);
@@ -74,17 +75,22 @@ public class ContentCheckCoordinatorTests
         _mockScope?.Dispose();
     }
 
-    #region Service Account Tests (Critical - Race Condition Prevention)
+    #region System Account Tests (Critical - Race Condition Prevention)
 
     [Test]
-    public async Task CheckAsync_ServiceAccount_SkipsAllChecks_NoRepositoryQueries()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task CheckAsync_SystemAccount_SkipsAllChecks_NoRepositoryQueries(long systemUserId)
     {
-        // Arrange
+        // Arrange - All Telegram system accounts should bypass all checks
         var request = new SpamLibRequest
         {
-            UserId = TelegramConstants.ServiceAccountUserId, // 777000
+            UserId = systemUserId,
             ChatId = -1001234567890,
-            Message = "Channel post content"
+            Message = "System account content"
         };
 
         // Act
@@ -94,21 +100,21 @@ public class ContentCheckCoordinatorTests
         Assert.Multiple(() =>
         {
             // Result validation
-            Assert.That(result.IsUserTrusted, Is.True, "Service account should be marked as trusted");
-            Assert.That(result.IsUserAdmin, Is.False, "Service account is not a chat admin");
+            Assert.That(result.IsUserTrusted, Is.True, "System account should be marked as trusted");
+            Assert.That(result.IsUserAdmin, Is.False, "System account is not a chat admin");
             Assert.That(result.SpamCheckSkipped, Is.True, "Spam checks should be skipped");
-            Assert.That(result.SkipReason, Does.Contain("Telegram service account"));
-            Assert.That(result.CriticalCheckViolations, Is.Empty, "No violations for service account");
+            Assert.That(result.SkipReason, Does.Contain("Telegram system account"));
+            Assert.That(result.CriticalCheckViolations, Is.Empty, "No violations for system account");
             Assert.That(result.SpamResult, Is.Null, "No spam detection should run");
         });
 
         // CRITICAL: Verify NO repository queries were made (race condition prevention)
-        await _mockUserActionsRepository.DidNotReceive()
-            .IsUserTrustedAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockUserRepository.DidNotReceive()
+            .IsTrustedAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
         await _mockChatAdminsRepository.DidNotReceive()
             .IsAdminAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
-        await _mockContentCheckConfigRepo.DidNotReceive()
-            .GetCriticalChecksAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await _mockConfigService.DidNotReceive()
+            .GetCriticalCheckNamesAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
 
         // Verify spam detection engine was NOT called
         await _mockSpamDetectionEngine.DidNotReceive()
@@ -116,12 +122,17 @@ public class ContentCheckCoordinatorTests
     }
 
     [Test]
-    public async Task CheckAsync_ServiceAccount_SkipsEvenWithCriticalChecksConfigured()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task CheckAsync_SystemAccount_SkipsEvenWithCriticalChecksConfigured(long systemUserId)
     {
-        // Arrange - Even if critical checks exist, service account bypasses ALL checks
+        // Arrange - Even if critical checks exist, system accounts bypass ALL checks
         var request = new SpamLibRequest
         {
-            UserId = TelegramConstants.ServiceAccountUserId,
+            UserId = systemUserId,
             ChatId = -1001234567890,
             Message = "https://malicious-link.com" // Would normally trigger URL check
         };
@@ -133,13 +144,13 @@ public class ContentCheckCoordinatorTests
         Assert.Multiple(() =>
         {
             Assert.That(result.SpamCheckSkipped, Is.True);
-            Assert.That(result.SkipReason, Does.Contain("Telegram service account"));
-            Assert.That(result.SpamResult, Is.Null, "No spam detection for service account");
+            Assert.That(result.SkipReason, Does.Contain("Telegram system account"));
+            Assert.That(result.SpamResult, Is.Null, "No spam detection for system account");
         });
 
         // Verify NO critical checks query was made
-        await _mockContentCheckConfigRepo.DidNotReceive()
-            .GetCriticalChecksAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await _mockConfigService.DidNotReceive()
+            .GetCriticalCheckNamesAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -157,12 +168,12 @@ public class ContentCheckCoordinatorTests
             Message = "Normal message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string>());
 
         // Act
         var result = await _coordinator.CheckAsync(request);
@@ -194,25 +205,14 @@ public class ContentCheckCoordinatorTests
             Message = "Normal message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        // Configure critical checks
-        var criticalCheck = new ContentCheckConfig(
-            Id: 1,
-            ChatId: request.ChatId,
-            CheckName: "URLCheck",
-            Enabled: true,
-            AlwaysRun: true,
-            ConfidenceThreshold: null,
-            ConfigurationJson: null,
-            ModifiedDate: DateTimeOffset.UtcNow,
-            ModifiedBy: "System"
-        );
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([criticalCheck]);
+        // Configure critical checks - now returns just the check names
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string> { "URLCheck" });
 
         // Mock detection result with NO violations
         var detectionResult = new ContentDetectionResult
@@ -258,25 +258,14 @@ public class ContentCheckCoordinatorTests
             Message = "https://malicious-link.com"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        // Configure critical URL check
-        var criticalCheck = new ContentCheckConfig(
-            Id: 1,
-            ChatId: request.ChatId,
-            CheckName: nameof(CheckName.UrlBlocklist), // "UrlBlocklist"
-            Enabled: true,
-            AlwaysRun: true,
-            ConfidenceThreshold: null,
-            ConfigurationJson: null,
-            ModifiedDate: DateTimeOffset.UtcNow,
-            ModifiedBy: "System"
-        );
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([criticalCheck]);
+        // Configure critical URL check - returns check names where AlwaysRun=true
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string> { nameof(CheckName.UrlBlocklist) });
 
         // Mock detection result WITH violation
         var detectionResult = new ContentDetectionResult
@@ -329,12 +318,12 @@ public class ContentCheckCoordinatorTests
             Message = "Admin message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string>());
 
         // Act
         var result = await _coordinator.CheckAsync(request);
@@ -365,24 +354,13 @@ public class ContentCheckCoordinatorTests
             Message = "Admin message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var criticalCheck = new ContentCheckConfig(
-            Id: 1,
-            ChatId: request.ChatId,
-            CheckName: "URLCheck",
-            Enabled: true,
-            AlwaysRun: true,
-            ConfidenceThreshold: null,
-            ConfigurationJson: null,
-            ModifiedDate: DateTimeOffset.UtcNow,
-            ModifiedBy: "System"
-        );
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([criticalCheck]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string> { "URLCheck" });
 
         // Mock clean result (no violations)
         var detectionResult = new ContentDetectionResult
@@ -422,12 +400,12 @@ public class ContentCheckCoordinatorTests
             Message = "Suspicious message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string>());
 
         var detectionResult = new ContentDetectionResult
         {
@@ -482,12 +460,12 @@ public class ContentCheckCoordinatorTests
             IsUserAdmin = false
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string>());
 
         var detectionResult = new ContentDetectionResult { IsSpam = false };
         _mockSpamDetectionEngine.CheckMessageAsync(Arg.Any<SpamLibRequest>(), Arg.Any<CancellationToken>())
@@ -521,21 +499,15 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        // Mix of enabled/disabled and always_run/normal checks
-        var checks = new List<ContentCheckConfig>
-        {
-            new(1, request.ChatId, "URLCheck", true, true, null, null, DateTimeOffset.UtcNow, "System"),       // Should count
-            new(2, request.ChatId, "BayesianClassifier", true, false, null, null, DateTimeOffset.UtcNow, "System"), // Should NOT count
-            new(3, request.ChatId, "ImageSpam", false, true, null, null, DateTimeOffset.UtcNow, "System"),     // Should NOT count (disabled)
-            new(4, request.ChatId, "CASBan", true, true, null, null, DateTimeOffset.UtcNow, "System")          // Should count
-        };
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns(checks);
+        // GetCriticalCheckNamesAsync now returns only enabled+alwaysRun check names
+        // (filtering happens in the repository, not here in the test)
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string> { "URLCheck", "CASBan" });
 
         var detectionResult = new ContentDetectionResult
         {
@@ -563,24 +535,13 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var criticalCheck = new ContentCheckConfig(
-            Id: 1,
-            ChatId: request.ChatId,
-            CheckName: nameof(CheckName.UrlBlocklist), // "UrlBlocklist"
-            Enabled: true,
-            AlwaysRun: true,
-            ConfidenceThreshold: null,
-            ConfigurationJson: null,
-            ModifiedDate: DateTimeOffset.UtcNow,
-            ModifiedBy: "System"
-        );
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([criticalCheck]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string> { nameof(CheckName.UrlBlocklist) });
 
         var detectionResult = new ContentDetectionResult
         {
@@ -627,12 +588,12 @@ public class ContentCheckCoordinatorTests
             Message = "Message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string>());
 
         // Act
         var result = await _coordinator.CheckAsync(request);
@@ -657,24 +618,13 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var criticalCheck = new ContentCheckConfig(
-            Id: 1,
-            ChatId: request.ChatId,
-            CheckName: "URLCheck",
-            Enabled: true,
-            AlwaysRun: true,
-            ConfidenceThreshold: null,
-            ConfigurationJson: null,
-            ModifiedDate: DateTimeOffset.UtcNow,
-            ModifiedBy: "System"
-        );
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([criticalCheck]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string> { "URLCheck" });
 
         // Return result with null CheckResults (testing defensive coding)
         var detectionResult = new ContentDetectionResult
@@ -701,25 +651,14 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
 
         // Config has "urlblocklist" (lowercase) - should match "UrlBlocklist" case-insensitively
-        var criticalCheck = new ContentCheckConfig(
-            Id: 1,
-            ChatId: request.ChatId,
-            CheckName: "urlblocklist",
-            Enabled: true,
-            AlwaysRun: true,
-            ConfidenceThreshold: null,
-            ConfigurationJson: null,
-            ModifiedDate: DateTimeOffset.UtcNow,
-            ModifiedBy: "System"
-        );
-        _mockContentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, Arg.Any<CancellationToken>())
-            .Returns([criticalCheck]);
+        _mockConfigService.GetCriticalCheckNamesAsync(request.ChatId, Arg.Any<CancellationToken>())
+            .Returns(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "urlblocklist" });
 
         // Detection returns "UrlBlocklist" (different case from config)
         var detectionResult = new ContentDetectionResult

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Auth;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Services.Auth;
@@ -40,8 +41,16 @@ public class AuthCookieService : IAuthCookieService
             new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+                ExpiresUtc = DateTimeOffset.UtcNow.Add(AuthenticationConstants.CookieExpiration)
             });
+    }
+
+    /// <summary>
+    /// Signs out a user by clearing the authentication cookie.
+    /// </summary>
+    public async Task SignOutAsync(HttpContext context)
+    {
+        await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     }
 
     /// <summary>
@@ -59,7 +68,7 @@ public class AuthCookieService : IAuthCookieService
             new AuthenticationProperties
             {
                 IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30),
+                ExpiresUtc = DateTimeOffset.UtcNow.Add(AuthenticationConstants.CookieExpiration),
                 IssuedUtc = DateTimeOffset.UtcNow
             },
             CookieAuthenticationDefaults.AuthenticationScheme);

@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- EF1002: ExecuteSqlRawAsync SQL injection warning - safe to suppress in tests (all SQL is hardcoded constants, no user input) -->
+    <NoWarn>$(NoWarn);EF1002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +16,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="NSubstitute" Version="5.3.0" />
@@ -22,9 +25,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="NUnit3TestAdapter" Version="5.2.0" />
-    <PackageReference Include="Testcontainers.PostgreSql" Version="4.9.0" />
-    <PackageReference Include="WireMock.Net" Version="1.16.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.0.1" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.10.0" />
+    <PackageReference Include="WireMock.Net" Version="1.23.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,6 +40,25 @@
     <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Telegram\TelegramGroupsAdmin.Telegram.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin\TelegramGroupsAdmin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Base data scripts (FK dependency order) -->
+    <EmbeddedResource Include="TestData\SQL\00_base_telegram_users.sql" />
+    <EmbeddedResource Include="TestData\SQL\01_base_web_users.sql" />
+    <EmbeddedResource Include="TestData\SQL\02_base_managed_chats.sql" />
+    <EmbeddedResource Include="TestData\SQL\03_base_linked_channels.sql" />
+    <EmbeddedResource Include="TestData\SQL\04_base_messages.sql" />
+    <EmbeddedResource Include="TestData\SQL\05_base_detection_results.sql" />
+    <EmbeddedResource Include="TestData\SQL\06_base_content_detection_configs.sql" />
+    <!-- Training data scripts -->
+    <EmbeddedResource Include="TestData\SQL\10_training_minimal.sql" />
+    <EmbeddedResource Include="TestData\SQL\11_training_full.sql" />
+    <EmbeddedResource Include="TestData\SQL\20_unbalanced_100_20.sql" />
+    <EmbeddedResource Include="TestData\SQL\21_unbalanced_20_100.sql" />
+    <EmbeddedResource Include="TestData\SQL\30_dedup_test_data.sql" />
+    <!-- Legacy (to be removed after migration) -->
+    <EmbeddedResource Include="TestData\MLTrainingData.sql" />
   </ItemGroup>
 
 </Project>

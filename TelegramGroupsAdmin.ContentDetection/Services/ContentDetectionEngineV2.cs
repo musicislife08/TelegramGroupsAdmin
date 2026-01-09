@@ -2,16 +2,17 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Telemetry;
-using OpenAIConfigDb = TelegramGroupsAdmin.Configuration.Models.OpenAIConfig;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -24,7 +25,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngineV2> _logger;
     private readonly IContentDetectionConfigRepository _configRepository;
-    private readonly ISystemConfigRepository _fileScanningConfigRepo;
+    private readonly ISystemConfigRepository _systemConfigRepo;
+    private readonly IPromptVersionRepository _promptVersionRepo;
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
     private readonly IAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
@@ -36,7 +38,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     public ContentDetectionEngineV2(
         ILogger<ContentDetectionEngineV2> logger,
         IContentDetectionConfigRepository configRepository,
-        ISystemConfigRepository fileScanningConfigRepo,
+        ISystemConfigRepository systemConfigRepo,
+        IPromptVersionRepository promptVersionRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
         IAITranslationService translationService,
         IUrlPreFilterService preFilterService,
@@ -44,7 +47,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     {
         _logger = logger;
         _configRepository = configRepository;
-        _fileScanningConfigRepo = fileScanningConfigRepo;
+        _systemConfigRepo = systemConfigRepo;
+        _promptVersionRepo = promptVersionRepo;
         _contentChecksV2 = contentChecksV2;
         _translationService = translationService;
         _preFilterService = preFilterService;
@@ -84,8 +88,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             if (hardBlock.ShouldBlock)
             {
                 _logger.LogWarning(
-                    "Hard block triggered for user {UserId} in chat {ChatId}: {Reason}",
-                    request.UserId, request.ChatId, hardBlock.Reason);
+                    "Hard block triggered for {User} in chat {ChatId}: {Reason}",
+                    LogDisplayName.UserDebug(request.UserName, request.UserId), request.ChatId, hardBlock.Reason);
 
                 var hardBlockResult = new ContentDetectionResult
                 {
@@ -115,39 +119,44 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             }
         }
 
-        // Run all non-OpenAI V2 checks
-        var nonOpenAIResult = await CheckMessageWithoutOpenAIAsync(request, cancellationToken);
+        // Run all non-AI pipeline checks
+        var pipelineResult = await RunPipelineChecksAsync(request, cancellationToken);
 
-        // Load infrastructure-level OpenAI config (global kill switch)
-        var openAIConfig = await _fileScanningConfigRepo.GetOpenAIConfigAsync(cancellationToken);
+        // Load AI provider config (connection + feature settings)
+        var aiProviderConfig = await _systemConfigRepo.GetAIProviderConfigAsync(cancellationToken);
+        var spamFeatureConfig = aiProviderConfig?.Features.GetValueOrDefault(AIFeatureType.SpamDetection);
+        var connection = aiProviderConfig?.Connections.FirstOrDefault(c => c.Id == spamFeatureConfig?.ConnectionId);
 
-        // Check BOTH infrastructure.Enabled (global) AND spamdetection.OpenAI.Enabled (per-chat)
-        var infrastructureEnabled = openAIConfig?.Enabled ?? false;
-        var spamDetectionEnabled = config.OpenAI.Enabled;
+        // Check BOTH infrastructure.Enabled (connection active) AND spamdetection.AIVeto.Enabled (per-chat)
+        var infrastructureEnabled = connection?.Enabled ?? false;
+        var spamDetectionEnabled = config.AIVeto.Enabled;
 
-        // Veto mode: Run OpenAI to confirm ANY spam detection (even low confidence)
+        // AI always runs as veto to confirm ANY spam detection (even low confidence)
         // This reduces false positives by having AI double-check all spam signals
-        var hasAnySpam = nonOpenAIResult.NetConfidence > 0;  // Any check contributed points (NetConfidence = totalScore * 20)
-        var shouldRunOpenAI = hasAnySpam
+        var hasAnySpam = pipelineResult.NetConfidence > 0;  // Any check contributed points (NetConfidence = totalScore * 20)
+        var shouldRunAIVeto = hasAnySpam
             && infrastructureEnabled  // Global kill switch
-            && spamDetectionEnabled   // Per-chat spam detection toggle
-            && config.OpenAI.VetoMode;
+            && spamDetectionEnabled;  // Per-chat spam detection toggle
 
-        _logger.LogInformation("[V2 DEBUG] OpenAI veto decision: HasAnySpam={HasAnySpam}, NetConf={NetConf}, InfraEnabled={InfraEnabled}, SpamDetectionEnabled={SpamEnabled}, VetoMode={VetoMode}, shouldRunOpenAI={ShouldRun}",
-            hasAnySpam, nonOpenAIResult.NetConfidence, infrastructureEnabled, spamDetectionEnabled, config.OpenAI.VetoMode, shouldRunOpenAI);
+        _logger.LogDebug("AI veto decision: HasAnySpam={HasAnySpam}, NetConf={NetConf}, InfraEnabled={InfraEnabled}, SpamDetectionEnabled={SpamEnabled}, ShouldRun={ShouldRun}",
+            hasAnySpam, pipelineResult.NetConfidence, infrastructureEnabled, spamDetectionEnabled, shouldRunAIVeto);
 
-        if (shouldRunOpenAI)
+        if (shouldRunAIVeto)
         {
-            // OpenAI veto using V2 check with proper scoring
-            var openAICheckV2 = _contentChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
-            if (openAICheckV2 != null)
+            // AI veto using V2 check with proper scoring
+            var aiVetoCheck = _contentChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
+            if (aiVetoCheck != null)
             {
-                // Note: AI service is obtained via IChatService (supports OpenAI, Azure, local providers)
-                _logger.LogInformation("[V2] Running AI veto check for user {UserId}", request.UserId);
+                // Fetch custom prompt from prompt_versions table (null = use default prompt)
+                var activePrompt = await _promptVersionRepo.GetActiveVersionAsync(request.ChatId, cancellationToken);
+                var systemPrompt = activePrompt?.PromptText;
+
+                _logger.LogInformation("Running AI veto check for {User} (custom prompt: {HasCustom})",
+                    request.UserName ?? $"User {request.UserId}", systemPrompt != null);
 
                 var vetoRequest = request with { HasSpamFlags = true };
-                var checkRequest = BuildAIRequest(vetoRequest, config, openAIConfig, cancellationToken);
-                var vetoResultV2 = await openAICheckV2.CheckAsync(checkRequest);
+                var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, cancellationToken);
+                var vetoResultV2 = await aiVetoCheck.CheckAsync(checkRequest);
 
                 // Convert V2 response to ContentCheckResponse
                 var vetoCheckResult = new ContentCheckResponse
@@ -160,45 +169,45 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                     Details = vetoResultV2.Details
                 };
 
-                List<ContentCheckResponse> updatedCheckResults = [..nonOpenAIResult.CheckResults, vetoCheckResult];
+                List<ContentCheckResponse> updatedCheckResults = [..pipelineResult.CheckResults, vetoCheckResult];
 
-                // OpenAI abstained (API error, timeout, rate limit) - defer to pipeline verdict
+                // AI abstained (API error, timeout, rate limit) - defer to pipeline verdict
                 if (vetoResultV2.Abstained)
                 {
-                    _logger.LogWarning("OpenAI veto abstained for user {UserId} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
-                        request.UserId, vetoResultV2.Details, nonOpenAIResult.NetConfidence);
+                    _logger.LogWarning("AI veto abstained for {User} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
+                        LogDisplayName.UserDebug(request.UserName, request.UserId), vetoResultV2.Details, pipelineResult.NetConfidence);
 
-                    // Return nonOpenAIResult with OpenAI check appended for visibility
-                    var deferredResult = nonOpenAIResult with { CheckResults = updatedCheckResults };
+                    // Return pipeline result with AI check appended for visibility
+                    var deferredResult = pipelineResult with { CheckResults = updatedCheckResults };
                     RecordDetectionMetrics(startTimestamp, deferredResult, activity);
                     return deferredResult;
                 }
 
-                // OpenAI ran successfully and returned clean (score = 0.0, not abstained) - veto the spam detection
+                // AI ran successfully and returned clean (score = 0.0, not abstained) - veto the spam detection
                 if (vetoResultV2.Score == 0.0)
                 {
-                    _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} (clean result with 0.0 score)",
-                        request.UserId);
+                    _logger.LogInformation("AI vetoed spam detection for {User} (clean result with 0.0 score)",
+                        request.UserName ?? $"User {request.UserId}");
                     var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoCheckResult);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;
                 }
 
-                // OpenAI confirmed spam - add score to total
-                _logger.LogInformation("OpenAI confirmed spam for user {UserId} with score {Score}",
-                    request.UserId, vetoResultV2.Score);
+                // AI confirmed spam - add score to total
+                _logger.LogInformation("AI confirmed spam for {User} with score {Score}",
+                    request.UserName ?? $"User {request.UserId}", vetoResultV2.Score);
 
-                var newTotalScore = (nonOpenAIResult.NetConfidence / 20.0) + vetoResultV2.Score;
+                var newTotalScore = (pipelineResult.NetConfidence / 20.0) + vetoResultV2.Score;
 
-                var confirmedResult = nonOpenAIResult with
+                var confirmedResult = pipelineResult with
                 {
                     CheckResults = updatedCheckResults,
                     IsSpam = true,
                     NetConfidence = (int)(newTotalScore * 20),
-                    MaxConfidence = Math.Max(nonOpenAIResult.MaxConfidence, vetoCheckResult.Confidence),
-                    AvgConfidence = (nonOpenAIResult.AvgConfidence + vetoCheckResult.Confidence) / 2,
-                    SpamFlags = nonOpenAIResult.SpamFlags + 1,
-                    PrimaryReason = $"OpenAI confirmed spam: {vetoResultV2.Details} (total score: {newTotalScore:F1})",
+                    MaxConfidence = Math.Max(pipelineResult.MaxConfidence, vetoCheckResult.Confidence),
+                    AvgConfidence = (pipelineResult.AvgConfidence + vetoCheckResult.Confidence) / 2,
+                    SpamFlags = pipelineResult.SpamFlags + 1,
+                    PrimaryReason = $"AI confirmed spam: {vetoResultV2.Details} (total score: {newTotalScore:F1})",
                     RecommendedAction = newTotalScore >= 5.0 ? DetectionAction.AutoBan : DetectionAction.ReviewQueue,
                     ShouldVeto = false
                 };
@@ -208,16 +217,14 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             }
         }
 
-        RecordDetectionMetrics(startTimestamp, nonOpenAIResult, activity);
-        return nonOpenAIResult;
+        RecordDetectionMetrics(startTimestamp, pipelineResult, activity);
+        return pipelineResult;
     }
 
-    public async Task<ContentDetectionResult> CheckMessageWithoutOpenAIAsync(ContentCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<ContentDetectionResult> RunPipelineChecksAsync(ContentCheckRequest request, CancellationToken cancellationToken = default)
     {
         var config = await GetConfigAsync(request, cancellationToken);
-
-        // Preprocess: Translate foreign language if needed
-        var processedRequest = await PreprocessMessageAsync(request, config, cancellationToken);
+        // Note: Translation handled upstream in MessageProcessingService
 
         var checkResponsesV2 = new List<ContentCheckResponseV2>();
         var totalScore = 0.0;
@@ -225,12 +232,12 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         // Run all V2 checks (they return scores, not votes)
         foreach (var check in _contentChecksV2)
         {
-            if (!ShouldRunCheckV2(check, processedRequest, config))
+            if (!ShouldRunCheckV2(check, request, config))
                 continue;
 
             try
             {
-                var checkRequest = BuildRequestForCheckV2(check, processedRequest, config, cancellationToken);
+                var checkRequest = BuildRequestForCheckV2(check, request, config, cancellationToken);
                 var checkResult = await ExecuteCheckWithTelemetryAsync(check, checkRequest);
                 checkResponsesV2.Add(checkResult);
 
@@ -242,7 +249,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error running {CheckName} for user {UserId}", check.CheckName, request.UserId);
+                _logger.LogError(ex, "Error running {CheckName} for {User}", check.CheckName, LogDisplayName.UserDebug(request.UserName, request.UserId));
                 // Continue with other checks
             }
         }
@@ -250,13 +257,17 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         // Convert V2 responses to V1 format for backward compatibility
         var checkResultsV1 = ConvertV2ResponsesToV1(checkResponsesV2, totalScore);
 
+        // Extract OCR text from ImageSpam check for downstream veto use
+        var ocrExtractedText = checkResponsesV2
+            .FirstOrDefault(r => r.CheckName == CheckName.ImageSpam)?.OcrExtractedText;
+
         // Determine action based on total score (SpamAssassin-style thresholds)
         var isSpam = totalScore >= ContentDetectionConstants.ReviewThreshold; // ≥3.0 is spam (may need review)
         var recommendedAction = DetermineActionFromScore(totalScore);
 
-        // Veto mode: Run OpenAI to confirm ANY spam detection (even low confidence)
-        // This reduces false positives by having AI double-check all spam signals
-        var shouldVeto = totalScore > 0 && config.OpenAI.VetoMode;
+        // AI veto runs on any spam detection to reduce false positives
+        // (actual veto execution happens in CheckMessageAsync based on config.AIVeto.Enabled)
+        var shouldVeto = totalScore > 0;
 
         var primaryReason = totalScore >= ContentDetectionConstants.ReviewThreshold
             ? $"Additive score: {totalScore:F1} points (threshold: {ContentDetectionConstants.SpamThreshold:F1})"
@@ -273,7 +284,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckResults = checkResultsV1,
             PrimaryReason = primaryReason,
             RecommendedAction = recommendedAction,
-            ShouldVeto = shouldVeto
+            ShouldVeto = shouldVeto,
+            OcrExtractedText = ocrExtractedText
         };
 
         _logger.LogInformation("V2 spam check complete: Score={TotalScore:F1}, IsSpam={IsSpam}, Action={Action}",
@@ -288,7 +300,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         {
             CheckName.StopWords => config.StopWords.Enabled,
             CheckName.Bayes => config.Bayes.Enabled,
-            CheckName.CAS => config.Cas.Enabled,
+            // CAS moved to user join flow (WelcomeService) - checks USER not MESSAGE
             CheckName.Similarity => config.Similarity.Enabled,
             CheckName.Spacing => config.Spacing.Enabled,
             CheckName.InvisibleChars => config.InvisibleChars.Enabled,
@@ -335,17 +347,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            CheckName.CAS => new CasCheckRequest
-            {
-                Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
-                ApiUrl = config.Cas.ApiUrl,
-                Timeout = config.Cas.Timeout,
-                UserAgent = config.Cas.UserAgent,
-                CancellationToken = cancellationToken
-            },
+            // CAS moved to user join flow (WelcomeService) - checks USER not MESSAGE
 
             CheckName.Similarity => new SimilarityCheckRequest
             {
@@ -355,7 +357,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 ChatId = originalRequest.ChatId,
                 MinMessageLength = config.MinMessageLength,
                 SimilarityThreshold = config.Similarity.Threshold,
-                ConfidenceThreshold = 75,
                 CancellationToken = cancellationToken
             },
 
@@ -433,26 +434,28 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         };
     }
 
-    private ContentCheckRequestBase BuildAIRequest(
+    private AIVetoCheckRequest BuildAIRequest(
         ContentCheckRequest originalRequest,
         ContentDetectionConfig config,
-        OpenAIConfigDb? openAIConfig,
+        AIFeatureConfig? featureConfig,
+        string? systemPrompt,
+        string? ocrExtractedText,
         CancellationToken cancellationToken)
     {
-        return new OpenAICheckRequest
+        return new AIVetoCheckRequest
         {
             Message = originalRequest.Message ?? "",
             UserId = originalRequest.UserId,
             UserName = originalRequest.UserName,
             ChatId = originalRequest.ChatId,
-            VetoMode = config.OpenAI.VetoMode,
-            SystemPrompt = config.OpenAI.SystemPrompt,
+            SystemPrompt = systemPrompt, // From prompt_versions table (null = use default)
             HasSpamFlags = originalRequest.HasSpamFlags,
             MinMessageLength = config.MinMessageLength,
-            CheckShortMessages = config.OpenAI.CheckShortMessages,
-            MessageHistoryCount = config.OpenAI.MessageHistoryCount,
-            Model = openAIConfig?.Model ?? "gpt-4o-mini",
-            MaxTokens = openAIConfig?.MaxTokens ?? 500,
+            CheckShortMessages = config.AIVeto.CheckShortMessages,
+            MessageHistoryCount = config.AIVeto.MessageHistoryCount,
+            Model = featureConfig?.Model ?? "gpt-4o-mini",
+            MaxTokens = featureConfig?.MaxTokens ?? 500,
+            OcrExtractedText = ocrExtractedText,
             CancellationToken = cancellationToken
         };
     }
@@ -537,32 +540,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             RecommendedAction = DetectionAction.Allow,
             ShouldVeto = false
         };
-    }
-
-    private ContentDetectionResult CreateReviewResult(List<ContentCheckResponse> checkResults, ContentCheckResponse reviewResult)
-    {
-        return new ContentDetectionResult
-        {
-            IsSpam = false,
-            MaxConfidence = reviewResult.Confidence,
-            AvgConfidence = reviewResult.Confidence,
-            SpamFlags = 0,
-            NetConfidence = 0,
-            CheckResults = checkResults,
-            PrimaryReason = reviewResult.Details,
-            RecommendedAction = DetectionAction.ReviewQueue,
-            ShouldVeto = false
-        };
-    }
-
-    private async Task<ContentCheckRequest> PreprocessMessageAsync(
-        ContentCheckRequest request,
-        ContentDetectionConfig config,
-        CancellationToken cancellationToken)
-    {
-        // Translation handled upstream in MessageProcessingService
-        await Task.CompletedTask;
-        return request;
     }
 
     private static void RecordDetectionMetrics(long startTimestamp, ContentDetectionResult result, Activity? activity)

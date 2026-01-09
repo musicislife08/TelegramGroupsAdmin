@@ -1,5 +1,4 @@
 using TelegramGroupsAdmin.Core.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -8,11 +7,11 @@ namespace TelegramGroupsAdmin.Repositories;
 /// </summary>
 public interface IUserRepository
 {
-    Task<int> GetUserCountAsync(CancellationToken ct = default);
-    Task<UiModels.UserRecord?> GetByEmailAsync(string email, CancellationToken ct = default);
-    Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default);
-    Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default);
-    Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken ct = default);
+    Task<int> GetUserCountAsync(CancellationToken cancellationToken = default);
+    Task<UserRecord?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken cancellationToken = default);
+    Task<UserRecord?> GetByIdAsync(string userId, CancellationToken cancellationToken = default);
+    Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Atomically register a user (create or reactivate) and mark the invite as used in a single transaction.
@@ -25,7 +24,7 @@ public interface IUserRepository
     /// <param name="permissionLevel">Permission level from invite</param>
     /// <param name="invitedBy">ID of user who created the invite</param>
     /// <param name="inviteToken">The invite token to mark as used</param>
-    /// <param name="ct">Cancellation token</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The user's ID (new or existing)</returns>
     Task<string> RegisterUserWithInviteAsync(
         string email,
@@ -33,36 +32,36 @@ public interface IUserRepository
         PermissionLevel permissionLevel,
         string? invitedBy,
         string inviteToken,
-        CancellationToken ct = default);
-    Task UpdateLastLoginAsync(string userId, CancellationToken ct = default);
-    Task UpdateSecurityStampAsync(string userId, CancellationToken ct = default);
-    Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken ct = default);
-    Task EnableTotpAsync(string userId, CancellationToken ct = default);
-    Task DisableTotpAsync(string userId, CancellationToken ct = default);
-    Task ResetTotpAsync(string userId, CancellationToken ct = default);
-    Task DeleteRecoveryCodesAsync(string userId, CancellationToken ct = default);
-    Task<List<UiModels.RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default);
+    Task UpdateLastLoginAsync(string userId, CancellationToken cancellationToken = default);
+    Task UpdateSecurityStampAsync(string userId, CancellationToken cancellationToken = default);
+    Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken cancellationToken = default);
+    Task EnableTotpAsync(string userId, CancellationToken cancellationToken = default);
+    Task DisableTotpAsync(string userId, CancellationToken cancellationToken = default);
+    Task ResetTotpAsync(string userId, CancellationToken cancellationToken = default);
+    Task DeleteRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
+    Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
     Task AddRecoveryCodesAsync(string userId, List<string> codeHashes, CancellationToken cancellationToken = default);
-    Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default);
-    Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default);
-    Task<UiModels.InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken ct = default);
-    Task UseInviteAsync(string token, string userId, CancellationToken ct = default);
-    Task<List<UiModels.UserRecord>> GetAllAsync(CancellationToken ct = default);
-    Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken ct = default);
-    Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default);
-    Task SetActiveAsync(string userId, bool isActive, CancellationToken ct = default);
-    Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken ct = default);
-    Task UpdateAsync(UiModels.UserRecord user, CancellationToken ct = default);
+    Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
+    Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
+    Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default);
+    Task UseInviteAsync(string token, string userId, CancellationToken cancellationToken = default);
+    Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
+    Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default);
+    Task SetActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default);
+    Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default);
+    Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default);
 
     // Account Lockout Methods (SECURITY-5, SECURITY-6)
-    Task IncrementFailedLoginAttemptsAsync(string userId, CancellationToken ct = default);
-    Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken ct = default);
-    Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken ct = default);
-    Task UnlockAccountAsync(string userId, CancellationToken ct = default);
+    Task IncrementFailedLoginAttemptsAsync(string userId, CancellationToken cancellationToken = default);
+    Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken cancellationToken = default);
+    Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken cancellationToken = default);
+    Task UnlockAccountAsync(string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get the primary owner's email (first Owner account by created_at)
     /// Used for VAPID authentication subject in Web Push notifications
     /// </summary>
-    Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken ct = default);
+    Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken cancellationToken = default);
 }

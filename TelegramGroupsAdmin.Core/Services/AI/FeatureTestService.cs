@@ -40,7 +40,7 @@ public class FeatureTestService(
         0x82
     ];
 
-    private const int DefaultMaxTokens = 500;
+    private const int DefaultMaxTokens = AIConstants.DefaultFeatureTestMaxTokens;
 
     public async Task<FeatureTestResult> TestFeatureAsync(
         AIFeatureType featureType,
@@ -48,7 +48,7 @@ public class FeatureTestService(
         string model,
         string? azureDeploymentName = null,
         int? maxTokens = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connectionId);
         ArgumentNullException.ThrowIfNull(model);
@@ -69,11 +69,11 @@ public class FeatureTestService(
             // Run feature-specific test using IChatService test methods
             return featureType switch
             {
-                AIFeatureType.SpamDetection => await TestSpamDetectionAsync(connectionId, model, azureDeploymentName, tokens, ct),
-                AIFeatureType.Translation => await TestTranslationAsync(connectionId, model, azureDeploymentName, tokens, ct),
-                AIFeatureType.ImageAnalysis => await TestVisionAsync(connectionId, model, azureDeploymentName, "image", tokens, ct),
-                AIFeatureType.VideoAnalysis => await TestVisionAsync(connectionId, model, azureDeploymentName, "video frame", tokens, ct),
-                AIFeatureType.PromptBuilder => await TestPromptBuilderAsync(connectionId, model, azureDeploymentName, tokens, ct),
+                AIFeatureType.SpamDetection => await TestSpamDetectionAsync(connectionId, model, azureDeploymentName, tokens, cancellationToken),
+                AIFeatureType.Translation => await TestTranslationAsync(connectionId, model, azureDeploymentName, tokens, cancellationToken),
+                AIFeatureType.ImageAnalysis => await TestVisionAsync(connectionId, model, azureDeploymentName, "image", tokens, cancellationToken),
+                AIFeatureType.VideoAnalysis => await TestVisionAsync(connectionId, model, azureDeploymentName, "video frame", tokens, cancellationToken),
+                AIFeatureType.PromptBuilder => await TestPromptBuilderAsync(connectionId, model, azureDeploymentName, tokens, cancellationToken),
                 _ => FeatureTestResult.Fail($"Unknown feature type: {featureType}")
             };
         }
@@ -86,7 +86,7 @@ public class FeatureTestService(
     }
 
     private async Task<FeatureTestResult> TestSpamDetectionAsync(
-        string connectionId, string model, string? azureDeploymentName, int maxTokens, CancellationToken ct)
+        string connectionId, string model, string? azureDeploymentName, int maxTokens, CancellationToken cancellationToken)
     {
         const string systemPrompt = "You are a test assistant. Follow instructions exactly.";
         const string userPrompt = "Respond with only 'OK'.";
@@ -98,7 +98,7 @@ public class FeatureTestService(
             systemPrompt,
             userPrompt,
             new ChatCompletionOptions { MaxTokens = maxTokens },
-            ct);
+            cancellationToken);
 
         if (result == null || string.IsNullOrWhiteSpace(result.Content))
         {
@@ -109,7 +109,7 @@ public class FeatureTestService(
     }
 
     private async Task<FeatureTestResult> TestTranslationAsync(
-        string connectionId, string model, string? azureDeploymentName, int maxTokens, CancellationToken ct)
+        string connectionId, string model, string? azureDeploymentName, int maxTokens, CancellationToken cancellationToken)
     {
         const string systemPrompt = "You are a translator. Respond with only the translation, nothing else.";
         const string userPrompt = "Translate 'Hello' to Spanish.";
@@ -121,7 +121,7 @@ public class FeatureTestService(
             systemPrompt,
             userPrompt,
             new ChatCompletionOptions { MaxTokens = maxTokens },
-            ct);
+            cancellationToken);
 
         if (result == null || string.IsNullOrWhiteSpace(result.Content))
         {
@@ -132,7 +132,7 @@ public class FeatureTestService(
     }
 
     private async Task<FeatureTestResult> TestVisionAsync(
-        string connectionId, string model, string? azureDeploymentName, string mediaType, int maxTokens, CancellationToken ct)
+        string connectionId, string model, string? azureDeploymentName, string mediaType, int maxTokens, CancellationToken cancellationToken)
     {
         const string systemPrompt = "You are an image analyzer. Describe what you see briefly.";
         const string userPrompt = "What color is this image? Respond with one word.";
@@ -146,7 +146,7 @@ public class FeatureTestService(
             TestImagePng,
             "image/png",
             new ChatCompletionOptions { MaxTokens = maxTokens },
-            ct);
+            cancellationToken);
 
         if (result == null || string.IsNullOrWhiteSpace(result.Content))
         {
@@ -158,7 +158,7 @@ public class FeatureTestService(
     }
 
     private async Task<FeatureTestResult> TestPromptBuilderAsync(
-        string connectionId, string model, string? azureDeploymentName, int maxTokens, CancellationToken ct)
+        string connectionId, string model, string? azureDeploymentName, int maxTokens, CancellationToken cancellationToken)
     {
         const string systemPrompt = "You are a helpful assistant.";
         const string userPrompt = "Say 'ready' if you can help build prompts.";
@@ -170,7 +170,7 @@ public class FeatureTestService(
             systemPrompt,
             userPrompt,
             new ChatCompletionOptions { MaxTokens = maxTokens },
-            ct);
+            cancellationToken);
 
         if (result == null || string.IsNullOrWhiteSpace(result.Content))
         {

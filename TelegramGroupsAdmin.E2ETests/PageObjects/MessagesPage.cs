@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -202,6 +203,15 @@ public class MessagesPage
     }
 
     /// <summary>
+    /// Waits for the chat view to become active after selecting a chat.
+    /// Uses Playwright's auto-waiting to handle Blazor re-render timing.
+    /// </summary>
+    public async Task WaitForChatViewActiveAsync()
+    {
+        await Expect(_page.Locator($"{MainView}.active")).ToBeVisibleAsync();
+    }
+
+    /// <summary>
     /// Checks if the chat header is visible.
     /// </summary>
     public async Task<bool> IsChatHeaderVisibleAsync()
@@ -263,6 +273,11 @@ public class MessagesPage
     }
 
     /// <summary>
+    /// Gets a locator for message bubbles (for use with Expect assertions).
+    /// </summary>
+    public ILocator MessageBubbles => _page.Locator(MessageBubble);
+
+    /// <summary>
     /// Checks if the "no messages" empty state is visible (within messages container).
     /// </summary>
     public async Task<bool> IsNoMessagesStateVisibleAsync()
@@ -274,4 +289,93 @@ public class MessagesPage
     /// Gets the current URL.
     /// </summary>
     public string CurrentUrl => _page.Url;
+
+    #region User Detail Dialog Methods
+
+    /// <summary>
+    /// Gets a locator for the dialog using semantic ARIA role.
+    /// More resilient to UI framework changes than CSS class selectors.
+    /// </summary>
+    private ILocator DialogLocator => _page.GetByRole(AriaRole.Dialog);
+
+    /// <summary>
+    /// Clicks on a username in a message bubble to open the user detail dialog.
+    /// </summary>
+    public async Task ClickUsernameInMessageAsync()
+    {
+        var userName = _page.Locator(".tg-user-name").First;
+        await userName.ClickAsync();
+    }
+
+    /// <summary>
+    /// Checks if the user detail dialog is visible.
+    /// </summary>
+    public async Task<bool> IsUserDetailDialogVisibleAsync()
+    {
+        return await DialogLocator.IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Waits for the user detail dialog to be visible.
+    /// </summary>
+    public async Task WaitForUserDetailDialogAsync(int timeoutMs = 5000)
+    {
+        await DialogLocator.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
+    }
+
+    /// <summary>
+    /// Gets the user detail dialog title text.
+    /// </summary>
+    public async Task<string?> GetUserDetailDialogTitleAsync()
+    {
+        // Title is within the dialog - scope the search
+        return await DialogLocator.Locator(".mud-dialog-title").TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the content text of the user detail dialog.
+    /// Uses InnerTextAsync for better text extraction from MudBlazor components.
+    /// </summary>
+    public async Task<string?> GetUserDetailDialogContentAsync()
+    {
+        // Get all visible text from the dialog using InnerTextAsync
+        // (TextContentAsync may return empty for complex MudBlazor component trees)
+        return await DialogLocator.InnerTextAsync();
+    }
+
+    /// <summary>
+    /// Closes the user detail dialog by pressing Escape.
+    /// </summary>
+    public async Task CloseUserDetailDialogByEscapeAsync()
+    {
+        await _page.Keyboard.PressAsync("Escape");
+    }
+
+    /// <summary>
+    /// Closes the user detail dialog by clicking the close button.
+    /// </summary>
+    public async Task CloseUserDetailDialogByButtonAsync()
+    {
+        // Use GetByLabel to target the icon button with aria-label="Close"
+        // (avoids ambiguity with any button that has "Close" text)
+        await DialogLocator.GetByLabel("Close").ClickAsync();
+    }
+
+    /// <summary>
+    /// Waits for the user detail dialog to be hidden.
+    /// </summary>
+    public async Task WaitForUserDetailDialogHiddenAsync(int timeoutMs = 5000)
+    {
+        await DialogLocator.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Hidden,
+            Timeout = timeoutMs
+        });
+    }
+
+    #endregion
 }

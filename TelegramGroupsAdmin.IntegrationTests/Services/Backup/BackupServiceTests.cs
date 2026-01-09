@@ -112,7 +112,7 @@ public class BackupServiceTests
         // Seed golden dataset (with Data Protection encryption)
         await using (var context = _testHelper.GetDbContext())
         {
-            await GoldenDataset.SeedDatabaseAsync(context, _dataProtectionProvider);
+            await GoldenDataset.SeedAsync(context, _dataProtectionProvider);
         }
 
         // Create BackupService in a new scope (using interface)
@@ -334,7 +334,7 @@ public class BackupServiceTests
         ");
 
         var countBeforeRestore = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM telegram_users");
-        Assert.That(countBeforeRestore, Is.EqualTo(9), "Should have 8 golden users + 1 extra = 9 before restore");
+        Assert.That(countBeforeRestore, Is.EqualTo(13), "Should have 12 golden users + 1 extra = 13 before restore");
 
         // Act - Restore (should wipe extra_user)
         await _backupService.RestoreAsync(backup);
@@ -504,6 +504,121 @@ public class BackupServiceTests
 
     #endregion
 
+    #region Error Handling Tests
+
+    [Test]
+    public async Task ExportAsync_WithCorruptedJsonbColumn_ShouldFailFastWithClearError()
+    {
+        // Arrange - Corrupt the warnings JSONB column with JSON that can't deserialize to List<WarningEntry>
+        // This simulates database corruption or schema mismatch that would produce an incomplete backup
+        await _testHelper!.ExecuteSqlAsync($@"
+            UPDATE telegram_users
+            SET warnings = '{{""not_an_array"": true}}'::jsonb
+            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+        ");
+
+        // Verify the corruption was applied
+        var corruptedValue = await _testHelper.ExecuteScalarAsync<string>($@"
+            SELECT warnings::text FROM telegram_users
+            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+        ");
+        Assert.That(corruptedValue, Does.Contain("not_an_array"), "Test setup: JSONB should be corrupted");
+
+        // Act & Assert - Export should fail fast with InvalidOperationException
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await _backupService!.ExportAsync();
+        });
+
+        // Verify the exception contains useful diagnostic information
+        Assert.That(ex!.Message, Does.Contain("warnings"), "Exception should identify the corrupted column");
+        Assert.That(ex.Message, Does.Contain("telegram_users"), "Exception should identify the table");
+        Assert.That(ex.InnerException, Is.TypeOf<System.Text.Json.JsonException>(), "Inner exception should be JsonException");
+    }
+
+    [Test]
+    public async Task ExportAsync_WithValidJsonbColumn_ShouldSucceed()
+    {
+        // Arrange - Ensure we have valid JSONB data (golden dataset already has this)
+        // This test verifies the happy path still works after adding error handling
+
+        // Act
+        var backupBytes = await _backupService!.ExportAsync();
+
+        // Assert - Export should succeed
+        Assert.That(backupBytes, Is.Not.Null);
+        Assert.That(backupBytes.Length, Is.GreaterThan(0));
+
+        // Verify the backup contains telegram_users table with warnings column
+        var metadata = await _backupService.GetMetadataAsync(backupBytes);
+        Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+    }
+
+    [Test]
+    public async Task ExportAndRestore_ShouldPreserveDateTimeOffsetTimezone()
+    {
+        // Arrange - Insert a DateTimeOffset with a non-UTC timezone (+05:30 IST)
+        // This tests that both TableExportService.ReadTypedValue and the test helper
+        // correctly use GetFieldValue<DateTimeOffset> instead of GetValue (which loses timezone)
+        var specificOffset = new DateTimeOffset(2025, 6, 15, 14, 30, 0, TimeSpan.FromHours(5.5));
+
+        await _testHelper!.ExecuteSqlAsync($@"
+            UPDATE telegram_users
+            SET first_seen_at = '{specificOffset:yyyy-MM-dd HH:mm:ss.ffffffzzz}'::timestamptz
+            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+        ");
+
+        // Verify the insert worked - test helper now uses GetFieldValue<DateTimeOffset> properly
+        var insertedOffset = await _testHelper.ExecuteScalarAsync<DateTimeOffset>($@"
+            SELECT first_seen_at FROM telegram_users
+            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+        ");
+
+        // PostgreSQL stores timestamptz as UTC internally, so compare UTC instants
+        Assert.That(insertedOffset.UtcDateTime, Is.EqualTo(specificOffset.UtcDateTime).Within(TimeSpan.FromSeconds(1)),
+            "Test setup: DateTimeOffset should be stored correctly");
+
+        // Act - Export and restore
+        var backupBytes = await _backupService!.ExportAsync();
+        await _backupService.RestoreAsync(backupBytes);
+
+        // Assert - Verify the DateTimeOffset was preserved through the roundtrip
+        var restoredOffset = await _testHelper.ExecuteScalarAsync<DateTimeOffset>($@"
+            SELECT first_seen_at FROM telegram_users
+            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+        ");
+
+        Assert.That(restoredOffset.UtcDateTime, Is.EqualTo(specificOffset.UtcDateTime).Within(TimeSpan.FromSeconds(1)),
+            "DateTimeOffset UTC instant should be preserved through backup/restore roundtrip");
+    }
+
+    [Test]
+    public async Task ExportAndRestore_ShouldPreserveEnumValues()
+    {
+        // Arrange - Verify enum value is set in golden dataset
+        // This tests that ReadTypedValue correctly uses Enum.ToObject for enum columns
+        var originalStatus = await _testHelper!.ExecuteScalarAsync<int>($@"
+            SELECT status FROM users WHERE id = '{GoldenDataset.Users.User3_Id}'
+        ");
+
+        Assert.That(originalStatus, Is.EqualTo(GoldenDataset.Users.User3_Status),
+            "Test setup: User3 should have Deleted status (3)");
+
+        // Act - Export and restore
+        var backupBytes = await _backupService!.ExportAsync();
+        await _backupService.RestoreAsync(backupBytes);
+
+        // Assert - Verify enum was preserved
+        var restoredStatus = await _testHelper.ExecuteScalarAsync<int>($@"
+            SELECT status FROM users WHERE id = '{GoldenDataset.Users.User3_Id}'
+        ");
+
+        Assert.That(restoredStatus, Is.EqualTo(GoldenDataset.Users.User3_Status),
+            "Enum value should be preserved through backup/restore roundtrip");
+    }
+
+    #endregion
+
     #region Passphrase Management Tests
 
     [Test]
@@ -644,7 +759,7 @@ public class BackupServiceTests
             NotificationEventType eventType,
             string subject,
             string message,
-            CancellationToken ct = default)
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
         }
@@ -653,17 +768,17 @@ public class BackupServiceTests
             NotificationEventType eventType,
             string subject,
             string message,
-            CancellationToken ct = default)
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
         }
 
         public Task<bool> SendNotificationAsync(
-            string userId,
+            UserRecord user,
             NotificationEventType eventType,
             string subject,
             string message,
-            CancellationToken ct = default)
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult(true); // No-op for tests
         }

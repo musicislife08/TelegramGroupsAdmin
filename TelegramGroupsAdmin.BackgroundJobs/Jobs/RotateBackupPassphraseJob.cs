@@ -1,11 +1,10 @@
-using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
+using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -45,12 +44,8 @@ public class RotateBackupPassphraseJob : IJob
     /// </summary>
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException("payload not found in job data");
-
-        var payload = JsonSerializer.Deserialize<RotateBackupPassphrasePayload>(payloadJson)
-            ?? throw new InvalidOperationException("Failed to deserialize RotateBackupPassphrasePayload");
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<RotateBackupPassphrasePayload>(context, _logger);
+        if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
     }
@@ -188,7 +183,7 @@ public class RotateBackupPassphraseJob : IJob
                         actor: Actor.FromWebUser(userId),
                         target: null,
                         value: $"Re-encrypted {processedCount} backup(s) in {backupDirectory}" + (failedCount > 0 ? $" ({failedCount} failed)" : ""),
-                        ct: cancellationToken);
+                        cancellationToken: cancellationToken);
 
                     _logger.LogInformation("Audit log entry created for passphrase rotation");
                 }

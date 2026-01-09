@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 
@@ -13,11 +14,6 @@ public class BackupEncryptionService : IBackupEncryptionService
 
     // File format constants
     private static readonly byte[] MagicHeader = "TGAENC\0"u8.ToArray(); // 7 bytes
-    private const int SaltSize = 32;
-    private const int NonceSize = 12; // AES-GCM standard nonce size
-    private const int TagSize = 16; // AES-GCM authentication tag size
-    private const int Pbkdf2Iterations = 100000;
-    private const int KeySize = 32; // 256 bits
 
     public BackupEncryptionService(ILogger<BackupEncryptionService> logger)
     {
@@ -39,22 +35,22 @@ public class BackupEncryptionService : IBackupEncryptionService
             throw new ArgumentException("Passphrase cannot be empty", nameof(passphrase));
 
         // Generate random salt and nonce (cryptographically secure)
-        var salt = RandomNumberGenerator.GetBytes(SaltSize);
-        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
+        var salt = RandomNumberGenerator.GetBytes(EncryptionConstants.SaltSizeBytes);
+        var nonce = RandomNumberGenerator.GetBytes(EncryptionConstants.NonceSizeBytes);
 
         // Derive encryption key from passphrase using PBKDF2
         var key = DeriveKey(passphrase, salt);
 
         // Encrypt using AES-256-GCM
-        using var aesGcm = new AesGcm(key, TagSize);
+        using var aesGcm = new AesGcm(key, EncryptionConstants.TagSizeBytes);
         var ciphertext = new byte[jsonBytes.Length];
-        var tag = new byte[TagSize];
+        var tag = new byte[EncryptionConstants.TagSizeBytes];
 
         aesGcm.Encrypt(nonce, jsonBytes, ciphertext, tag);
 
         // Build final encrypted backup file
         // Format: [TGAENC\0 (7)][salt (32)][nonce (12)][ciphertext (variable)][tag (16)]
-        var encryptedBackup = new byte[MagicHeader.Length + SaltSize + NonceSize + ciphertext.Length + TagSize];
+        var encryptedBackup = new byte[MagicHeader.Length + EncryptionConstants.SaltSizeBytes + EncryptionConstants.NonceSizeBytes + ciphertext.Length + EncryptionConstants.TagSizeBytes];
         var span = encryptedBackup.AsSpan();
 
         var offset = 0;
@@ -62,10 +58,10 @@ public class BackupEncryptionService : IBackupEncryptionService
         offset += MagicHeader.Length;
 
         salt.CopyTo(span[offset..]);
-        offset += SaltSize;
+        offset += EncryptionConstants.SaltSizeBytes;
 
         nonce.CopyTo(span[offset..]);
-        offset += NonceSize;
+        offset += EncryptionConstants.NonceSizeBytes;
 
         ciphertext.CopyTo(span[offset..]);
         offset += ciphertext.Length;
@@ -99,7 +95,7 @@ public class BackupEncryptionService : IBackupEncryptionService
             throw new InvalidOperationException("File does not have encrypted backup header (TGAENC)");
         }
 
-        var minSize = MagicHeader.Length + SaltSize + NonceSize + TagSize;
+        var minSize = MagicHeader.Length + EncryptionConstants.SaltSizeBytes + EncryptionConstants.NonceSizeBytes + EncryptionConstants.TagSizeBytes;
         if (encryptedBytes.Length < minSize)
         {
             throw new InvalidOperationException($"Encrypted backup file is too small (minimum {minSize} bytes)");
@@ -109,23 +105,23 @@ public class BackupEncryptionService : IBackupEncryptionService
         var span = encryptedBytes.AsSpan();
         var offset = MagicHeader.Length; // Skip magic header
 
-        var salt = span.Slice(offset, SaltSize).ToArray();
-        offset += SaltSize;
+        var salt = span.Slice(offset, EncryptionConstants.SaltSizeBytes).ToArray();
+        offset += EncryptionConstants.SaltSizeBytes;
 
-        var nonce = span.Slice(offset, NonceSize).ToArray();
-        offset += NonceSize;
+        var nonce = span.Slice(offset, EncryptionConstants.NonceSizeBytes).ToArray();
+        offset += EncryptionConstants.NonceSizeBytes;
 
-        var ciphertextLength = encryptedBytes.Length - offset - TagSize;
+        var ciphertextLength = encryptedBytes.Length - offset - EncryptionConstants.TagSizeBytes;
         var ciphertext = span.Slice(offset, ciphertextLength).ToArray();
         offset += ciphertextLength;
 
-        var tag = span.Slice(offset, TagSize).ToArray();
+        var tag = span.Slice(offset, EncryptionConstants.TagSizeBytes).ToArray();
 
         // Derive key from passphrase (must match encryption key)
         var key = DeriveKey(passphrase, salt);
 
         // Decrypt using AES-256-GCM
-        using var aesGcm = new AesGcm(key, TagSize);
+        using var aesGcm = new AesGcm(key, EncryptionConstants.TagSizeBytes);
         var plaintext = new byte[ciphertext.Length];
 
         try
@@ -164,8 +160,8 @@ public class BackupEncryptionService : IBackupEncryptionService
             password: passphrase,
             salt: salt,
             prf: KeyDerivationPrf.HMACSHA256,
-            iterationCount: Pbkdf2Iterations,
-            numBytesRequested: KeySize
+            iterationCount: EncryptionConstants.Pbkdf2Iterations,
+            numBytesRequested: EncryptionConstants.KeySizeBytes
         );
     }
 }

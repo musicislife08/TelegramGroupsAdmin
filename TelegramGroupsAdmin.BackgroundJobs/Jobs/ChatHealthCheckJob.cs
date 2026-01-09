@@ -9,31 +9,26 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
 /// <summary>
 /// Job logic for periodic chat health monitoring
-/// Replaces PeriodicTimer in TelegramAdminBotService (Phase 4: Chat health optimization)
 /// Monitors chat permissions, admin lists, invite links
 /// </summary>
 [DisallowConcurrentExecution]
 public class ChatHealthCheckJob : IJob
 {
-    private readonly ChatManagementService _chatService;
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly IChatManagementService _chatService;
     private readonly IConfigService _configService;
     private readonly ILogger<ChatHealthCheckJob> _logger;
 
     public ChatHealthCheckJob(
-        ChatManagementService chatService,
-        TelegramBotClientFactory botFactory,
+        IChatManagementService chatService,
         IConfigService configService,
         ILogger<ChatHealthCheckJob> logger)
     {
         _chatService = chatService;
-        _botFactory = botFactory;
         _configService = configService;
         _logger = logger;
     }
@@ -87,22 +82,19 @@ public class ChatHealthCheckJob : IJob
                 return;
             }
 
-            // Get bot client from factory
-            var botClient = await _botFactory.GetBotClientAsync();
-
             try
             {
                 if (payload.ChatId.HasValue)
                 {
                     // Single chat refresh (from manual UI button)
                     _logger.LogInformation("Running health check for chat {ChatId}", payload.ChatId.Value);
-                    await _chatService.RefreshSingleChatAsync(botClient, payload.ChatId.Value, includeIcon: true, cancellationToken);
+                    await _chatService.RefreshSingleChatAsync(payload.ChatId.Value, includeIcon: true, cancellationToken);
                 }
                 else
                 {
                     // All chats refresh (from recurring job)
                     _logger.LogInformation("Running health check for all chats");
-                    await _chatService.RefreshAllHealthAsync(botClient, cancellationToken);
+                    await _chatService.RefreshAllHealthAsync(cancellationToken);
                 }
 
                 _logger.LogInformation("Chat health check completed successfully");

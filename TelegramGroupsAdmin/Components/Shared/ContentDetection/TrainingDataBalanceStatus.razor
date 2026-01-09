@@ -1,0 +1,292 @@
+@using TelegramGroupsAdmin.ContentDetection.ML
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Utilities
+@inject IMLTrainingDataRepository MLTrainingDataRepository
+@inject IMLTextClassifierService MLTextClassifierService
+@inject ILogger<TrainingDataBalanceStatus> Logger
+
+<MudPaper Class="pa-4" Elevation="@Elevation">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_balanceStats != null)
+    {
+        <MudStack Spacing="3">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Training Data Balance</MudText>
+                @if (ShowRefreshButton)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                                  Color="Color.Primary"
+                                  Size="Size.Small"
+                                  OnClick="@HandleRefresh" />
+                }
+            </MudStack>
+
+            @* Current Model Section (#174) *@
+            @if (_currentModelMetadata != null)
+            {
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                        Current Model (trained @DateTimeUtilities.FormatRelativeTimeVerbose(_currentModelMetadata.TrainedAt))
+                    </MudText>
+                    <div style="display: flex; height: 20px; width: 100%; border-radius: 4px; overflow: hidden;">
+                        <div style="width: @GetCurrentSpamPercentage()%; background: #d32f2f;"></div>
+                        <div style="width: @GetCurrentHamPercentage()%; background: var(--mud-palette-success);"></div>
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Default">
+                        Spam: @_currentModelMetadata.SpamSampleCount | Ham: @_currentModelMetadata.HamSampleCount
+                    </MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="my-2">
+                    No model trained yet - pending training data shown below
+                </MudAlert>
+            }
+
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Pending Training Data</MudText>
+
+            <!-- Status Chips -->
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudChip T="string" Size="Size.Small" Style="background: #d32f2f; color: white;" Icon="@Icons.Material.Filled.Warning">
+                    Explicit Spam: @_balanceStats.ExplicitSpamCount
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Style="background: #ef9a9a; color: white;" Icon="@Icons.Material.Filled.AutoAwesome">
+                    Implicit Spam: @_balanceStats.ImplicitSpamCount
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Label">
+                    Explicit Ham: @_balanceStats.ExplicitHamCount
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">
+                    Implicit Ham: @_balanceStats.ImplicitHamCount
+                </MudChip>
+                <MudText Typo="Typo.body2" Color="Color.Default">
+                    Total: @_balanceStats.TotalSampleCount samples
+                </MudText>
+            </MudStack>
+
+            <!-- Dataset Composition Bar (4 segments) -->
+            <div style="position: relative; height: 25px; width: 100%; border-radius: 4px; overflow: hidden; display: flex;">
+                <!-- Explicit Spam (dark red) -->
+                @if (_balanceStats.ExplicitSpamCount > 0)
+                {
+                    <div style="width: @(GetExplicitSpamPercentage())%; background: #d32f2f; position: relative;">
+                        <!-- Spam minimum marker (only show if total spam below minimum) -->
+                        @if (_balanceStats.SpamCount < SpamClassifierMetadata.MinimumSamplesPerClass && _balanceStats.ImplicitSpamCount == 0)
+                        {
+                            <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
+                            <MudText Typo="Typo.caption" Style="position: absolute; right: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
+                            </MudText>
+                        }
+                    </div>
+                }
+
+                <!-- Implicit Spam (light red) -->
+                @if (_balanceStats.ImplicitSpamCount > 0)
+                {
+                    <div style="width: @(GetImplicitSpamPercentage())%; background: #ef9a9a; position: relative;">
+                        <!-- Spam minimum marker (only show if total spam below minimum) -->
+                        @if (_balanceStats.SpamCount < SpamClassifierMetadata.MinimumSamplesPerClass)
+                        {
+                            <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
+                            <MudText Typo="Typo.caption" Style="position: absolute; right: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
+                            </MudText>
+                        }
+                    </div>
+                }
+
+                <!-- Explicit Ham (blue) -->
+                @if (_balanceStats.ExplicitHamCount > 0)
+                {
+                    <div style="width: @(GetExplicitHamPercentage())%; background: var(--mud-palette-info); position: relative;">
+                        <!-- Ham minimum marker (only show if total ham below minimum) -->
+                        @if (_balanceStats.TotalHamCount < SpamClassifierMetadata.MinimumSamplesPerClass && _balanceStats.ImplicitHamCount == 0)
+                        {
+                            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
+                            <MudText Typo="Typo.caption" Style="position: absolute; left: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
+                            </MudText>
+                        }
+                    </div>
+                }
+
+                <!-- Implicit Ham (green) -->
+                @if (_balanceStats.ImplicitHamCount > 0)
+                {
+                    <div style="width: @(GetImplicitHamPercentage())%; background: var(--mud-palette-success); position: relative;">
+                        <!-- Ham minimum marker (only show if total ham below minimum) -->
+                        @if (_balanceStats.TotalHamCount < SpamClassifierMetadata.MinimumSamplesPerClass)
+                        {
+                            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
+                            <MudText Typo="Typo.caption" Style="position: absolute; left: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
+                            </MudText>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Status Text Below Bar -->
+            <MudText Typo="Typo.body2" Color="@GetStatusColor()" Style="font-weight: 500;">
+                @GetStatusText()
+            </MudText>
+
+            @* Delta Display (#174) *@
+            @if (_currentModelMetadata != null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Delta: @FormatDelta(SpamDelta) spam, @FormatDelta(HamDelta) ham since last training
+                </MudText>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public int Elevation { get; set; } = 1;
+    [Parameter] public bool ShowRefreshButton { get; set; } = false;
+    [Parameter] public EventCallback OnRefresh { get; set; }
+
+    private TrainingBalanceStats? _balanceStats;
+    private SpamClassifierMetadata? _currentModelMetadata;
+    private bool _loading = true;
+
+    // Delta calculations (#174)
+    private int SpamDelta => (_balanceStats?.SpamCount ?? 0) - (_currentModelMetadata?.SpamSampleCount ?? 0);
+    private int HamDelta => (_balanceStats?.TotalHamCount ?? 0) - (_currentModelMetadata?.HamSampleCount ?? 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBalanceStats();
+    }
+
+    private async Task LoadBalanceStats()
+    {
+        _loading = true;
+        try
+        {
+            _balanceStats = await MLTrainingDataRepository.GetTrainingBalanceStatsAsync();
+            _currentModelMetadata = MLTextClassifierService.GetMetadata();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load training balance stats");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleRefresh()
+    {
+        await LoadBalanceStats();
+        if (OnRefresh.HasDelegate)
+        {
+            await OnRefresh.InvokeAsync();
+        }
+    }
+
+    // Current model bar percentages (#174)
+    private double GetCurrentSpamPercentage()
+    {
+        if (_currentModelMetadata == null || _currentModelMetadata.TotalSampleCount == 0) return 0;
+        return ((double)_currentModelMetadata.SpamSampleCount / _currentModelMetadata.TotalSampleCount) * 100;
+    }
+
+    private double GetCurrentHamPercentage()
+    {
+        if (_currentModelMetadata == null || _currentModelMetadata.TotalSampleCount == 0) return 0;
+        return ((double)_currentModelMetadata.HamSampleCount / _currentModelMetadata.TotalSampleCount) * 100;
+    }
+
+    private static string FormatDelta(int delta) => delta >= 0 ? $"+{delta}" : delta.ToString();
+
+    private bool IsBalanced()
+    {
+        if (_balanceStats == null) return false;
+        return _balanceStats.SpamRatio >= SpamClassifierMetadata.MinBalancedSpamRatio &&
+               _balanceStats.SpamRatio <= SpamClassifierMetadata.MaxBalancedSpamRatio;
+    }
+
+    private double GetExplicitSpamPercentage()
+    {
+        if (_balanceStats == null || _balanceStats.TotalSampleCount == 0) return 0;
+        return ((double)_balanceStats.ExplicitSpamCount / _balanceStats.TotalSampleCount) * 100;
+    }
+
+    private double GetImplicitSpamPercentage()
+    {
+        if (_balanceStats == null || _balanceStats.TotalSampleCount == 0) return 0;
+        return ((double)_balanceStats.ImplicitSpamCount / _balanceStats.TotalSampleCount) * 100;
+    }
+
+    private double GetExplicitHamPercentage()
+    {
+        if (_balanceStats == null || _balanceStats.TotalSampleCount == 0) return 0;
+        return ((double)_balanceStats.ExplicitHamCount / _balanceStats.TotalSampleCount) * 100;
+    }
+
+    private double GetImplicitHamPercentage()
+    {
+        if (_balanceStats == null || _balanceStats.TotalSampleCount == 0) return 0;
+        return ((double)_balanceStats.ImplicitHamCount / _balanceStats.TotalSampleCount) * 100;
+    }
+
+    private string GetStatusText()
+    {
+        if (_balanceStats == null) return "Loading...";
+
+        var spamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.SpamCount);
+        var hamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.TotalHamCount);
+
+        if (spamNeeded > 0 && hamNeeded > 0)
+        {
+            return $"⚠️ Insufficient data: Need {spamNeeded} more spam sample{(spamNeeded == 1 ? "" : "s")}, {hamNeeded} more ham sample{(hamNeeded == 1 ? "" : "s")}";
+        }
+        else if (spamNeeded > 0)
+        {
+            return $"⚠️ Insufficient data: Need {spamNeeded} more spam sample{(spamNeeded == 1 ? "" : "s")}";
+        }
+        else if (hamNeeded > 0)
+        {
+            return $"⚠️ Insufficient data: Need {hamNeeded} more ham sample{(hamNeeded == 1 ? "" : "s")}";
+        }
+        else if (!IsBalanced())
+        {
+            return $"⚠️ Data meets minimum requirements but is imbalanced ({_balanceStats.SpamRatio:P1} spam ratio, target: 20-80%)";
+        }
+        else
+        {
+            return $"✓ Meets minimum requirements and is well-balanced ({_balanceStats.SpamRatio:P1} spam ratio, target: 30%)";
+        }
+    }
+
+    private Color GetStatusColor()
+    {
+        if (_balanceStats == null) return Color.Default;
+
+        var spamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.SpamCount);
+        var hamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.TotalHamCount);
+
+        if (spamNeeded > 0 || hamNeeded > 0)
+        {
+            return Color.Error;
+        }
+        else if (!IsBalanced())
+        {
+            return Color.Warning;
+        }
+        else
+        {
+            return Color.Success;
+        }
+    }
+}

@@ -22,7 +22,7 @@ public class AIContentCheckV2(
     ILogger<AIContentCheckV2> logger,
     IChatService chatService,
     IMemoryCache cache,
-    IMessageHistoryService messageHistoryService) : IContentCheckV2
+    IMessageContextProvider messageContextProvider) : IContentCheckV2
 {
     public CheckName CheckName => CheckName.OpenAI;
 
@@ -58,53 +58,64 @@ public class AIContentCheckV2(
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
-        var req = (OpenAICheckRequest)request;
+        var req = (AIVetoCheckRequest)request;
 
         try
         {
+            // Combine caption and OCR text for analysis (handles image-only messages with OCR)
+            var effectiveText = req.Message;
+            if (!string.IsNullOrWhiteSpace(req.OcrExtractedText))
+            {
+                effectiveText = string.IsNullOrWhiteSpace(effectiveText)
+                    ? req.OcrExtractedText
+                    : $"{effectiveText}\n\n[IMAGE TEXT]\n{req.OcrExtractedText}";
+            }
+
             // Skip short messages unless specifically configured to check them
-            if (!req.CheckShortMessages && req.Message.Length < req.MinMessageLength)
+            // Check combined length (not just caption) - handles OCR-only cases
+            if (!req.CheckShortMessages && effectiveText.Length < req.MinMessageLength)
             {
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"Message too short (< {req.MinMessageLength} chars)",
+                    Details = $"Combined text too short (< {req.MinMessageLength} chars)",
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            // In veto mode, only run if other checks flagged as spam
+            // AI veto only runs when other checks flagged as spam
             // Note: This is typically handled by engine, but check here too as fallback
-            if (req.VetoMode && !req.HasSpamFlags)
+            if (!req.HasSpamFlags)
             {
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Veto mode: no spam flags from other checks",
+                    Details = "No spam flags to verify",
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
             // Check cache first (cache by content hash to avoid reprocessing identical messages)
-            var cacheKey = $"ai_check_{GetMessageHash(req.Message)}";
+            // Use effectiveText (caption + OCR) to ensure different images with same caption aren't cached together
+            var cacheKey = $"ai_check_{GetMessageHash(effectiveText)}";
             if (cache.TryGetValue(cacheKey, out ChatCompletionResult? cachedResult) && cachedResult != null)
             {
-                logger.LogDebug("AI V2 check for user {UserId}: Using cached result", req.UserId);
+                logger.LogDebug("AI V2 check for {User}: Using cached result", req.UserName);
                 return ParseAIResponse(cachedResult, fromCache: true, startTimestamp);
             }
 
             // Get message history for context (count from config)
-            var history = await messageHistoryService.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);
+            var history = await messageContextProvider.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);
 
             // Build prompts using the prompt builder
             var prompts = AIPromptBuilder.CreatePrompts(req, history);
 
-            logger.LogDebug("AI V2 check for user {UserId}: Calling AI service with message length {MessageLength}",
-                req.UserId, req.Message.Length);
+            logger.LogDebug("AI V2 check for {User}: Calling AI service (effective text: {EffectiveLength} chars, caption: {CaptionLength}, OCR: {OcrLength})",
+                req.UserName, effectiveText.Length, req.Message?.Length ?? 0, req.OcrExtractedText?.Length ?? 0);
 
             // Make AI call using the chat service
             // Temperature and MaxTokens defaults come from feature config if not specified
@@ -133,8 +144,8 @@ public class AIContentCheckV2(
                 };
             }
 
-            // Cache the result for 1 hour
-            cache.Set(cacheKey, result, TimeSpan.FromHours(1));
+            // Cache the result
+            cache.Set(cacheKey, result, TimeSpan.FromHours(AIConstants.CacheDurationHours));
 
             return ParseAIResponse(result, fromCache: false, startTimestamp);
         }
@@ -243,7 +254,7 @@ public class AIContentCheckV2(
 
             // Map confidence (0.0-1.0) to V2 score (0.0-5.0)
             var confidence = jsonResponse.Confidence ?? ContentDetectionConstants.DefaultOpenAIConfidence;
-            var score = confidence * 5.0;
+            var score = confidence * AIConstants.ConfidenceToScoreMultiplier;
 
             // Review = medium score (capped at review threshold)
             if (isReview)

@@ -1,9 +1,13 @@
 @page "/messages"
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Media
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Core.Utilities
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
@@ -12,11 +16,14 @@
 @inject IManagedChatsRepository ChatsRepository
 @inject IJSRuntime Js
 @inject IDialogService DialogService
-@inject IMessageHistoryService MessageHistoryService
+@inject ITelegramBotService BotService
 @inject BlazorAuthHelper AuthHelper
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject ModerationActionService ModerationService
+@inject ITrainingLabelsRepository TrainingLabelsRepository
+@inject IJobTriggerService JobTriggerService
+@inject ModerationOrchestrator ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
+@inject ITelegramUserRepository TelegramUserRepository
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
@@ -89,10 +96,11 @@
                                                    OnMarkAsSpam="HandleMarkAsSpam"
                                                    OnMarkAsHam="HandleMarkAsHam"
                                                    OnViewDetections="HandleViewDetections"
-                                                   OnFilterByUser="HandleFilterByUser"
+                                                   OnViewUserDetail="ViewUserDetail"
                                                    OnFilterByChat="HandleFilterByChat"
                                                    OnDeleteMessage="HandleDeleteMessage"
                                                    OnTempBan="HandleTempBan"
+                                                   OnWarn="HandleWarn"
                                                    OnReplyClick="HandleReplyClick"
                                                    OnReplyToClick="HandleReplyToClick"
                                                    OnEditClick="@((tuple) => HandleEditClick(tuple.MessageId, tuple.MessageText))"
@@ -181,6 +189,8 @@
     private DateTime _lastUpdate = DateTime.Now;
 
     // User state
+    private string? _currentUserId; // Cached web user ID for service calls
+    private string? _currentUserEmail; // Cached web user email for logging
     private PermissionLevel _userPermissionLevel = PermissionLevel.Admin; // Default to Admin
     private HashSet<long> _userTelegramIds = []; // Current user's linked Telegram IDs
 
@@ -212,27 +222,29 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Get user permission level and ID
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
+        // Cache user identity for service calls (avoids repeated AuthHelper calls)
+        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
+        _currentUserEmail = await AuthHelper.GetCurrentUserEmailAsync();
         _userPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
 
         // Load current user's linked Telegram accounts for message alignment
-        if (!string.IsNullOrEmpty(userId))
+        if (!string.IsNullOrEmpty(_currentUserId))
         {
             try
             {
-                var mappings = await TelegramMappingRepository.GetByUserIdAsync(userId);
+                var mappings = await TelegramMappingRepository.GetByUserIdAsync(_currentUserId);
                 _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for user {UserId}", userId);
+                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
+                    LogDisplayName.WebUserDebug(_currentUserEmail, _currentUserId));
             }
         }
 
         // Subscribe to real-time updates
-        MessageHistoryService.OnNewMessage += HandleNewMessage;
-        MessageHistoryService.OnMediaUpdated += HandleMediaUpdated;
+        BotService.OnNewMessage += HandleNewMessage;
+        BotService.OnMediaUpdated += HandleMediaUpdated;
 
         // Load managed chats
         await LoadChatsAsync();
@@ -253,8 +265,8 @@
     public void Dispose()
     {
         // Unsubscribe from events
-        MessageHistoryService.OnNewMessage -= HandleNewMessage;
-        MessageHistoryService.OnMediaUpdated -= HandleMediaUpdated;
+        BotService.OnNewMessage -= HandleNewMessage;
+        BotService.OnMediaUpdated -= HandleMediaUpdated;
 
         // Dispose JavaScript interop resources
         _infiniteScrollModule?.DisposeAsync();
@@ -914,33 +926,7 @@
 
             if (result.Success)
             {
-                // Refresh detection history for this message in the wrapper
-                var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
-                var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == message.MessageId);
-                if (messageWrapper != null)
-                {
-                    messageWrapper.DetectionResults.Clear();
-                    messageWrapper.DetectionResults.AddRange(history);
-                }
-
-                // Refresh spam check display
-                if (history.Any())
-                {
-                    var latest = history.OrderByDescending(h => h.DetectedAt).First();
-                    _contentChecks[message.MessageId] = new ContentCheckRecord(
-                        Id: latest.Id,
-                        CheckTimestamp: latest.DetectedAt,
-                        UserId: message.UserId,
-                        ContentHash: null,
-                        IsSpam: latest.IsSpam,
-                        Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
-                        Reason: latest.Reason,
-                        CheckType: latest.DetectionMethod,
-                        MatchedMessageId: null
-                    );
-                }
-
-                StateHasChanged();
+                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
 
                 Logger.LogInformation(
                     "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
@@ -983,6 +969,7 @@
                 ? "Manually marked as ham (not spam) by admin - false positive correction"
                 : "Manually added as ham training sample by admin";
 
+            // 1. Create detection result for history (NOT for training)
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = message.MessageId,
@@ -994,13 +981,26 @@
                 Reason = reason,
                 AddedBy = executor,
                 UserId = message.UserId,
-                UsedForTraining = true, // Manual decisions are always training-worthy
+                UsedForTraining = false, // History only - training handled by training_labels
                 NetConfidence = -100, // Strong ham signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
 
-            await DetectionResultsRepository.InsertWithTrainingInvalidationAsync(message.MessageId, detectionResult);
+            await DetectionResultsRepository.InsertAsync(detectionResult);
+
+            // 2. Create explicit training label for ML
+            await TrainingLabelsRepository.UpsertLabelAsync(
+                message.MessageId,
+                label: TrainingLabel.Ham,
+                labeledByUserId: executor.GetTelegramUserId(),
+                reason: reason,
+                auditLogId: null);
+
+            // 3. Trigger ML text classifier retraining
+            await JobTriggerService.TriggerNowAsync(
+                BackgroundJobNames.TextClassifierRetraining,
+                payload: new { });
 
             // 2. Only unban and restore trust if this was previously marked as spam (false positive correction)
             if (wasPreviouslySpam)
@@ -1029,33 +1029,7 @@
                     message.MessageId);
             }
 
-            // Refresh detection history for this message in the wrapper
-            var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
-            var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == message.MessageId);
-            if (messageWrapper != null)
-            {
-                messageWrapper.DetectionResults.Clear();
-                messageWrapper.DetectionResults.AddRange(history);
-            }
-
-            // Refresh spam check display
-            if (history.Any())
-            {
-                var latest = history.OrderByDescending(h => h.DetectedAt).First();
-                _contentChecks[message.MessageId] = new ContentCheckRecord(
-                    Id: latest.Id,
-                    CheckTimestamp: latest.DetectedAt,
-                    UserId: message.UserId,
-                    ContentHash: null,
-                    IsSpam: latest.IsSpam,
-                    Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
-                    Reason: latest.Reason,
-                    CheckType: latest.DetectionMethod,
-                    MatchedMessageId: null
-                );
-            }
-
-            StateHasChanged();
+            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
         }
         catch (Exception ex)
         {
@@ -1063,14 +1037,54 @@
         }
     }
 
+    /// <summary>
+    /// Refreshes detection history display for a message after spam/ham labeling.
+    /// Updates both the message wrapper's cached history and the content checks dictionary.
+    /// </summary>
+    private async Task RefreshDetectionHistoryDisplayAsync(long messageId, long userId)
+    {
+        // Refresh detection history for this message in the wrapper
+        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
+        var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == messageId);
+        if (messageWrapper != null)
+        {
+            messageWrapper.DetectionResults.Clear();
+            messageWrapper.DetectionResults.AddRange(history);
+        }
+
+        // Refresh spam check display
+        if (history.Any())
+        {
+            var latest = history.OrderByDescending(h => h.DetectedAt).First();
+            _contentChecks[messageId] = new ContentCheckRecord(
+                Id: latest.Id,
+                CheckTimestamp: latest.DetectedAt,
+                UserId: userId,
+                ContentHash: null,
+                IsSpam: latest.IsSpam,
+                Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
+                Reason: latest.Reason,
+                CheckType: latest.DetectionMethod,
+                MatchedMessageId: null
+            );
+        }
+
+        StateHasChanged();
+    }
+
     private async Task HandleViewDetections(MessageRecord message)
     {
-        var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+        // Use detection history from wrapper if available (avoids duplicate database query)
+        var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
+        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+
+        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId);
 
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {
             { x => x.Message, message },
-            { x => x.DetectionResults, history }
+            { x => x.DetectionResults, history },
+            { x => x.TrainingLabel, trainingLabel }
         };
 
         var options = new DialogOptions
@@ -1084,20 +1098,25 @@
         await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters, options);
     }
 
-    private void HandleFilterByUser(long userId)
+    /// <summary>
+    /// Open UserDetailDialog when clicking on username or avatar in message bubble (#107)
+    /// </summary>
+    private async Task ViewUserDetail(long userId)
     {
-        // TODO: Display user detail dialog (see issue #107)
-        // Currently disabled - filtering by username was broken
-        return;
+        var parameters = new DialogParameters<UserDetailDialog>
+        {
+            { x => x.UserId, userId }
+        };
 
-        // Old filtering code (broken):
-        // var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.UserId == userId);
-        // if (messageWrapper != null)
-        // {
-        //     _filterState.UserName = messageWrapper.Message.UserName ?? $"User {userId}";
-        //     ApplyFilters();
-        //     StateHasChanged();
-        // }
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
     }
 
     private void HandleFilterByChat(long chatId)
@@ -1246,12 +1265,15 @@
                     yesText: "OK");
 
                 Logger.LogInformation(
-                    "User {UserId} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
-                    message.UserId, banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
+                    "{User} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
+                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
             }
             else
             {
-                Logger.LogError("Failed to temp ban user {UserId}: {Error}", message.UserId, banResult.ErrorMessage);
+                Logger.LogError("Failed to temp ban {User}: {Error}",
+                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    banResult.ErrorMessage);
 
                 await DialogService.ShowMessageBox(
                     "Error",
@@ -1261,12 +1283,88 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error temp banning user {UserId}", message.UserId);
+            Logger.LogError(ex, "Error temp banning {User}",
+                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
 
             await DialogService.ShowMessageBox(
                 "Error",
                 $"Failed to temp ban user: {ex.Message}",
                 yesText: "OK");
+        }
+    }
+
+    private async Task HandleWarn(MessageRecord message)
+    {
+        // Get user's current warning count from database
+        var warningCount = await TelegramUserRepository.GetActiveWarningCountAsync(message.UserId);
+
+        // Show warn dialog
+        var parameters = new DialogParameters<WarnDialog>
+        {
+            { x => x.UserId, message.UserId },
+            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" },
+            { x => x.CurrentWarningCount, warningCount }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<WarnDialog>("Issue Warning", parameters, options);
+        var result = await dialog.Result;
+
+        if (result == null || result.Canceled || result.Data is not WarnDialog.WarnResult warnResult)
+            return;
+
+        try
+        {
+            // Get executor Actor from authentication state
+            Actor executor;
+            try
+            {
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
+
+            // Call moderation service to warn the user
+            var warnServiceResult = await ModerationService.WarnUserAsync(
+                message.UserId,
+                message.MessageId,
+                executor,
+                warnResult.Reason ?? "Warning issued via UI",
+                message.ChatId);
+
+            if (warnServiceResult.Success)
+            {
+                Snackbar.Add($"Warning issued to {message.UserName ?? message.FirstName ?? $"User {message.UserId}"}", Severity.Success);
+
+                Logger.LogInformation(
+                    "Warning issued to {User} for message {MessageId}",
+                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.MessageId);
+            }
+            else
+            {
+                Logger.LogError("Failed to warn {User}: {Error}",
+                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    warnServiceResult.ErrorMessage);
+
+                Snackbar.Add($"Failed to warn user: {warnServiceResult.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error warning {User}",
+                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
+
+            Snackbar.Add($"Failed to warn user: {ex.Message}", Severity.Error);
         }
     }
 
@@ -1389,7 +1487,7 @@
                     string.IsNullOrEmpty(msg.MediaLocalPath))
                 {
                     // Queue for re-download (deduplication handled by queue service)
-                    // Real-time UI updates handled by MessageHistoryService.OnMediaUpdated event
+                    // Real-time UI updates handled by BotService.OnMediaUpdated event
                     var wasQueued = await MediaRefetchQueue.EnqueueMediaAsync(msg.MessageId, msg.MediaType.Value);
                     if (wasQueued)
                     {
@@ -1496,15 +1594,14 @@
     /// </summary>
     private async Task CheckFeatureAvailabilityAsync()
     {
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(_currentUserId))
         {
             _isFeatureAvailable = false;
             _featureUnavailableReason = "Not authenticated";
             return;
         }
 
-        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(userId);
+        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(_currentUserId, _currentUserEmail);
         _isFeatureAvailable = result.IsAvailable;
         _botUserId = result.BotUserId;
         _linkedUsername = result.LinkedUsername;
@@ -1537,15 +1634,15 @@
         if (!_selectedChatId.HasValue)
             return;
 
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(_currentUserId))
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
         var result = await WebBotMessagingService.SendMessageAsync(
-            userId,
+            _currentUserId,
+            _currentUserEmail,
             _selectedChatId.Value,
             text,
             _replyToMessageId);
@@ -1573,15 +1670,15 @@
         if (!_isEditingMessageId.HasValue || !_selectedChatId.HasValue)
             return;
 
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(_currentUserId))
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
         var result = await WebBotMessagingService.EditMessageAsync(
-            userId,
+            _currentUserId,
+            _currentUserEmail,
             _selectedChatId.Value,
             (int)_isEditingMessageId.Value,
             text);

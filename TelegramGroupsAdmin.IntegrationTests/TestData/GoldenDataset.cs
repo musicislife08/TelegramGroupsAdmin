@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 37; // Updated 2025-12-09: +linked_channels (Phase 4.10 impersonation detection)
+    public const int TotalTableCount = 36; // Updated 2026-01-08: -content_check_configs (merged into content_detection_configs)
 
     /// <summary>
     /// Web application users (ASP.NET Identity)
@@ -246,6 +246,42 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Training labels (explicit ML training data for spam classifier)
+    /// </summary>
+    public static class TrainingLabels
+    {
+        // Spam label 1: Msg1 marked as spam by admin
+        public const long Label1_MessageId = Messages.Msg1_Id;
+        public const short Label1_Label = 0; // Spam
+        public const long Label1_LabeledByUserId = TelegramUsers.User1_TelegramUserId;
+        public const string Label1_Reason = "Manual spam marking via /report command";
+
+        // Spam label 2: Msg2 marked as spam (no user attribution)
+        public const long Label2_MessageId = Messages.Msg2_Id;
+        public const short Label2_Label = 0; // Spam
+        public static readonly long? Label2_LabeledByUserId = null;
+        public const string Label2_Reason = "Confirmed spam pattern";
+
+        // Ham label 1: Msg3 corrected to ham
+        public const long Label3_MessageId = Messages.Msg3_Id;
+        public const short Label3_Label = 1; // Ham
+        public const long Label3_LabeledByUserId = TelegramUsers.User2_TelegramUserId;
+        public const string Label3_Reason = "Admin correction - false positive";
+
+        // Ham label 2: Msg4 marked as ham (no reason)
+        public const long Label4_MessageId = Messages.Msg4_Id;
+        public const short Label4_Label = 1; // Ham
+        public static readonly long? Label4_LabeledByUserId = null;
+        public static readonly string? Label4_Reason = null;
+
+        // Spam label 3: Msg5 marked as spam (no reason)
+        public const long Label5_MessageId = Messages.Msg5_Id;
+        public const short Label5_Label = 0; // Spam
+        public static readonly long? Label5_LabeledByUserId = null;
+        public static readonly string? Label5_Reason = null;
+    }
+
+    /// <summary>
     /// Linked channels (channels linked to managed chat groups for impersonation detection)
     /// </summary>
     public static class LinkedChannels
@@ -282,22 +318,6 @@ public static class GoldenDataset
         public const long Config1_Id = 1;
         public const long Config1_ChatId = 0; // Global config (SCHEMA-3: chat_id = 0 for global)
 
-        // Spam detection config (real structure, simplified)
-        public const string SpamDetectionConfigJson = """
-        {
-          "cas": {"apiUrl": "https://api.cas.chat", "enabled": true, "timeout": "00:00:05"},
-          "bayes": {"enabled": true, "minSpamProbability": 50},
-          "openAI": {"enabled": true, "vetoMode": true, "vetoThreshold": 95, "checkShortMessages": false},
-          "spacing": {"enabled": true, "minWordsCount": 5, "spaceRatioThreshold": 0.3},
-          "stopWords": {"enabled": true, "confidenceThreshold": 50},
-          "similarity": {"enabled": true, "threshold": 0.5},
-          "threatIntel": {"enabled": true, "timeout": "00:00:30", "useVirusTotal": true},
-          "autoBanThreshold": 80,
-          "firstMessageOnly": true,
-          "minMessageLength": 20
-        }
-        """;
-
         // Backup encryption config (real structure)
         public const string BackupEncryptionConfigJson = """
         {
@@ -311,113 +331,71 @@ public static class GoldenDataset
     }
 
     /// <summary>
-    /// Seed the test database with golden dataset.
-    /// Encrypts sensitive fields using the test container's Data Protection system.
+    /// Seeds full dataset: base data + GoldenDataset training labels (3 spam + 2 ham) + MLTrainingData.sql (20 spam + 20 ham).
+    /// Total: 23 spam + 22 ham training samples.
+    /// Use for most tests that need complete training data.
     /// </summary>
-    public static async Task SeedDatabaseAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
+    public static async Task SeedAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
     {
-        // Create Data Protector for API keys if provider available
+        await SeedBaseDataAsync(context, dataProtectionProvider);
+        await SeedGoldenDatasetTrainingLabelsAsync(context);
+        await SeedMLTrainingDataScriptAsync(context);
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds only base data (messages, users, chats, configs) - NO training labels or ML data.
+    /// Total: 0 spam + 0 ham training samples.
+    /// Use for threshold tests that need to create minimal custom datasets.
+    /// </summary>
+    public static async Task SeedWithoutTrainingDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
+    {
+        await SeedBaseDataAsync(context, dataProtectionProvider);
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds base data + GoldenDataset training labels only (3 spam + 2 ham) - skips MLTrainingData.sql.
+    /// Total: 3 spam + 2 ham training samples (below 20 minimum threshold).
+    /// Use for tests validating behavior with insufficient training data.
+    /// </summary>
+    public static async Task SeedWithMinimalTrainingDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
+    {
+        await SeedBaseDataAsync(context, dataProtectionProvider);
+        await SeedGoldenDatasetTrainingLabelsAsync(context);
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds base database structure (users, chats, messages, detection_results, configs).
+    /// Loads SQL scripts 00-05 in FK dependency order, then configs inline (encryption).
+    /// Does NOT seed training_labels or ML training data.
+    /// </summary>
+    private static async Task SeedBaseDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider)
+    {
+        // Load base data scripts in FK dependency order
+        await LoadSqlScriptAsync(context, "SQL.00_base_telegram_users.sql");
+        await LoadSqlScriptAsync(context, "SQL.01_base_web_users.sql");
+        await LoadSqlScriptAsync(context, "SQL.02_base_managed_chats.sql");
+        await LoadSqlScriptAsync(context, "SQL.03_base_linked_channels.sql");
+        await LoadSqlScriptAsync(context, "SQL.04_base_messages.sql");
+        await LoadSqlScriptAsync(context, "SQL.05_base_detection_results.sql");
+        await LoadSqlScriptAsync(context, "SQL.06_base_content_detection_configs.sql");
+
+        // Seed configs inline (requires runtime encryption of API keys)
+        await SeedConfigsAsync(context, dataProtectionProvider);
+    }
+
+    /// <summary>
+    /// Seeds configs with encrypted API keys.
+    /// Kept inline because encryption output changes every run (includes nonce/timestamp).
+    /// </summary>
+    private static async Task SeedConfigsAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider)
+    {
         var apiKeyProtector = dataProtectionProvider?.CreateProtector(DataProtectionPurposes.ApiKeys);
-
-        // 1. Seed telegram_users (no FK dependencies)
-        // Insert separately to handle nulls properly
-        await context.Database.ExecuteSqlRawAsync(
-            $"""
-            INSERT INTO telegram_users (telegram_user_id, username, first_name, last_name, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
-            VALUES
-            ({TelegramUsers.System_TelegramUserId}, '{TelegramUsers.System_Username}', NULL, NULL, {TelegramUsers.System_IsTrusted}, {TelegramUsers.System_BotDmEnabled}, NOW() - INTERVAL '14 days', NOW(), NOW() - INTERVAL '14 days', NOW()),
-            ({TelegramUsers.User1_TelegramUserId}, '{TelegramUsers.User1_Username}', '{TelegramUsers.User1_FirstName}', '{TelegramUsers.User1_LastName}', {TelegramUsers.User1_IsTrusted}, {TelegramUsers.User1_BotDmEnabled}, NOW() - INTERVAL '13 days', NOW(), NOW() - INTERVAL '13 days', NOW()),
-            ({TelegramUsers.User2_TelegramUserId}, '{TelegramUsers.User2_Username}', '{TelegramUsers.User2_FirstName}', '{TelegramUsers.User2_LastName}', {TelegramUsers.User2_IsTrusted}, {TelegramUsers.User2_BotDmEnabled}, NOW() - INTERVAL '12 days', NOW(), NOW() - INTERVAL '12 days', NOW()),
-            ({TelegramUsers.User3_TelegramUserId}, '{TelegramUsers.User3_Username}', '{TelegramUsers.User3_FirstName}', '{TelegramUsers.User3_LastName}', {TelegramUsers.User3_IsTrusted}, {TelegramUsers.User3_BotDmEnabled}, NOW() - INTERVAL '11 days', NOW(), NOW() - INTERVAL '11 days', NOW()),
-            ({TelegramUsers.User4_TelegramUserId}, '{TelegramUsers.User4_Username}', '{TelegramUsers.User4_FirstName}', '{TelegramUsers.User4_LastName}', {TelegramUsers.User4_IsTrusted}, {TelegramUsers.User4_BotDmEnabled}, NOW() - INTERVAL '10 days', NOW(), NOW() - INTERVAL '10 days', NOW()),
-            ({TelegramUsers.User5_TelegramUserId}, '{TelegramUsers.User5_Username}', NULL, NULL, {TelegramUsers.User5_IsTrusted}, {TelegramUsers.User5_BotDmEnabled}, NOW() - INTERVAL '9 days', NOW(), NOW() - INTERVAL '9 days', NOW()),
-            ({TelegramUsers.User6_TelegramUserId}, NULL, '{TelegramUsers.User6_FirstName}', NULL, {TelegramUsers.User6_IsTrusted}, {TelegramUsers.User6_BotDmEnabled}, NOW() - INTERVAL '8 days', NOW(), NOW() - INTERVAL '8 days', NOW()),
-            ({TelegramUsers.User7_TelegramUserId}, '{TelegramUsers.User7_Username}', NULL, NULL, {TelegramUsers.User7_IsTrusted}, {TelegramUsers.User7_BotDmEnabled}, NOW() - INTERVAL '7 days', NOW(), NOW() - INTERVAL '7 days', NOW())
-            """
-        );
-
-        // 2. Seed users (with self-referencing FK: invited_by)
-        // Note: Using plaintext password hash (not real, just for testing structure)
-        const string testPasswordHash = "AQAAAAIAAYagAAAAEDummyHashForTestingOnly1234567890";
-        const string testSecurityStamp = "TEST_SECURITY_STAMP";
-
-#pragma warning disable EF1002 // SQL injection risk suppressed: all values are static test constants
-        await context.Database.ExecuteSqlRawAsync(
-            $"""
-            INSERT INTO users (id, email, normalized_email, password_hash, security_stamp, permission_level, invited_by, is_active, totp_secret, totp_enabled, totp_setup_started_at, created_at, last_login_at, status, email_verified, "InvitedByUserId")
-            VALUES
-            ('{Users.User1_Id}', '{Users.User1_Email}', '{Users.User1_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User1_PermissionLevel}, NULL, TRUE, NULL, {Users.User1_TotpEnabled}, NULL, NOW() - INTERVAL '14 days', NOW(), {Users.User1_Status}, {Users.User1_EmailVerified}, NULL),
-            ('{Users.User2_Id}', '{Users.User2_Email}', '{Users.User2_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User2_PermissionLevel}, '{Users.User1_Id}', TRUE, NULL, {Users.User2_TotpEnabled}, NULL, NOW() - INTERVAL '13 days', NOW(), {Users.User2_Status}, {Users.User2_EmailVerified}, '{Users.User1_Id}'),
-            ('{Users.User3_Id}', '{Users.User3_Email}', '{Users.User3_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User3_PermissionLevel}, '{Users.User1_Id}', FALSE, NULL, {Users.User3_TotpEnabled}, NULL, NOW() - INTERVAL '12 days', NULL, {Users.User3_Status}, {Users.User3_EmailVerified}, '{Users.User1_Id}'),
-            ('{Users.User4_Id}', '{Users.User4_Email}', '{Users.User4_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User4_PermissionLevel}, '{Users.User2_Id}', FALSE, NULL, {Users.User4_TotpEnabled}, NULL, NOW() - INTERVAL '11 days', NULL, {Users.User4_Status}, {Users.User4_EmailVerified}, '{Users.User2_Id}')
-            """
-        );
-#pragma warning restore EF1002
-
-        // 3. Seed managed_chats
-        await context.Database.ExecuteSqlRawAsync(
-            $"""
-            INSERT INTO managed_chats (chat_id, chat_name, chat_type, bot_status, is_admin, added_at, is_active, last_seen_at)
-            VALUES
-            ({ManagedChats.Chat1_Id}, '{ManagedChats.Chat1_Name}', {ManagedChats.Chat1_Type}, {ManagedChats.Chat1_BotStatus}, {ManagedChats.Chat1_IsAdmin}, NOW() - INTERVAL '13 days', {ManagedChats.Chat1_IsActive}, NOW()),
-            ({ManagedChats.Chat2_Id}, '{ManagedChats.Chat2_Name}', {ManagedChats.Chat2_Type}, {ManagedChats.Chat2_BotStatus}, {ManagedChats.Chat2_IsAdmin}, NOW() - INTERVAL '12 days', {ManagedChats.Chat2_IsActive}, NOW()),
-            ({ManagedChats.Chat3_Id}, '{ManagedChats.Chat3_Name}', {ManagedChats.Chat3_Type}, {ManagedChats.Chat3_BotStatus}, {ManagedChats.Chat3_IsAdmin}, NOW() - INTERVAL '11 days', {ManagedChats.Chat3_IsActive}, NOW()),
-            ({ManagedChats.MainChat_Id}, '{ManagedChats.MainChat_Name}', {ManagedChats.MainChat_Type}, {ManagedChats.MainChat_BotStatus}, {ManagedChats.MainChat_IsAdmin}, NOW() - INTERVAL '10 days', {ManagedChats.MainChat_IsActive}, NOW())
-            """
-        );
-
-        // 4. Seed linked_channels (FK to managed_chats)
-        await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO linked_channels (managed_chat_id, channel_id, channel_name, channel_icon_path, photo_hash, last_synced)
-            VALUES
-            ({{LinkedChannels.Channel1_ManagedChatId}}, {{LinkedChannels.Channel1_ChannelId}}, {0}, NULL, {1}, NOW() - INTERVAL '1 day'),
-            ({{LinkedChannels.Channel2_ManagedChatId}}, {{LinkedChannels.Channel2_ChannelId}}, {2}, {3}, NULL, NOW() - INTERVAL '2 days')
-            """,
-            LinkedChannels.Channel1_Name,
-            LinkedChannels.Channel1_PhotoHash,
-            LinkedChannels.Channel2_Name,
-            (object?)LinkedChannels.Channel2_IconPath ?? DBNull.Value
-        );
-
-        // 5. Seed messages (use parameters for text to handle special characters, FK to telegram_users and managed_chats)
-        await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, content_check_skip_reason)
-            VALUES
-            ({{Messages.Msg1_Id}}, {{Messages.Msg1_UserId}}, {{Messages.Msg1_ChatId}}, NOW() - INTERVAL '1 hour', {0}, NULL, {{Messages.Msg1_ContentCheckSkipReason}}),
-            ({{Messages.Msg2_Id}}, {{Messages.Msg2_UserId}}, {{Messages.Msg2_ChatId}}, NOW() - INTERVAL '2 hours', {1}, NULL, {{Messages.Msg2_ContentCheckSkipReason}}),
-            ({{Messages.Msg3_Id}}, {{Messages.Msg3_UserId}}, {{Messages.Msg3_ChatId}}, NOW() - INTERVAL '3 hours', {2}, NULL, {{Messages.Msg3_ContentCheckSkipReason}}),
-            ({{Messages.Msg4_Id}}, {{Messages.Msg4_UserId}}, {{Messages.Msg4_ChatId}}, NOW() - INTERVAL '4 hours', {3}, NULL, {{Messages.Msg4_ContentCheckSkipReason}}),
-            ({{Messages.Msg5_Id}}, {{Messages.Msg5_UserId}}, {{Messages.Msg5_ChatId}}, NOW() - INTERVAL '5 hours', {4}, NULL, {{Messages.Msg5_ContentCheckSkipReason}}),
-            ({{Messages.Msg6_Id}}, {{Messages.Msg6_UserId}}, {{Messages.Msg6_ChatId}}, NOW() - INTERVAL '6 hours', NULL, {{Messages.Msg6_MediaType}}, {{Messages.Msg6_ContentCheckSkipReason}}),
-            ({{Messages.Msg7_Id}}, {{Messages.Msg7_UserId}}, {{Messages.Msg7_ChatId}}, NOW() - INTERVAL '7 hours', {5}, NULL, {{Messages.Msg7_ContentCheckSkipReason}}),
-            ({{Messages.Msg8_Id}}, {{Messages.Msg8_UserId}}, {{Messages.Msg8_ChatId}}, NOW() - INTERVAL '8 hours', {6}, NULL, {{Messages.Msg8_ContentCheckSkipReason}}),
-            ({{Messages.Msg9_Id}}, {{Messages.Msg9_UserId}}, {{Messages.Msg9_ChatId}}, NOW() - INTERVAL '9 hours', {7}, NULL, {{Messages.Msg9_ContentCheckSkipReason}}),
-            ({{Messages.Msg10_Id}}, {{Messages.Msg10_UserId}}, {{Messages.Msg10_ChatId}}, NOW() - INTERVAL '10 hours', {8}, NULL, {{Messages.Msg10_ContentCheckSkipReason}}),
-            ({{Messages.Msg11_Id}}, {{Messages.Msg11_UserId}}, {{Messages.Msg11_ChatId}}, NOW() - INTERVAL '11 hours', {9}, NULL, {{Messages.Msg11_ContentCheckSkipReason}})
-            """,
-            Messages.Msg1_Text, Messages.Msg2_Text, Messages.Msg3_Text, Messages.Msg4_Text, Messages.Msg5_Text,
-            Messages.Msg7_Text, Messages.Msg8_Text, Messages.Msg9_Text, Messages.Msg10_Text, Messages.Msg11_Text
-        );
-
-        // 6. Seed detection_results (FK to messages)
-        await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
-            VALUES
-            ({{DetectionResults.Result1_MessageId}}, NOW() - INTERVAL '1 hour', 'System', {0}, {{DetectionResults.Result1_Confidence}}, {1}, 'spam-detection-v1', FALSE, {{DetectionResults.Result1_NetConfidence}}, 0),
-            (82581, NOW() - INTERVAL '2 hours', 'System', {2}, {{DetectionResults.Result2_Confidence}}, {3}, 'spam-detection-v1', FALSE, {{DetectionResults.Result2_NetConfidence}}, 0)
-            """,
-            DetectionResults.Result1_DetectionMethod, DetectionResults.Result1_Reason,
-            DetectionResults.Result2_DetectionMethod, DetectionResults.Result2_Reason
-        );
-
-        // 7. Seed configs (with encrypted api_keys and JSONB)
         string? encryptedApiKeys = null;
         if (apiKeyProtector != null)
         {
-            // Encrypt test API keys using Data Protection
             var apiKeysJson = $$"""
             {
               "VirusTotal": "{{ApiKeys.VirusTotal_Test}}"
@@ -427,17 +405,105 @@ public static class GoldenDataset
         }
 
         await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO configs (id, chat_id, spam_detection_config, api_keys, backup_encryption_config, created_at)
+            """
+            INSERT INTO configs (id, chat_id, api_keys, backup_encryption_config, created_at)
             VALUES
-            ({{Configs.Config1_Id}}, {0}, {1}::jsonb, {2}, {3}::jsonb, NOW() - INTERVAL '10 days')
+            ({0}, {1}, {2}, {3}::jsonb, NOW() - INTERVAL '10 days')
             """,
+            Configs.Config1_Id,
             Configs.Config1_ChatId,
-            Configs.SpamDetectionConfigJson!,
             encryptedApiKeys!,
             Configs.BackupEncryptionConfigJson!
         );
+    }
 
-        await context.SaveChangesAsync();
+    /// <summary>
+    /// Seeds GoldenDataset training labels (3 spam + 2 ham from original test data).
+    /// </summary>
+    private static async Task SeedGoldenDatasetTrainingLabelsAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.10_training_minimal.sql");
+    }
+
+    /// <summary>
+    /// Seeds ML training data from embedded SQL script (20 spam + 20 ham).
+    /// </summary>
+    private static async Task SeedMLTrainingDataScriptAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "MLTrainingData.sql");
+    }
+
+    /// <summary>
+    /// Seeds balanced ML training data (20 spam + 20 ham).
+    /// Use for tests requiring balanced training datasets.
+    /// </summary>
+    public static async Task SeedBalancedTrainingDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.11_training_full.sql");
+    }
+
+    /// <summary>
+    /// Seeds global content detection configuration (chat_id = 0).
+    /// Use for tests that need content detection settings without full base data.
+    /// </summary>
+    public static async Task SeedContentDetectionConfigAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.06_base_content_detection_configs.sql");
+    }
+
+    /// <summary>
+    /// Seeds high-spam imbalanced ML training data (100 spam + 20 ham, 83.3% spam, 5:1 ratio).
+    /// Use for testing ML classifier behavior with high spam ratio.
+    /// </summary>
+    public static async Task SeedHighSpamTrainingDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.20_unbalanced_100_20.sql");
+    }
+
+    /// <summary>
+    /// Seeds high-ham imbalanced ML training data (20 spam + 100 ham, 16.7% spam, 1:5 ratio).
+    /// Use for testing ML classifier behavior with high ham ratio.
+    /// </summary>
+    public static async Task SeedHighHamTrainingDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.21_unbalanced_20_100.sql");
+    }
+
+    /// <summary>
+    /// Seeds deduplication test data with intentional near-duplicates (22 messages with 7 distinct groups).
+    /// Use for testing SimHash near-duplicate detection accuracy.
+    /// Message IDs: 95001-95022
+    /// Groups:
+    /// - Group 1 (95001-95004): Crypto signal spam variants
+    /// - Group 2 (95005-95007): Investment scam variants
+    /// - Group 3 (95008-95010): Giveaway scam variants
+    /// - Group 4 (95011-95013): Different spam topics (not near-duplicates)
+    /// - Group 5 (95014-95016): Legitimate ham messages
+    /// - Group 6 (95017-95019): Ham near-duplicates
+    /// - Group 7 (95020-95022): More spam variants
+    /// </summary>
+    public static async Task SeedDeduplicationTestDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.30_dedup_test_data.sql");
+    }
+
+    /// <summary>
+    /// Loads and executes an embedded SQL script from TestData directory.
+    /// </summary>
+    /// <param name="context">Database context</param>
+    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.11_training_full.sql")</param>
+    private static async Task LoadSqlScriptAsync(AppDbContext context, string scriptPath)
+    {
+        var assembly = typeof(GoldenDataset).Assembly;
+        var resourceName = $"TelegramGroupsAdmin.IntegrationTests.TestData.{scriptPath}";
+        await using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
+        {
+            throw new InvalidOperationException($"Embedded resource not found: {resourceName}. Ensure the SQL file is marked as EmbeddedResource in the .csproj file.");
+        }
+
+        using var reader = new StreamReader(stream);
+        var sqlScript = await reader.ReadToEndAsync();
+        await context.Database.ExecuteSqlRawAsync(sqlScript);
     }
 }

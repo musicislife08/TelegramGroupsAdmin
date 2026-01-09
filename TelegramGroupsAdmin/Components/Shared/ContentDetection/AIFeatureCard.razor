@@ -1,5 +1,6 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Core.Services.AI
+@using TelegramGroupsAdmin.Core.Utilities
 
 <MudPaper Class="pa-4" Elevation="2">
     <MudStack Spacing="3">
@@ -102,7 +103,7 @@
                 {
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
                         @SelectedConnection.AvailableModels.Count models available
-                        (fetched @FormatRelativeTime(SelectedConnection.ModelsLastFetched.Value))
+                        (fetched @DateTimeUtilities.FormatRelativeTimeCompact(SelectedConnection.ModelsLastFetched.Value))
                     </MudText>
                 }
             }
@@ -383,14 +384,4 @@
         AIProviderType.LocalOpenAI => "Local",
         _ => provider.ToString()
     };
-
-    private static string FormatRelativeTime(DateTimeOffset dateTime)
-    {
-        var diff = DateTimeOffset.UtcNow - dateTime;
-
-        if (diff.TotalMinutes < 1) return "just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes} min ago";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours} hr ago";
-        return $"{(int)diff.TotalDays} days ago";
-    }
 }

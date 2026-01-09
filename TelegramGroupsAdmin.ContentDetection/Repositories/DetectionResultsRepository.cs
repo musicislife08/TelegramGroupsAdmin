@@ -202,45 +202,50 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Phase 2.6: Only use high-quality training samples for similarity matching
-        var results = await WithMessageJoin(
-                context.DetectionResults.AsNoTracking()
-                    .Where(dr => dr.IsSpam == true && dr.UsedForTraining == true), // Filter BEFORE join
-                context)
-            .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
-            .OrderByDescending(x => x.DetectionResult.DetectedAt)
-            .Take(limit)
-            .Select(x => x.Message.MessageText!)
-            .ToListAsync(cancellationToken);
+        // Use query syntax for EF Core translation compatibility (H10 pattern from GetTrainingSamplesAsync)
+        var results = await (
+            from dr in context.DetectionResults.AsNoTracking()
+            join m in context.Messages on dr.MessageId equals m.MessageId
+            where dr.IsSpam == true
+                && dr.UsedForTraining == true
+                && m.MessageText != null
+                && m.MessageText != ""
+            orderby dr.DetectedAt descending
+            select m.MessageText
+        ).Take(limit).ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} spam samples for similarity check (used_for_training = true)",
             results.Count);
 
-        return results;
+        return results!;
     }
 
-    public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
+    public async Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        // Mirror of GetSpamSamplesForSimilarityAsync but for ham samples
+        // Use query syntax for EF Core translation compatibility
+        var results = await (
+            from dr in context.DetectionResults.AsNoTracking()
+            join m in context.Messages on dr.MessageId equals m.MessageId
+            where dr.IsSpam == false
+                && dr.UsedForTraining == true
+                && m.MessageText != null
+                && m.MessageText != ""
+            orderby dr.DetectedAt descending
+            select m.MessageText
+        ).Take(limit).ToListAsync(cancellationToken);
 
-        // Single source of truth: telegram_users.is_trusted column
-        // This includes: service account auto-trust, manual trust, and auto-trust (Phase 5.5)
-        // user_actions table is for audit trail only (who/when/why), not for current state
-        var isTrusted = await context.TelegramUsers
-            .AsNoTracking()
-            .Where(u => u.TelegramUserId == userId && u.IsTrusted)
-            .AnyAsync(cancellationToken);
+        _logger.LogDebug(
+            "Retrieved {Count} ham samples for similarity check (used_for_training = true)",
+            results.Count);
 
-        if (isTrusted)
-        {
-            _logger.LogDebug(
-                "User {UserId} is trusted (chat: {ChatId})",
-                userId,
-                chatId?.ToString() ?? "global");
-        }
-
-        return isTrusted;
+        return results!;
     }
+
+    // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
+    // Source of truth is telegram_users.is_trusted column
 
     public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default)
     {
@@ -444,51 +449,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             _logger.LogInformation(
                 "Invalidated {Count} training data record(s) for message {MessageId}",
                 affectedRecords, messageId);
-        }
-    }
-
-    /// <summary>
-    /// Atomically invalidate old training data and insert a new detection result.
-    /// This ensures both operations happen in a single transaction - if either fails, both are rolled back.
-    /// Used by ModerationActionService.MarkAsSpamAndBanAsync to prevent ML training data corruption.
-    /// </summary>
-    public async Task InsertWithTrainingInvalidationAsync(long messageId, DetectionResultRecord result, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // Step 1: Invalidate old training data for this message
-        // Note: ExecuteUpdateAsync commits immediately, so we need to use tracked entities instead
-        var existingTrainingRecords = await context.DetectionResults
-            .Where(dr => dr.MessageId == messageId && dr.UsedForTraining)
-            .ToListAsync(cancellationToken);
-
-        foreach (var record in existingTrainingRecords)
-        {
-            record.UsedForTraining = false;
-        }
-
-        // Step 2: Add the new detection result
-        var entity = result.ToDto();
-        context.DetectionResults.Add(entity);
-
-        // Single SaveChangesAsync for both operations (implicit transaction)
-        await context.SaveChangesAsync(cancellationToken);
-
-        if (existingTrainingRecords.Count > 0)
-        {
-            _logger.LogInformation(
-                "Atomically invalidated {Count} training record(s) and inserted new detection result for message {MessageId}",
-                existingTrainingRecords.Count, messageId);
-        }
-        else
-        {
-            _logger.LogDebug(
-                "Inserted detection result for message {MessageId}: {IsSpam} (confidence: {Confidence}, net: {NetConfidence}, training: {UsedForTraining})",
-                result.MessageId,
-                result.IsSpam ? "spam" : "ham",
-                result.Confidence,
-                result.NetConfidence,
-                result.UsedForTraining);
         }
     }
 

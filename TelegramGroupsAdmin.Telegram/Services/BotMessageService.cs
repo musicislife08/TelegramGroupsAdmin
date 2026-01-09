@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -14,8 +13,9 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Ensures all bot-sent messages are tracked in the database for complete conversation history.
 /// Phase 1: Bot message storage and deletion tracking
 /// </summary>
-public class BotMessageService
+public class BotMessageService : IBotMessageService
 {
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IMessageHistoryRepository _messageRepo;
     private readonly IMessageEditService _editService;
     private readonly ITelegramUserRepository _userRepo;
@@ -23,11 +23,13 @@ public class BotMessageService
     private User? _cachedBotInfo; // In-memory cache to avoid repeated GetMe() calls
 
     public BotMessageService(
+        ITelegramBotClientFactory botClientFactory,
         IMessageHistoryRepository messageRepo,
         IMessageEditService editService,
         ITelegramUserRepository userRepo,
         ILogger<BotMessageService> logger)
     {
+        _botClientFactory = botClientFactory;
         _messageRepo = messageRepo;
         _editService = editService;
         _userRepo = userRepo;
@@ -39,31 +41,26 @@ public class BotMessageService
     /// Returns the sent Message object (contains MessageId for tracking).
     /// </summary>
     public async Task<Message> SendAndSaveMessageAsync(
-        ITelegramBotClient botClient,
         long chatId,
         string text,
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
         CancellationToken cancellationToken = default)
     {
+        var operations = await _botClientFactory.GetOperationsAsync();
+
         // Send message via Telegram
-        var sentMessage = parseMode.HasValue
-            ? await botClient.SendMessage(
-                chatId: chatId,
-                text: text,
-                parseMode: parseMode.Value,
-                replyParameters: replyParameters,
-                cancellationToken: cancellationToken)
-            : await botClient.SendMessage(
-                chatId: chatId,
-                text: text,
-                replyParameters: replyParameters,
-                cancellationToken: cancellationToken);
+        var sentMessage = await operations.SendMessageAsync(
+            chatId: chatId,
+            text: text,
+            parseMode: parseMode,
+            replyParameters: replyParameters,
+            cancellationToken: cancellationToken);
 
         // Get bot user info (fetch once and cache in memory)
         if (_cachedBotInfo == null)
         {
-            _cachedBotInfo = await botClient.GetMe(cancellationToken);
+            _cachedBotInfo = await operations.GetMeAsync(cancellationToken);
             _logger.LogDebug("Fetched and cached bot info: {BotId} (@{BotUsername})", _cachedBotInfo.Id, _cachedBotInfo.Username);
         }
         var botInfo = _cachedBotInfo;
@@ -80,6 +77,7 @@ public class BotMessageService
             PhotoFileUniqueId: null,
             IsBot: true,
             IsTrusted: false,
+            IsBanned: false,
             BotDmEnabled: false,
             FirstSeenAt: now,
             LastSeenAt: now,
@@ -140,13 +138,14 @@ public class BotMessageService
     /// Used for web UI editing of bot messages (Phase 1: Send & Edit Messages as Bot).
     /// </summary>
     public async Task<Message> EditAndUpdateMessageAsync(
-        ITelegramBotClient botClient,
         long chatId,
         int messageId,
         string text,
         ParseMode? parseMode = null,
         CancellationToken cancellationToken = default)
     {
+        var operations = await _botClientFactory.GetOperationsAsync();
+
         // Get old message from database for edit history
         var oldMessage = await _messageRepo.GetMessageAsync(messageId, cancellationToken);
         if (oldMessage == null)
@@ -157,18 +156,12 @@ public class BotMessageService
         var oldText = oldMessage.MessageText;
 
         // Edit message via Telegram
-        var editedMessage = parseMode.HasValue
-            ? await botClient.EditMessageText(
-                chatId: chatId,
-                messageId: messageId,
-                text: text,
-                parseMode: parseMode.Value,
-                cancellationToken: cancellationToken)
-            : await botClient.EditMessageText(
-                chatId: chatId,
-                messageId: messageId,
-                text: text,
-                cancellationToken: cancellationToken);
+        var editedMessage = await operations.EditMessageTextAsync(
+            chatId: chatId,
+            messageId: messageId,
+            text: text,
+            parseMode: parseMode,
+            cancellationToken: cancellationToken);
 
         var editDate = editedMessage.EditDate.HasValue
             ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero) // DateTime (UTC) → DateTimeOffset
@@ -218,16 +211,17 @@ public class BotMessageService
     /// Gracefully handles cases where message is already deleted from Telegram.
     /// </summary>
     public async Task DeleteAndMarkMessageAsync(
-        ITelegramBotClient botClient,
         long chatId,
         int messageId,
         string deletionSource = "bot_cleanup",
         CancellationToken cancellationToken = default)
     {
+        var operations = await _botClientFactory.GetOperationsAsync();
+
         try
         {
             // Delete from Telegram
-            await botClient.DeleteMessage(chatId, messageId, cancellationToken);
+            await operations.DeleteMessageAsync(chatId, messageId, cancellationToken);
 
             // Mark as deleted in database
             await _messageRepo.MarkMessageAsDeletedAsync(messageId, deletionSource, cancellationToken);

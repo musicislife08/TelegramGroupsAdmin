@@ -1,4 +1,6 @@
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -16,16 +18,6 @@ public class AccountLockoutService : IAccountLockoutService
     private readonly IAuditService _auditService;
     private readonly ILogger<AccountLockoutService> _logger;
 
-    // Lockout configuration
-    private const int MaxFailedAttempts = 5;
-    private static readonly TimeSpan[] LockoutDurations =
-    [
-        TimeSpan.FromMinutes(1),   // 1st lockout
-        TimeSpan.FromMinutes(10),  // 2nd lockout
-        TimeSpan.FromMinutes(30),  // 3rd lockout
-        TimeSpan.FromMinutes(120)  // 4th+ lockouts
-    ];
-
     public AccountLockoutService(
         IUserRepository userRepository,
         IEmailService emailService,
@@ -38,13 +30,13 @@ public class AccountLockoutService : IAccountLockoutService
         _logger = logger;
     }
 
-    public async Task HandleFailedLoginAsync(string userId, CancellationToken ct = default)
+    public async Task HandleFailedLoginAsync(string userId, CancellationToken cancellationToken = default)
     {
         // Increment failed login attempts counter
-        await _userRepository.IncrementFailedLoginAttemptsAsync(userId, ct);
+        await _userRepository.IncrementFailedLoginAttemptsAsync(userId, cancellationToken);
 
         // Get updated user to check threshold
-        var user = await _userRepository.GetByIdAsync(userId, ct);
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
         if (user == null)
         {
             _logger.LogWarning("User {UserId} not found when handling failed login", userId);
@@ -52,20 +44,20 @@ public class AccountLockoutService : IAccountLockoutService
         }
 
         // Check if threshold reached
-        if (user.FailedLoginAttempts >= MaxFailedAttempts)
+        if (user.FailedLoginAttempts >= AccountLockoutConstants.MaxFailedAttempts)
         {
             // Calculate lockout duration using exponential backoff
             // Use number of previous lockouts to determine duration index
-            var lockoutIndex = Math.Min(user.FailedLoginAttempts - MaxFailedAttempts, LockoutDurations.Length - 1);
-            var lockoutDuration = LockoutDurations[lockoutIndex];
+            var lockoutIndex = Math.Min(user.FailedLoginAttempts - AccountLockoutConstants.MaxFailedAttempts, AccountLockoutConstants.LockoutDurations.Length - 1);
+            var lockoutDuration = AccountLockoutConstants.LockoutDurations[lockoutIndex];
             var lockedUntil = DateTimeOffset.UtcNow + lockoutDuration;
 
             // Lock the account
-            await _userRepository.LockAccountAsync(userId, lockedUntil, ct);
+            await _userRepository.LockAccountAsync(userId, lockedUntil, cancellationToken);
 
             _logger.LogWarning(
-                "Account locked for user {UserId} after {Attempts} failed attempts. Locked until {LockedUntil}",
-                userId, user.FailedLoginAttempts, lockedUntil);
+                "Account locked for {User} after {Attempts} failed attempts. Locked until {LockedUntil}",
+                LogDisplayName.WebUserDebug(user.Email, userId), user.FailedLoginAttempts, lockedUntil);
 
             // Send email notification (fire-and-forget, don't block login flow)
             _ = Task.Run(async () =>
@@ -81,13 +73,13 @@ public class AccountLockoutService : IAccountLockoutService
                             ["lockedUntil"] = lockedUntil.ToString("yyyy-MM-dd HH:mm:ss UTC"),
                             ["attempts"] = user.FailedLoginAttempts.ToString()
                         },
-                        ct);
+                        cancellationToken);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed to send account lockout email to {Email}", user.Email);
                 }
-            }, ct);
+            }, cancellationToken);
 
             // Audit log the lockout event
             await _auditService.LogEventAsync(
@@ -95,20 +87,21 @@ public class AccountLockoutService : IAccountLockoutService
                 actor: Actor.FromSystem("account_lockout"),
                 target: Actor.FromWebUser(userId),
                 value: $"Account locked until {lockedUntil:yyyy-MM-dd HH:mm:ss UTC} after {user.FailedLoginAttempts} failed login attempts",
-                ct: ct);
+                cancellationToken: cancellationToken);
         }
     }
 
-    public async Task ResetLockoutAsync(string userId, CancellationToken ct = default)
+    public async Task ResetLockoutAsync(string userId, string userEmail, CancellationToken cancellationToken = default)
     {
-        await _userRepository.ResetFailedLoginAttemptsAsync(userId, ct);
-        _logger.LogInformation("Reset lockout state for user {UserId} after successful login", userId);
+        await _userRepository.ResetFailedLoginAttemptsAsync(userId, cancellationToken);
+        _logger.LogInformation("Reset lockout state for {User} after successful login",
+            LogDisplayName.WebUserInfo(userEmail, userId));
     }
 
-    public async Task UnlockAccountAsync(string userId, string unlockedBy, CancellationToken ct = default)
+    public async Task UnlockAccountAsync(string userId, string unlockedById, string unlockedByEmail, CancellationToken cancellationToken = default)
     {
         // Get user before unlock
-        var user = await _userRepository.GetByIdAsync(userId, ct);
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
         if (user == null)
         {
             _logger.LogWarning("User {UserId} not found when attempting manual unlock", userId);
@@ -116,9 +109,11 @@ public class AccountLockoutService : IAccountLockoutService
         }
 
         // Unlock the account
-        await _userRepository.UnlockAccountAsync(userId, ct);
+        await _userRepository.UnlockAccountAsync(userId, cancellationToken);
 
-        _logger.LogInformation("Account manually unlocked for user {UserId} by {UnlockedBy}", userId, unlockedBy);
+        _logger.LogInformation("Account manually unlocked for {User} by {Admin}",
+            LogDisplayName.WebUserInfo(user.Email, userId),
+            LogDisplayName.WebUserInfo(unlockedByEmail, unlockedById));
 
         // Send email notification (fire-and-forget)
         _ = Task.Run(async () =>
@@ -132,20 +127,20 @@ public class AccountLockoutService : IAccountLockoutService
                     {
                         ["email"] = user.Email
                     },
-                    ct);
+                    cancellationToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send account unlock email to {Email}", user.Email);
             }
-        }, ct);
+        }, cancellationToken);
 
         // Audit log the unlock event
         await _auditService.LogEventAsync(
             AuditEventType.UserAccountUnlocked,
-            actor: Actor.FromWebUser(unlockedBy),
+            actor: Actor.FromWebUser(unlockedById),
             target: Actor.FromWebUser(userId),
             value: "Account manually unlocked by administrator",
-            ct: ct);
+            cancellationToken: cancellationToken);
     }
 }

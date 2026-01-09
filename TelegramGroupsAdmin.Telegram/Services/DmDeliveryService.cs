@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Exceptions;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -15,13 +17,13 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class DmDeliveryService : IDmDeliveryService
 {
     private readonly ILogger<DmDeliveryService> _logger;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IServiceProvider _serviceProvider;
     private readonly IJobScheduler _jobScheduler;
 
     public DmDeliveryService(
         ILogger<DmDeliveryService> logger,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IServiceProvider serviceProvider,
         IJobScheduler jobScheduler)
     {
@@ -38,26 +40,27 @@ public class DmDeliveryService : IDmDeliveryService
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default)
     {
-        var botClient = await _botClientFactory.GetBotClientAsync();
+        var operations = await _botClientFactory.GetOperationsAsync();
+
+        // Fetch user once for logging (reuse for all logs in this method)
+        using var scope = _serviceProvider.CreateScope();
+        var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
         {
             // Attempt to send DM
-            await botClient.SendMessage(
+            await operations.SendMessageAsync(
                 chatId: telegramUserId,
                 text: messageText,
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "DM sent successfully to user {UserId}",
-                telegramUserId);
+                "DM sent successfully to {User}",
+                user.ToLogInfo(telegramUserId));
 
             // Update bot_dm_enabled flag to true (user can receive DMs)
-            using (var scope = _serviceProvider.CreateScope())
-            {
-                var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
-            }
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -70,22 +73,18 @@ public class DmDeliveryService : IDmDeliveryService
         {
             // User has blocked the bot or hasn't started a DM
             _logger.LogWarning(
-                "DM blocked for user {UserId} (403 Forbidden){FallbackInfo}",
-                telegramUserId,
+                "DM blocked for {User} (403 Forbidden){FallbackInfo}",
+                user.ToLogDebug(telegramUserId),
                 fallbackChatId.HasValue ? $" - falling back to chat {fallbackChatId.Value}" : " - no fallback configured");
 
             // Update bot_dm_enabled flag to false
-            using (var scope = _serviceProvider.CreateScope())
-            {
-                var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
-            }
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
 
             // If fallback chat is configured, post message there
             if (fallbackChatId.HasValue)
             {
                 return await SendFallbackToChatAsync(
-                    botClient,
+                    operations,
                     fallbackChatId.Value,
                     messageText,
                     autoDeleteSeconds,
@@ -104,8 +103,8 @@ public class DmDeliveryService : IDmDeliveryService
         {
             _logger.LogError(
                 ex,
-                "Failed to send DM to user {UserId}",
-                telegramUserId);
+                "Failed to send DM to {User}",
+                user.ToLogDebug(telegramUserId));
 
             return new DmDeliveryResult
             {
@@ -123,27 +122,29 @@ public class DmDeliveryService : IDmDeliveryService
         string messageText,
         CancellationToken cancellationToken = default)
     {
-        var botClient = await _botClientFactory.GetBotClientAsync();
+        var operations = await _botClientFactory.GetOperationsAsync();
+
+        // Fetch user once for logging (reuse for all logs in this method)
+        using var scope = _serviceProvider.CreateScope();
+        var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var pendingNotificationsRepository = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
+        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
         {
             // Attempt to send DM
-            await botClient.SendMessage(
+            await operations.SendMessageAsync(
                 chatId: telegramUserId,
                 text: messageText,
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "DM sent successfully to user {UserId} (notification type: {NotificationType})",
-                telegramUserId,
+                "DM sent successfully to {User} (notification type: {NotificationType})",
+                user.ToLogInfo(telegramUserId),
                 notificationType);
 
             // Update bot_dm_enabled flag to true (user can receive DMs)
-            using (var scope = _serviceProvider.CreateScope())
-            {
-                var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
-            }
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -156,25 +157,19 @@ public class DmDeliveryService : IDmDeliveryService
         {
             // User has blocked the bot or hasn't started a DM - queue for later
             _logger.LogWarning(
-                "DM blocked for user {UserId} - queueing {NotificationType} notification for later delivery",
-                telegramUserId,
+                "DM blocked for {User} - queueing {NotificationType} notification for later delivery",
+                user.ToLogDebug(telegramUserId),
                 notificationType);
 
             // Update bot_dm_enabled flag to false and queue notification
-            using (var scope = _serviceProvider.CreateScope())
-            {
-                var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                var pendingNotificationsRepository = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
 
-                await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
-
-                // Queue notification for later delivery
-                await pendingNotificationsRepository.AddPendingNotificationAsync(
-                    telegramUserId,
-                    notificationType,
-                    messageText,
-                    cancellationToken: cancellationToken);
-            }
+            // Queue notification for later delivery
+            await pendingNotificationsRepository.AddPendingNotificationAsync(
+                telegramUserId,
+                notificationType,
+                messageText,
+                cancellationToken: cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -190,16 +185,16 @@ public class DmDeliveryService : IDmDeliveryService
             if (IsNetworkError(ex))
             {
                 _logger.LogWarning(
-                    "Failed to send DM to user {UserId} - network unavailable (notification type: {NotificationType})",
-                    telegramUserId,
+                    "Failed to send DM to {User} - network unavailable (notification type: {NotificationType})",
+                    user.ToLogDebug(telegramUserId),
                     notificationType);
             }
             else
             {
                 _logger.LogError(
                     ex,
-                    "Failed to send DM to user {UserId} (notification type: {NotificationType})",
-                    telegramUserId,
+                    "Failed to send DM to {User} (notification type: {NotificationType})",
+                    user.ToLogDebug(telegramUserId),
                     notificationType);
             }
 
@@ -217,23 +212,28 @@ public class DmDeliveryService : IDmDeliveryService
     /// Send fallback message in chat with optional auto-delete
     /// </summary>
     private async Task<DmDeliveryResult> SendFallbackToChatAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         long chatId,
         string messageText,
         int? autoDeleteSeconds,
         CancellationToken cancellationToken)
     {
+        // Fetch chat once for logging (reuse for all logs in this method)
+        using var scope = _serviceProvider.CreateScope();
+        var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+        var chat = await managedChatsRepo.GetByChatIdAsync(chatId, cancellationToken);
+
         try
         {
-            var fallbackMessage = await botClient.SendMessage(
+            var fallbackMessage = await operations.SendMessageAsync(
                 chatId: chatId,
                 text: messageText,
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Sent fallback message {MessageId} in chat {ChatId}{DeleteInfo}",
+                "Sent fallback message {MessageId} in {Chat}{DeleteInfo}",
                 fallbackMessage.MessageId,
-                chatId,
+                chat.ToLogInfo(chatId),
                 autoDeleteSeconds.HasValue ? $", will delete in {autoDeleteSeconds.Value} seconds" : "");
 
             // Schedule auto-delete if requested
@@ -266,15 +266,15 @@ public class DmDeliveryService : IDmDeliveryService
             if (IsNetworkError(ex))
             {
                 _logger.LogWarning(
-                    "Failed to send fallback message in chat {ChatId} - network unavailable",
-                    chatId);
+                    "Failed to send fallback message in {Chat} - network unavailable",
+                    chat.ToLogDebug(chatId));
             }
             else
             {
                 _logger.LogError(
                     ex,
-                    "Failed to send fallback message in chat {ChatId}",
-                    chatId);
+                    "Failed to send fallback message in {Chat}",
+                    chat.ToLogDebug(chatId));
             }
 
             return new DmDeliveryResult
@@ -295,7 +295,13 @@ public class DmDeliveryService : IDmDeliveryService
         string? videoPath = null,
         CancellationToken cancellationToken = default)
     {
-        var botClient = await _botClientFactory.GetBotClientAsync();
+        var operations = await _botClientFactory.GetOperationsAsync();
+
+        // Fetch user once for logging (reuse for all logs in this method)
+        using var scope = _serviceProvider.CreateScope();
+        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var notificationRepo = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
+        var user = await telegramUserRepo.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
         {
@@ -309,61 +315,55 @@ public class DmDeliveryService : IDmDeliveryService
                 {
                     // Send photo with caption
                     await using var photoStream = File.OpenRead(photoPath);
-                    await botClient.SendPhoto(
+                    await operations.SendPhotoAsync(
                         chatId: telegramUserId,
-                        photo: global::Telegram.Bot.Types.InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
+                        photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
                         caption: messageText,
-                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        parseMode: ParseMode.MarkdownV2,
                         cancellationToken: cancellationToken);
 
-                    _logger.LogInformation("DM with photo sent successfully to user {UserId}", telegramUserId);
+                    _logger.LogInformation("DM with photo sent successfully to {User}", user.ToLogInfo(telegramUserId));
                 }
                 else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
                 {
                     // Send video with caption
                     await using var videoStream = File.OpenRead(videoPath);
-                    await botClient.SendVideo(
+                    await operations.SendVideoAsync(
                         chatId: telegramUserId,
-                        video: global::Telegram.Bot.Types.InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
+                        video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
                         caption: messageText,
-                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        parseMode: ParseMode.MarkdownV2,
                         cancellationToken: cancellationToken);
 
-                    _logger.LogInformation("DM with video sent successfully to user {UserId}", telegramUserId);
+                    _logger.LogInformation("DM with video sent successfully to {User}", user.ToLogInfo(telegramUserId));
                 }
                 else
                 {
                     // Media path provided but file doesn't exist - fallback to text only
-                    _logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to user {UserId}",
-                        photoPath, videoPath, telegramUserId);
+                    _logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to {User}",
+                        photoPath, videoPath, user.ToLogDebug(telegramUserId));
 
-                    await botClient.SendMessage(
+                    await operations.SendMessageAsync(
                         chatId: telegramUserId,
                         text: messageText,
-                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
-                        linkPreviewOptions: new global::Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true },
+                        parseMode: ParseMode.MarkdownV2,
                         cancellationToken: cancellationToken);
                 }
             }
             else
             {
                 // No media - send text only
-                await botClient.SendMessage(
+                await operations.SendMessageAsync(
                     chatId: telegramUserId,
                     text: messageText,
-                    parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
-                    linkPreviewOptions: new global::Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true },
+                    parseMode: ParseMode.MarkdownV2,
                     cancellationToken: cancellationToken);
 
-                _logger.LogInformation("DM sent successfully to user {UserId}", telegramUserId);
+                _logger.LogInformation("DM sent successfully to {User}", user.ToLogInfo(telegramUserId));
             }
 
             // Update bot_dm_enabled flag to true
-            using (var updateScope = _serviceProvider.CreateScope())
-            {
-                var telegramUserRepo = updateScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
-            }
+            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -375,17 +375,12 @@ public class DmDeliveryService : IDmDeliveryService
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
             // User has blocked the bot - update flag and queue notification
-            _logger.LogInformation("User {UserId} has blocked bot DMs (403), queuing notification", telegramUserId);
+            _logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
 
-            using (var updateScope = _serviceProvider.CreateScope())
-            {
-                var telegramUserRepo = updateScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
 
-                // Queue notification for later delivery
-                var notificationRepo = updateScope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
-                await notificationRepo.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
-            }
+            // Queue notification for later delivery
+            await notificationRepo.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -397,7 +392,7 @@ public class DmDeliveryService : IDmDeliveryService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send DM with media to user {UserId}", telegramUserId);
+            _logger.LogError(ex, "Failed to send DM with media to {User}", user.ToLogDebug(telegramUserId));
             return new DmDeliveryResult
             {
                 DmSent = false,
