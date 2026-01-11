@@ -62,13 +62,21 @@ public class AIContentCheckV2(
 
         try
         {
-            // Combine caption and OCR text for analysis (handles image-only messages with OCR)
+            // Combine caption, OCR text, and Vision analysis for analysis
             var effectiveText = req.Message;
             if (!string.IsNullOrWhiteSpace(req.OcrExtractedText))
             {
                 effectiveText = string.IsNullOrWhiteSpace(effectiveText)
                     ? req.OcrExtractedText
-                    : $"{effectiveText}\n\n[IMAGE TEXT]\n{req.OcrExtractedText}";
+                    : $"{effectiveText}\n\n<image-text>\n{req.OcrExtractedText}\n</image-text>";
+            }
+
+            // Add Vision analysis text (raw reason/patterns from image spam detection)
+            if (!string.IsNullOrWhiteSpace(req.VisionAnalysisText))
+            {
+                effectiveText = string.IsNullOrWhiteSpace(effectiveText)
+                    ? req.VisionAnalysisText
+                    : $"{effectiveText}\n\n<image-analysis>\n{req.VisionAnalysisText}\n</image-analysis>";
             }
 
             // Skip short messages unless specifically configured to check them
@@ -114,8 +122,8 @@ public class AIContentCheckV2(
             // Build prompts using the prompt builder
             var prompts = AIPromptBuilder.CreatePrompts(req, history);
 
-            logger.LogDebug("AI V2 check for {User}: Calling AI service (effective text: {EffectiveLength} chars, caption: {CaptionLength}, OCR: {OcrLength})",
-                req.UserName, effectiveText.Length, req.Message?.Length ?? 0, req.OcrExtractedText?.Length ?? 0);
+            logger.LogDebug("AI V2 check for {User}: Calling AI service (effective text: {EffectiveLength} chars, caption: {CaptionLength}, OCR: {OcrLength}, Vision: {VisionLength})",
+                req.UserName, effectiveText.Length, req.Message?.Length ?? 0, req.OcrExtractedText?.Length ?? 0, req.VisionAnalysisText?.Length ?? 0);
 
             // Make AI call using the chat service
             // Temperature and MaxTokens defaults come from feature config if not specified

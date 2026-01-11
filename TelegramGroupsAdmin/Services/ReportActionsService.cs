@@ -85,10 +85,8 @@ public class ReportActionsService : IReportActionsService
             Actor.FromTelegramUser(message.UserId),
             $"spam:report#{reportId}:chats{result.ChatsAffected}");
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"✅ Report reviewed: User banned from {result.ChatsAffected} chats, message deleted as spam");
+        // Delete the /report command message (cleanup - no reply needed, action is visible)
+        await DeleteReportCommandMessageAsync(report);
     }
 
     public async Task HandleBanActionAsync(long reportId, string reviewerId)
@@ -152,10 +150,8 @@ public class ReportActionsService : IReportActionsService
             Actor.FromTelegramUser(message.UserId),
             $"ban:report#{reportId}:chats{result.ChatsAffected}");
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"✅ Report reviewed: User banned from {result.ChatsAffected} chats");
+        // Delete the /report command message (cleanup - no reply needed, action is visible)
+        await DeleteReportCommandMessageAsync(report);
     }
 
     public async Task HandleWarnActionAsync(long reportId, string reviewerId)
@@ -204,10 +200,8 @@ public class ReportActionsService : IReportActionsService
             Actor.FromTelegramUser(message.UserId),
             $"warn:report#{reportId}:warnings{result.WarningCount}");
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"✅ Report reviewed: Warning issued to user");
+        // Delete the /report command message (cleanup - no reply needed, action is visible)
+        await DeleteReportCommandMessageAsync(report);
     }
 
     public async Task HandleDismissActionAsync(long reportId, string reviewerId, string? reason = null)
@@ -233,10 +227,11 @@ public class ReportActionsService : IReportActionsService
             null,
             $"dismiss:report#{reportId}:{reason ?? "no_action"}");
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"ℹ️ Report reviewed: No violation found{(reason != null ? $" ({reason})" : "")}");
+        // Reply to original REPORTED message (not /report command) - for dismiss only
+        await SendDismissReplyAsync(report);
+
+        // Delete the /report command message (cleanup)
+        await DeleteReportCommandMessageAsync(report);
 
         _logger.LogInformation(
             "Dismissed report {ReportId} (reason: {Reason})",
@@ -244,31 +239,58 @@ public class ReportActionsService : IReportActionsService
             reason ?? "none");
     }
 
-    private async Task SendReportReplyAsync(Report report, string message)
+    /// <summary>
+    /// Send dismiss notification as a reply to the original REPORTED message.
+    /// Only used for dismiss action - other actions have visible outcomes.
+    /// </summary>
+    private async Task SendDismissReplyAsync(Report report)
     {
         try
         {
-            // Phase 2.6: For web UI reports, reply to the reported message itself
-            // For Telegram /report command, reply to the command message
-            // This ensures all reports get visible feedback in the chat
-            var replyToMessageId = report.ReportCommandMessageId ?? report.MessageId;
-
-            // Use BotMessageService to save bot response to database
+            // Reply to the original REPORTED message (not /report command)
             await _botMessageService.SendAndSaveMessageAsync(
                 report.ChatId,
-                message,
+                "✓ This message was reviewed and no action was taken",
                 parseMode: ParseMode.Markdown,
                 replyParameters: new global::Telegram.Bot.Types.ReplyParameters
                 {
-                    MessageId = replyToMessageId
+                    MessageId = report.MessageId
                 });
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
-                "Failed to send reply to message {MessageId} in chat {ChatId}",
-                report.ReportCommandMessageId ?? report.MessageId,
-                report.ChatId);
+            // Original message might be deleted - that's okay
+            _logger.LogDebug(ex,
+                "Could not reply to reported message {MessageId} (may be deleted)",
+                report.MessageId);
+        }
+    }
+
+    /// <summary>
+    /// Delete the /report command message after review (cleanup).
+    /// </summary>
+    private async Task DeleteReportCommandMessageAsync(Report report)
+    {
+        if (!report.ReportCommandMessageId.HasValue)
+            return; // Web UI reports don't have a command message
+
+        try
+        {
+            await _botMessageService.DeleteAndMarkMessageAsync(
+                report.ChatId,
+                report.ReportCommandMessageId.Value,
+                deletionSource: "report_reviewed");
+
+            _logger.LogDebug(
+                "Deleted /report command message {MessageId} in chat {ChatId}",
+                report.ReportCommandMessageId.Value, report.ChatId);
+        }
+        catch (Exception ex)
+        {
+            // Message might already be deleted - that's okay
+            _logger.LogDebug(ex,
+                "Could not delete /report command message {MessageId} (may already be deleted)",
+                report.ReportCommandMessageId);
         }
     }
 }

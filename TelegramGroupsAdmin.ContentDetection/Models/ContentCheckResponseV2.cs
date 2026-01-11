@@ -45,4 +45,10 @@ public record ContentCheckResponseV2
     /// OCR-extracted text from image (populated by ImageContentCheckV2 for downstream veto use)
     /// </summary>
     public string? OcrExtractedText { get; init; }
+
+    /// <summary>
+    /// Raw text analysis from OpenAI Vision API (reason + patterns).
+    /// Stored raw for downstream processing; Details field has formatted version for UI.
+    /// </summary>
+    public string? VisionAnalysisText { get; init; }
 }

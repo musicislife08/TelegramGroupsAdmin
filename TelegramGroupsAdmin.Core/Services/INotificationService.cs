@@ -17,6 +17,9 @@ public interface INotificationService
     /// <param name="eventType">Type of event triggering the notification</param>
     /// <param name="subject">Notification subject/title</param>
     /// <param name="message">Notification message body</param>
+    /// <param name="reportId">Optional report ID for moderation action buttons</param>
+    /// <param name="photoPath">Optional absolute path to photo for DM with image</param>
+    /// <param name="reportedUserId">Optional reported user's Telegram ID for moderation actions</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Dictionary mapping userId to delivery success</returns>
     Task<Dictionary<string, bool>> SendChatNotificationAsync(
@@ -24,6 +27,9 @@ public interface INotificationService
         NotificationEventType eventType,
         string subject,
         string message,
+        long? reportId = null,
+        string? photoPath = null,
+        long? reportedUserId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

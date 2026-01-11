@@ -155,7 +155,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                     request.UserName ?? $"User {request.UserId}", systemPrompt != null);
 
                 var vetoRequest = request with { HasSpamFlags = true };
-                var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, cancellationToken);
+                var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, pipelineResult.VisionAnalysisText, cancellationToken);
                 var vetoResultV2 = await aiVetoCheck.CheckAsync(checkRequest);
 
                 // Convert V2 response to ContentCheckResponse
@@ -257,9 +257,10 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         // Convert V2 responses to V1 format for backward compatibility
         var checkResultsV1 = ConvertV2ResponsesToV1(checkResponsesV2, totalScore);
 
-        // Extract OCR text from ImageSpam check for downstream veto use
-        var ocrExtractedText = checkResponsesV2
-            .FirstOrDefault(r => r.CheckName == CheckName.ImageSpam)?.OcrExtractedText;
+        // Extract OCR text and Vision analysis from ImageSpam check for downstream veto use
+        var imageSpamResponse = checkResponsesV2.FirstOrDefault(r => r.CheckName == CheckName.ImageSpam);
+        var ocrExtractedText = imageSpamResponse?.OcrExtractedText;
+        var visionAnalysisText = imageSpamResponse?.VisionAnalysisText;
 
         // Determine action based on total score (SpamAssassin-style thresholds)
         var isSpam = totalScore >= ContentDetectionConstants.ReviewThreshold; // ≥3.0 is spam (may need review)
@@ -285,7 +286,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             PrimaryReason = primaryReason,
             RecommendedAction = recommendedAction,
             ShouldVeto = shouldVeto,
-            OcrExtractedText = ocrExtractedText
+            OcrExtractedText = ocrExtractedText,
+            VisionAnalysisText = visionAnalysisText
         };
 
         _logger.LogInformation("V2 spam check complete: Score={TotalScore:F1}, IsSpam={IsSpam}, Action={Action}",
@@ -440,6 +442,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         AIFeatureConfig? featureConfig,
         string? systemPrompt,
         string? ocrExtractedText,
+        string? visionAnalysisText,
         CancellationToken cancellationToken)
     {
         return new AIVetoCheckRequest
@@ -456,6 +459,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             Model = featureConfig?.Model ?? "gpt-4o-mini",
             MaxTokens = featureConfig?.MaxTokens ?? 500,
             OcrExtractedText = ocrExtractedText,
+            VisionAnalysisText = visionAnalysisText,
             CancellationToken = cancellationToken
         };
     }

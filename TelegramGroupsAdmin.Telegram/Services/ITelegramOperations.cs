@@ -52,6 +52,17 @@ public interface ITelegramOperations
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Edit caption of an existing media message (photo, video, etc.).
+    /// </summary>
+    Task<Message> EditMessageCaptionAsync(
+        long chatId,
+        int messageId,
+        string caption,
+        ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete a message from a chat.
     /// </summary>
     Task DeleteMessageAsync(long chatId, int messageId, CancellationToken cancellationToken = default);

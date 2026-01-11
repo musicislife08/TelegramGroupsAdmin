@@ -63,4 +63,9 @@ public record ContentDetectionResult
     /// OCR-extracted text from image (populated by ImageContentCheckV2 for downstream veto use)
     /// </summary>
     public string? OcrExtractedText { get; init; }
+
+    /// <summary>
+    /// Raw Vision API analysis text (populated by ImageContentCheckV2 for downstream veto use)
+    /// </summary>
+    public string? VisionAnalysisText { get; init; }
 }

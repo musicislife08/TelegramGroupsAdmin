@@ -738,6 +738,23 @@ public class BackupServiceTests
                 Failed = false
             });
         }
+
+        public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
+            long telegramUserId,
+            string notificationType,
+            string messageText,
+            string? photoPath = null,
+            global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+            CancellationToken cancellationToken = default)
+        {
+            // No-op for tests - return success
+            return Task.FromResult(new DmDeliveryResult
+            {
+                DmSent = true,
+                FallbackUsed = false,
+                Failed = false
+            });
+        }
     }
 
     /// <summary>
@@ -759,6 +776,9 @@ public class BackupServiceTests
             NotificationEventType eventType,
             string subject,
             string message,
+            long? reportId = null,
+            string? photoPath = null,
+            long? reportedUserId = null,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests

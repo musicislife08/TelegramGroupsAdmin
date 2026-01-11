@@ -10,5 +10,11 @@ public record SendChatNotificationPayload(
     long ChatId,
     NotificationEventType EventType,
     string Subject,
-    string Message
+    string Message,
+    /// <summary>Report ID for action buttons (optional)</summary>
+    long? ReportId = null,
+    /// <summary>Absolute path to photo file for DM with image (optional)</summary>
+    string? PhotoPath = null,
+    /// <summary>Reported user's Telegram ID for moderation actions (optional)</summary>
+    long? ReportedUserId = null
 );

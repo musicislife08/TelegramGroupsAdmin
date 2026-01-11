@@ -456,6 +456,14 @@ public class ImageContentCheckV2(
             logger.LogDebug("AI Vision V2 analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
                 userId, response.Spam, response.Confidence, response.Reason);
 
+            // Build raw Vision text for downstream processing (AI veto)
+            var rawVisionText = response.Reason ?? "";
+            if (response.PatternsDetected?.Length > 0)
+            {
+                rawVisionText += $" Patterns: {string.Join(", ", response.PatternsDetected)}";
+            }
+
+            // Build formatted details for UI display
             var details = response.Reason ?? "No reason provided";
             if (response.PatternsDetected?.Length > 0)
             {
@@ -472,7 +480,8 @@ public class ImageContentCheckV2(
                     Abstained = true,
                     Details = $"AI Vision: Clean ({details})",
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                    OcrExtractedText = extractedOcrText
+                    OcrExtractedText = extractedOcrText,
+                    VisionAnalysisText = rawVisionText
                 };
             }
 
@@ -486,7 +495,8 @@ public class ImageContentCheckV2(
                 Abstained = false,
                 Details = details,
                 ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                OcrExtractedText = extractedOcrText
+                OcrExtractedText = extractedOcrText,
+                VisionAnalysisText = rawVisionText
             };
         }
         catch (Exception ex)

@@ -56,6 +56,9 @@ public class NotificationService : INotificationService
         NotificationEventType eventType,
         string subject,
         string message,
+        long? reportId = null,
+        string? photoPath = null,
+        long? reportedUserId = null,
         CancellationToken cancellationToken = default)
     {
         // Fetch chat once for logging (reuse for all logs in this method)
@@ -95,7 +98,10 @@ public class NotificationService : INotificationService
             var results = new Dictionary<string, bool>();
             foreach (var user in linkedAdmins)
             {
-                var success = await SendNotificationAsync(user, eventType, subject, message, cancellationToken);
+                var success = await SendNotificationAsync(
+                    user, eventType, subject, message,
+                    reportId, photoPath, reportedUserId, chatId,
+                    cancellationToken);
                 results[user.Id] = success;
             }
 
@@ -155,6 +161,24 @@ public class NotificationService : INotificationService
         string message,
         CancellationToken cancellationToken = default)
     {
+        // Call internal method without report-specific parameters
+        return await SendNotificationAsync(
+            user, eventType, subject, message,
+            reportId: null, photoPath: null, reportedUserId: null, chatId: null,
+            cancellationToken);
+    }
+
+    private async Task<bool> SendNotificationAsync(
+        UserRecord user,
+        NotificationEventType eventType,
+        string subject,
+        string message,
+        long? reportId,
+        string? photoPath,
+        long? reportedUserId,
+        long? chatId,
+        CancellationToken cancellationToken)
+    {
         try
         {
             // Get user preferences (creates default if not exists)
@@ -165,7 +189,10 @@ public class NotificationService : INotificationService
             // Telegram DM channel - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.TelegramDm, eventType))
             {
-                var telegramSuccess = await SendTelegramDmAsync(user.Id, subject, message, cancellationToken);
+                var telegramSuccess = await SendTelegramDmAsync(
+                    user.Id, subject, message,
+                    reportId, photoPath, reportedUserId, chatId,
+                    cancellationToken);
                 deliverySuccess = deliverySuccess || telegramSuccess;
             }
 
@@ -223,7 +250,15 @@ public class NotificationService : INotificationService
     /// Send notification via Telegram DM
     /// Maps web user ID to Telegram ID and delivers via DM (with queue fallback)
     /// </summary>
-    private async Task<bool> SendTelegramDmAsync(string userId, string subject, string message, CancellationToken cancellationToken)
+    private async Task<bool> SendTelegramDmAsync(
+        string userId,
+        string subject,
+        string message,
+        long? reportId,
+        string? photoPath,
+        long? reportedUserId,
+        long? chatId,
+        CancellationToken cancellationToken)
     {
         // Fetch once for logging
         var user = await _userRepo.GetByIdAsync(userId, cancellationToken);
@@ -244,12 +279,35 @@ public class NotificationService : INotificationService
             // Format message with subject
             var formattedMessage = $"🔔 *{EscapeMarkdown(subject)}*\n\n{EscapeMarkdown(message)}";
 
-            // Send DM with queue fallback (pending notifications)
-            var result = await _dmDeliveryService.SendDmWithQueueAsync(
-                mapping.TelegramId,
-                "notification", // notification type for pending_notifications table
-                formattedMessage,
-                cancellationToken);
+            // Build inline keyboard if this is a report notification with action context
+            global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null;
+            if (reportId.HasValue && reportedUserId.HasValue && chatId.HasValue)
+            {
+                keyboard = BuildReportActionKeyboard(reportId.Value, chatId.Value, reportedUserId.Value);
+            }
+
+            DmDeliveryResult result;
+
+            // Send with photo and keyboard if we have report context
+            if (keyboard != null || !string.IsNullOrWhiteSpace(photoPath))
+            {
+                result = await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
+                    mapping.TelegramId,
+                    "report",
+                    formattedMessage,
+                    photoPath,
+                    keyboard,
+                    cancellationToken);
+            }
+            else
+            {
+                // Standard DM with queue fallback
+                result = await _dmDeliveryService.SendDmWithQueueAsync(
+                    mapping.TelegramId,
+                    "notification",
+                    formattedMessage,
+                    cancellationToken);
+            }
 
             if (result.DmSent)
             {
@@ -272,6 +330,32 @@ public class NotificationService : INotificationService
             _logger.LogError(ex, "Failed to send Telegram DM to {User}", user.ToLogDebug(userId));
             return false;
         }
+    }
+
+    /// <summary>
+    /// Build inline keyboard with report moderation action buttons
+    /// </summary>
+    private static global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup BuildReportActionKeyboard(
+        long reportId,
+        long chatId,
+        long userId)
+    {
+        // Format: rpt:{actionInt}:{reportId}:{chatId}:{userId}
+        string Cb(int action) => $"rpt:{action}:{reportId}:{chatId}:{userId}";
+
+        return new global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("🚫 Spam", Cb(0)),
+                global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("⚠️ Warn", Cb(1))
+            },
+            new[]
+            {
+                global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("⏱️ TempBan", Cb(2)),
+                global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("✓ Dismiss", Cb(3))
+            }
+        });
     }
 
     /// <summary>

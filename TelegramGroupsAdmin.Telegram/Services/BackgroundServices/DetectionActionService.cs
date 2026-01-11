@@ -806,7 +806,7 @@ public class DetectionActionService(
             {
                 using var scope = serviceProvider.CreateScope();
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                await notificationService.SendChatNotificationAsync(chat.Id, eventType, subject, message, cancellationToken);
+                await notificationService.SendChatNotificationAsync(chat.Id, eventType, subject, message, cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {

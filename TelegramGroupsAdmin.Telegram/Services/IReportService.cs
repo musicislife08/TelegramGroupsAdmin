@@ -7,9 +7,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Result of creating a report
 /// </summary>
 public record ReportCreationResult(
-    long ReportId,
-    int DmNotificationCount,
-    int ChatMentionCount);
+    long ReportId);
 
 /// <summary>
 /// Service for creating reports and sending notifications

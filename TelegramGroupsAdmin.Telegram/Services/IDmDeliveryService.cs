@@ -58,4 +58,25 @@ public interface IDmDeliveryService
         string? photoPath = null,
         string? videoPath = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM with optional media and inline keyboard buttons.
+    /// If DM fails (403), queues notification for later delivery (without buttons).
+    /// Updates bot_dm_enabled flag automatically.
+    /// Phase X: Report moderation DM support with action buttons
+    /// </summary>
+    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
+    /// <param name="notificationType">Type of notification (e.g., "report")</param>
+    /// <param name="messageText">Message text to send (or caption if media present)</param>
+    /// <param name="photoPath">Optional local path to photo file</param>
+    /// <param name="keyboard">Optional inline keyboard markup with action buttons</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result indicating success or failure</returns>
+    Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
+        long telegramUserId,
+        string notificationType,
+        string messageText,
+        string? photoPath = null,
+        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+        CancellationToken cancellationToken = default);
 }
