@@ -136,6 +136,7 @@ git push origin develop
 - If user asks to commit directly to master/develop, remind them of the protected workflow
 - Always create PRs to `develop` first, never to `master` (validation will block it)
 - **ALWAYS include closing keywords** (`Closes #123`) at the top of PR body to link issues in Development section
+- **ALWAYS prefer new commits over amending** - create a new commit instead of using `git commit --amend`
 
 ## Use Case & Deployment Context
 
