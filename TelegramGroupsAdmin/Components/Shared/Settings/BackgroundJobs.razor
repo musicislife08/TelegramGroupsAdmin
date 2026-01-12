@@ -102,9 +102,9 @@
                             <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
                                           Size="Size.Small"
                                           Color="Color.Primary"
-                                          Disabled="@(!context.Enabled || context.JobName == BackgroundJobNames.MessageCleanup)"
+                                          Disabled="@(!context.Enabled)"
                                           OnClick="@(() => RunNowAsync(context.JobName))"
-                                          title="@(context.JobName == BackgroundJobNames.MessageCleanup ? "Background Service (always running)" : "Run Now")" />
+                                          title="Run Now" />
                         </MudStack>
                     </MudTd>
                 </RowTemplate>

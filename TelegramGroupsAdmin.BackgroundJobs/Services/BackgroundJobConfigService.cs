@@ -441,6 +441,21 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                     needsRepair = true;
                 }
 
+                // Update DisplayName and Description from defaults (allows renaming jobs)
+                if (existingConfig.DisplayName != defaultConfig.DisplayName)
+                {
+                    _logger.LogInformation("Updating DisplayName for {JobName}: {Old} → {New}",
+                        jobName, existingConfig.DisplayName, defaultConfig.DisplayName);
+                    existingConfig.DisplayName = defaultConfig.DisplayName;
+                    needsRepair = true;
+                }
+
+                if (existingConfig.Description != defaultConfig.Description)
+                {
+                    existingConfig.Description = defaultConfig.Description;
+                    needsRepair = true;
+                }
+
                 // Save repaired config
                 if (needsRepair)
                 {
