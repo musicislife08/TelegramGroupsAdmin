@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
             services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
             services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
+            services.AddScoped<IReportCallbackContextRepository, ReportCallbackContextRepository>(); // DM action button contexts
             services.AddScoped<ILinkedChannelsRepository, LinkedChannelsRepository>(); // Linked channel impersonation detection
             // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
@@ -108,6 +109,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
             services.AddSingleton<IWelcomeService, WelcomeService>();
             services.AddSingleton<IBanCallbackHandler, BanCallbackHandler>(); // Ban user selection callbacks
+            services.AddSingleton<IReportCallbackHandler, ReportCallbackHandler>(); // Report moderation action callbacks
             services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature

@@ -71,6 +71,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
+    public DbSet<ReportCallbackContextDto> ReportCallbackContexts => Set<ReportCallbackContextDto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -730,6 +731,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(mt => mt.SimilarityHash)
             .HasFilter("similarity_hash IS NOT NULL")
             .HasDatabaseName("ix_message_translations_similarity_hash");
+
+        // ReportCallbackContexts indexes (DM action button contexts)
+        modelBuilder.Entity<ReportCallbackContextDto>()
+            .HasIndex(rcc => rcc.ReportId)
+            .HasDatabaseName("ix_report_callback_contexts_report_id");  // Cleanup when report is handled
+        modelBuilder.Entity<ReportCallbackContextDto>()
+            .HasIndex(rcc => rcc.CreatedAt)
+            .HasDatabaseName("ix_report_callback_contexts_created_at");  // Expiry cleanup job
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

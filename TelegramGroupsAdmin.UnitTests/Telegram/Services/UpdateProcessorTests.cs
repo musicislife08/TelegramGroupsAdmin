@@ -22,6 +22,7 @@ public class UpdateProcessorTests
     private IChatManagementService _mockChatManagementService = null!;
     private IWelcomeService _mockWelcomeService = null!;
     private IBanCallbackHandler _mockBanCallbackHandler = null!;
+    private IReportCallbackHandler _mockReportCallbackHandler = null!;
     private ITelegramBotClientFactory _mockBotFactory = null!;
     private ITelegramOperations _mockOperations = null!;
     private ILogger<UpdateProcessor> _mockLogger = null!;
@@ -34,6 +35,7 @@ public class UpdateProcessorTests
         _mockChatManagementService = Substitute.For<IChatManagementService>();
         _mockWelcomeService = Substitute.For<IWelcomeService>();
         _mockBanCallbackHandler = Substitute.For<IBanCallbackHandler>();
+        _mockReportCallbackHandler = Substitute.For<IReportCallbackHandler>();
         _mockBotFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockOperations = Substitute.For<ITelegramOperations>();
         _mockLogger = Substitute.For<ILogger<UpdateProcessor>>();
@@ -41,14 +43,16 @@ public class UpdateProcessorTests
         // Setup factory to return mock operations
         _mockBotFactory.GetOperationsAsync().Returns(_mockOperations);
 
-        // Ban callback handler returns false by default (routes to welcome service)
+        // Ban and report callback handlers return false by default (routes to welcome service)
         _mockBanCallbackHandler.CanHandle(Arg.Any<string>()).Returns(false);
+        _mockReportCallbackHandler.CanHandle(Arg.Any<string>()).Returns(false);
 
         _sut = new UpdateProcessor(
             _mockMessageProcessingService,
             _mockChatManagementService,
             _mockWelcomeService,
             _mockBanCallbackHandler,
+            _mockReportCallbackHandler,
             _mockBotFactory,
             _mockLogger);
     }
@@ -102,12 +106,12 @@ public class UpdateProcessorTests
         };
     }
 
-    private static Update CreateCallbackQueryUpdate(string callbackId = "test-callback")
+    private static Update CreateCallbackQueryUpdate(string callbackId = "test-callback", string data = "accept")
     {
         return new Update
         {
             Id = 3,
-            CallbackQuery = CreateCallbackQuery(callbackId)
+            CallbackQuery = CreateCallbackQuery(callbackId, data)
         };
     }
 
@@ -337,6 +341,37 @@ public class UpdateProcessorTests
             .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), token);
         await _mockOperations.Received(1)
             .AnswerCallbackQueryAsync(Arg.Any<string>(), text: null, cancellationToken: token);
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithReportCallback_RoutesToReportCallbackHandler()
+    {
+        // Arrange
+        _mockReportCallbackHandler.CanHandle("rpt:12345:0").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert
+        await _mockReportCallbackHandler.Received(1).HandleCallbackAsync(
+            Arg.Is<CallbackQuery>(q => q.Data == "rpt:12345:0"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithReportCallback_DoesNotRouteToWelcomeService()
+    {
+        // Arrange - report handler claims the callback
+        _mockReportCallbackHandler.CanHandle("rpt:12345:0").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert - welcome service should NOT be called
+        await _mockWelcomeService.DidNotReceive()
+            .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

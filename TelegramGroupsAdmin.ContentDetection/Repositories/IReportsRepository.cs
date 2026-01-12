@@ -45,6 +45,18 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Atomically updates report status only if still pending.
+    /// Returns false if report was already handled (race condition).
+    /// </summary>
+    Task<bool> TryUpdateReportStatusAsync(
+        long reportId,
+        ReportStatus newStatus,
+        string reviewedBy,
+        string actionTaken,
+        string? notes = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get count of pending reports
     /// </summary>
     Task<int> GetPendingCountAsync(long? chatId = null, CancellationToken cancellationToken = default);
@@ -58,7 +70,7 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete old reports (cleanup)
+    /// Delete old resolved reports (cleanup). Returns count of deleted reports.
     /// </summary>
-    Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default);
+    Task<int> DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default);
 }

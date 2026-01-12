@@ -73,6 +73,21 @@ public class TelegramOperations : ITelegramOperations
             replyMarkup: replyMarkup,
             cancellationToken: cancellationToken);
 
+    public Task<Message> EditMessageCaptionAsync(
+        long chatId,
+        int messageId,
+        string caption,
+        ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default)
+        => _botClient.EditMessageCaption(
+            chatId,
+            messageId,
+            caption,
+            parseMode: parseMode ?? default,
+            replyMarkup: replyMarkup,
+            cancellationToken: cancellationToken);
+
     public async Task DeleteMessageAsync(long chatId, int messageId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Deleting message {MessageId} from chat {ChatId}", messageId, chatId);

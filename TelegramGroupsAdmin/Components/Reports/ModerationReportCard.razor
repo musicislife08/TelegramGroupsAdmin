@@ -42,10 +42,18 @@
                     @(_message.MessageText ?? "[No text]")
                 </MudText>
 
-                @if (_message.PhotoFileId != null)
+                @if (_message.PhotoLocalPath != null)
+                {
+                    <MudImage Src="@MediaPathUtilities.GetPhotoWebPath(_message.PhotoLocalPath)"
+                              Alt="Reported image"
+                              ObjectFit="ObjectFit.Contain"
+                              Width="300"
+                              Class="mt-2 rounded" />
+                }
+                else if (_message.PhotoFileId != null)
                 {
                     <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Image" Color="Color.Info">
-                        Has Image
+                        Has Image (not downloaded)
                     </MudChip>
                 }
 

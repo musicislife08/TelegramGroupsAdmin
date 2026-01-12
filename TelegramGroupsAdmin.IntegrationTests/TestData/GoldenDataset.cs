@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 36; // Updated 2026-01-08: -content_check_configs (merged into content_detection_configs)
+    public const int TotalTableCount = 37; // Updated 2026-01-11: +report_callback_contexts
 
     /// <summary>
     /// Web application users (ASP.NET Identity)

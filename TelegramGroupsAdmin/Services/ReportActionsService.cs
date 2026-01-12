@@ -20,6 +20,7 @@ public class ReportActionsService : IReportActionsService
     private readonly ModerationOrchestrator _moderationService;
     private readonly IAuditService _auditService;
     private readonly IBotMessageService _botMessageService;
+    private readonly IReportCallbackContextRepository _callbackContextRepo;
     private readonly ILogger<ReportActionsService> _logger;
 
     public ReportActionsService(
@@ -28,6 +29,7 @@ public class ReportActionsService : IReportActionsService
         ModerationOrchestrator moderationService,
         IAuditService auditService,
         IBotMessageService botMessageService,
+        IReportCallbackContextRepository callbackContextRepo,
         ILogger<ReportActionsService> logger)
     {
         _reportsRepository = reportsRepository;
@@ -35,18 +37,19 @@ public class ReportActionsService : IReportActionsService
         _moderationService = moderationService;
         _auditService = auditService;
         _botMessageService = botMessageService;
+        _callbackContextRepo = callbackContextRepo;
         _logger = logger;
     }
 
-    public async Task HandleSpamActionAsync(long reportId, string reviewerId)
+    public async Task HandleSpamActionAsync(long reportId, string reviewerId, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId);
+        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
-        var message = await _messageRepository.GetMessageAsync(report.MessageId);
+        var message = await _messageRepository.GetMessageAsync(report.MessageId, cancellationToken);
         if (message == null)
         {
             throw new InvalidOperationException($"Message {report.MessageId} not found");
@@ -62,7 +65,7 @@ public class ReportActionsService : IReportActionsService
             chatId: report.ChatId,
             executor: executor,
             reason: $"Report #{reportId} - spam/abuse",
-            cancellationToken: CancellationToken.None);
+            cancellationToken: cancellationToken);
 
         if (!result.Success)
         {
@@ -76,30 +79,33 @@ public class ReportActionsService : IReportActionsService
             DataModels.ReportStatus.Reviewed,
             reviewerId,
             "spam",
-            $"User banned from {result.ChatsAffected} chats, message deleted");
+            $"User banned from {result.ChatsAffected} chats, message deleted",
+            cancellationToken);
 
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             Actor.FromTelegramUser(message.UserId),
-            $"spam:report#{reportId}:chats{result.ChatsAffected}");
+            $"spam:report#{reportId}:chats{result.ChatsAffected}",
+            cancellationToken);
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"✅ Report reviewed: User banned from {result.ChatsAffected} chats, message deleted as spam");
+        // Delete the /report command message (cleanup - no reply needed, action is visible)
+        await DeleteReportCommandMessageAsync(report, cancellationToken);
+
+        // Cleanup stale DM callback contexts (report handled via web UI)
+        await _callbackContextRepo.DeleteByReportIdAsync(reportId, cancellationToken);
     }
 
-    public async Task HandleBanActionAsync(long reportId, string reviewerId)
+    public async Task HandleBanActionAsync(long reportId, string reviewerId, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId);
+        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
-        var message = await _messageRepository.GetMessageAsync(report.MessageId);
+        var message = await _messageRepository.GetMessageAsync(report.MessageId, cancellationToken);
         if (message == null)
         {
             throw new InvalidOperationException($"Message {report.MessageId} not found");
@@ -114,7 +120,7 @@ public class ReportActionsService : IReportActionsService
             messageId: report.MessageId,
             executor: executor,
             reason: $"Report #{reportId} - spam/abuse",
-            cancellationToken: CancellationToken.None);
+            cancellationToken: cancellationToken);
 
         if (!result.Success)
         {
@@ -128,7 +134,8 @@ public class ReportActionsService : IReportActionsService
             await _botMessageService.DeleteAndMarkMessageAsync(
                 report.ChatId,
                 report.MessageId,
-                deletionSource: "ban_action");
+                deletionSource: "ban_action",
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -143,30 +150,33 @@ public class ReportActionsService : IReportActionsService
             DataModels.ReportStatus.Reviewed,
             reviewerId,
             "ban",
-            $"User banned from {result.ChatsAffected} chats");
+            $"User banned from {result.ChatsAffected} chats",
+            cancellationToken);
 
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             Actor.FromTelegramUser(message.UserId),
-            $"ban:report#{reportId}:chats{result.ChatsAffected}");
+            $"ban:report#{reportId}:chats{result.ChatsAffected}",
+            cancellationToken);
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"✅ Report reviewed: User banned from {result.ChatsAffected} chats");
+        // Delete the /report command message (cleanup - no reply needed, action is visible)
+        await DeleteReportCommandMessageAsync(report, cancellationToken);
+
+        // Cleanup stale DM callback contexts (report handled via web UI)
+        await _callbackContextRepo.DeleteByReportIdAsync(reportId, cancellationToken);
     }
 
-    public async Task HandleWarnActionAsync(long reportId, string reviewerId)
+    public async Task HandleWarnActionAsync(long reportId, string reviewerId, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId);
+        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
-        var message = await _messageRepository.GetMessageAsync(report.MessageId);
+        var message = await _messageRepository.GetMessageAsync(report.MessageId, cancellationToken);
         if (message == null)
         {
             throw new InvalidOperationException($"Message {report.MessageId} not found");
@@ -181,7 +191,8 @@ public class ReportActionsService : IReportActionsService
             messageId: report.MessageId,
             executor: executor,
             reason: $"Report #{reportId} - inappropriate behavior",
-            chatId: message.ChatId);
+            chatId: message.ChatId,
+            cancellationToken: cancellationToken);
 
         if (!result.Success)
         {
@@ -195,24 +206,27 @@ public class ReportActionsService : IReportActionsService
             DataModels.ReportStatus.Reviewed,
             reviewerId,
             "warn",
-            $"User {message.UserId} warned");
+            $"User {message.UserId} warned",
+            cancellationToken);
 
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             Actor.FromTelegramUser(message.UserId),
-            $"warn:report#{reportId}:warnings{result.WarningCount}");
+            $"warn:report#{reportId}:warnings{result.WarningCount}",
+            cancellationToken);
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"✅ Report reviewed: Warning issued to user");
+        // Delete the /report command message (cleanup - no reply needed, action is visible)
+        await DeleteReportCommandMessageAsync(report, cancellationToken);
+
+        // Cleanup stale DM callback contexts (report handled via web UI)
+        await _callbackContextRepo.DeleteByReportIdAsync(reportId, cancellationToken);
     }
 
-    public async Task HandleDismissActionAsync(long reportId, string reviewerId, string? reason = null)
+    public async Task HandleDismissActionAsync(long reportId, string reviewerId, string? reason = null, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId);
+        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
@@ -224,19 +238,25 @@ public class ReportActionsService : IReportActionsService
             DataModels.ReportStatus.Dismissed,
             reviewerId,
             "dismiss",
-            reason ?? "No action needed");
+            reason ?? "No action needed",
+            cancellationToken);
 
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             null,
-            $"dismiss:report#{reportId}:{reason ?? "no_action"}");
+            $"dismiss:report#{reportId}:{reason ?? "no_action"}",
+            cancellationToken);
 
-        // Reply to original /report command
-        await SendReportReplyAsync(
-            report,
-            $"ℹ️ Report reviewed: No violation found{(reason != null ? $" ({reason})" : "")}");
+        // Reply to original REPORTED message (not /report command) - for dismiss only
+        await SendDismissReplyAsync(report, cancellationToken);
+
+        // Delete the /report command message (cleanup)
+        await DeleteReportCommandMessageAsync(report, cancellationToken);
+
+        // Cleanup stale DM callback contexts (report handled via web UI)
+        await _callbackContextRepo.DeleteByReportIdAsync(reportId, cancellationToken);
 
         _logger.LogInformation(
             "Dismissed report {ReportId} (reason: {Reason})",
@@ -244,31 +264,60 @@ public class ReportActionsService : IReportActionsService
             reason ?? "none");
     }
 
-    private async Task SendReportReplyAsync(Report report, string message)
+    /// <summary>
+    /// Send dismiss notification as a reply to the original REPORTED message.
+    /// Only used for dismiss action - other actions have visible outcomes.
+    /// </summary>
+    private async Task SendDismissReplyAsync(Report report, CancellationToken cancellationToken)
     {
         try
         {
-            // Phase 2.6: For web UI reports, reply to the reported message itself
-            // For Telegram /report command, reply to the command message
-            // This ensures all reports get visible feedback in the chat
-            var replyToMessageId = report.ReportCommandMessageId ?? report.MessageId;
-
-            // Use BotMessageService to save bot response to database
+            // Reply to the original REPORTED message (not /report command)
             await _botMessageService.SendAndSaveMessageAsync(
                 report.ChatId,
-                message,
+                "✓ This message was reviewed and no action was taken",
                 parseMode: ParseMode.Markdown,
                 replyParameters: new global::Telegram.Bot.Types.ReplyParameters
                 {
-                    MessageId = replyToMessageId
-                });
+                    MessageId = report.MessageId
+                },
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
-                "Failed to send reply to message {MessageId} in chat {ChatId}",
-                report.ReportCommandMessageId ?? report.MessageId,
-                report.ChatId);
+            // Original message might be deleted - that's okay
+            _logger.LogDebug(ex,
+                "Could not reply to reported message {MessageId} (may be deleted)",
+                report.MessageId);
+        }
+    }
+
+    /// <summary>
+    /// Delete the /report command message after review (cleanup).
+    /// </summary>
+    private async Task DeleteReportCommandMessageAsync(Report report, CancellationToken cancellationToken)
+    {
+        if (!report.ReportCommandMessageId.HasValue)
+            return; // Web UI reports don't have a command message
+
+        try
+        {
+            await _botMessageService.DeleteAndMarkMessageAsync(
+                report.ChatId,
+                report.ReportCommandMessageId.Value,
+                deletionSource: "report_reviewed",
+                cancellationToken: cancellationToken);
+
+            _logger.LogDebug(
+                "Deleted /report command message {MessageId} in chat {ChatId}",
+                report.ReportCommandMessageId.Value, report.ChatId);
+        }
+        catch (Exception ex)
+        {
+            // Message might already be deleted - that's okay
+            _logger.LogDebug(ex,
+                "Could not delete /report command message {MessageId} (may already be deleted)",
+                report.ReportCommandMessageId);
         }
     }
 }

@@ -3,8 +3,8 @@ namespace TelegramGroupsAdmin.Configuration;
 public sealed class MessageHistoryOptions
 {
     public bool Enabled { get; set; } = true; // Enable/disable message history tracking
-    public int RetentionHours { get; set; } = 720; // 30 days
     public int CleanupIntervalMinutes { get; set; } = 1440; // 24 hours (once per day)
+    // NOTE: Retention settings are now configured via Background Jobs → Message Cleanup settings
 
     /// <summary>
     /// Storage path for images (user photos, chat icons) and media (message attachments)

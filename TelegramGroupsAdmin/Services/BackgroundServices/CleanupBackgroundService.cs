@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 
@@ -32,9 +35,7 @@ public class CleanupBackgroundService : BackgroundService
             {
                 await Task.Delay(TimeSpan.FromMinutes(_options.CleanupIntervalMinutes), stoppingToken);
 
-                // Create a scope to resolve the repository and config service
                 await using var scope = _scopeFactory.CreateAsyncScope();
-                var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
                 var configService = scope.ServiceProvider.GetRequiredService<IBackgroundJobConfigService>();
 
                 // Check if job is enabled
@@ -44,7 +45,18 @@ public class CleanupBackgroundService : BackgroundService
                     continue;
                 }
 
-                var (deleted, imagePaths, mediaPaths) = await repository.CleanupExpiredAsync();
+                // Get retention settings from job config (uses record defaults if not configured)
+                var jobConfig = await configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+                var settings = jobConfig?.DataCleanup ?? new DataCleanupSettings();
+
+                var messageRetention = ParseRetention(settings.MessageRetention, TimeSpan.FromDays(30));
+                var reportRetention = ParseRetention(settings.ReportRetention, TimeSpan.FromDays(30));
+                var contextRetention = ParseRetention(settings.CallbackContextRetention, TimeSpan.FromDays(7));
+                var notificationRetention = ParseRetention(settings.WebNotificationRetention, TimeSpan.FromDays(7));
+
+                // 1. Clean up expired messages
+                var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+                var (deleted, imagePaths, mediaPaths) = await repository.CleanupExpiredAsync(messageRetention, stoppingToken);
 
                 // Delete image files from disk (photo thumbnails)
                 var imageDeletedCount = 0;
@@ -89,10 +101,11 @@ public class CleanupBackgroundService : BackgroundService
                 var stats = await statsService.GetStatsAsync();
 
                 _logger.LogInformation(
-                    "Cleanup complete: {Deleted} expired messages removed, {ImagesDeleted} images deleted, {MediaDeleted} media files deleted. Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",
+                    "Message cleanup: {Deleted} expired messages removed, {ImagesDeleted} images deleted, {MediaDeleted} media files deleted (retention: {Retention}). Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",
                     deleted,
                     imageDeletedCount,
                     mediaDeletedCount,
+                    TimeSpanUtilities.FormatDuration(messageRetention),
                     stats.TotalMessages,
                     stats.UniqueUsers,
                     stats.PhotoCount,
@@ -100,16 +113,42 @@ public class CleanupBackgroundService : BackgroundService
                         ? stats.OldestTimestamp.Value.ToString("g")
                         : "none");
 
-                // Clean up old read web notifications (7 day retention)
+                // 2. Clean up old resolved reports
+                var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+                var reportsCutoff = DateTimeOffset.UtcNow - reportRetention;
+                var reportsDeleted = await reportsRepo.DeleteOldReportsAsync(reportsCutoff, stoppingToken);
+
+                if (reportsDeleted > 0)
+                {
+                    _logger.LogInformation(
+                        "Report cleanup: {Count} old resolved reports deleted (retention: {Retention})",
+                        reportsDeleted,
+                        TimeSpanUtilities.FormatDuration(reportRetention));
+                }
+
+                // 3. Clean up expired DM callback contexts
+                var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
+                var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(contextRetention, stoppingToken);
+
+                if (contextsDeleted > 0)
+                {
+                    _logger.LogInformation(
+                        "Callback context cleanup: {Count} expired contexts deleted (retention: {Retention})",
+                        contextsDeleted,
+                        TimeSpanUtilities.FormatDuration(contextRetention));
+                }
+
+                // 4. Clean up old read web notifications
                 var webPushService = scope.ServiceProvider.GetRequiredService<IWebPushNotificationService>();
                 var notificationsDeleted = await webPushService.DeleteOldReadNotificationsAsync(
-                    TimeSpan.FromDays(7), stoppingToken);
+                    notificationRetention, stoppingToken);
 
                 if (notificationsDeleted > 0)
                 {
                     _logger.LogInformation(
-                        "Notification cleanup: {Count} old read notifications deleted",
-                        notificationsDeleted);
+                        "Notification cleanup: {Count} old read notifications deleted (retention: {Retention})",
+                        notificationsDeleted,
+                        TimeSpanUtilities.FormatDuration(notificationRetention));
                 }
             }
             catch (OperationCanceledException)
@@ -124,4 +163,7 @@ public class CleanupBackgroundService : BackgroundService
 
         _logger.LogInformation("Cleanup service stopped");
     }
+
+    private static TimeSpan ParseRetention(string durationString, TimeSpan defaultValue)
+        => TimeSpanUtilities.TryParseDuration(durationString, out var duration) ? duration : defaultValue;
 }

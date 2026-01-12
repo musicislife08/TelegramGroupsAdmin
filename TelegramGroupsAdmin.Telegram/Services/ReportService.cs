@@ -18,8 +18,7 @@ public class ReportService(
     IReportsRepository reportsRepository,
     IJobTriggerService jobTriggerService,
     IAuditService auditService,
-    IUserMessagingService messagingService,
-    IChatAdminsRepository chatAdminsRepository,
+    IMessageHistoryRepository messageHistoryRepository,
     ILogger<ReportService> logger) : IReportService
 {
     public async Task<ReportCreationResult> CreateReportAsync(
@@ -73,98 +72,36 @@ public class ReportService(
         var notificationMessage = BuildNotificationMessage(
             reportId, chatName, report.ReportedByUserName, reportedUserName, messagePreview, isAutomated);
 
+        // Get reported user's Telegram ID for moderation action buttons
+        var reportedUserId = originalMessage?.From?.Id;
+
+        // Get photo path from stored message for DM with image
+        string? photoPath = null;
+        var storedMessage = await messageHistoryRepository.GetMessageAsync(report.MessageId, cancellationToken);
+        if (storedMessage?.PhotoLocalPath != null)
+        {
+            // PhotoLocalPath is stored as relative (e.g., "full/{chatId}/{messageId}.jpg")
+            // Need to construct absolute path for DM delivery
+            photoPath = Path.Combine("/data", "media", storedMessage.PhotoLocalPath);
+        }
+
         // Send notification via Quartz job (reliable delivery instead of fire-and-forget)
+        // Now includes report metadata for action buttons and photo for DM with image
         var notificationPayload = new SendChatNotificationPayload(
             ChatId: report.ChatId,
             EventType: NotificationEventType.MessageReported,
             Subject: notificationSubject,
-            Message: notificationMessage);
+            Message: notificationMessage,
+            ReportId: reportId,
+            PhotoPath: photoPath,
+            ReportedUserId: reportedUserId);
 
         await jobTriggerService.TriggerNowAsync(
             "SendChatNotificationJob",
             notificationPayload,
             cancellationToken);
 
-        // 4. Send direct DM notifications to chat admins (immediate alert fallback)
-        var (dmCount, mentionCount) = await SendDirectDmNotificationsAsync(
-            reportId,
-            report,
-            originalMessage,
-            chatName,
-            messagePreview,
-            reportedUserName,
-            isAutomated,
-            cancellationToken);
-
-        return new ReportCreationResult(reportId, dmCount, mentionCount);
-    }
-
-    private async Task<(int DmCount, int MentionCount)> SendDirectDmNotificationsAsync(
-        long reportId,
-        Report report,
-        Message? originalMessage,
-        string chatName,
-        string messagePreview,
-        string reportedUserName,
-        bool isAutomated,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var admins = await chatAdminsRepository.GetChatAdminsAsync(report.ChatId, cancellationToken);
-            var adminUserIds = admins.Select(a => a.TelegramId).ToList();
-
-            if (!adminUserIds.Any())
-            {
-                logger.LogDebug("No admins found for chat {ChatId}, skipping DM notifications", report.ChatId);
-                return (0, 0);
-            }
-
-            var reporterName = isAutomated
-                ? "Auto-Detection System"
-                : $"@{report.ReportedByUserName ?? report.ReportedByUserId?.ToString() ?? "Unknown"}";
-
-            var jumpLink = originalMessage != null
-                ? $"[Jump to message](https://t.me/c/{Math.Abs(report.ChatId)}/{originalMessage.MessageId})"
-                : "";
-
-            var reportNotification = isAutomated
-                ? $"🚨 **New Auto-Detected Report #{reportId}**\n\n" +
-                  $"**Chat:** {chatName}\n" +
-                  $"**Reported by:** {reporterName}\n" +
-                  $"**Reported user:** {reportedUserName}\n" +
-                  $"**Message:** {messagePreview}\n\n" +
-                  (string.IsNullOrEmpty(jumpLink) ? "" : $"{jumpLink}\n\n") +
-                  $"Review in the Reports tab or use moderation commands."
-                : $"🚨 **New Report #{reportId}**\n\n" +
-                  $"**Chat:** {chatName}\n" +
-                  $"**Reported by:** {reporterName}\n" +
-                  $"**Reported user:** {reportedUserName}\n" +
-                  $"**Message:** {messagePreview}\n\n" +
-                  (string.IsNullOrEmpty(jumpLink) ? "" : $"{jumpLink}\n\n") +
-                  $"Review in the Reports tab or use moderation commands.";
-
-            var results = await messagingService.SendToMultipleUsersAsync(
-                userIds: adminUserIds,
-                chat: originalMessage!.Chat,
-                messageText: reportNotification,
-                replyToMessageId: originalMessage.MessageId,
-                cancellationToken: cancellationToken);
-
-            var dmCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.PrivateDm);
-            var mentionCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.ChatMention);
-
-            logger.LogInformation(
-                "Report {ReportId} DM notification sent to {TotalAdmins} admins ({DmCount} via DM, {MentionCount} via chat mention)",
-                reportId, results.Count, dmCount, mentionCount);
-
-            return (dmCount, mentionCount);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to send DM notifications for report {ReportId}", reportId);
-            return (0, 0);
-        }
+        return new ReportCreationResult(reportId);
     }
 
     private static string GetMessagePreview(Message? message, Report report)

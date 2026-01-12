@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings
 @using Microsoft.EntityFrameworkCore
 @using TelegramGroupsAdmin.Data
 @using System.Text.Json
@@ -316,25 +317,15 @@ else
 
             if (_backupConfig != null)
             {
-                // Load backup-specific settings
-                if (_backupConfig.Settings != null)
-                {
-                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainHourlyBackups, out var hourly))
-                        _editRetainHourlyBackups = Convert.ToInt32(((JsonElement)hourly).GetInt32());
-                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainDailyBackups, out var daily))
-                        _editRetainDailyBackups = Convert.ToInt32(((JsonElement)daily).GetInt32());
-                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainWeeklyBackups, out var weekly))
-                        _editRetainWeeklyBackups = Convert.ToInt32(((JsonElement)weekly).GetInt32());
-                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainMonthlyBackups, out var monthly))
-                        _editRetainMonthlyBackups = Convert.ToInt32(((JsonElement)monthly).GetInt32());
-                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainYearlyBackups, out var yearly))
-                        _editRetainYearlyBackups = Convert.ToInt32(((JsonElement)yearly).GetInt32());
-                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
-                    {
-                        _editBackupDirectory = ((JsonElement)dir).GetString();
-                        _currentBackupDirectory = _editBackupDirectory ?? "/data/backups";
-                    }
-                }
+                // Load backup-specific settings from typed property
+                var settings = _backupConfig.ScheduledBackup ?? new ScheduledBackupSettings();
+                _editRetainHourlyBackups = settings.RetainHourlyBackups;
+                _editRetainDailyBackups = settings.RetainDailyBackups;
+                _editRetainWeeklyBackups = settings.RetainWeeklyBackups;
+                _editRetainMonthlyBackups = settings.RetainMonthlyBackups;
+                _editRetainYearlyBackups = settings.RetainYearlyBackups;
+                _editBackupDirectory = settings.BackupDirectory;
+                _currentBackupDirectory = settings.BackupDirectory ?? "/data/backups";
             }
         }
         catch (Exception ex)
@@ -353,23 +344,20 @@ else
 
         try
         {
-            // Update backup-specific settings (schedule is managed in Background Jobs page)
-            _backupConfig.Settings ??= new Dictionary<string, object>();
-            _backupConfig.Settings[BackgroundJobSettings.RetainHourlyBackups] = _editRetainHourlyBackups;
-            _backupConfig.Settings[BackgroundJobSettings.RetainDailyBackups] = _editRetainDailyBackups;
-            _backupConfig.Settings[BackgroundJobSettings.RetainWeeklyBackups] = _editRetainWeeklyBackups;
-            _backupConfig.Settings[BackgroundJobSettings.RetainMonthlyBackups] = _editRetainMonthlyBackups;
-            _backupConfig.Settings[BackgroundJobSettings.RetainYearlyBackups] = _editRetainYearlyBackups;
+            // Update backup-specific settings using typed property
+            _backupConfig.ScheduledBackup = new ScheduledBackupSettings
+            {
+                RetainHourlyBackups = _editRetainHourlyBackups,
+                RetainDailyBackups = _editRetainDailyBackups,
+                RetainWeeklyBackups = _editRetainWeeklyBackups,
+                RetainMonthlyBackups = _editRetainMonthlyBackups,
+                RetainYearlyBackups = _editRetainYearlyBackups,
+                BackupDirectory = !string.IsNullOrWhiteSpace(_editBackupDirectory)
+                    ? _editBackupDirectory
+                    : "/data/backups"
+            };
 
-            if (!string.IsNullOrWhiteSpace(_editBackupDirectory))
-            {
-                _backupConfig.Settings[BackgroundJobSettings.BackupDirectory] = _editBackupDirectory;
-                _currentBackupDirectory = _editBackupDirectory;
-            }
-            else
-            {
-                _currentBackupDirectory = "/data/backups"; // Default fallback
-            }
+            _currentBackupDirectory = _backupConfig.ScheduledBackup.BackupDirectory ?? "/data/backups";
 
             await JobConfigService.UpdateJobConfigAsync(BackgroundJobNames.ScheduledBackup, _backupConfig);
 

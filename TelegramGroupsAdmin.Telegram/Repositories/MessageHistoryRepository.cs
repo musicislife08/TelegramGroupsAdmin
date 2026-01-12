@@ -46,11 +46,11 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     }
 
 
-    public async Task<(int deletedCount, List<string> imagePaths, List<string> mediaPaths)> CleanupExpiredAsync(CancellationToken cancellationToken = default)
+    public async Task<(int deletedCount, List<string> imagePaths, List<string> mediaPaths)> CleanupExpiredAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Retention: Keep messages from last 30 days OR messages with detection_results (training data)
-        var retentionCutoff = DateTimeOffset.UtcNow.AddDays(-30);
+        // Retention: Keep messages within retention period OR messages with detection_results (training data)
+        var retentionCutoff = DateTimeOffset.UtcNow - retention;
 
         // MH2: Single query optimization - get all expired message data in one query
         var expiredData = await context.Messages

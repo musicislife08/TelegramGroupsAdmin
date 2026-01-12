@@ -1,3 +1,4 @@
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
@@ -5,7 +6,9 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 
@@ -26,6 +29,7 @@ public class NotificationService : INotificationService
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IManagedChatsRepository _managedChatsRepo;
     private readonly IUserRepository _userRepo;
+    private readonly IReportCallbackContextRepository _callbackContextRepo;
     private readonly ILogger<NotificationService> _logger;
     private DateTime _lastDeliveryFailureLog = DateTime.MinValue;
 
@@ -38,6 +42,7 @@ public class NotificationService : INotificationService
         IChatAdminsRepository chatAdminsRepo,
         IManagedChatsRepository managedChatsRepo,
         IUserRepository userRepo,
+        IReportCallbackContextRepository callbackContextRepo,
         ILogger<NotificationService> logger)
     {
         _preferencesRepo = preferencesRepo;
@@ -48,6 +53,7 @@ public class NotificationService : INotificationService
         _chatAdminsRepo = chatAdminsRepo;
         _managedChatsRepo = managedChatsRepo;
         _userRepo = userRepo;
+        _callbackContextRepo = callbackContextRepo;
         _logger = logger;
     }
 
@@ -56,6 +62,9 @@ public class NotificationService : INotificationService
         NotificationEventType eventType,
         string subject,
         string message,
+        long? reportId = null,
+        string? photoPath = null,
+        long? reportedUserId = null,
         CancellationToken cancellationToken = default)
     {
         // Fetch chat once for logging (reuse for all logs in this method)
@@ -95,7 +104,10 @@ public class NotificationService : INotificationService
             var results = new Dictionary<string, bool>();
             foreach (var user in linkedAdmins)
             {
-                var success = await SendNotificationAsync(user, eventType, subject, message, cancellationToken);
+                var success = await SendNotificationAsync(
+                    user, eventType, subject, message,
+                    reportId, photoPath, reportedUserId, chatId,
+                    cancellationToken);
                 results[user.Id] = success;
             }
 
@@ -121,7 +133,7 @@ public class NotificationService : INotificationService
             var allUsers = await _userRepo.GetAllAsync(cancellationToken);
             var ownerUsers = allUsers.Where(u => u.PermissionLevel == PermissionLevel.Owner).ToList();
 
-            if (!ownerUsers.Any())
+            if (ownerUsers.Count == 0)
             {
                 _logger.LogWarning("No Owner users found in system, cannot send system notification");
                 return new Dictionary<string, bool>();
@@ -155,6 +167,24 @@ public class NotificationService : INotificationService
         string message,
         CancellationToken cancellationToken = default)
     {
+        // Call internal method without report-specific parameters
+        return await SendNotificationAsync(
+            user, eventType, subject, message,
+            reportId: null, photoPath: null, reportedUserId: null, chatId: null,
+            cancellationToken);
+    }
+
+    private async Task<bool> SendNotificationAsync(
+        UserRecord user,
+        NotificationEventType eventType,
+        string subject,
+        string message,
+        long? reportId,
+        string? photoPath,
+        long? reportedUserId,
+        long? chatId,
+        CancellationToken cancellationToken)
+    {
         try
         {
             // Get user preferences (creates default if not exists)
@@ -165,7 +195,10 @@ public class NotificationService : INotificationService
             // Telegram DM channel - check if event is enabled for this channel
             if (config.IsEnabled(NotificationChannel.TelegramDm, eventType))
             {
-                var telegramSuccess = await SendTelegramDmAsync(user.Id, subject, message, cancellationToken);
+                var telegramSuccess = await SendTelegramDmAsync(
+                    user.Id, subject, message,
+                    reportId, photoPath, reportedUserId, chatId,
+                    cancellationToken);
                 deliverySuccess = deliverySuccess || telegramSuccess;
             }
 
@@ -223,7 +256,15 @@ public class NotificationService : INotificationService
     /// Send notification via Telegram DM
     /// Maps web user ID to Telegram ID and delivers via DM (with queue fallback)
     /// </summary>
-    private async Task<bool> SendTelegramDmAsync(string userId, string subject, string message, CancellationToken cancellationToken)
+    private async Task<bool> SendTelegramDmAsync(
+        string userId,
+        string subject,
+        string message,
+        long? reportId,
+        string? photoPath,
+        long? reportedUserId,
+        long? chatId,
+        CancellationToken cancellationToken)
     {
         // Fetch once for logging
         var user = await _userRepo.GetByIdAsync(userId, cancellationToken);
@@ -244,12 +285,35 @@ public class NotificationService : INotificationService
             // Format message with subject
             var formattedMessage = $"🔔 *{EscapeMarkdown(subject)}*\n\n{EscapeMarkdown(message)}";
 
-            // Send DM with queue fallback (pending notifications)
-            var result = await _dmDeliveryService.SendDmWithQueueAsync(
-                mapping.TelegramId,
-                "notification", // notification type for pending_notifications table
-                formattedMessage,
-                cancellationToken);
+            // Build inline keyboard if this is a report notification with action context
+            InlineKeyboardMarkup? keyboard = null;
+            if (reportId.HasValue && reportedUserId.HasValue && chatId.HasValue)
+            {
+                keyboard = await BuildReportActionKeyboardAsync(reportId.Value, chatId.Value, reportedUserId.Value, cancellationToken);
+            }
+
+            DmDeliveryResult result;
+
+            // Send with photo and keyboard if we have report context
+            if (keyboard != null || !string.IsNullOrWhiteSpace(photoPath))
+            {
+                result = await _dmDeliveryService.SendDmWithMediaAndKeyboardAsync(
+                    mapping.TelegramId,
+                    "report",
+                    formattedMessage,
+                    photoPath,
+                    keyboard,
+                    cancellationToken);
+            }
+            else
+            {
+                // Standard DM with queue fallback
+                result = await _dmDeliveryService.SendDmWithQueueAsync(
+                    mapping.TelegramId,
+                    "notification",
+                    formattedMessage,
+                    cancellationToken);
+            }
 
             if (result.DmSent)
             {
@@ -272,6 +336,41 @@ public class NotificationService : INotificationService
             _logger.LogError(ex, "Failed to send Telegram DM to {User}", user.ToLogDebug(userId));
             return false;
         }
+    }
+
+    /// <summary>
+    /// Build inline keyboard with report moderation action buttons.
+    /// Creates ONE database-backed callback context per report (short IDs, no 64-byte limit issues).
+    /// </summary>
+    private async Task<InlineKeyboardMarkup> BuildReportActionKeyboardAsync(
+        long reportId,
+        long chatId,
+        long userId,
+        CancellationToken cancellationToken)
+    {
+        // Create ONE context for this report - action is passed in callback data
+        var context = new ReportCallbackContext(
+            Id: 0, // Generated by database
+            ReportId: reportId,
+            ChatId: chatId,
+            UserId: userId,
+            CreatedAt: DateTimeOffset.UtcNow);
+        var contextId = await _callbackContextRepo.CreateAsync(context, cancellationToken);
+
+        // Format: rpt:{contextId}:{action} - always under 20 bytes!
+        return new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("🚫 Spam", $"rpt:{contextId}:{(int)ReportAction.Spam}"),
+                InlineKeyboardButton.WithCallbackData("⚠️ Warn", $"rpt:{contextId}:{(int)ReportAction.Warn}")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData("⏱️ TempBan", $"rpt:{contextId}:{(int)ReportAction.TempBan}"),
+                InlineKeyboardButton.WithCallbackData("✓ Dismiss", $"rpt:{contextId}:{(int)ReportAction.Dismiss}")
+            }
+        });
     }
 
     /// <summary>

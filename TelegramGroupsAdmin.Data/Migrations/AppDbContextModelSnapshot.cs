@@ -1951,6 +1951,42 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("recovery_codes");
                 });
 
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReportCallbackContextDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("ReportId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("report_id");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_report_callback_contexts_created_at");
+
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_callback_contexts_report_id");
+
+                    b.ToTable("report_callback_contexts");
+                });
+
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReportDto", b =>
                 {
                     b.Property<long>("Id")

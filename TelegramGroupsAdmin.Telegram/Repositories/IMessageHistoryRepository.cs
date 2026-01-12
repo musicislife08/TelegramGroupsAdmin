@@ -22,7 +22,7 @@ public interface IMessageHistoryRepository
     Task<int> GetMessageCountByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
 
     // Cleanup (retention policy)
-    Task<(int deletedCount, List<string> imagePaths, List<string> mediaPaths)> CleanupExpiredAsync(CancellationToken cancellationToken = default);
+    Task<(int deletedCount, List<string> imagePaths, List<string> mediaPaths)> CleanupExpiredAsync(TimeSpan retention, CancellationToken cancellationToken = default);
 
     // Cross-chat ban cleanup (FEATURE-4.23)
     Task<List<UiModels.UserMessageInfo>> GetUserMessagesAsync(

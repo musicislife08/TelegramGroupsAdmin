@@ -17,4 +17,9 @@ public sealed class AIVetoCheckRequest : ContentCheckRequestBase
     /// OCR-extracted text from image (combined with caption for veto analysis)
     /// </summary>
     public string? OcrExtractedText { get; init; }
+
+    /// <summary>
+    /// Raw OpenAI Vision analysis (reason/patterns from image spam detection)
+    /// </summary>
+    public string? VisionAnalysisText { get; init; }
 }

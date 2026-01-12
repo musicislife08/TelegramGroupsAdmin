@@ -62,6 +62,23 @@ public static class MediaPathUtilities
         => Path.Combine(basePath, "media", relativePath);
 
     /// <summary>
+    /// Convert a relative photo path to a web URL path.
+    /// Photos use a separate storage pattern from media attachments:
+    /// - Storage: /data/media/{relativePath} (e.g., /data/media/full/{chatId}/{messageId}.jpg)
+    /// - Web URL: /media/{relativePath} (e.g., /media/full/{chatId}/{messageId}.jpg)
+    /// Works for both PhotoLocalPath and PhotoThumbnailPath (both stored as relative paths).
+    /// </summary>
+    /// <param name="relativePath">Relative photo path (e.g., "full/{chatId}/{messageId}.jpg")</param>
+    /// <returns>Web URL path (e.g., "/media/full/{chatId}/{messageId}.jpg")</returns>
+    public static string? GetPhotoWebPath(string? relativePath)
+    {
+        if (string.IsNullOrEmpty(relativePath))
+            return null;
+
+        return $"/media/{relativePath}";
+    }
+
+    /// <summary>
     /// Validates that a media file exists on the filesystem.
     /// REFACTOR-3: Extracted from MessageHistoryRepository and MessageQueryService (DRY).
     /// </summary>
