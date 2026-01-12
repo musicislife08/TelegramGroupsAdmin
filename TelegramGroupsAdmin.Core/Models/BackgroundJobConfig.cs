@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
+
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
@@ -49,9 +51,25 @@ public class BackgroundJobConfig
     /// </summary>
     public string? LastError { get; set; }
 
+    // === Job-specific settings (only populate the relevant one per job) ===
+
     /// <summary>
-    /// Job-specific settings as JSON
-    /// Example for scheduled_backup: {"retention_days": 7}
+    /// Settings for Data Cleanup job (retention periods for messages, reports, etc.)
     /// </summary>
-    public Dictionary<string, object>? Settings { get; set; }
+    public DataCleanupSettings? DataCleanup { get; set; }
+
+    /// <summary>
+    /// Settings for Scheduled Backup job (5-tier retention policy)
+    /// </summary>
+    public ScheduledBackupSettings? ScheduledBackup { get; set; }
+
+    /// <summary>
+    /// Settings for Database Maintenance job (VACUUM, ANALYZE)
+    /// </summary>
+    public DatabaseMaintenanceSettings? DatabaseMaintenance { get; set; }
+
+    /// <summary>
+    /// Settings for User Photo Refresh job
+    /// </summary>
+    public UserPhotoRefreshSettings? UserPhotoRefresh { get; set; }
 }

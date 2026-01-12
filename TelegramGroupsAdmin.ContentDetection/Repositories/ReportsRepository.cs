@@ -117,6 +117,39 @@ public class ReportsRepository : IReportsRepository
         }
     }
 
+    public async Task<bool> TryUpdateReportStatusAsync(
+        long reportId,
+        DataModels.ReportStatus newStatus,
+        string reviewedBy,
+        string actionTaken,
+        string? notes = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var rowsAffected = await context.Reports
+            .Where(r => r.Id == reportId && r.Status == DataModels.ReportStatus.Pending)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, newStatus)
+                .SetProperty(r => r.ReviewedBy, reviewedBy)
+                .SetProperty(r => r.ActionTaken, actionTaken)
+                .SetProperty(r => r.ReviewedAt, DateTimeOffset.UtcNow)
+                .SetProperty(r => r.AdminNotes, notes),
+                cancellationToken);
+
+        if (rowsAffected > 0)
+        {
+            _logger.LogInformation(
+                "Atomically updated report {ReportId} to status {Status} by {ReviewedBy} (action: {ActionTaken})",
+                reportId,
+                newStatus,
+                reviewedBy,
+                actionTaken);
+        }
+
+        return rowsAffected > 0;
+    }
+
     public async Task<int> GetPendingCountAsync(long? chatId = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -150,26 +183,23 @@ public class ReportsRepository : IReportsRepository
         return entity?.ToModel();
     }
 
-    public async Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default)
+    public async Task<int> DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var toDelete = await context.Reports
+        var deleted = await context.Reports
             .Where(r => r.ReportedAt < olderThanTimestamp
                 && r.Status != DataModels.ReportStatus.Pending)
-            .ToListAsync(cancellationToken);
-
-        var deleted = toDelete.Count;
+            .ExecuteDeleteAsync(cancellationToken);
 
         if (deleted > 0)
         {
-            context.Reports.RemoveRange(toDelete);
-            await context.SaveChangesAsync(cancellationToken);
-
             _logger.LogInformation(
                 "Deleted {Count} old reports (older than {Timestamp})",
                 deleted,
                 olderThanTimestamp);
         }
+
+        return deleted;
     }
 }

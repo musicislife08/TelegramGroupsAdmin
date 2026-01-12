@@ -106,12 +106,12 @@ public class UpdateProcessorTests
         };
     }
 
-    private static Update CreateCallbackQueryUpdate(string callbackId = "test-callback")
+    private static Update CreateCallbackQueryUpdate(string callbackId = "test-callback", string data = "accept")
     {
         return new Update
         {
             Id = 3,
-            CallbackQuery = CreateCallbackQuery(callbackId)
+            CallbackQuery = CreateCallbackQuery(callbackId, data)
         };
     }
 
@@ -341,6 +341,37 @@ public class UpdateProcessorTests
             .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), token);
         await _mockOperations.Received(1)
             .AnswerCallbackQueryAsync(Arg.Any<string>(), text: null, cancellationToken: token);
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithReportCallback_RoutesToReportCallbackHandler()
+    {
+        // Arrange
+        _mockReportCallbackHandler.CanHandle("rpt:12345:0").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert
+        await _mockReportCallbackHandler.Received(1).HandleCallbackAsync(
+            Arg.Is<CallbackQuery>(q => q.Data == "rpt:12345:0"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ProcessUpdateAsync_WithReportCallback_DoesNotRouteToWelcomeService()
+    {
+        // Arrange - report handler claims the callback
+        _mockReportCallbackHandler.CanHandle("rpt:12345:0").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
+
+        // Act
+        await _sut.ProcessUpdateAsync(update);
+
+        // Assert - welcome service should NOT be called
+        await _mockWelcomeService.DidNotReceive()
+            .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

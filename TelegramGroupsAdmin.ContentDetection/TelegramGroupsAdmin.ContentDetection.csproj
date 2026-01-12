@@ -16,7 +16,7 @@
     <PackageReference Include="Microsoft.ML" Version="5.0.0" />
     <PackageReference Include="nClam" Version="9.0.0" />
     <PackageReference Include="Npgsql" Version="10.0.1" />
-    <PackageReference Include="Panlingo.LanguageIdentification.FastText" Version="0.7.0" />
+    <PackageReference Include="Panlingo.LanguageIdentification.FastText" Version="0.7.2" />
   </ItemGroup>
 
   <ItemGroup>

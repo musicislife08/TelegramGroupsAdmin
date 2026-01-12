@@ -947,8 +947,8 @@ public class MessageHistoryRepositoryTests
         // Arrange - Get current message count
         var statsBefore = await _statsService!.GetStatsAsync();
 
-        // Act
-        var (deletedCount, imagePaths, mediaPaths) = await _repository!.CleanupExpiredAsync();
+        // Act - Use 30-day retention (default)
+        var (deletedCount, imagePaths, mediaPaths) = await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
         // Assert - Should not delete anything (golden dataset is recent)
         Assert.That(deletedCount, Is.EqualTo(0), "Should not delete recent messages from golden dataset");
@@ -989,8 +989,8 @@ public class MessageHistoryRepositoryTests
         Assert.That(msg1WithHistory!.DetectionResults.Count, Is.GreaterThan(0),
             "Message should have detection results (training data)");
 
-        // Act - Run cleanup
-        var (deletedCount, imagePaths, mediaPaths) = await _repository.CleanupExpiredAsync();
+        // Act - Run cleanup with 30-day retention
+        var (deletedCount, imagePaths, mediaPaths) = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
         // Assert - Message with detection result should NOT be deleted
         var messageAfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg1_Id);

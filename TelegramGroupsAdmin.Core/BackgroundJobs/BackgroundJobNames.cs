@@ -94,28 +94,3 @@ public static class BackgroundJobNames
     /// </summary>
     public const string WelcomeTimeout = "WelcomeTimeout";
 }
-
-/// <summary>
-/// Centralized constants for background job settings keys
-/// Prevents magic strings in Settings dictionaries
-/// </summary>
-public static class BackgroundJobSettings
-{
-    // Scheduled Backup settings (granular 5-tier retention)
-    public const string RetainHourlyBackups = "RetainHourlyBackups";
-    public const string RetainDailyBackups = "RetainDailyBackups";
-    public const string RetainWeeklyBackups = "RetainWeeklyBackups";
-    public const string RetainMonthlyBackups = "RetainMonthlyBackups";
-    public const string RetainYearlyBackups = "RetainYearlyBackups";
-    public const string BackupDirectory = "BackupDirectory";
-
-    // Message Cleanup settings
-    public const string RetentionHours = "RetentionHours";
-
-    // User Photo Refresh settings
-    public const string DaysBack = "DaysBack";
-
-    // Database Maintenance settings
-    public const string RunVacuum = "RunVacuum";
-    public const string RunAnalyze = "RunAnalyze";
-}

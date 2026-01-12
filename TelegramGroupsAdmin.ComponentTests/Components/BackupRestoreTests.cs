@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Data;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -41,11 +42,11 @@ public class BackupRestoreTestContext : BunitContext
             Description = "Automated database and media backup",
             Schedule = "1d at 2am",
             Enabled = true,
-            Settings = new Dictionary<string, object>
+            ScheduledBackup = new ScheduledBackupSettings
             {
-                ["RetainHourlyBackups"] = 24,
-                ["RetainDailyBackups"] = 7,
-                ["BackupDirectory"] = "/data/backups"
+                RetainHourlyBackups = 24,
+                RetainDailyBackups = 7,
+                BackupDirectory = "/data/backups"
             }
         };
         JobConfigService.GetJobConfigAsync(Arg.Any<string>()).Returns(defaultJobConfig);
