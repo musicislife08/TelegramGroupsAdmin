@@ -21,6 +21,7 @@ public class BackgroundJobConfigMigrationTests
 {
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
+    private IServiceScope? _scope;
     private IBackgroundJobConfigService? _configService;
 
     [SetUp]
@@ -55,15 +56,16 @@ public class BackgroundJobConfigMigrationTests
         _serviceProvider = services.BuildServiceProvider();
 
         // Get service in a scope
-        var scope = _serviceProvider.CreateScope();
-        _configService = scope.ServiceProvider.GetRequiredService<IBackgroundJobConfigService>();
+        _scope = _serviceProvider.CreateScope();
+        _configService = _scope.ServiceProvider.GetRequiredService<IBackgroundJobConfigService>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _testHelper?.Dispose();
+        _scope?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
+        _testHelper?.Dispose();
     }
 
     #region Migration Tests

@@ -24,6 +24,7 @@ public class ReportsRepositoryTests
 {
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
+    private IServiceScope? _scope;
     private IReportsRepository? _repository;
 
     [SetUp]
@@ -48,15 +49,16 @@ public class ReportsRepositoryTests
 
         _serviceProvider = services.BuildServiceProvider();
 
-        var scope = _serviceProvider.CreateScope();
-        _repository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+        _scope = _serviceProvider.CreateScope();
+        _repository = _scope.ServiceProvider.GetRequiredService<IReportsRepository>();
     }
 
     [TearDown]
     public void TearDown()
     {
-        _testHelper?.Dispose();
+        _scope?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
+        _testHelper?.Dispose();
     }
 
     #region Helper Methods
