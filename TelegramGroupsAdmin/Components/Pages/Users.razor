@@ -2,8 +2,8 @@
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Components.Shared.Settings
-@inject TelegramUserManagementService UserManagementService
-@inject BlazorAuthHelper AuthHelper
+@inject ITelegramUserManagementService UserManagementService
+@inject IBlazorAuthHelper AuthHelper
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService

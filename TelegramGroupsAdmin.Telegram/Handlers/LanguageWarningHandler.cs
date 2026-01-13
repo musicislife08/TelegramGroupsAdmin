@@ -90,7 +90,7 @@ public class LanguageWarningHandler
                 .Replace("{warnings_remaining}", warningsRemaining.ToString());
 
             // Issue warning using moderation system
-            var moderationService = scope.ServiceProvider.GetRequiredService<Services.Moderation.ModerationOrchestrator>();
+            var moderationService = scope.ServiceProvider.GetRequiredService<Services.Moderation.IModerationOrchestrator>();
             await moderationService.WarnUserAsync(
                 userId: message.From.Id,
                 messageId: message.MessageId,

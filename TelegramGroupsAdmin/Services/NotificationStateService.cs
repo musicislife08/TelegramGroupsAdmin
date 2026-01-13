@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Services;
 /// Blazor state service for managing in-app notification UI state
 /// Scoped per circuit - tracks unread count and recent notifications
 /// </summary>
-public class NotificationStateService : IDisposable
+public class NotificationStateService : INotificationStateService
 {
 
     private readonly IWebPushNotificationService _notificationService;
@@ -31,9 +31,7 @@ public class NotificationStateService : IDisposable
         _logger = logger;
     }
 
-    /// <summary>
-    /// Initialize state for a user (call from layout OnInitializedAsync)
-    /// </summary>
+    /// <inheritdoc/>
     public async Task InitializeAsync(string userId, CancellationToken cancellationToken = default)
     {
         if (_userId == userId && _isLoaded)
@@ -43,9 +41,7 @@ public class NotificationStateService : IDisposable
         await RefreshAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Refresh notifications from database
-    /// </summary>
+    /// <inheritdoc/>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))
@@ -65,9 +61,7 @@ public class NotificationStateService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Mark a single notification as read
-    /// </summary>
+    /// <inheritdoc/>
     public async Task MarkAsReadAsync(long notificationId, CancellationToken cancellationToken = default)
     {
         await _notificationService.MarkAsReadAsync(notificationId, cancellationToken);
@@ -83,9 +77,7 @@ public class NotificationStateService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Mark all notifications as read
-    /// </summary>
+    /// <inheritdoc/>
     public async Task MarkAllAsReadAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))
@@ -104,9 +96,7 @@ public class NotificationStateService : IDisposable
         await NotifyStateChangedAsync();
     }
 
-    /// <summary>
-    /// Add a new notification (called when receiving real-time updates)
-    /// </summary>
+    /// <inheritdoc/>
     public async Task AddNotificationAsync(WebNotification notification)
     {
         _notifications.Insert(0, notification);
@@ -124,9 +114,7 @@ public class NotificationStateService : IDisposable
         await NotifyStateChangedAsync();
     }
 
-    /// <summary>
-    /// Delete a single notification
-    /// </summary>
+    /// <inheritdoc/>
     public async Task DeleteAsync(long notificationId, CancellationToken cancellationToken = default)
     {
         await _notificationService.DeleteAsync(notificationId, cancellationToken);
@@ -144,9 +132,7 @@ public class NotificationStateService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Delete all notifications for current user
-    /// </summary>
+    /// <inheritdoc/>
     public async Task DeleteAllAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_userId))

@@ -186,7 +186,7 @@ public partial class MessageProcessingService(
             if (message.NewChatMembers != null)
             {
                 var userRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
 
                 foreach (var joiningUser in message.NewChatMembers)
                 {
@@ -560,7 +560,7 @@ public partial class MessageProcessingService(
                     LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                     message.MessageId);
 
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
                 await moderationService.DeleteMessageAsync(
                     messageId: message.MessageId,
                     chatId: message.Chat.Id,

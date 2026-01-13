@@ -15,7 +15,7 @@ public class WarnCommand : IBotCommand
 {
     private readonly ILogger<WarnCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
     private readonly IUserMessagingService _messagingService;
 
     public string Name => "warn";
@@ -29,7 +29,7 @@ public class WarnCommand : IBotCommand
     public WarnCommand(
         ILogger<WarnCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationOrchestrator moderationService,
+        IModerationOrchestrator moderationService,
         IUserMessagingService messagingService)
     {
         _logger = logger;

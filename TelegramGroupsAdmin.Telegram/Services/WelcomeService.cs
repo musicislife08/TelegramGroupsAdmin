@@ -238,7 +238,7 @@ public class WelcomeService : IWelcomeService
                     casResult.Reason ?? "No reason provided");
 
                 // Ban user using ModerationOrchestrator
-                var moderationOrchestrator = impersonationScope.ServiceProvider.GetRequiredService<ModerationOrchestrator>();
+                var moderationOrchestrator = impersonationScope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
                 var reason = $"CAS banned: {casResult.Reason ?? "Listed in CAS database"}";
                 await moderationOrchestrator.BanUserAsync(
                     userId: user.Id,

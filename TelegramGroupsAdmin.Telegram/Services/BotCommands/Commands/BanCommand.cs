@@ -18,7 +18,7 @@ public class BanCommand : IBotCommand
 {
     private readonly ILogger<BanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
     private readonly IUserMessagingService _messagingService;
     private readonly ITelegramBotClientFactory _botClientFactory;
 
@@ -33,7 +33,7 @@ public class BanCommand : IBotCommand
     public BanCommand(
         ILogger<BanCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationOrchestrator moderationService,
+        IModerationOrchestrator moderationService,
         IUserMessagingService messagingService,
         ITelegramBotClientFactory botClientFactory)
     {

@@ -15,7 +15,7 @@ public class TrustCommand : IBotCommand
 {
     private readonly ILogger<TrustCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
 
     public string Name => "trust";
     public string Description => "Toggle trust status (bypass spam detection)";
@@ -28,7 +28,7 @@ public class TrustCommand : IBotCommand
     public TrustCommand(
         ILogger<TrustCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationOrchestrator moderationService)
+        IModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

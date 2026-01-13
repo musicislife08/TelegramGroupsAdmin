@@ -29,7 +29,7 @@ public class BackupService : IBackupService
     private readonly IPassphraseManagementService _passphraseService;
     private readonly IBackupConfigurationService _configService;
     private readonly DependencyResolutionService _dependencyResolutionService;
-    private readonly BackupRetentionService _retentionService;
+    private readonly IBackupRetentionService _retentionService;
     private const string CurrentVersion = "2.1"; // SCHEMA-3: configs.chat_id NULL → 0 migration
 
     public BackupService(
@@ -45,7 +45,7 @@ public class BackupService : IBackupService
         IPassphraseManagementService passphraseService,
         IBackupConfigurationService configService,
         DependencyResolutionService dependencyResolutionService,
-        BackupRetentionService retentionService)
+        IBackupRetentionService retentionService)
     {
         _dataSource = dataSource;
         _logger = logger;

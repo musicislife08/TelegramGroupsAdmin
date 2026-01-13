@@ -15,7 +15,7 @@ public class MuteCommand : IBotCommand
 {
     private readonly ILogger<MuteCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
 
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
@@ -28,7 +28,7 @@ public class MuteCommand : IBotCommand
     public MuteCommand(
         ILogger<MuteCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationOrchestrator moderationService)
+        IModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

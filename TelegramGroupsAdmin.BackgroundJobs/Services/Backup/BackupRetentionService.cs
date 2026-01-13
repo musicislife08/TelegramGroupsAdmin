@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 /// <summary>
 /// Service for managing backup retention with grandfather-father-son strategy
 /// </summary>
-public class BackupRetentionService
+public class BackupRetentionService : IBackupRetentionService
 {
     private readonly ILogger<BackupRetentionService> _logger;
 
@@ -15,13 +15,7 @@ public class BackupRetentionService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Determines which backup files should be deleted based on retention policy
-    /// Uses grandfather-father-son (5-tier) strategy
-    /// </summary>
-    /// <param name="backupFiles">All backup files with their metadata</param>
-    /// <param name="retentionConfig">Retention configuration</param>
-    /// <returns>List of backup files to delete</returns>
+    /// <inheritdoc/>
     public List<BackupFileInfo> GetBackupsToDelete(
         List<BackupFileInfo> backupFiles,
         RetentionConfig retentionConfig)
@@ -159,10 +153,8 @@ public class BackupRetentionService
         return classified;
     }
 
-    /// <summary>
-    /// Determines the primary (highest) tier for a backup and whether it will be kept
-    /// </summary>
-    public (BackupTier PrimaryTier, bool WillBeKept) GetBackupRetentionInfo(
+    /// <inheritdoc/>
+    public BackupRetentionInfo GetBackupRetentionInfo(
         BackupFileInfo backup,
         List<BackupFileInfo> allBackups,
         RetentionConfig retentionConfig)
@@ -185,7 +177,7 @@ public class BackupRetentionService
         var backupsToDelete = GetBackupsToDelete(allBackups, retentionConfig);
         var willBeKept = !backupsToDelete.Any(b => b.FilePath == backup.FilePath);
 
-        return (primaryTier, willBeKept);
+        return new BackupRetentionInfo(primaryTier, willBeKept);
     }
 
     /// <summary>

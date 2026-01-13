@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// ClamAV health check result (Phase 4.22)
+/// Health check result for file scanner services.
 /// </summary>
-public class ClamAVHealthResult
+public class FileScannerHealthResult
 {
     public bool IsHealthy { get; set; }
     public string? Version { get; set; }
