@@ -25,7 +25,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
 /// Workers are domain experts that don't know about each other.
 /// Only the orchestrator composes workflows across workers.
 /// </summary>
-public class ModerationOrchestrator
+public class ModerationOrchestrator : IModerationOrchestrator
 {
     // Domain handlers (workers)
     private readonly IBanHandler _banHandler;
@@ -72,10 +72,7 @@ public class ModerationOrchestrator
         _logger = logger;
     }
 
-    /// <summary>
-    /// Mark message as spam, delete it, ban user globally, and revoke trust.
-    /// Composes: EnsureExists → Delete → Ban → Training Data
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> MarkAsSpamAndBanAsync(
         long messageId,
         long userId,
@@ -132,10 +129,7 @@ public class ModerationOrchestrator
         };
     }
 
-    /// <summary>
-    /// Ban user globally across all managed chats.
-    /// Business rule: Bans always revoke trust.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> BanUserAsync(
         long userId,
         long? messageId,
@@ -178,10 +172,7 @@ public class ModerationOrchestrator
         };
     }
 
-    /// <summary>
-    /// Warn user globally with automatic ban after threshold.
-    /// Business rule: N warnings = auto-ban (configurable per chat).
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> WarnUserAsync(
         long userId,
         long? messageId,
@@ -249,9 +240,7 @@ public class ModerationOrchestrator
         return result;
     }
 
-    /// <summary>
-    /// Trust user globally (bypass spam detection).
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> TrustUserAsync(
         long userId,
         Actor executor,
@@ -269,9 +258,7 @@ public class ModerationOrchestrator
         return new ModerationResult { Success = true };
     }
 
-    /// <summary>
-    /// Remove trust from user globally.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> UntrustUserAsync(
         long userId,
         Actor executor,
@@ -289,9 +276,7 @@ public class ModerationOrchestrator
         return new ModerationResult { Success = true };
     }
 
-    /// <summary>
-    /// Unban user globally and optionally restore trust.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> UnbanUserAsync(
         long userId,
         Actor executor,
@@ -325,9 +310,7 @@ public class ModerationOrchestrator
         return result;
     }
 
-    /// <summary>
-    /// Delete a message from Telegram and mark as deleted in database.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> DeleteMessageAsync(
         long messageId,
         long chatId,
@@ -348,9 +331,7 @@ public class ModerationOrchestrator
         };
     }
 
-    /// <summary>
-    /// Temporarily ban user globally with automatic unrestriction.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> TempBanUserAsync(
         long userId,
         long? messageId,
@@ -380,9 +361,7 @@ public class ModerationOrchestrator
         };
     }
 
-    /// <summary>
-    /// Restrict user (mute) globally with automatic unrestriction.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> RestrictUserAsync(
         long userId,
         long? messageId,
@@ -411,10 +390,7 @@ public class ModerationOrchestrator
         };
     }
 
-    /// <summary>
-    /// Sync an existing global ban to a specific chat (lazy sync for chats added after ban).
-    /// Use when a globally banned user joins or posts in a chat that was added after their ban.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<ModerationResult> SyncBanToChatAsync(
         User user,
         Chat chat,

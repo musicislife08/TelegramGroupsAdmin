@@ -12,7 +12,7 @@ public class UnbanCommand : IBotCommand
 {
     private readonly ILogger<UnbanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
 
     public string Name => "unban";
     public string Description => "Remove ban from user";
@@ -25,7 +25,7 @@ public class UnbanCommand : IBotCommand
     public UnbanCommand(
         ILogger<UnbanCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationOrchestrator moderationService)
+        IModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

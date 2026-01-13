@@ -14,16 +14,16 @@ public class Tier1VotingCoordinator
 {
     private readonly ILogger<Tier1VotingCoordinator> _logger;
     private readonly FileScanningConfig _config;
-    private readonly ClamAVScannerService _clamAvScanner;
+    private readonly IFileScannerService _fileScannerService;
 
     public Tier1VotingCoordinator(
         ILogger<Tier1VotingCoordinator> logger,
         IOptions<FileScanningConfig> config,
-        ClamAVScannerService clamAvScanner)
+        IFileScannerService fileScannerService)
     {
         _logger = logger;
         _config = config.Value;
-        _clamAvScanner = clamAvScanner;
+        _fileScannerService = fileScannerService;
     }
 
     /// <summary>
@@ -61,7 +61,7 @@ public class Tier1VotingCoordinator
         // Launch ClamAV scan
         if (_config.Tier1.ClamAV.Enabled)
         {
-            scanTasks.Add(_clamAvScanner.ScanFileAsync(filePath, fileName, cancellationToken));
+            scanTasks.Add(_fileScannerService.ScanFileAsync(filePath, fileName, cancellationToken));
         }
 
         if (!scanTasks.Any())

@@ -98,7 +98,7 @@ public class BackupServiceTests
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
-        services.AddScoped<BackupRetentionService>();
+        services.AddScoped<IBackupRetentionService, BackupRetentionService>();
 
         // Add internal handler services (required by BackupService)
         services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableDiscoveryService>();

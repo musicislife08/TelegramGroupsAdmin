@@ -107,7 +107,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
 
         // Internal handler services (required by BackupService)
-        services.AddScoped<BackupRetentionService>();
+        services.AddScoped<IBackupRetentionService, BackupRetentionService>();
         services.AddScoped<TableDiscoveryService>();
         services.AddScoped<TableExportService>();
         services.AddScoped<DependencyResolutionService>();

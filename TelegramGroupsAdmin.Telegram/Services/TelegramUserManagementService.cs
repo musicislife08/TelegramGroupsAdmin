@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Orchestration service for Telegram user management operations.
 /// Coordinates between TelegramUserRepository, UserActionRepository, and DetectionResultRepository.
 /// </summary>
-public class TelegramUserManagementService
+public class TelegramUserManagementService : ITelegramUserManagementService
 {
     private readonly ITelegramUserRepository _userRepository;
     private readonly IUserActionsRepository _userActionsRepository;
@@ -27,19 +27,13 @@ public class TelegramUserManagementService
         _logger = logger;
     }
 
-    /// <summary>
-    /// Get all Telegram users with computed stats for list view
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<TelegramUserListItem>> GetAllUsersAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetAllWithStatsAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get Telegram users filtered by accessible chats
-    /// </summary>
-    /// <param name="chatIds">List of accessible chat IDs (empty = all users for GlobalAdmin/Owner)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
+    /// <inheritdoc/>
     public Task<List<TelegramUserListItem>> GetAllUsersAsync(List<long> chatIds, CancellationToken cancellationToken = default)
     {
         // Empty list means all chats (GlobalAdmin/Owner)
@@ -51,75 +45,55 @@ public class TelegramUserManagementService
         return _userRepository.GetAllWithStatsAsync(chatIds, cancellationToken);
     }
 
-    /// <summary>
-    /// Get users with tags or notes for tracking (includes warned users)
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetTaggedUsersAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get banned users
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<TelegramUserListItem>> GetBannedUsersAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetBannedUsersAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get banned users with detailed ban information
-    /// Includes ban date, banned by, reason, expiry, and trigger message
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetBannedUsersWithDetailsAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get trusted (whitelisted) users
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetTrustedUsersAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get inactive users (joined but never engaged - no welcome accept or message)
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetInactiveUsersAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get top active users by 30-day message count
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<TopActiveUser>> GetTopActiveUsersAsync(int limit = 3, CancellationToken cancellationToken = default)
     {
         return _userRepository.GetTopActiveUsersAsync(limit: limit, cancellationToken: cancellationToken);
     }
 
-    /// <summary>
-    /// Get moderation queue statistics (banned, warned, flagged counts)
-    /// </summary>
+    /// <inheritdoc/>
     public Task<ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetModerationQueueStatsAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Get detailed user info with all related data (chat memberships, actions, detection history)
-    /// </summary>
+    /// <inheritdoc/>
     public Task<TelegramUserDetail?> GetUserDetailAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         return _userRepository.GetUserDetailAsync(telegramUserId, cancellationToken);
     }
 
-    /// <summary>
-    /// Toggle user trust status (whitelist on/off)
-    /// Creates audit trail via user_actions table.
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<bool> ToggleTrustAsync(long telegramUserId, Actor modifiedBy, CancellationToken cancellationToken = default)
     {
         // Get current user
@@ -189,36 +163,25 @@ public class TelegramUserManagementService
         return true;
     }
 
-    /// <summary>
-    /// Get all user actions (warnings, bans, trusts) for a specific user
-    /// </summary>
+    /// <inheritdoc/>
     public Task<List<UserActionRecord>> GetUserActionsAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         return _userActionsRepository.GetByUserIdAsync(telegramUserId);
     }
 
-    /// <summary>
-    /// Check if user is currently banned.
-    /// REFACTOR-5: Uses is_banned column as source of truth (not user_actions audit log).
-    /// </summary>
+    /// <inheritdoc/>
     public Task<bool> IsBannedAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         return _userRepository.IsBannedAsync(telegramUserId, cancellationToken);
     }
 
-    /// <summary>
-    /// Get active warning count for user.
-    /// REFACTOR-5: Uses warnings JSONB column as source of truth (not user_actions audit log).
-    /// </summary>
+    /// <inheritdoc/>
     public Task<int> GetActiveWarningCountAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         return _userRepository.GetActiveWarningCountAsync(telegramUserId, cancellationToken);
     }
 
-    /// <summary>
-    /// Unban a user (expire all active bans and create unban action record)
-    /// Phase 5: Banned users tab enhancements
-    /// </summary>
+    /// <inheritdoc/>
     public async Task<bool> UnbanAsync(long telegramUserId, Actor unbannedBy, string? reason = null, CancellationToken cancellationToken = default)
     {
         // Verify user exists

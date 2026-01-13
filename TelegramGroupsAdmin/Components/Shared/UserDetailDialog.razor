@@ -1,13 +1,13 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
-@inject TelegramUserManagementService UserManagementService
-@inject ModerationOrchestrator ModerationService
+@inject ITelegramUserManagementService UserManagementService
+@inject IModerationOrchestrator ModerationService
 @inject IAdminNotesRepository AdminNotesRepository
 @inject IUserTagsRepository UserTagsRepository
 @inject ITagDefinitionsRepository TagDefinitionsRepository
 @inject IUserActionsRepository UserActionsRepository
-@inject BlazorAuthHelper AuthHelper
+@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation

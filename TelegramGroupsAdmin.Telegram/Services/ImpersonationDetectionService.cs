@@ -33,7 +33,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
     private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
-    private readonly ModerationOrchestrator _moderationActionService;
+    private readonly IModerationOrchestrator _moderationActionService;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
@@ -52,7 +52,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
         IImpersonationAlertsRepository impersonationAlertsRepository,
-        ModerationOrchestrator moderationActionService,
+        IModerationOrchestrator moderationActionService,
         ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)

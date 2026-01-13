@@ -302,7 +302,7 @@ public class ClamAVScannerService : IFileScannerService
     /// Check ClamAV daemon health and get version/signature info (Phase 4.22)
     /// </summary>
     /// <returns>Health check result with version and signature count</returns>
-    public async Task<ClamAVHealthResult> GetHealthAsync(CancellationToken cancellationToken = default)
+    public async Task<FileScannerHealthResult> GetHealthAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -316,7 +316,7 @@ public class ClamAVScannerService : IFileScannerService
             var pingResult = await clamClient.PingAsync(cancellationToken);
             if (!pingResult)
             {
-                return new ClamAVHealthResult
+                return new FileScannerHealthResult
                 {
                     IsHealthy = false,
                     ErrorMessage = $"ClamAV daemon not responding at {config.Tier1.ClamAV.Host}:{config.Tier1.ClamAV.Port}"
@@ -329,7 +329,7 @@ public class ClamAVScannerService : IFileScannerService
             _logger.LogInformation("✅ ClamAV health check successful: {Version} at {Host}:{Port}",
                 versionResult, config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
 
-            return new ClamAVHealthResult
+            return new FileScannerHealthResult
             {
                 IsHealthy = true,
                 Version = versionResult ?? "Unknown",
@@ -340,7 +340,7 @@ public class ClamAVScannerService : IFileScannerService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking ClamAV health");
-            return new ClamAVHealthResult
+            return new FileScannerHealthResult
             {
                 IsHealthy = false,
                 ErrorMessage = ex.Message

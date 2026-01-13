@@ -17,7 +17,7 @@ public class ReportActionsService : IReportActionsService
 {
     private readonly IReportsRepository _reportsRepository;
     private readonly IMessageHistoryRepository _messageRepository;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
     private readonly IAuditService _auditService;
     private readonly IBotMessageService _botMessageService;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
@@ -26,7 +26,7 @@ public class ReportActionsService : IReportActionsService
     public ReportActionsService(
         IReportsRepository reportsRepository,
         IMessageHistoryRepository messageRepository,
-        ModerationOrchestrator moderationService,
+        IModerationOrchestrator moderationService,
         IAuditService auditService,
         IBotMessageService botMessageService,
         IReportCallbackContextRepository callbackContextRepo,
@@ -87,7 +87,7 @@ public class ReportActionsService : IReportActionsService
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             Actor.FromTelegramUser(message.UserId),
-            $"spam:report#{reportId}:chats{result.ChatsAffected}",
+            $"Marked as spam (report #{reportId}, affected {result.ChatsAffected} chats)",
             cancellationToken);
 
         // Delete the /report command message (cleanup - no reply needed, action is visible)
@@ -158,7 +158,7 @@ public class ReportActionsService : IReportActionsService
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             Actor.FromTelegramUser(message.UserId),
-            $"ban:report#{reportId}:chats{result.ChatsAffected}",
+            $"Banned user (report #{reportId}, affected {result.ChatsAffected} chats)",
             cancellationToken);
 
         // Delete the /report command message (cleanup - no reply needed, action is visible)
@@ -214,7 +214,7 @@ public class ReportActionsService : IReportActionsService
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             Actor.FromTelegramUser(message.UserId),
-            $"warn:report#{reportId}:warnings{result.WarningCount}",
+            $"Warned user (report #{reportId}, {result.WarningCount} warnings total)",
             cancellationToken);
 
         // Delete the /report command message (cleanup - no reply needed, action is visible)
@@ -246,7 +246,7 @@ public class ReportActionsService : IReportActionsService
             AuditEventType.ReportReviewed,
             Actor.FromWebUser(reviewerId),
             null,
-            $"dismiss:report#{reportId}:{reason ?? "no_action"}",
+            $"Dismissed report #{reportId} ({reason ?? "no action taken"})",
             cancellationToken);
 
         // Reply to original REPORTED message (not /report command) - for dismiss only

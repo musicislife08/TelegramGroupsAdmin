@@ -137,7 +137,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<IAuditService, AuditService>();
             services.AddScoped<IFeatureAvailabilityService, FeatureAvailabilityService>(); // FEATURE-5.3: Check external service configuration status
-            services.AddScoped<BlazorAuthHelper>(); // Authentication context extraction helper for UI components
+            services.AddScoped<IBlazorAuthHelper, BlazorAuthHelper>(); // Authentication context extraction helper for UI components
 
             // Prompt builder service (Phase 4.X: AI-powered prompt generation)
             services.AddScoped<Services.PromptBuilder.IPromptBuilderService, Services.PromptBuilder.PromptBuilderService>();
@@ -151,7 +151,7 @@ public static class ServiceCollectionExtensions
             // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
-            services.AddScoped<NotificationStateService>(); // Blazor state for notification bell
+            services.AddScoped<INotificationStateService, NotificationStateService>(); // Blazor state for notification bell
 
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
             services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();

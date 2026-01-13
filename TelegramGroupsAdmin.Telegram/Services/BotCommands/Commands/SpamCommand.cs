@@ -14,7 +14,7 @@ public class SpamCommand : IBotCommand
 {
     private readonly ILogger<SpamCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
 
     public string Name => "spam";
     public string Description => "Mark message as spam and delete it";
@@ -27,7 +27,7 @@ public class SpamCommand : IBotCommand
     public SpamCommand(
         ILogger<SpamCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationOrchestrator moderationService)
+        IModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

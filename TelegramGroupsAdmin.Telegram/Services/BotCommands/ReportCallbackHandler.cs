@@ -74,7 +74,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
         var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
         var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var moderationService = scope.ServiceProvider.GetRequiredService<ModerationOrchestrator>();
+        var moderationService = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
 
         // Look up callback context from database
         var context = await callbackContextRepo.GetByIdAsync(contextId, cancellationToken);
@@ -242,7 +242,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReportActionResult> HandleSpamActionAsync(
-        ModerationOrchestrator moderationService,
+        IModerationOrchestrator moderationService,
         long reportId,
         long userId,
         int messageId,
@@ -272,7 +272,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReportActionResult> HandleWarnActionAsync(
-        ModerationOrchestrator moderationService,
+        IModerationOrchestrator moderationService,
         long reportId,
         long chatId,
         long userId,
@@ -303,7 +303,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReportActionResult> HandleTempBanActionAsync(
-        ModerationOrchestrator moderationService,
+        IModerationOrchestrator moderationService,
         long reportId,
         long userId,
         int messageId,

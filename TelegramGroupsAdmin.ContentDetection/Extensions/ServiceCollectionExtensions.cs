@@ -75,7 +75,7 @@ public static class ServiceCollectionExtensions
 
             // Register file scanning services (Phase 4.17 - Tier 1: Local scanners)
             // Note: YARA was removed due to ARM compatibility issues - ClamAV provides superior coverage
-            services.AddScoped<ClamAVScannerService>();
+            services.AddScoped<IFileScannerService, ClamAVScannerService>();
             services.AddScoped<Tier1VotingCoordinator>();
 
             // Register file scanning services (Phase 4.17 - Phase 2: Tier 2 cloud scanners)

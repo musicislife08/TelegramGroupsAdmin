@@ -4,7 +4,7 @@
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
 @inject IBackupService BackupService
-@inject BackupRetentionService RetentionService
+@inject IBackupRetentionService RetentionService
 @inject ISnackbar Snackbar
 @inject IJSRuntime Js
 @inject IAuditService AuditService
@@ -304,7 +304,7 @@
 
     private List<BackupFileInfo> _backups = [];
     private List<TierGroup> _tierGroups = [];
-    private readonly Dictionary<string, (BackupTier PrimaryTier, bool WillBeKept)> _backupRetentionInfo = new();
+    private readonly Dictionary<string, BackupRetentionInfo> _backupRetentionInfo = new();
     private bool _isLoading;
     private readonly RetentionConfig _retentionConfig = new(); // Default retention policy
 

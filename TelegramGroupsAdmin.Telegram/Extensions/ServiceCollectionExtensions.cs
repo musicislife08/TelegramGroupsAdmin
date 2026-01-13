@@ -98,13 +98,13 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITrainingHandler, TrainingHandler>();
 
             // Orchestrator (routes to handlers and owns business rules)
-            services.AddScoped<ModerationOrchestrator>();
+            services.AddScoped<IModerationOrchestrator, ModerationOrchestrator>();
 
             // Report service
             services.AddScoped<IReportService, ReportService>();
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
-            services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
+            services.AddScoped<ITelegramUserManagementService, TelegramUserManagementService>(); // Orchestrates Telegram user operations
             services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
             services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
             services.AddSingleton<IWelcomeService, WelcomeService>();
