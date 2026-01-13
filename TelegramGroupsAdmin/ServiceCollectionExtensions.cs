@@ -119,8 +119,7 @@ public static class ServiceCollectionExtensions
         /// </summary>
         public IServiceCollection AddApplicationServices()
         {
-            // PERF-CFG-1: Memory cache for configuration caching (95% query reduction)
-            services.AddMemoryCache();
+            // Note: HybridCache (registered in AddInfrastructure) provides L1 in-memory caching
 
             // Auth services
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();

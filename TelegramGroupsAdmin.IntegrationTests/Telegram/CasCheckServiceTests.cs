@@ -1,5 +1,5 @@
 using System.Net;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -22,7 +22,8 @@ public class CasCheckServiceTests
 {
     private WireMockServer _mockServer = null!;
     private ILogger<CasCheckService> _mockLogger = null!;
-    private IMemoryCache _memoryCache = null!;
+    private HybridCache _cache = null!;
+    private ServiceProvider _cacheServiceProvider = null!;
     private IHttpClientFactory _httpClientFactory = null!;
     private IServiceProvider _serviceProvider = null!;
     private IConfigService _mockConfigService = null!;
@@ -36,7 +37,12 @@ public class CasCheckServiceTests
         _mockServer.Reset(); // Clear any stubs from previous tests
 
         _mockLogger = Substitute.For<ILogger<CasCheckService>>();
-        _memoryCache = new MemoryCache(new MemoryCacheOptions());
+
+        // Create HybridCache via DI
+        var cacheServices = new ServiceCollection();
+        cacheServices.AddHybridCache();
+        _cacheServiceProvider = cacheServices.BuildServiceProvider();
+        _cache = _cacheServiceProvider.GetRequiredService<HybridCache>();
 
         // Create real HttpClientFactory
         var services = new ServiceCollection();
@@ -63,7 +69,7 @@ public class CasCheckServiceTests
             _mockLogger,
             _serviceProvider,
             _httpClientFactory,
-            _memoryCache);
+            _cache);
     }
 
     [TearDown]
@@ -71,7 +77,7 @@ public class CasCheckServiceTests
     {
         _mockServer.Stop();
         _mockServer.Dispose();
-        _memoryCache.Dispose();
+        _cacheServiceProvider.Dispose();
     }
 
     #region Happy Path Tests
