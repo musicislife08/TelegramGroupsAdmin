@@ -140,13 +140,20 @@ public class UsersPage
     }
 
     /// <summary>
-    /// Clears the search input.
+    /// Clears the search input by clicking the MudBlazor clear button (X icon).
+    /// This triggers OnClearButtonClick which calls ApplyFilters().
     /// </summary>
     public async Task ClearSearchAsync()
     {
-        var searchInput = _page.Locator(SearchInput);
-        await searchInput.ClearAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Click the MudBlazor clear button (X icon) to trigger OnClearButtonClick
+        // The clear button is in the end adornment area of the MudTextField
+        var clearButton = _page.Locator(".mud-input-adornment-end button").First;
+
+        if (await clearButton.IsVisibleAsync())
+        {
+            await clearButton.ClickAsync();
+            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        }
     }
 
     /// <summary>
