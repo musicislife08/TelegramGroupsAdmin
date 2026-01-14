@@ -35,6 +35,7 @@ public class AnalyticsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
+        // Analytics has interactive charts - need Blazor circuit connected
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 

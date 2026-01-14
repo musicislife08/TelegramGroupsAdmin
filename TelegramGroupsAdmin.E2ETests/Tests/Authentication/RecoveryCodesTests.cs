@@ -33,10 +33,9 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task Profile_WithTotpEnabled_ShowsRegenerateButton()
     {
         // Arrange - create user with TOTP already enabled
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("regen-visible"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true) // Fully configured TOTP
             .AsOwner()
@@ -44,7 +43,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Login with 2FA
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         var totpCode = TotpHelper.GenerateCode(user.TotpSecret!);
@@ -64,17 +63,16 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task Profile_RegenerateRecoveryCodes_RequiresPassword()
     {
         // Arrange - create user with TOTP enabled and login
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("regen-password"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
             .BuildAsync();
 
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         var totpCode = TotpHelper.GenerateCode(user.TotpSecret!);
@@ -97,17 +95,16 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task Profile_RegenerateRecoveryCodes_WithValidPassword_ShowsCodes()
     {
         // Arrange - create user with TOTP enabled and login
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("regen-success"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
             .BuildAsync();
 
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         var totpCode = TotpHelper.GenerateCode(user.TotpSecret!);
@@ -118,7 +115,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.WaitForLoadAsync();
 
         // Act - regenerate recovery codes with valid password
-        var recoveryCodes = await _profilePage.RegenerateRecoveryCodesAsync(password);
+        var recoveryCodes = await _profilePage.RegenerateRecoveryCodesAsync(user.Password);
 
         // Assert - should receive recovery codes per AuthenticationConstants.RecoveryCodeCount
         Assert.That(recoveryCodes.Count, Is.EqualTo(AuthenticationConstants.RecoveryCodeCount),
@@ -137,17 +134,16 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task Profile_RegenerateRecoveryCodes_WithInvalidPassword_ShowsError()
     {
         // Arrange - create user with TOTP enabled and login
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("regen-bad-pass"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
             .BuildAsync();
 
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         var totpCode = TotpHelper.GenerateCode(user.TotpSecret!);
@@ -161,7 +157,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.ClickRegenerateRecoveryCodesAsync();
         await _profilePage.WaitForPasswordConfirmDialogAsync();
         await _profilePage.FillPasswordConfirmDialogAsync("WrongPassword123!");
-        await _profilePage.ClickGenerateNewCodesAsync();
+        await _profilePage.ClickGenerateNewCodesAsync(expectSuccess: false);
 
         // Assert - should show error snackbar
         var snackbar = await _profilePage.WaitForSnackbarAsync();
@@ -177,17 +173,16 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task Profile_RegenerateRecoveryCodes_CanCancel()
     {
         // Arrange - create user with TOTP enabled and login
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("regen-cancel"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
             .BuildAsync();
 
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         var totpCode = TotpHelper.GenerateCode(user.TotpSecret!);
@@ -202,9 +197,8 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.WaitForPasswordConfirmDialogAsync();
         await _profilePage.CancelPasswordConfirmDialogAsync();
 
-        // Assert - dialog should be closed
-        // Give it a moment to close
-        await Task.Delay(500);
+        // Assert - dialog should be closed (use Playwright's auto-waiting instead of Task.Delay)
+        await _profilePage.WaitForPasswordConfirmDialogClosedAsync();
         Assert.That(await _profilePage.IsPasswordConfirmDialogVisibleAsync(), Is.False,
             "Dialog should be closed after canceling");
     }
@@ -217,10 +211,9 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task Profile_Enable2FA_ShowsRecoveryCodesAfterSetup()
     {
         // Arrange - create user WITHOUT TOTP (will enable via Profile)
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("profile-enable"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotpDisabled() // No 2FA configured
             .AsOwner()
@@ -228,7 +221,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Login (no 2FA required)
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _loginPage.WaitForRedirectAsync();
 
         // Navigate to profile
@@ -260,10 +253,9 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task LoginVerify_ShowsRecoveryCodeOption()
     {
         // Arrange - create user with TOTP enabled
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("recovery-option"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
@@ -271,7 +263,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Act - login to get to TOTP verification page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         // Assert - "Use a recovery code instead" link should be visible
@@ -283,17 +275,16 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task LoginVerify_ClickRecoveryCodeLink_ShowsRecoveryForm()
     {
         // Arrange - create user with TOTP enabled
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("recovery-form"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
             .BuildAsync();
 
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         // Act - click to use recovery code
@@ -313,10 +304,9 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task LoginVerify_WithValidRecoveryCode_LogsIn()
     {
         // Arrange - create user requiring TOTP setup to get recovery codes
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("recovery-login"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -324,7 +314,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Complete TOTP setup to get recovery codes
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         var totpSetupPage = new TotpSetupPage(Page);
         await totpSetupPage.WaitForPageAsync();
@@ -342,7 +332,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Now try to login with a recovery code
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         // Act - use a recovery code to login
@@ -357,17 +347,16 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task LoginVerify_WithInvalidRecoveryCode_ShowsError()
     {
         // Arrange - create user with TOTP enabled
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("recovery-invalid"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
             .BuildAsync();
 
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         // Act - try to use an invalid recovery code (correct length but not a valid code)
@@ -388,10 +377,9 @@ public class RecoveryCodesTests : SharedE2ETestBase
     public async Task LoginVerify_RecoveryCode_IsOneTimeUse()
     {
         // Arrange - create user requiring TOTP setup to get recovery codes
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("recovery-onetime"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -399,7 +387,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Complete TOTP setup to get recovery codes
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         var totpSetupPage = new TotpSetupPage(Page);
         await totpSetupPage.WaitForPageAsync();
@@ -414,7 +402,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
         // First login with recovery code
         await Page.Context.ClearCookiesAsync();
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
         await _verifyPage.LoginWithRecoveryCodeAsync(recoveryCodes[0]);
         await _verifyPage.WaitForRedirectAsync();
@@ -424,7 +412,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Act - try to use the same recovery code again
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
         await _verifyPage.ClickUseRecoveryCodeAsync();
         await _verifyPage.WaitForRecoveryCodeFormAsync();

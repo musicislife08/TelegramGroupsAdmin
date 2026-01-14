@@ -32,7 +32,7 @@ public class EmailVerificationTests : E2ETestBase
         // Arrange - create an unverified user and generate a verification token
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("verify"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified(false)
             .WithTotpDisabled()
             .AsOwner()
@@ -57,10 +57,9 @@ public class EmailVerificationTests : E2ETestBase
     public async Task VerifyEmail_WithValidToken_CanLoginAfterVerification()
     {
         // Arrange - create an unverified user with password
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("login-after"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified(false)
             .WithTotpDisabled()
             .AsOwner()
@@ -73,7 +72,7 @@ public class EmailVerificationTests : E2ETestBase
         await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex(@"/login"));
 
         // Now try to login
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should redirect away from login (successful login)
         await _loginPage.WaitForRedirectAsync();
@@ -86,7 +85,7 @@ public class EmailVerificationTests : E2ETestBase
         // Arrange - create a verified user and generate a token anyway
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("already-verified"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified(true)
             .WithTotpDisabled()
             .AsOwner()
@@ -118,7 +117,7 @@ public class EmailVerificationTests : E2ETestBase
         // Arrange - create user and expired token
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("expired-token"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified(false)
             .WithTotpDisabled()
             .AsOwner()
@@ -155,7 +154,7 @@ public class EmailVerificationTests : E2ETestBase
         // Arrange - create user and use the token
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("used-token"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified(false)
             .WithTotpDisabled()
             .AsOwner()
@@ -200,7 +199,7 @@ public class EmailVerificationTests : E2ETestBase
 
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("resend"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified(false)
             .WithTotpDisabled()
             .AsOwner()
@@ -271,7 +270,7 @@ public class EmailVerificationTests : E2ETestBase
 
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("already-verified-resend"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified(true)
             .WithTotpDisabled()
             .AsOwner()
@@ -310,7 +309,7 @@ public class EmailVerificationTests : E2ETestBase
 
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("check-link"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified(false)
             .WithTotpDisabled()
             .AsOwner()
@@ -338,10 +337,9 @@ public class EmailVerificationTests : E2ETestBase
     public async Task UnverifiedUser_CannotLogin()
     {
         // Arrange - create an unverified user
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(Factory.Services)
             .WithEmail(TestCredentials.GenerateEmail("cant-login"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified(false)
             .WithTotpDisabled()
             .AsOwner()
@@ -349,7 +347,7 @@ public class EmailVerificationTests : E2ETestBase
 
         // Act - try to login
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show error about email verification
         Assert.That(await _loginPage.HasErrorMessageAsync(), Is.True,

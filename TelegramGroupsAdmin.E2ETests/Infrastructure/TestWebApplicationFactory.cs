@@ -144,6 +144,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Create the test database before app starts
         EnsureDatabaseCreated();
 
+        // Skip ML training (saves 3-5s per factory startup)
+        // E2E tests don't need the ML classifier - add WithMlTraining() builder if needed later
+        Environment.SetEnvironmentVariable("SKIP_ML_TRAINING", "true");
+
         // Use Development environment so UseStaticFiles() serves CSS/JS correctly
         // (MapStaticAssets requires publish-time manifest which doesn't exist in tests)
         builder.UseEnvironment("Development");
@@ -273,9 +277,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 dropCmd.CommandText = $"DROP DATABASE IF EXISTS \"{_databaseName}\"";
                 dropCmd.ExecuteNonQuery();
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore cleanup errors
+                // Log but don't fail - cleanup is best-effort
+                Console.WriteLine($"Warning: Database cleanup failed for {_databaseName}: {ex.Message}");
             }
 
             // Clean up temp directory
@@ -286,9 +291,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                     Directory.Delete(_tempDataPath, recursive: true);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore cleanup errors
+                // Log but don't fail - cleanup is best-effort
+                Console.WriteLine($"Warning: Temp directory cleanup failed for {_tempDataPath}: {ex.Message}");
             }
         }
 

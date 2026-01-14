@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -51,9 +52,9 @@ public class ReportsPage
             Timeout = 10000
         });
 
-        // Wait for loading indicator to disappear (if it appears)
+        // Wait for loading indicator to disappear (if it's visible)
         var loadingIndicator = _page.Locator(LoadingIndicator);
-        try
+        if (await loadingIndicator.IsVisibleAsync())
         {
             await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
             {
@@ -61,13 +62,9 @@ public class ReportsPage
                 Timeout = 5000
             });
         }
-        catch (TimeoutException)
-        {
-            // Loading indicator may have already disappeared
-        }
 
-        // Wait for network to settle
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for filters to be visible (indicates page is loaded)
+        await Expect(_page.Locator(FilterPaper)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -109,12 +106,11 @@ public class ReportsPage
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
         var popover = _page.Locator(".mud-popover-open");
-        var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
+        var option = popover.Locator(".mud-list-item-clickable").Filter(new() { HasText = filterOption });
         await option.ClickAsync();
 
-        // Wait for popover to close and network to settle
-        await popover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for popover to close
+        await Expect(popover).Not.ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -129,12 +125,11 @@ public class ReportsPage
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
         var popover = _page.Locator(".mud-popover-open");
-        var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
+        var option = popover.Locator(".mud-list-item-clickable").Filter(new() { HasText = filterOption });
         await option.ClickAsync();
 
-        // Wait for popover to close and network to settle
-        await popover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for popover to close
+        await Expect(popover).Not.ToBeVisibleAsync();
     }
 
     /// <summary>

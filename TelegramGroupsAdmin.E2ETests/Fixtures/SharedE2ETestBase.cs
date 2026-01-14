@@ -54,10 +54,15 @@ public abstract class SharedE2ETestBase
 
     /// <summary>
     /// Gets the shared factory instance. Created once and shared across all test classes.
+    /// Uses Volatile.Read for thread safety in parallel test execution.
     /// </summary>
     protected static TestWebApplicationFactory SharedFactory
     {
-        get => _sharedFactory ?? throw new InvalidOperationException("SharedFactory not initialized. Ensure OneTimeSetUp has run.");
+        get
+        {
+            var factory = Volatile.Read(ref _sharedFactory);
+            return factory ?? throw new InvalidOperationException("SharedFactory not initialized. Ensure OneTimeSetUp has run.");
+        }
     }
 
     /// <summary>
@@ -65,8 +70,7 @@ public abstract class SharedE2ETestBase
     /// </summary>
     protected HttpClient Client => _sharedClient ?? throw new InvalidOperationException("Client not initialized.");
 
-    // Per-test browser state
-    protected IBrowser Browser { get; private set; } = null!;
+    // Per-test browser context (browser is shared via E2EFixture)
     protected IBrowserContext Context { get; private set; } = null!;
     protected IPage Page { get; private set; } = null!;
 
@@ -84,13 +88,18 @@ public abstract class SharedE2ETestBase
     public virtual async Task OneTimeSetUp()
     {
         // Thread-safe factory creation (in case of parallel test class execution)
+        // Assign to locals first to ensure atomic publication of fully-initialized objects
         lock (_factoryLock)
         {
             if (_sharedFactory == null)
             {
-                _sharedFactory = new TestWebApplicationFactory();
-                _sharedFactory.StartServer();
-                _sharedClient = new HttpClient { BaseAddress = new Uri(_sharedFactory.ServerAddress) };
+                var factory = new TestWebApplicationFactory();
+                factory.StartServer();
+                var client = new HttpClient { BaseAddress = new Uri(factory.ServerAddress) };
+
+                // Publish fully-initialized objects atomically
+                _sharedFactory = factory;
+                _sharedClient = client;
             }
         }
 
@@ -106,13 +115,9 @@ public abstract class SharedE2ETestBase
         // Clear captured emails from previous tests
         EmailService.Clear();
 
-        // Launch browser and create context (per-test for isolation)
-        Browser = await E2EFixture.Playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = true // Set to false for debugging
-        });
-
-        Context = await Browser.NewContextAsync(new BrowserNewContextOptions
+        // Use shared browser, create isolated context per test
+        // BrowserContext provides full isolation (cookies, localStorage, cache)
+        Context = await E2EFixture.Browser.NewContextAsync(new BrowserNewContextOptions
         {
             BaseURL = BaseUrl,
             IgnoreHTTPSErrors = true
@@ -187,12 +192,12 @@ public abstract class SharedE2ETestBase
             }
         }
 
-        // Safely close browser resources (may be null if setup failed)
+        // Safely close context resources (may be null if setup failed)
+        // Note: Browser is shared via E2EFixture - don't close it here
         if (Page != null) await Page.CloseAsync();
         if (Context != null) await Context.CloseAsync();
-        if (Browser != null) await Browser.CloseAsync();
 
-        // Note: We don't dispose the factory here - it's shared across all tests in the class
+        // Note: We don't dispose the factory here - it's shared across all tests
     }
 
     [OneTimeTearDown]
@@ -247,7 +252,9 @@ public abstract class SharedE2ETestBase
         // - Removes all rows without scanning them
         // - RESTART IDENTITY resets auto-increment sequences
         // - CASCADE handles foreign key dependencies automatically
-#pragma warning disable EF1002 // Table names validated above and come from system catalog
+        // SAFETY: Table names come from pg_tables (trusted) AND are validated against
+        // ValidTableNamePattern regex above to prevent injection even if pg_tables were compromised
+#pragma warning disable EF1002
         await dbContext.Database.ExecuteSqlRawAsync(
             $"TRUNCATE TABLE {tableList} RESTART IDENTITY CASCADE;");
 #pragma warning restore EF1002

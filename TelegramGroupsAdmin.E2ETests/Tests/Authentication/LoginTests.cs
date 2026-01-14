@@ -24,17 +24,16 @@ public class LoginTests : SharedE2ETestBase
     public async Task Login_WithValidCredentials_RedirectsToHome()
     {
         // Arrange - create a verified user who can login
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("login"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .AsOwner() // Owner so they have full access
             .BuildAsync();
 
         // Act - navigate to login and submit credentials
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should redirect to home page after successful login
         await _loginPage.WaitForRedirectAsync();
@@ -49,7 +48,7 @@ public class LoginTests : SharedE2ETestBase
         // Arrange - create a verified user
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("invalid"))
-            .WithPassword(TestCredentials.GeneratePassword())
+            .WithStandardPassword()
             .WithEmailVerified()
             .BuildAsync();
 
@@ -67,16 +66,15 @@ public class LoginTests : SharedE2ETestBase
     public async Task Login_WithUnverifiedEmail_ShowsVerificationError()
     {
         // Arrange - create user WITHOUT email verification
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("unverified"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified(false) // Email not verified
             .BuildAsync();
 
         // Act - try to login
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show verification required message
         var errorMessage = await _loginPage.GetErrorMessageAsync();
@@ -90,17 +88,16 @@ public class LoginTests : SharedE2ETestBase
     public async Task Login_WithLockedAccount_ShowsLockedMessage()
     {
         // Arrange - create a locked user
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("locked"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .LockedFor(TimeSpan.FromMinutes(30))
             .BuildAsync();
 
         // Act - try to login
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show locked account message
         var errorMessage = await _loginPage.GetErrorMessageAsync();
@@ -114,17 +111,16 @@ public class LoginTests : SharedE2ETestBase
     public async Task Login_WithDisabledAccount_ShowsDisabledMessage()
     {
         // Arrange - create a disabled user
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("disabled"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithStatus(Core.Models.UserStatus.Disabled)
             .BuildAsync();
 
         // Act - try to login
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should show disabled account message
         var errorMessage = await _loginPage.GetErrorMessageAsync();

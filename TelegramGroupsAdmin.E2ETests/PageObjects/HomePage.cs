@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -25,6 +26,7 @@ public class HomePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/");
+        // Dashboard has interactive stats - need Blazor circuit connected
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 

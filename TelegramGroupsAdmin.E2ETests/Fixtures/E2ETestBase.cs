@@ -13,7 +13,6 @@ public abstract class E2ETestBase
 {
     protected TestWebApplicationFactory Factory { get; private set; } = null!;
     protected HttpClient Client { get; private set; } = null!;
-    protected IBrowser Browser { get; private set; } = null!;
     protected IBrowserContext Context { get; private set; } = null!;
     protected IPage Page { get; private set; } = null!;
     protected string BaseUrl { get; private set; } = null!;
@@ -39,13 +38,9 @@ public abstract class E2ETestBase
         // Create an HttpClient for any HTTP-based assertions
         Client = new HttpClient { BaseAddress = new Uri(BaseUrl) };
 
-        // Launch browser and create context
-        Browser = await E2EFixture.Playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = true // Set to false for debugging
-        });
-
-        Context = await Browser.NewContextAsync(new BrowserNewContextOptions
+        // Use shared browser, create isolated context per test
+        // BrowserContext provides full isolation (cookies, localStorage, cache)
+        Context = await E2EFixture.Browser.NewContextAsync(new BrowserNewContextOptions
         {
             BaseURL = BaseUrl,
             IgnoreHTTPSErrors = true
@@ -123,12 +118,11 @@ public abstract class E2ETestBase
             }
         }
 
-        // Safely close browser resources (may be null if setup failed)
+        // Safely close context resources (may be null if setup failed)
+        // Note: Browser is shared via E2EFixture - don't close it here
         if (Page != null) await Page.CloseAsync();
         if (Context != null) await Context.CloseAsync();
-        if (Browser != null) await Browser.CloseAsync();
-
-        Client?.Dispose();
+        if (Client != null) Client.Dispose();
         if (Factory != null) await Factory.DisposeAsync();
     }
 

@@ -37,7 +37,7 @@ public class ProfilePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ public class ProfilePage
     /// </summary>
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(AccountInfoSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
 
     #endregion
@@ -162,7 +162,8 @@ public class ProfilePage
     {
         var button = _page.Locator(ChangePasswordSection).GetByRole(AriaRole.Button, new() { Name = "Change Password" });
         await button.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for snackbar to appear (indicates operation completed)
+        await Expect(_page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -344,6 +345,16 @@ public class ProfilePage
     }
 
     /// <summary>
+    /// Waits for the password confirmation dialog to close.
+    /// Uses Playwright's auto-waiting instead of explicit delays.
+    /// </summary>
+    public async Task WaitForPasswordConfirmDialogClosedAsync(int timeoutMs = 5000)
+    {
+        await Expect(_page.Locator(PasswordConfirmDialog)).Not.ToBeVisibleAsync(
+            new() { Timeout = timeoutMs });
+    }
+
+    /// <summary>
     /// Fills the password field in the confirmation dialog.
     /// </summary>
     public async Task FillPasswordConfirmDialogAsync(string password)
@@ -355,11 +366,17 @@ public class ProfilePage
     /// <summary>
     /// Clicks "Generate New Codes" in the password confirmation dialog.
     /// </summary>
-    public async Task ClickGenerateNewCodesAsync()
+    /// <param name="expectSuccess">If true, waits for recovery codes dialog. If false, caller handles the expected outcome.</param>
+    public async Task ClickGenerateNewCodesAsync(bool expectSuccess = true)
     {
         var button = _page.Locator(PasswordConfirmDialog).GetByRole(AriaRole.Button, new() { Name = "Generate New Codes" });
         await button.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        if (expectSuccess)
+        {
+            // Wait for the recovery codes dialog to appear
+            await Expect(_page.Locator(RecoveryCodesDialog)).ToBeVisibleAsync();
+        }
     }
 
     /// <summary>
@@ -523,7 +540,7 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> HasLinkedAccountWithUsernameAsync(string username)
     {
-        var cell = _page.Locator($"{TelegramLinkingSection} td[data-label='Username']:has-text('{username}')");
+        var cell = _page.Locator($"{TelegramLinkingSection} td[data-label='Username']").Filter(new() { HasText = username });
         return await cell.IsVisibleAsync();
     }
 
@@ -534,7 +551,8 @@ public class ProfilePage
     {
         var button = _page.Locator(TelegramLinkingSection).GetByRole(AriaRole.Button, new() { Name = "Link New Telegram Account" });
         await button.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for the link token alert to appear
+        await Expect(_page.Locator(TelegramLinkingSection).Locator(".mud-alert:has-text('Your Link Token')")).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -563,7 +581,8 @@ public class ProfilePage
         var unlinkButton = _page.Locator($"{TelegramLinkingSection} .mud-table-body tr").Nth(rowIndex)
             .GetByRole(AriaRole.Button, new() { Name = "Unlink" });
         await unlinkButton.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for snackbar to appear (indicates operation completed)
+        await Expect(_page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
     }
 
     #endregion
@@ -585,7 +604,7 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> HasSnackbarWithTextAsync(string text)
     {
-        var snackbar = _page.Locator($".mud-snackbar:has-text('{text}')");
+        var snackbar = _page.Locator(".mud-snackbar").Filter(new() { HasText = text });
         return await snackbar.IsVisibleAsync();
     }
 

@@ -63,11 +63,33 @@ public class TestUserBuilder
 
     /// <summary>
     /// Sets a pre-hashed password directly (for edge cases).
-    /// Most tests should use WithPassword() instead.
+    /// Most tests should use WithStandardPassword() instead.
     /// </summary>
     public TestUserBuilder WithPasswordHash(string passwordHash)
     {
         _passwordHash = passwordHash;
+        return this;
+    }
+
+    /// <summary>
+    /// Uses the standard pre-hashed test password.
+    /// This is ~2 seconds faster than WithPassword() because it skips PBKDF2 hashing.
+    /// </summary>
+    public TestUserBuilder WithStandardPassword()
+    {
+        _password = PrehashedTestCredentials.StandardPassword;
+        _passwordHash = PrehashedTestCredentials.StandardPasswordHash;
+        return this;
+    }
+
+    /// <summary>
+    /// Uses the alternate pre-hashed test password.
+    /// Useful for multi-user tests that need different credentials.
+    /// </summary>
+    public TestUserBuilder WithAlternatePassword()
+    {
+        _password = PrehashedTestCredentials.AlternatePassword;
+        _passwordHash = PrehashedTestCredentials.AlternatePasswordHash;
         return this;
     }
 
