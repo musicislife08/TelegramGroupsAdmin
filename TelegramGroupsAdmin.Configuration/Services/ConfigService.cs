@@ -51,6 +51,9 @@ public class ConfigService(
             await cache.RemoveAsync($"cfg_{configType}_{chatId}");
             if (chatId != 0)
                 await cache.RemoveAsync($"cfg_effective_{configType}_{chatId}");
+            else
+                // Global config changed - invalidate all chat-specific effective caches via tag
+                await cache.RemoveByTagAsync($"effective_{configType}");
             return;
         }
 
@@ -85,13 +88,11 @@ public class ConfigService(
             await cache.RemoveAsync(effectiveCacheKey);
         }
 
-        // If updating global config, invalidate all chat-specific effective caches
+        // If updating global config, invalidate all chat-specific effective caches via tag
         // (they fall back to global, so need to pick up new global values)
         if (chatId == 0)
         {
-            // Note: We can't easily enumerate all chat IDs here, but the 15-min expiration
-            // ensures eventual consistency. For instant updates, users can refresh the page.
-            // Alternative: Keep a registry of cache keys, but adds complexity.
+            await cache.RemoveByTagAsync($"effective_{configType}");
         }
     }
 
@@ -143,7 +144,8 @@ public class ConfigService(
             var cdConfig = await cache.GetOrCreateAsync(
                 cdCacheKey,
                 async _ => await contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId),
-                CacheOptions);
+                CacheOptions,
+                tags: [$"effective_{configType}"]);
 
             return cdConfig as T;
         }
@@ -176,7 +178,8 @@ public class ConfigService(
                 // Merge: chat-specific overrides global
                 return MergeConfigs(globalConfig, chatConfig);
             },
-            CacheOptions);
+            CacheOptions,
+            tags: [$"effective_{configType}"]);
     }
 
     public async Task DeleteAsync(ConfigType configType, long chatId)
@@ -216,11 +219,16 @@ public class ConfigService(
         var cacheKey = $"cfg_{configType}_{chatId}";
         await cache.RemoveAsync(cacheKey);
 
-        // Also invalidate effective config cache if chat-specific
+        // Also invalidate effective config cache
         if (chatId != 0)
         {
             var effectiveCacheKey = $"cfg_effective_{configType}_{chatId}";
             await cache.RemoveAsync(effectiveCacheKey);
+        }
+        else
+        {
+            // Global config deleted - invalidate all chat-specific effective caches via tag
+            await cache.RemoveByTagAsync($"effective_{configType}");
         }
     }
 

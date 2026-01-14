@@ -119,7 +119,7 @@ public static class ServiceCollectionExtensions
         /// </summary>
         public IServiceCollection AddApplicationServices()
         {
-            // Note: HybridCache (registered in AddInfrastructure) provides L1 in-memory caching
+            // Note: HybridCache (registered in AddHttpClients) provides L1 in-memory caching
 
             // Auth services
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
