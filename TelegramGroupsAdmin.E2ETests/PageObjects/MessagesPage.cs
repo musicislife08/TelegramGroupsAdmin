@@ -48,7 +48,7 @@ public class MessagesPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/messages");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(TelegramLayout)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public class MessagesPage
             url += "?" + string.Join("&", queryParams);
 
         await _page.GotoAsync(url);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(TelegramLayout)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -150,7 +150,7 @@ public class MessagesPage
     {
         var chatItem = _page.Locator(ChatListItem).Filter(new() { HasText = chatName });
         await chatItem.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator($"{MainView}.active")).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -163,7 +163,7 @@ public class MessagesPage
         await searchInput.ClearAsync();
         // Type character by character to trigger oninput event
         await searchInput.PressSequentiallyAsync(searchText, new LocatorPressSequentiallyOptions { Delay = 50 });
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(searchInput).ToHaveValueAsync(searchText);
     }
 
     /// <summary>
@@ -175,7 +175,7 @@ public class MessagesPage
         // Clear and dispatch input event to trigger filtering
         await searchInput.FillAsync("");
         await searchInput.DispatchEventAsync("input");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(searchInput).ToHaveValueAsync("");
     }
 
     /// <summary>

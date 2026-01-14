@@ -44,6 +44,7 @@ public class AuditLogPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
+        // Audit log has interactive data loading - need Blazor circuit connected
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 

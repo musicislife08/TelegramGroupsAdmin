@@ -37,7 +37,7 @@ public class ProfilePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ public class ProfilePage
     /// </summary>
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(AccountInfoSection)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
 
     #endregion
@@ -162,7 +162,8 @@ public class ProfilePage
     {
         var button = _page.Locator(ChangePasswordSection).GetByRole(AriaRole.Button, new() { Name = "Change Password" });
         await button.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for snackbar to appear (indicates operation completed)
+        await Expect(_page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -355,11 +356,17 @@ public class ProfilePage
     /// <summary>
     /// Clicks "Generate New Codes" in the password confirmation dialog.
     /// </summary>
-    public async Task ClickGenerateNewCodesAsync()
+    /// <param name="expectSuccess">If true, waits for recovery codes dialog. If false, caller handles the expected outcome.</param>
+    public async Task ClickGenerateNewCodesAsync(bool expectSuccess = true)
     {
         var button = _page.Locator(PasswordConfirmDialog).GetByRole(AriaRole.Button, new() { Name = "Generate New Codes" });
         await button.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        if (expectSuccess)
+        {
+            // Wait for the recovery codes dialog to appear
+            await Expect(_page.Locator(RecoveryCodesDialog)).ToBeVisibleAsync();
+        }
     }
 
     /// <summary>
@@ -534,7 +541,8 @@ public class ProfilePage
     {
         var button = _page.Locator(TelegramLinkingSection).GetByRole(AriaRole.Button, new() { Name = "Link New Telegram Account" });
         await button.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for the link token alert to appear
+        await Expect(_page.Locator(TelegramLinkingSection).Locator(".mud-alert:has-text('Your Link Token')")).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -563,7 +571,8 @@ public class ProfilePage
         var unlinkButton = _page.Locator($"{TelegramLinkingSection} .mud-table-body tr").Nth(rowIndex)
             .GetByRole(AriaRole.Button, new() { Name = "Unlink" });
         await unlinkButton.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for snackbar to appear (indicates operation completed)
+        await Expect(_page.Locator(".mud-snackbar").First).ToBeVisibleAsync();
     }
 
     #endregion

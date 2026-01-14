@@ -31,6 +31,7 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
+        // Settings page has complex interactivity - NetworkIdle ensures Blazor SignalR circuit is established
         await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
@@ -375,6 +376,8 @@ public class SettingsPage
         var row = Page.Locator($".mud-table tbody tr:has-text('{jobDisplayName}')");
         var settingsButton = row.Locator("button[title='Configure']");
         await settingsButton.ClickAsync();
+        // Wait for dialog to appear
+        await Expect(Page.GetByRole(AriaRole.Dialog)).ToBeVisibleAsync();
     }
 
     /// <summary>

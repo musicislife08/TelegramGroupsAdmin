@@ -65,8 +65,7 @@ public abstract class SharedE2ETestBase
     /// </summary>
     protected HttpClient Client => _sharedClient ?? throw new InvalidOperationException("Client not initialized.");
 
-    // Per-test browser state
-    protected IBrowser Browser { get; private set; } = null!;
+    // Per-test browser context (browser is shared via E2EFixture)
     protected IBrowserContext Context { get; private set; } = null!;
     protected IPage Page { get; private set; } = null!;
 
@@ -106,13 +105,9 @@ public abstract class SharedE2ETestBase
         // Clear captured emails from previous tests
         EmailService.Clear();
 
-        // Launch browser and create context (per-test for isolation)
-        Browser = await E2EFixture.Playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = true // Set to false for debugging
-        });
-
-        Context = await Browser.NewContextAsync(new BrowserNewContextOptions
+        // Use shared browser, create isolated context per test
+        // BrowserContext provides full isolation (cookies, localStorage, cache)
+        Context = await E2EFixture.Browser.NewContextAsync(new BrowserNewContextOptions
         {
             BaseURL = BaseUrl,
             IgnoreHTTPSErrors = true
@@ -187,12 +182,12 @@ public abstract class SharedE2ETestBase
             }
         }
 
-        // Safely close browser resources (may be null if setup failed)
+        // Safely close context resources (may be null if setup failed)
+        // Note: Browser is shared via E2EFixture - don't close it here
         if (Page != null) await Page.CloseAsync();
         if (Context != null) await Context.CloseAsync();
-        if (Browser != null) await Browser.CloseAsync();
 
-        // Note: We don't dispose the factory here - it's shared across all tests in the class
+        // Note: We don't dispose the factory here - it's shared across all tests
     }
 
     [OneTimeTearDown]

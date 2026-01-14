@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -30,7 +31,7 @@ public class ResetPasswordPage
     public async Task NavigateAsync(string token)
     {
         await _page.GotoAsync($"/reset-password?token={token}");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -41,7 +42,7 @@ public class ResetPasswordPage
         // Extract the path from the full URL
         var uri = new Uri(resetLink);
         await _page.GotoAsync($"{uri.PathAndQuery}");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -66,8 +67,8 @@ public class ReportsPage
             // Loading indicator may have already disappeared
         }
 
-        // Wait for network to settle
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for filters to be visible (indicates page is loaded)
+        await Expect(_page.Locator(FilterPaper)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -112,9 +113,8 @@ public class ReportsPage
         var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
         await option.ClickAsync();
 
-        // Wait for popover to close and network to settle
-        await popover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for popover to close
+        await Expect(popover).Not.ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -132,9 +132,8 @@ public class ReportsPage
         var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
         await option.ClickAsync();
 
-        // Wait for popover to close and network to settle
-        await popover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for popover to close
+        await Expect(popover).Not.ToBeVisibleAsync();
     }
 
     /// <summary>

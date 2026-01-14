@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
 
@@ -65,6 +66,7 @@ public class WebAdminAccountsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/settings/system/accounts");
+        // Settings pages need Blazor circuit connected for interactions
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 

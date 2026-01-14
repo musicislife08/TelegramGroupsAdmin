@@ -33,6 +33,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly TestEmailService _testEmailService;
     private string? _tempDataPath;
     private bool _databaseCreated;
+    private bool _skipMlTraining = true; // Default: skip for speed (saves 3-5s)
 
     // NSubstitute mocks for external services
     private readonly IAITranslationService _mockAITranslationService;
@@ -109,6 +110,18 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     public ICloudScannerService MockCloudScanner => _mockCloudScannerService;
 
     /// <summary>
+    /// Enables ML classifier training on startup.
+    /// By default, ML training is skipped to save 3-5 seconds per factory startup.
+    /// Use this for tests that specifically need the ML classifier (training stats, spam detection tests).
+    /// Must be called before StartServer() or accessing Services.
+    /// </summary>
+    public TestWebApplicationFactory WithMlTraining()
+    {
+        _skipMlTraining = false;
+        return this;
+    }
+
+    /// <summary>
     /// Gets the connection string for this test's isolated database.
     /// </summary>
     public string ConnectionString => BuildConnectionString(_databaseName);
@@ -143,6 +156,17 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     {
         // Create the test database before app starts
         EnsureDatabaseCreated();
+
+        // Skip ML training by default (saves 3-5s per factory startup)
+        // Tests that need ML can call WithMlTraining() before StartServer()
+        if (_skipMlTraining)
+        {
+            Environment.SetEnvironmentVariable("SKIP_ML_TRAINING", "true");
+        }
+        else
+        {
+            Environment.SetEnvironmentVariable("SKIP_ML_TRAINING", null);
+        }
 
         // Use Development environment so UseStaticFiles() serves CSS/JS correctly
         // (MapStaticAssets requires publish-time manifest which doesn't exist in tests)

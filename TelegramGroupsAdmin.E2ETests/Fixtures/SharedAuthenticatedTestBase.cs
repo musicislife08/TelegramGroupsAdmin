@@ -73,10 +73,9 @@ public abstract class SharedAuthenticatedTestBase : SharedE2ETestBase
     /// <param name="enableTotp">Whether to enable TOTP (2FA) for the user. Default is false for convenience.</param>
     protected async Task<TestUser> LoginAsAsync(PermissionLevel permissionLevel, bool enableTotp = false)
     {
-        var password = TestCredentials.GeneratePassword();
         var builder = new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail(permissionLevel.ToString().ToLower()))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithPermissionLevel(permissionLevel);
 
@@ -183,10 +182,9 @@ public abstract class SharedAuthenticatedTestBase : SharedE2ETestBase
         bool emailVerified = true,
         bool totpEnabled = false)
     {
-        var password = TestCredentials.GeneratePassword();
         var builder = new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail(permissionLevel.ToString().ToLower()))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithPermissionLevel(permissionLevel);
 
         if (emailVerified)

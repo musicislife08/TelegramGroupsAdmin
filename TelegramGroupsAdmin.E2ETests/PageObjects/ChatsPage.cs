@@ -47,7 +47,7 @@ public class ChatsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/chats");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -254,7 +254,7 @@ public class ChatsPage
     {
         var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
         await row.Locator(ConfigureButton).ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(".mud-dialog")).ToBeVisibleAsync();
     }
 
     /// <summary>
