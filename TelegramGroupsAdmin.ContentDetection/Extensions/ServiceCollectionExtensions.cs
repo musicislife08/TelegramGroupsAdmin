@@ -123,8 +123,7 @@ public static class ServiceCollectionExtensions
             // Register HTTP client for external API calls
             services.AddHttpClient();
 
-            // Register memory cache for caching API responses
-            services.AddMemoryCache();
+            // Note: HybridCache is registered in main project and provides L1 in-memory caching
 
             return services;
         }

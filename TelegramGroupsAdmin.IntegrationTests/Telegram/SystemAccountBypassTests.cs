@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -68,7 +68,7 @@ public class SystemAccountBypassTests
         // Register config service dependencies
         services.AddScoped<IConfigRepository, ConfigRepository>();
         services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
-        services.AddSingleton<IMemoryCache, MemoryCache>();
+        services.AddHybridCache();
         services.AddDataProtection();
         services.AddScoped<IConfigService, ConfigService>();
 
