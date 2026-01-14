@@ -193,8 +193,10 @@ public class MessageQueryService : IMessageQueryService
             .GroupBy(n => n.TelegramUserId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Step 3: Combine data (preserve timestamp ordering from Step 1)
-        return messagesWithDetections.Select(msg =>
+        // Step 4: Combine data (preserve timestamp ordering from Step 1)
+        return messagesWithDetections
+            .Where(msg => enrichedDict.ContainsKey(msg.MessageId))
+            .Select(msg =>
         {
             var enriched = enrichedDict[msg.MessageId];
             var messageModel = enriched.ToModel();
@@ -293,6 +295,7 @@ public class MessageQueryService : IMessageQueryService
                     m.ContentHash,
                     dr.IsSpam,
                     dr.Confidence,
+                    dr.NetConfidence,
                     Reason = dr.Reason ?? $"{dr.DetectionMethod}: Spam detected",
                     CheckType = dr.DetectionMethod,
                     MatchedMessageId = dr.MessageId
@@ -305,21 +308,6 @@ public class MessageQueryService : IMessageQueryService
             .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
             .ToList();
 
-        // Get net_confidence values for all these messages (need fresh query to include net_confidence)
-        var latestMessageIds = latestResults.Select(r => r.MessageId).Distinct().ToArray();
-        var netConfidenceResults = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => latestMessageIds.Contains(dr.MessageId))
-            .Select(dr => new { dr.MessageId, dr.NetConfidence, dr.DetectedAt })
-            .ToListAsync(cancellationToken);
-
-        // Group detection results by message and take latest net_confidence
-        var latestNetConfidence = netConfidenceResults
-            .GroupBy(dr => dr.MessageId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(dr => dr.DetectedAt).First().NetConfidence);
-
         // Build final result with absolute net_confidence as display confidence
         return latestResults
             .Select(r => new UiModels.ContentCheckRecord(
@@ -328,7 +316,7 @@ public class MessageQueryService : IMessageQueryService
                 UserId: r.UserId,
                 ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: Math.Abs(latestNetConfidence.GetValueOrDefault(r.MessageId, 0)), // Use absolute net_confidence for display
+                Confidence: Math.Abs(r.NetConfidence), // Use absolute net_confidence for display
                 Reason: r.Reason,
                 CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))
