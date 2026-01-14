@@ -145,15 +145,14 @@ public class UsersPage
     /// </summary>
     public async Task ClearSearchAsync()
     {
-        // Click the MudBlazor clear button (X icon) to trigger OnClearButtonClick
-        // The clear button is in the end adornment area of the MudTextField
-        var clearButton = _page.Locator(".mud-input-adornment-end button").First;
+        // MudBlazor's Clearable button is an icon button inside the input adornment
+        // Use multiple selector strategies for robustness across environments
+        var clearButton = _page.Locator(".mud-input-adornment-end button, .mud-input-control button.mud-icon-button").First;
 
-        if (await clearButton.IsVisibleAsync())
-        {
-            await clearButton.ClickAsync();
-            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-        }
+        // Wait for the clear button to be visible (it only shows when input has text)
+        await Expect(clearButton).ToBeVisibleAsync();
+        await clearButton.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
