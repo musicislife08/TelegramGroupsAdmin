@@ -6,11 +6,13 @@
 #
 # What it does:
 #   1. Backs up the entire database using pg_dumpall
-#   2. Stops the running containers
+#   2. Stops all services (docker compose down)
 #   3. Updates compose.yml (image version + volume mount path)
 #   4. Starts PostgreSQL 18 with fresh data directory
 #   5. Restores the backup
-#   6. Starts all services in detached mode
+#
+# After completion, start your services manually:
+#   docker compose up -d
 #
 # Prerequisites:
 #   - Docker and Docker Compose installed
@@ -110,11 +112,10 @@ create_backup() {
     log_info "Backup complete: $BACKUP_FILE ($BACKUP_SIZE)"
 }
 
-# Stop postgres container only
-stop_postgres() {
-    log_info "Stopping PostgreSQL container..."
-    docker compose -f "$COMPOSE_FILE" stop "$POSTGRES_SERVICE"
-    docker compose -f "$COMPOSE_FILE" rm -f "$POSTGRES_SERVICE"
+# Stop all services (app will fail if postgres goes down while it's running)
+stop_services() {
+    log_info "Stopping all services..."
+    docker compose -f "$COMPOSE_FILE" down
 }
 
 # Update compose file
@@ -264,10 +265,12 @@ main() {
     echo ""
     log_warn "This script will:"
     echo "  1. Backup your database (pg_dumpall)"
-    echo "  2. Stop the PostgreSQL container"
+    echo "  2. Stop all services (docker compose down)"
     echo "  3. Update compose.yml for PostgreSQL 18"
     echo "  4. Start PostgreSQL 18 with fresh data directory"
     echo "  5. Restore your database"
+    echo ""
+    echo "  After completion, start your services manually: docker compose up -d"
     echo ""
 
     if [[ "$SKIP_CONFIRM" != "true" ]]; then
@@ -284,7 +287,7 @@ main() {
 
     echo ""
     create_backup
-    stop_postgres
+    stop_services
     pull_new_image
     update_compose_file
     prepare_volumes
