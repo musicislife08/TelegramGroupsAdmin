@@ -60,7 +60,7 @@ public static class ServiceCollectionExtensions
             // Message processing handlers (REFACTOR-1: extracted from MessageProcessingService)
             services.AddScoped<Handlers.MediaProcessingHandler>();
             services.AddScoped<Handlers.FileScanningHandler>();
-            services.AddScoped<Handlers.TranslationHandler>();
+            services.AddScoped<Handlers.ITranslationHandler, Handlers.TranslationHandler>();
 
             // REFACTOR-2: Additional handlers for image processing and job scheduling
             services.AddScoped<Handlers.ImageProcessingHandler>();

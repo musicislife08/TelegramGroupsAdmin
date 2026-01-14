@@ -72,4 +72,15 @@ public interface IMessageQueryService
         long userId,
         long chatId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get a single message by ID with full enrichment (user photo, reply context).
+    /// Used for real-time message notifications where bare message needs enrichment.
+    /// </summary>
+    /// <param name="message">The bare message record (used for IDs and logging context)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Enriched message with UserPhotoPath, ReplyToUser, ReplyToText populated</returns>
+    Task<UiModels.MessageRecord?> GetMessageByIdAsync(
+        UiModels.MessageRecord message,
+        CancellationToken cancellationToken = default);
 }

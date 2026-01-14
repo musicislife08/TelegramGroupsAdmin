@@ -135,6 +135,29 @@ public static class TelegramLoggingExtensions
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // UI Model Extensions (MessageRecord)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    extension(MessageRecord? message)
+    {
+        /// <summary>
+        /// Format message record for INFO logs (message ID + chat name).
+        /// </summary>
+        public string ToLogInfo()
+            => message == null
+                ? "null"
+                : $"Message {message.MessageId} in {message.ChatName ?? $"chat {message.ChatId}"}";
+
+        /// <summary>
+        /// Format message record for DEBUG/WARNING/ERROR logs (message ID + chat ID + user).
+        /// </summary>
+        public string ToLogDebug()
+            => message == null
+                ? "null"
+                : $"Message {message.MessageId} in {message.ChatName ?? "unknown"} ({message.ChatId}) from {message.DisplayName}";
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Repository Async Extensions (for cases where only ID is available)
     // ═══════════════════════════════════════════════════════════════════════════
 

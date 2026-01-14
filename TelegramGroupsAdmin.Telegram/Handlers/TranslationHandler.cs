@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// 2. FastText language detection for Latin-script languages (English vs Dutch/German/French/Spanish)
 /// 3. OpenAI translation for all non-English or low-confidence detections
 /// </summary>
-public class TranslationHandler
+public class TranslationHandler : ITranslationHandler
 {
     private readonly IConfigService _configService;
     private readonly IAITranslationService _translationService;
