@@ -451,8 +451,8 @@ public partial class MessageProcessingService(
             var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "media", "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
-            // REFACTOR-1: Use TranslationHandler for translation detection and processing
-            var translationHandler = messageScope.ServiceProvider.GetRequiredService<Handlers.TranslationHandler>();
+            // REFACTOR-1: Use ITranslationHandler for translation detection and processing
+            var translationHandler = messageScope.ServiceProvider.GetRequiredService<Handlers.ITranslationHandler>();
             var translationForDetection = await translationHandler.GetTextForDetectionAsync(
                 text,
                 message.MessageId,

@@ -140,12 +140,18 @@ public class UsersPage
     }
 
     /// <summary>
-    /// Clears the search input.
+    /// Clears the search input by clicking the MudBlazor clear button (X icon).
+    /// This triggers OnClearButtonClick which calls ApplyFilters().
     /// </summary>
     public async Task ClearSearchAsync()
     {
-        var searchInput = _page.Locator(SearchInput);
-        await searchInput.ClearAsync();
+        // MudBlazor's Clearable button is an icon button inside the input adornment
+        // Use multiple selector strategies for robustness across environments
+        var clearButton = _page.Locator(".mud-input-adornment-end button, .mud-input-control button.mud-icon-button").First;
+
+        // Wait for the clear button to be visible (it only shows when input has text)
+        await Expect(clearButton).ToBeVisibleAsync();
+        await clearButton.ClickAsync();
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 

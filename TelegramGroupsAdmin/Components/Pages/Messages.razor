@@ -445,8 +445,12 @@
                 // Capture scroll state before adding message
                 var scrollState = await Js.InvokeAsync<ScrollState>("captureScrollState", _messagesContainer);
 
+                // Fetch enriched message with user photo and reply data from database view
+                var enrichedMessage = await MessageQueryService.GetMessageByIdAsync(message);
+
                 // Add to our list at the beginning (most recent first) wrapped in MessageWithDetectionHistory
-                _allMessages.Insert(0, new MessageWithDetectionHistory { Message = message });
+                // Use enriched message if available, otherwise fall back to original
+                _allMessages.Insert(0, new MessageWithDetectionHistory { Message = enrichedMessage ?? message });
 
                 // Load spam check for this new message if it exists
                 long[] messageIds = [message.MessageId];
