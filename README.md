@@ -524,6 +524,41 @@ docker compose exec postgres psql -U tgadmin -d telegram_groups_admin
    docker compose up -d
    ```
 
+#### Upgrading PostgreSQL (17 to 18)
+
+**Symptom:** After updating to a newer image, PostgreSQL 18 fails to start with:
+```
+Error: in 18+, these Docker images are configured to store database data in a
+       format which is compatible with "pg_ctlcluster"...
+```
+
+**Cause:** PostgreSQL 18's Docker image changed the data directory structure. It now uses version-specific subdirectories (`/var/lib/postgresql/18/data` instead of `/var/lib/postgresql/data`).
+
+**Solution:** Use the automated upgrade script:
+```bash
+# From your deployment directory (where compose.yml is located)
+./scripts/upgrade-postgres-17-to-18.sh
+
+# Or skip confirmation prompt
+./scripts/upgrade-postgres-17-to-18.sh -y
+```
+
+**What the script does:**
+1. Backs up your database using `pg_dumpall`
+2. Stops the PostgreSQL container
+3. Updates compose.yml (image version + volume mount path)
+4. Moves old data directory (preserved as backup)
+5. Starts PostgreSQL 18 with fresh data directory
+6. Restores your database from backup
+7. Verifies the upgrade succeeded
+
+**After successful upgrade**, you can clean up:
+```bash
+rm pg17_backup_*.sql        # SQL backup (keep if paranoid)
+rm compose.yml.backup       # Old compose file
+rm -rf ./data/postgres_pg17_*  # Old data directory
+```
+
 #### Build Failures (Development Mode)
 
 **Symptom:** Build fails during `docker compose up --build`

@@ -39,7 +39,7 @@ public class E2EFixture
         ClearArtifactsDirectory();
 
         // Start PostgreSQL container
-        _container = new PostgreSqlBuilder("postgres:17")
+        _container = new PostgreSqlBuilder("postgres:18")
             .WithCleanUp(true)
             .Build();
 

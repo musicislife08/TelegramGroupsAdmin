@@ -20,8 +20,8 @@ public class PostgresFixture
     [OneTimeSetUp]
     public async Task GlobalSetup()
     {
-        // Start a single Postgres 17 container for all tests
-        _container = new PostgreSqlBuilder("postgres:17")
+        // Start a single Postgres 18 container for all tests
+        _container = new PostgreSqlBuilder("postgres:18")
             .WithCleanUp(true)
             .Build();
 
