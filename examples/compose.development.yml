@@ -29,7 +29,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql
       - ./backups:/backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tgadmin -d telegram_groups_admin"]
