@@ -57,14 +57,14 @@ public class ResetPasswordPage
     }
 
     /// <summary>
-    /// Gets locator for the first password input (New Password).
+    /// Gets locator for the New Password input using semantic label.
     /// </summary>
-    private ILocator NewPasswordInput => _page.Locator("input.mud-input-slot").First;
+    private ILocator NewPasswordInput => _page.GetByLabel("New Password");
 
     /// <summary>
-    /// Gets locator for the second password input (Confirm Password).
+    /// Gets locator for the Confirm Password input using semantic label.
     /// </summary>
-    private ILocator ConfirmPasswordInput => _page.Locator("input.mud-input-slot").Nth(1);
+    private ILocator ConfirmPasswordInput => _page.GetByLabel("Confirm Password");
 
     /// <summary>
     /// Waits for the form to be visible (token was valid).

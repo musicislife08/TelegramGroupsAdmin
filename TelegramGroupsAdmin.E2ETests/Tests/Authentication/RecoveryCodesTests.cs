@@ -197,9 +197,8 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _profilePage.WaitForPasswordConfirmDialogAsync();
         await _profilePage.CancelPasswordConfirmDialogAsync();
 
-        // Assert - dialog should be closed
-        // Give it a moment to close
-        await Task.Delay(500);
+        // Assert - dialog should be closed (use Playwright's auto-waiting instead of Task.Delay)
+        await _profilePage.WaitForPasswordConfirmDialogClosedAsync();
         Assert.That(await _profilePage.IsPasswordConfirmDialogVisibleAsync(), Is.False,
             "Dialog should be closed after canceling");
     }

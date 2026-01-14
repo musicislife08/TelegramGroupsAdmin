@@ -159,14 +159,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         // Skip ML training by default (saves 3-5s per factory startup)
         // Tests that need ML can call WithMlTraining() before StartServer()
+        // Note: Only set to "true", never unset - avoids race conditions between factories
         if (_skipMlTraining)
         {
             Environment.SetEnvironmentVariable("SKIP_ML_TRAINING", "true");
         }
-        else
-        {
-            Environment.SetEnvironmentVariable("SKIP_ML_TRAINING", null);
-        }
+        // Don't clear the env var when !_skipMlTraining - let Program.cs default behavior handle it
+        // This prevents race conditions when multiple factories exist with different settings
 
         // Use Development environment so UseStaticFiles() serves CSS/JS correctly
         // (MapStaticAssets requires publish-time manifest which doesn't exist in tests)
@@ -297,9 +296,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 dropCmd.CommandText = $"DROP DATABASE IF EXISTS \"{_databaseName}\"";
                 dropCmd.ExecuteNonQuery();
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore cleanup errors
+                // Log but don't fail - cleanup is best-effort
+                Console.WriteLine($"Warning: Database cleanup failed for {_databaseName}: {ex.Message}");
             }
 
             // Clean up temp directory
@@ -310,9 +310,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                     Directory.Delete(_tempDataPath, recursive: true);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore cleanup errors
+                // Log but don't fail - cleanup is best-effort
+                Console.WriteLine($"Warning: Temp directory cleanup failed for {_tempDataPath}: {ex.Message}");
             }
         }
 

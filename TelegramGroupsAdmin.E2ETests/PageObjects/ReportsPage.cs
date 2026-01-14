@@ -52,19 +52,15 @@ public class ReportsPage
             Timeout = 10000
         });
 
-        // Wait for loading indicator to disappear (if it appears)
+        // Wait for loading indicator to disappear (if it's visible)
         var loadingIndicator = _page.Locator(LoadingIndicator);
-        try
+        if (await loadingIndicator.IsVisibleAsync())
         {
             await loadingIndicator.WaitForAsync(new LocatorWaitForOptions
             {
                 State = WaitForSelectorState.Hidden,
                 Timeout = 5000
             });
-        }
-        catch (TimeoutException)
-        {
-            // Loading indicator may have already disappeared
         }
 
         // Wait for filters to be visible (indicates page is loaded)
@@ -110,7 +106,7 @@ public class ReportsPage
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
         var popover = _page.Locator(".mud-popover-open");
-        var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
+        var option = popover.Locator(".mud-list-item-clickable").Filter(new() { HasText = filterOption });
         await option.ClickAsync();
 
         // Wait for popover to close
@@ -129,7 +125,7 @@ public class ReportsPage
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
         var popover = _page.Locator(".mud-popover-open");
-        var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
+        var option = popover.Locator(".mud-list-item-clickable").Filter(new() { HasText = filterOption });
         await option.ClickAsync();
 
         // Wait for popover to close

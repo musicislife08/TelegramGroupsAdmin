@@ -54,10 +54,15 @@ public abstract class SharedE2ETestBase
 
     /// <summary>
     /// Gets the shared factory instance. Created once and shared across all test classes.
+    /// Uses Volatile.Read for thread safety in parallel test execution.
     /// </summary>
     protected static TestWebApplicationFactory SharedFactory
     {
-        get => _sharedFactory ?? throw new InvalidOperationException("SharedFactory not initialized. Ensure OneTimeSetUp has run.");
+        get
+        {
+            var factory = Volatile.Read(ref _sharedFactory);
+            return factory ?? throw new InvalidOperationException("SharedFactory not initialized. Ensure OneTimeSetUp has run.");
+        }
     }
 
     /// <summary>
@@ -83,13 +88,18 @@ public abstract class SharedE2ETestBase
     public virtual async Task OneTimeSetUp()
     {
         // Thread-safe factory creation (in case of parallel test class execution)
+        // Assign to locals first to ensure atomic publication of fully-initialized objects
         lock (_factoryLock)
         {
             if (_sharedFactory == null)
             {
-                _sharedFactory = new TestWebApplicationFactory();
-                _sharedFactory.StartServer();
-                _sharedClient = new HttpClient { BaseAddress = new Uri(_sharedFactory.ServerAddress) };
+                var factory = new TestWebApplicationFactory();
+                factory.StartServer();
+                var client = new HttpClient { BaseAddress = new Uri(factory.ServerAddress) };
+
+                // Publish fully-initialized objects atomically
+                _sharedFactory = factory;
+                _sharedClient = client;
             }
         }
 
@@ -242,7 +252,9 @@ public abstract class SharedE2ETestBase
         // - Removes all rows without scanning them
         // - RESTART IDENTITY resets auto-increment sequences
         // - CASCADE handles foreign key dependencies automatically
-#pragma warning disable EF1002 // Table names validated above and come from system catalog
+        // SAFETY: Table names come from pg_tables (trusted) AND are validated against
+        // ValidTableNamePattern regex above to prevent injection even if pg_tables were compromised
+#pragma warning disable EF1002
         await dbContext.Database.ExecuteSqlRawAsync(
             $"TRUNCATE TABLE {tableList} RESTART IDENTITY CASCADE;");
 #pragma warning restore EF1002

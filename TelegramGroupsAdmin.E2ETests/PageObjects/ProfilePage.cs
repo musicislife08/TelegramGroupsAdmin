@@ -345,6 +345,16 @@ public class ProfilePage
     }
 
     /// <summary>
+    /// Waits for the password confirmation dialog to close.
+    /// Uses Playwright's auto-waiting instead of explicit delays.
+    /// </summary>
+    public async Task WaitForPasswordConfirmDialogClosedAsync(int timeoutMs = 5000)
+    {
+        await Expect(_page.Locator(PasswordConfirmDialog)).Not.ToBeVisibleAsync(
+            new() { Timeout = timeoutMs });
+    }
+
+    /// <summary>
     /// Fills the password field in the confirmation dialog.
     /// </summary>
     public async Task FillPasswordConfirmDialogAsync(string password)
@@ -530,7 +540,7 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> HasLinkedAccountWithUsernameAsync(string username)
     {
-        var cell = _page.Locator($"{TelegramLinkingSection} td[data-label='Username']:has-text('{username}')");
+        var cell = _page.Locator($"{TelegramLinkingSection} td[data-label='Username']").Filter(new() { HasText = username });
         return await cell.IsVisibleAsync();
     }
 
@@ -594,7 +604,7 @@ public class ProfilePage
     /// </summary>
     public async Task<bool> HasSnackbarWithTextAsync(string text)
     {
-        var snackbar = _page.Locator($".mud-snackbar:has-text('{text}')");
+        var snackbar = _page.Locator(".mud-snackbar").Filter(new() { HasText = text });
         return await snackbar.IsVisibleAsync();
     }
 

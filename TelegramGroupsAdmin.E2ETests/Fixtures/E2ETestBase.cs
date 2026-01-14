@@ -122,8 +122,7 @@ public abstract class E2ETestBase
         // Note: Browser is shared via E2EFixture - don't close it here
         if (Page != null) await Page.CloseAsync();
         if (Context != null) await Context.CloseAsync();
-
-        Client?.Dispose();
+        if (Client != null) Client.Dispose();
         if (Factory != null) await Factory.DisposeAsync();
     }
 

@@ -254,7 +254,7 @@ public class ChatsPage
     {
         var row = _page.Locator(TableRow).Filter(new() { HasText = chatName });
         await row.Locator(ConfigureButton).ClickAsync();
-        await Expect(_page.Locator(".mud-dialog")).ToBeVisibleAsync();
+        await Expect(_page.GetByRole(AriaRole.Dialog)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -290,10 +290,9 @@ public class ChatsPage
     /// </summary>
     public async Task<bool> IsDialogOpenAsync()
     {
-        // MudBlazor dialogs use .mud-dialog inside .mud-dialog-container
-        // The .mud-dialog element is the actual dialog content wrapper
-        var mudDialog = _page.Locator(".mud-dialog");
-        return await mudDialog.IsVisibleAsync();
+        // Use semantic role locator for better reliability
+        var dialog = _page.GetByRole(AriaRole.Dialog);
+        return await dialog.IsVisibleAsync();
     }
 
     /// <summary>
@@ -310,7 +309,7 @@ public class ChatsPage
     /// </summary>
     public async Task CloseDialogAsync()
     {
-        var dialog = _page.Locator(".mud-dialog");
+        var dialog = _page.GetByRole(AriaRole.Dialog);
         var closeButton = dialog.Locator("button:has-text('Close')");
 
         if (await closeButton.IsVisibleAsync())
