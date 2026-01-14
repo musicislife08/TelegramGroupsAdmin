@@ -107,7 +107,7 @@ public class E2EFixture
     {
         // Start PostgreSQL container
         _container = new PostgreSqlBuilder()
-            .WithImage("postgres:17")
+            .WithImage("postgres:18")
             .WithCleanUp(true)
             .Build();
         await _container.StartAsync();
