@@ -362,6 +362,36 @@ public class ReportCallbackHandlerTests
             cancellationToken: Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task HandleCallbackAsync_ReportAlreadyReviewed_ShowsWhoHandledIt()
+    {
+        // Arrange - report is already reviewed when fetched
+        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3"); // Dismiss
+        SetupValidContext();
+
+        var reviewedReport = CreateTestReport(
+            status: ReportStatus.Reviewed,
+            reviewedBy: "FirstAdmin",
+            actionTaken: "Warn",
+            reviewedAt: DateTimeOffset.UtcNow.AddMinutes(-5));
+        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(reviewedReport);
+
+        // Act
+        await _handler.HandleCallbackAsync(callbackQuery);
+
+        // Assert - message shows who already handled it
+        await _mockOperations.Received().EditMessageTextAsync(
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Is<string>(s => s.Contains("FirstAdmin") && s.Contains("Warn")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
+
+        // Assert - context is cleaned up
+        await _mockCallbackContextRepo.Received().DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region Spam Action Tests
