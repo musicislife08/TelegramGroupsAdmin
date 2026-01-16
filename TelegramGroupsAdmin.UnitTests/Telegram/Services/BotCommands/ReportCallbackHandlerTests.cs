@@ -292,7 +292,7 @@ public class ReportCallbackHandlerTests
     }
 
     [Test]
-    public async Task HandleCallbackAsync_ReportAlreadyReviewed_UpdatesMessageAndCleansUp()
+    public async Task HandleCallbackAsync_ReportAlreadyReviewed_DoesNotCallModeration()
     {
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
@@ -304,21 +304,14 @@ public class ReportCallbackHandlerTests
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert
-        await _mockOperations.Received(1).EditMessageTextAsync(
-            Arg.Any<long>(),
-            Arg.Any<int>(),
-            Arg.Is<string>(s => s.Contains("already") && s.Contains("reviewed")),
-            replyMarkup: null,
-            cancellationToken: Arg.Any<CancellationToken>());
-
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
-
-        // Moderation should NOT be called
+        // Assert - Moderation should NOT be called for already-reviewed reports
         await _mockModerationService.DidNotReceive()
             .BanUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
                 Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        // Context should still be cleaned up
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -360,6 +353,36 @@ public class ReportCallbackHandlerTests
             Arg.Is<string>(s => s.Contains("OtherAdmin") && s.Contains("Spam")),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCallbackAsync_ReportAlreadyReviewed_ShowsWhoHandledIt()
+    {
+        // Arrange - report is already reviewed when fetched
+        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3"); // Dismiss
+        SetupValidContext();
+
+        var reviewedReport = CreateTestReport(
+            status: ReportStatus.Reviewed,
+            reviewedBy: "FirstAdmin",
+            actionTaken: "Warn",
+            reviewedAt: DateTimeOffset.UtcNow.AddMinutes(-5));
+        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(reviewedReport);
+
+        // Act
+        await _handler.HandleCallbackAsync(callbackQuery);
+
+        // Assert - message shows who already handled it
+        await _mockOperations.Received().EditMessageTextAsync(
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Is<string>(s => s.Contains("FirstAdmin") && s.Contains("Warn")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
+
+        // Assert - context is cleaned up
+        await _mockCallbackContextRepo.Received().DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
     }
 
     #endregion

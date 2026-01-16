@@ -107,7 +107,8 @@ public class ReportCallbackHandler : IReportCallbackHandler
         if (report.Status != ReportStatus.Pending)
         {
             _logger.LogInformation("Report {ReportId} already handled (status: {Status})", reportId, report.Status);
-            await UpdateMessageWithResultAsync(callbackQuery, $"Report already {report.Status.ToString().ToLower()}", cancellationToken);
+            await UpdateMessageWithResultAsync(callbackQuery,
+                FormatAlreadyHandledMessage(report.ReviewedBy, report.ActionTaken, report.ReviewedAt), cancellationToken);
             await callbackContextRepo.DeleteAsync(contextId, cancellationToken);
             return;
         }
@@ -160,11 +161,9 @@ public class ReportCallbackHandler : IReportCallbackHandler
             {
                 // Race condition: another admin/web user handled it first
                 var currentReport = await reportsRepo.GetByIdAsync(reportId, cancellationToken);
-                var handledMessage = $"Already handled by {currentReport?.ReviewedBy ?? "another admin"} " +
-                                     $"({currentReport?.ActionTaken ?? "unknown"}) " +
-                                     $"at {currentReport?.ReviewedAt?.ToString("g") ?? "unknown time"}";
-
-                await UpdateMessageWithResultAsync(callbackQuery, handledMessage, cancellationToken);
+                await UpdateMessageWithResultAsync(callbackQuery,
+                    FormatAlreadyHandledMessage(currentReport?.ReviewedBy, currentReport?.ActionTaken, currentReport?.ReviewedAt),
+                    cancellationToken);
                 await callbackContextRepo.DeleteAsync(contextId, cancellationToken);
                 return;
             }
@@ -345,6 +344,16 @@ public class ReportCallbackHandler : IReportCallbackHandler
 
         // No moderation action needed - status update handled by TryUpdateReportStatusAsync
         return new ReportActionResult(Success: true, Message: "Report dismissed");
+    }
+
+    private static string FormatAlreadyHandledMessage(string? reviewedBy, string? actionTaken, DateTimeOffset? reviewedAt)
+    {
+        var handledBy = reviewedBy ?? "another admin";
+        var action = actionTaken ?? "unknown";
+        var time = reviewedAt.HasValue
+            ? $"{reviewedAt.Value.UtcDateTime:g} UTC"
+            : "unknown time";
+        return $"Already handled by {handledBy} ({action}) at {time}";
     }
 
     private async Task UpdateMessageWithResultAsync(
