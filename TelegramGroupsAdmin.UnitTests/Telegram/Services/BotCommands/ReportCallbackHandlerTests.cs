@@ -292,7 +292,7 @@ public class ReportCallbackHandlerTests
     }
 
     [Test]
-    public async Task HandleCallbackAsync_ReportAlreadyReviewed_UpdatesMessageAndCleansUp()
+    public async Task HandleCallbackAsync_ReportAlreadyReviewed_DoesNotCallModeration()
     {
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
@@ -304,21 +304,14 @@ public class ReportCallbackHandlerTests
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert
-        await _mockOperations.Received(1).EditMessageTextAsync(
-            Arg.Any<long>(),
-            Arg.Any<int>(),
-            Arg.Is<string>(s => s.Contains("already") && s.Contains("reviewed")),
-            replyMarkup: null,
-            cancellationToken: Arg.Any<CancellationToken>());
-
-        await _mockCallbackContextRepo.Received(1)
-            .DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
-
-        // Moderation should NOT be called
+        // Assert - Moderation should NOT be called for already-reviewed reports
         await _mockModerationService.DidNotReceive()
             .BanUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
                 Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        // Context should still be cleaned up
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteAsync(TestContextId, Arg.Any<CancellationToken>());
     }
 
     [Test]
