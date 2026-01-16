@@ -98,7 +98,7 @@ public class UserRecordDto
     public virtual ICollection<TelegramLinkTokenRecordDto> LinkTokens { get; set; } = [];
     public virtual ICollection<VerificationTokenDto> VerificationTokens { get; set; } = [];
     public virtual ICollection<RecoveryCodeRecordDto> RecoveryCodes { get; set; } = [];
-    public virtual ICollection<ReportDto> Reports { get; set; } = [];
+    public virtual ICollection<ReviewDto> Reviews { get; set; } = [];
 
     // Helper properties (not mapped)
     [NotMapped]
