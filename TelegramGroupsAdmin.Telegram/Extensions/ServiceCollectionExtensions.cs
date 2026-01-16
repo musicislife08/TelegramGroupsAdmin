@@ -124,6 +124,10 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
 
+            // Entrance exam evaluation (uses content moderation AI connection)
+            services.AddScoped<IExamEvaluationService, ExamEvaluationService>();
+            services.AddScoped<IExamFlowService, ExamFlowService>(); // Phase 2: Exam flow orchestration
+
             // CAS (Combot Anti-Spam) check on user join
             services.AddSingleton<ICasCheckService, CasCheckService>();
 
