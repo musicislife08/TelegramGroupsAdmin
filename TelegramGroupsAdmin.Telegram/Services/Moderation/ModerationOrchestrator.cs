@@ -164,6 +164,16 @@ public class ModerationOrchestrator : IModerationOrchestrator
         // Notify admins
         await _notificationHandler.NotifyAdminsBanAsync(userId, executor, reason, cancellationToken);
 
+        // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
+        try
+        {
+            await _messageHandler.ScheduleUserMessagesCleanupAsync(userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to schedule messages cleanup for user {UserId}, ban succeeded", userId);
+        }
+
         return new ModerationResult
         {
             Success = true,

@@ -73,7 +73,7 @@ public class DeleteUserMessagesJob(
             var failedCount = 0;
             var skippedCount = 0;
 
-            // Delete messages with rate limiting (~10 deletions/second)
+            // Delete messages (Telegram.Bot handles 429 rate limiting internally)
             foreach (var message in userMessages)
             {
                 if (cancellationToken.IsCancellationRequested)
@@ -99,9 +99,6 @@ public class DeleteUserMessagesJob(
                         message.MessageId,
                         message.ChatId,
                         payload.TelegramUserId);
-
-                    // Rate limiting: ~10 deletions/second
-                    await Task.Delay(100, cancellationToken);
                 }
                 catch (Exception apiEx) when (
                     apiEx.Message.Contains("message to delete not found") ||
