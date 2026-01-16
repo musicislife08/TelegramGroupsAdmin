@@ -199,7 +199,7 @@ public class SystemAccountBypassTests
 
         // Assert: Verify no spam reports were created in the database
         await using var context = _testHelper!.GetDbContext();
-        var reportCount = await context.Reports.CountAsync();
+        var reportCount = await context.Reviews.CountAsync();
 
         Assert.That(reportCount, Is.Zero,
             "No spam reports should be created for system account messages");

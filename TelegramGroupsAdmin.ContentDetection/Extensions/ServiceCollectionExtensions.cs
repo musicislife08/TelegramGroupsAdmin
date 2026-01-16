@@ -63,11 +63,11 @@ public static class ServiceCollectionExtensions
             // Register threshold recommendations repository (ML.NET threshold optimization)
             services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>();
 
-            // Register reports repository
-            services.AddScoped<IReportsRepository, ReportsRepository>();
+            // Register unified reviews repository (handles Reports, ImpersonationAlerts, ExamFailures)
+            services.AddScoped<IReviewsRepository, ReviewsRepository>();
 
-            // Register impersonation alerts repository (Phase 4.10: Anti-Impersonation Detection)
-            services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>();
+            // Register reports repository (backward compatibility - uses same underlying Reviews table)
+            services.AddScoped<IReportsRepository, ReportsRepository>();
 
             // Register URL filtering services (Phase 4.13)
             services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();

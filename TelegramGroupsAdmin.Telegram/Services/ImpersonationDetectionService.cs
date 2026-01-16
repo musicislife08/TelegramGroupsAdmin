@@ -32,7 +32,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
-    private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
+    private readonly IReviewsRepository _reviewsRepository;
     private readonly IModerationOrchestrator _moderationActionService;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
@@ -51,7 +51,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IManagedChatsRepository managedChatsRepository,
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
-        IImpersonationAlertsRepository impersonationAlertsRepository,
+        IReviewsRepository reviewsRepository,
         IModerationOrchestrator moderationActionService,
         ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
@@ -63,7 +63,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         _managedChatsRepository = managedChatsRepository;
         _messageHistoryRepository = messageHistoryRepository;
         _photoHashService = photoHashService;
-        _impersonationAlertsRepository = impersonationAlertsRepository;
+        _reviewsRepository = reviewsRepository;
         _moderationActionService = moderationActionService;
         _botClientFactory = botClientFactory;
         _configService = configService;
@@ -84,7 +84,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         }
 
         // 2. Check if user has pending alert (avoid duplicate checks)
-        var hasPendingAlert = await _impersonationAlertsRepository.HasPendingAlertAsync(userId);
+        var hasPendingAlert = await _reviewsRepository.HasPendingImpersonationAlertAsync(userId);
         if (hasPendingAlert)
         {
             _logger.LogDebug("{User} already has pending impersonation alert", user.ToLogDebug());
@@ -237,7 +237,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 AutoBanned = result.ShouldAutoBan
             };
 
-            var alertId = await _impersonationAlertsRepository.CreateAlertAsync(alert);
+            var alertId = await _reviewsRepository.InsertImpersonationAlertAsync(alert);
 
             _logger.LogInformation(
                 "Created impersonation alert #{AlertId}: {SuspectedUser} → Admin ({TargetUserId}) (score: {Score})",

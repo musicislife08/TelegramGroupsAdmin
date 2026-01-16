@@ -25,7 +25,7 @@ public class ReportsRepository : IReportsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = report.ToDto();
-        context.Reports.Add(entity);
+        context.Reviews.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
@@ -42,7 +42,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.Reports
+        var entity = await context.Reviews
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
@@ -63,7 +63,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = context.Reports.AsNoTracking();
+        var query = context.Reviews.AsNoTracking();
 
         if (chatId.HasValue)
         {
@@ -94,7 +94,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.Reports.FindAsync([reportId], cancellationToken);
+        var entity = await context.Reviews.FindAsync([reportId], cancellationToken);
 
         if (entity != null)
         {
@@ -127,7 +127,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var rowsAffected = await context.Reports
+        var rowsAffected = await context.Reviews
             .Where(r => r.Id == reportId && r.Status == DataModels.ReportStatus.Pending)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(r => r.Status, newStatus)
@@ -154,7 +154,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = context.Reports.AsNoTracking()
+        var query = context.Reviews.AsNoTracking()
             .Where(r => r.Status == DataModels.ReportStatus.Pending);
 
         if (chatId.HasValue)
@@ -172,7 +172,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.Reports
+        var entity = await context.Reviews
             .AsNoTracking()
             .FirstOrDefaultAsync(r =>
                 r.MessageId == messageId &&
@@ -187,7 +187,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var deleted = await context.Reports
+        var deleted = await context.Reviews
             .Where(r => r.ReportedAt < olderThanTimestamp
                 && r.Status != DataModels.ReportStatus.Pending)
             .ExecuteDeleteAsync(cancellationToken);

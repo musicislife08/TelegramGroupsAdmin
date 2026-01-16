@@ -7,7 +7,8 @@
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Components.Reports
 @inject IReportsRepository ReportsRepository
-@inject IImpersonationAlertsRepository ImpersonationAlertsRepository
+@* TODO Phase 2.9: Replace with IReviewsRepository for unified reviews UI *@
+@* @inject IReviewsRepository ReviewsRepository *@
 @inject IReportActionsService ReportActionsService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IBlazorAuthHelper AuthHelper
@@ -208,31 +209,32 @@
                 });
             }
 
-            // Load impersonation alerts
-            var impersonationAlerts = await ImpersonationAlertsRepository.GetPendingAlertsAsync(
-                chatId: null,
-                cancellationToken: CancellationToken.None);
+            // TODO Phase 2.9: Load impersonation alerts from unified ReviewsRepository
+            // var impersonationAlerts = await ReviewsRepository.GetPendingImpersonationAlertsAsync(
+            //     chatId: null,
+            //     cancellationToken: CancellationToken.None);
+            var filteredImpersonationAlerts = new List<ImpersonationAlertRecord>();
 
-            // Filter to accessible chats only
-            var filteredImpersonationAlerts = impersonationAlerts
-                .Where(a => accessibleChatIds.Contains(a.ChatId))
-                .ToList();
-
-            foreach (var alert in filteredImpersonationAlerts)
-            {
-                unifiedQueue.Add(new ReportQueueItem
-                {
-                    Type = ReportType.Impersonation,
-                    Timestamp = alert.DetectedAt,
-                    Priority = CalculateImpersonationPriority(alert),
-                    IsPending = !alert.ReviewedAt.HasValue,
-                    SpamReport = null,
-                    ImpersonationAlert = alert,
-                    DisplayTitle = "Impersonation Alert",
-                    UserId = alert.SuspectedUserId,
-                    UserName = alert.SuspectedUserName
-                });
-            }
+            // // Filter to accessible chats only
+            // var filteredImpersonationAlerts = impersonationAlerts
+            //     .Where(a => accessibleChatIds.Contains(a.ChatId))
+            //     .ToList();
+            //
+            // foreach (var alert in filteredImpersonationAlerts)
+            // {
+            //     unifiedQueue.Add(new ReportQueueItem
+            //     {
+            //         Type = ReportType.Impersonation,
+            //         Timestamp = alert.DetectedAt,
+            //         Priority = CalculateImpersonationPriority(alert),
+            //         IsPending = !alert.ReviewedAt.HasValue,
+            //         SpamReport = null,
+            //         ImpersonationAlert = alert,
+            //         DisplayTitle = "Impersonation Alert",
+            //         UserId = alert.SuspectedUserId,
+            //         UserName = alert.SuspectedUserName
+            //     });
+            // }
 
             // Sort by priority (high → low), then timestamp (new → old)
             _allReports = unifiedQueue
@@ -351,50 +353,10 @@
         }
     }
 
-    private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, string Action) args)
+    // TODO Phase 2.9: Implement HandleImpersonationAction using unified ReviewsRepository
+    private Task HandleImpersonationAction((ImpersonationAlertRecord Alert, string Action) args)
     {
-        try
-        {
-            switch (args.Action)
-            {
-                case "confirm":
-                    // Confirm as scam (Phase 4.10)
-                    await ImpersonationAlertsRepository.UpdateVerdictAsync(
-                        args.Alert.Id,
-                        Data.Models.ImpersonationVerdict.ConfirmedScam,
-                        _currentUserId);
-                    Snackbar.Add($"Impersonation confirmed for user {args.Alert.SuspectedUserId}", Severity.Success);
-                    break;
-
-                case "unban":
-                    // Unban + mark as false positive (Phase 4.10)
-                    await ImpersonationAlertsRepository.UpdateVerdictAsync(
-                        args.Alert.Id,
-                        Data.Models.ImpersonationVerdict.FalsePositive,
-                        _currentUserId);
-                    Snackbar.Add($"User {args.Alert.SuspectedUserId} marked as false positive (unban pending)", Severity.Info);
-                    break;
-
-                case "dismiss":
-                    // Whitelist (not scam, but also not false positive)
-                    await ImpersonationAlertsRepository.UpdateVerdictAsync(
-                        args.Alert.Id,
-                        Data.Models.ImpersonationVerdict.Whitelisted,
-                        _currentUserId);
-                    Snackbar.Add($"User whitelisted", Severity.Info);
-                    break;
-
-                default:
-                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
-                    return;
-            }
-
-            await LoadReportsAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error handling impersonation action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
-            Snackbar.Add($"Failed to process alert: {ex.Message}", Severity.Error);
-        }
+        Snackbar.Add("Impersonation actions temporarily disabled - Phase 2.9 will implement unified reviews UI", Severity.Warning);
+        return Task.CompletedTask;
     }
 }

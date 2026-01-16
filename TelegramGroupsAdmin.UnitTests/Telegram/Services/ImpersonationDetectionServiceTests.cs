@@ -31,7 +31,7 @@ public class ImpersonationDetectionServiceTests
     // Mocks for ShouldCheckUserAsync (only interfaces used by that method)
     private ITelegramUserRepository _mockTelegramUserRepo = null!;
     private IMessageHistoryRepository _mockMessageHistoryRepo = null!;
-    private IImpersonationAlertsRepository _mockImpersonationAlertsRepo = null!;
+    private IReviewsRepository _mockReviewsRepo = null!;
     private IConfigService _mockConfigService = null!;
     private ImpersonationDetectionService _service = null!;
 
@@ -51,7 +51,7 @@ public class ImpersonationDetectionServiceTests
         // Only create mocks for interfaces (concrete classes can't be mocked without parameterless constructor)
         _mockTelegramUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockMessageHistoryRepo = Substitute.For<IMessageHistoryRepository>();
-        _mockImpersonationAlertsRepo = Substitute.For<IImpersonationAlertsRepository>();
+        _mockReviewsRepo = Substitute.For<IReviewsRepository>();
         _mockConfigService = Substitute.For<IConfigService>();
 
         // Default config: check first 5 messages
@@ -85,7 +85,7 @@ public class ImpersonationDetectionServiceTests
             mockManagedChatsRepo,
             _mockMessageHistoryRepo,
             mockPhotoHashService,
-            _mockImpersonationAlertsRepo,
+            _mockReviewsRepo,
             null!, // ModerationActionService - not used by ShouldCheckUserAsync
             null!, // TelegramBotClientFactory - not used by ShouldCheckUserAsync
             _mockConfigService,
@@ -114,7 +114,7 @@ public class ImpersonationDetectionServiceTests
         // Arrange
         _mockTelegramUserRepo.GetByTelegramIdAsync(TestUserId)
             .Returns(CreateTestUser(TestUserId, isTrusted: false));
-        _mockImpersonationAlertsRepo.HasPendingAlertAsync(TestUserId)
+        _mockReviewsRepo.HasPendingImpersonationAlertAsync(TestUserId)
             .Returns(true);
 
         // Act
@@ -130,7 +130,7 @@ public class ImpersonationDetectionServiceTests
         // Arrange
         _mockTelegramUserRepo.GetByTelegramIdAsync(TestUserId)
             .Returns(CreateTestUser(TestUserId, isTrusted: false));
-        _mockImpersonationAlertsRepo.HasPendingAlertAsync(TestUserId)
+        _mockReviewsRepo.HasPendingImpersonationAlertAsync(TestUserId)
             .Returns(false);
         _mockMessageHistoryRepo.GetMessageCountAsync(TestUserId, TestChatId)
             .Returns(10); // >= 5 threshold
@@ -148,7 +148,7 @@ public class ImpersonationDetectionServiceTests
         // Arrange
         _mockTelegramUserRepo.GetByTelegramIdAsync(TestUserId)
             .Returns(CreateTestUser(TestUserId, isTrusted: false));
-        _mockImpersonationAlertsRepo.HasPendingAlertAsync(TestUserId)
+        _mockReviewsRepo.HasPendingImpersonationAlertAsync(TestUserId)
             .Returns(false);
         _mockMessageHistoryRepo.GetMessageCountAsync(TestUserId, TestChatId)
             .Returns(2); // < 5 threshold
@@ -166,7 +166,7 @@ public class ImpersonationDetectionServiceTests
         // Arrange - user not in database
         _mockTelegramUserRepo.GetByTelegramIdAsync(TestUserId)
             .Returns((UiModels.TelegramUser?)null);
-        _mockImpersonationAlertsRepo.HasPendingAlertAsync(TestUserId)
+        _mockReviewsRepo.HasPendingImpersonationAlertAsync(TestUserId)
             .Returns(false);
         _mockMessageHistoryRepo.GetMessageCountAsync(TestUserId, TestChatId)
             .Returns(0);

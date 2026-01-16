@@ -4,11 +4,11 @@ using UiModels = TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 
 /// <summary>
-/// Mapping extensions for Report records
+/// Mapping extensions for Report records (maps to ReviewDto in Data layer)
 /// </summary>
 public static class ReportMappings
 {
-    extension(DataModels.ReportDto data)
+    extension(DataModels.ReviewDto data)
     {
         public UiModels.Report ToModel() => new(
             Id: data.Id,
@@ -28,9 +28,10 @@ public static class ReportMappings
 
     extension(UiModels.Report ui)
     {
-        public DataModels.ReportDto ToDto() => new()
+        public DataModels.ReviewDto ToDto() => new()
         {
             Id = ui.Id,
+            Type = DataModels.ReviewType.Report,
             MessageId = ui.MessageId,
             ChatId = ui.ChatId,
             ReportCommandMessageId = ui.ReportCommandMessageId,
