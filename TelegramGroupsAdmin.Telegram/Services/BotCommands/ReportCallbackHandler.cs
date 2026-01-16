@@ -350,7 +350,9 @@ public class ReportCallbackHandler : IReportCallbackHandler
     {
         var handledBy = reviewedBy ?? "another admin";
         var action = actionTaken ?? "unknown";
-        var time = reviewedAt?.ToString("g") ?? "unknown time";
+        var time = reviewedAt.HasValue
+            ? $"{reviewedAt.Value.UtcDateTime:g} UTC"
+            : "unknown time";
         return $"Already handled by {handledBy} ({action}) at {time}";
     }
 
