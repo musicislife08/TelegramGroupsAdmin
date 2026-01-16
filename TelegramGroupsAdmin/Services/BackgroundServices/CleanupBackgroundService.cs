@@ -127,7 +127,7 @@ public class CleanupBackgroundService : BackgroundService
                 }
 
                 // 3. Clean up expired DM callback contexts
-                var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
+                var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReviewCallbackContextRepository>();
                 var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(contextRetention, stoppingToken);
 
                 if (contextsDeleted > 0)

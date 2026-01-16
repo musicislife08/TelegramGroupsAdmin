@@ -37,7 +37,7 @@ public class ReportActionsServiceTests
     private IModerationOrchestrator _mockModerationService = null!;
     private IAuditService _mockAuditService = null!;
     private IBotMessageService _mockBotMessageService = null!;
-    private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
+    private IReviewCallbackContextRepository _mockCallbackContextRepo = null!;
     private ILogger<ReportActionsService> _mockLogger = null!;
 
     private ReportActionsService _service = null!;
@@ -50,7 +50,7 @@ public class ReportActionsServiceTests
         _mockModerationService = Substitute.For<IModerationOrchestrator>();
         _mockAuditService = Substitute.For<IAuditService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
-        _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
+        _mockCallbackContextRepo = Substitute.For<IReviewCallbackContextRepository>();
         _mockLogger = Substitute.For<ILogger<ReportActionsService>>();
 
         _service = new ReportActionsService(
@@ -193,7 +193,7 @@ public class ReportActionsServiceTests
 
         // Assert
         await _mockCallbackContextRepo.Received(1)
-            .DeleteByReportIdAsync(TestReportId, Arg.Any<CancellationToken>());
+            .DeleteByReviewIdAsync(TestReportId, Arg.Any<CancellationToken>());
     }
 
     #endregion

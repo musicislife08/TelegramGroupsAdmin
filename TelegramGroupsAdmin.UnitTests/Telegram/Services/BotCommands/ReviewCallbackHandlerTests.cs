@@ -15,21 +15,21 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
-using Report = TelegramGroupsAdmin.ContentDetection.Models.Report;
+using Review = TelegramGroupsAdmin.ContentDetection.Models.Review;
 using TelegramUser = TelegramGroupsAdmin.Telegram.Models.TelegramUser;
-using ReportCallbackContext = TelegramGroupsAdmin.Telegram.Models.ReportCallbackContext;
+using ReviewCallbackContext = TelegramGroupsAdmin.Telegram.Models.ReviewCallbackContext;
 // Fully qualify ModerationResult to avoid ambiguity with Models.ModerationResult
 using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.ModerationResult;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BotCommands;
 
 /// <summary>
-/// Unit tests for ReportCallbackHandler.
+/// Unit tests for ReviewCallbackHandler.
 /// Tests callback parsing, context lookup, action execution, and cleanup.
 /// Uses IModerationOrchestrator interface (enabled by Issue #127 interface extraction).
 /// </summary>
 [TestFixture]
-public class ReportCallbackHandlerTests
+public class ReviewCallbackHandlerTests
 {
     private const long TestContextId = 12345L;
     private const long TestReportId = 99L;
@@ -37,7 +37,7 @@ public class ReportCallbackHandlerTests
     private const long TestUserId = 54321L;
     private const int TestMessageId = 42;
 
-    private ILogger<ReportCallbackHandler> _mockLogger = null!;
+    private ILogger<ReviewCallbackHandler> _mockLogger = null!;
     private IServiceScopeFactory _mockScopeFactory = null!;
     private IServiceScope _mockScope = null!;
     private IServiceProvider _mockServiceProvider = null!;
@@ -45,17 +45,17 @@ public class ReportCallbackHandlerTests
     private ITelegramOperations _mockOperations = null!;
 
     // Scoped services resolved from the mock scope
-    private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
-    private IReportsRepository _mockReportsRepo = null!;
+    private IReviewCallbackContextRepository _mockCallbackContextRepo = null!;
+    private IReviewsRepository _mockReviewsRepo = null!;
     private ITelegramUserRepository _mockUserRepo = null!;
     private IModerationOrchestrator _mockModerationService = null!;
 
-    private ReportCallbackHandler _handler = null!;
+    private ReviewCallbackHandler _handler = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockLogger = Substitute.For<ILogger<ReportCallbackHandler>>();
+        _mockLogger = Substitute.For<ILogger<ReviewCallbackHandler>>();
         _mockScopeFactory = Substitute.For<IServiceScopeFactory>();
         _mockScope = Substitute.For<IServiceScope>();
         _mockServiceProvider = Substitute.For<IServiceProvider>();
@@ -63,8 +63,8 @@ public class ReportCallbackHandlerTests
         _mockOperations = Substitute.For<ITelegramOperations>();
 
         // Scoped services
-        _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
-        _mockReportsRepo = Substitute.For<IReportsRepository>();
+        _mockCallbackContextRepo = Substitute.For<IReviewCallbackContextRepository>();
+        _mockReviewsRepo = Substitute.For<IReviewsRepository>();
         _mockUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockModerationService = Substitute.For<IModerationOrchestrator>();
 
@@ -73,10 +73,10 @@ public class ReportCallbackHandlerTests
         _mockScope.ServiceProvider.Returns(_mockServiceProvider);
 
         // Wire up service resolution
-        _mockServiceProvider.GetService(typeof(IReportCallbackContextRepository))
+        _mockServiceProvider.GetService(typeof(IReviewCallbackContextRepository))
             .Returns(_mockCallbackContextRepo);
-        _mockServiceProvider.GetService(typeof(IReportsRepository))
-            .Returns(_mockReportsRepo);
+        _mockServiceProvider.GetService(typeof(IReviewsRepository))
+            .Returns(_mockReviewsRepo);
         _mockServiceProvider.GetService(typeof(ITelegramUserRepository))
             .Returns(_mockUserRepo);
         _mockServiceProvider.GetService(typeof(IModerationOrchestrator))
@@ -85,7 +85,7 @@ public class ReportCallbackHandlerTests
         // Bot client factory returns operations
         _mockBotClientFactory.GetOperationsAsync().Returns(_mockOperations);
 
-        _handler = new ReportCallbackHandler(
+        _handler = new ReviewCallbackHandler(
             _mockLogger,
             _mockScopeFactory,
             _mockBotClientFactory);
@@ -227,7 +227,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
         _mockCallbackContextRepo.GetByIdAsync(TestContextId, Arg.Any<CancellationToken>())
-            .Returns((ReportCallbackContext?)null);
+            .Returns((ReviewCallbackContext?)null);
 
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
@@ -241,7 +241,7 @@ public class ReportCallbackHandlerTests
             cancellationToken: Arg.Any<CancellationToken>());
 
         // No report lookup should happen
-        await _mockReportsRepo.DidNotReceive()
+        await _mockReviewsRepo.DidNotReceive()
             .GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
     }
 
@@ -258,7 +258,7 @@ public class ReportCallbackHandlerTests
         await _handler.HandleCallbackAsync(callbackQuery);
 
         // Assert - should look up the report
-        await _mockReportsRepo.Received(1)
+        await _mockReviewsRepo.Received(1)
             .GetByIdAsync(TestReportId, Arg.Any<CancellationToken>());
     }
 
@@ -272,8 +272,8 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
         SetupValidContext();
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
-            .Returns((Report?)null);
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns((Review?)null);
 
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
@@ -297,8 +297,8 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
         SetupValidContext();
-        var report = CreateTestReport(status: ReportStatus.Reviewed);
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        var report = CreateTestReview(status: ReportStatus.Reviewed);
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
         // Act
@@ -320,12 +320,12 @@ public class ReportCallbackHandlerTests
         // Arrange - report is pending, action succeeds, but status update fails (race condition)
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3"); // Dismiss
         SetupValidContext();
-        var pendingReport = CreateTestReport(status: ReportStatus.Pending);
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        var pendingReport = CreateTestReview(status: ReportStatus.Pending);
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(pendingReport);
 
         // First call returns the pending report, but TryUpdate fails
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 TestReportId,
                 ReportStatus.Reviewed,
                 Arg.Any<string>(),
@@ -335,12 +335,12 @@ public class ReportCallbackHandlerTests
             .Returns(false); // Race condition - another admin handled it
 
         // Second GetByIdAsync returns the already-reviewed report
-        var reviewedReport = CreateTestReport(
+        var reviewedReport = CreateTestReview(
             status: ReportStatus.Reviewed,
             reviewedBy: "OtherAdmin",
             actionTaken: "Spam",
             reviewedAt: DateTimeOffset.UtcNow);
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(pendingReport, reviewedReport);
 
         // Act
@@ -362,12 +362,12 @@ public class ReportCallbackHandlerTests
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3"); // Dismiss
         SetupValidContext();
 
-        var reviewedReport = CreateTestReport(
+        var reviewedReport = CreateTestReview(
             status: ReportStatus.Reviewed,
             reviewedBy: "FirstAdmin",
             actionTaken: "Warn",
             reviewedAt: DateTimeOffset.UtcNow.AddMinutes(-5));
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(reviewedReport);
 
         // Act
@@ -395,7 +395,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0"); // Spam = 0
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
         SetupTargetUser();
 
         _mockModerationService.BanUserAsync(
@@ -406,7 +406,7 @@ public class ReportCallbackHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -423,7 +423,7 @@ public class ReportCallbackHandlerTests
             Arg.Any<CancellationToken>());
 
         // Report status updated
-        await _mockReportsRepo.Received(1).TryUpdateReportStatusAsync(
+        await _mockReviewsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
             Arg.Any<string>(),
@@ -438,7 +438,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
         SetupTargetUser();
 
         _mockModerationService.BanUserAsync(
@@ -461,7 +461,7 @@ public class ReportCallbackHandlerTests
             cancellationToken: Arg.Any<CancellationToken>());
 
         // Report status NOT updated on failure
-        await _mockReportsRepo.DidNotReceive().TryUpdateReportStatusAsync(
+        await _mockReviewsRepo.DidNotReceive().TryUpdateStatusAsync(
             Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
@@ -476,7 +476,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1"); // Warn = 1
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
         SetupTargetUser();
 
         _mockModerationService.WarnUserAsync(
@@ -488,7 +488,7 @@ public class ReportCallbackHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, WarningCount = 2 });
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -505,7 +505,7 @@ public class ReportCallbackHandlerTests
             TestChatId,
             Arg.Any<CancellationToken>());
 
-        await _mockReportsRepo.Received(1).TryUpdateReportStatusAsync(
+        await _mockReviewsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
             Arg.Any<string>(),
@@ -520,7 +520,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1");
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
         SetupTargetUser();
 
         _mockModerationService.WarnUserAsync(
@@ -554,7 +554,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2"); // TempBan = 2
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
         SetupTargetUser();
 
         _mockModerationService.TempBanUserAsync(
@@ -566,7 +566,7 @@ public class ReportCallbackHandlerTests
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -583,7 +583,7 @@ public class ReportCallbackHandlerTests
             Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>());
 
-        await _mockReportsRepo.Received(1).TryUpdateReportStatusAsync(
+        await _mockReviewsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
             Arg.Any<string>(),
@@ -598,7 +598,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2");
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
         SetupTargetUser();
 
         _mockModerationService.TempBanUserAsync(
@@ -632,9 +632,9 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3"); // Dismiss = 3
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -654,7 +654,7 @@ public class ReportCallbackHandlerTests
                 Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
 
         // Report status still updated
-        await _mockReportsRepo.Received(1).TryUpdateReportStatusAsync(
+        await _mockReviewsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
             Arg.Any<string>(),
@@ -669,9 +669,9 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3");
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -697,9 +697,9 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3");
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -719,13 +719,13 @@ public class ReportCallbackHandlerTests
         var reportCommandMessageId = 999;
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3");
         SetupValidContext();
-        var report = CreateTestReport(
+        var report = CreateTestReview(
             status: ReportStatus.Pending,
             reportCommandMessageId: reportCommandMessageId);
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -747,13 +747,13 @@ public class ReportCallbackHandlerTests
         var reportCommandMessageId = 999;
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3");
         SetupValidContext();
-        var report = CreateTestReport(
+        var report = CreateTestReview(
             status: ReportStatus.Pending,
             reportCommandMessageId: reportCommandMessageId);
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -777,9 +777,9 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3", isPhotoMessage: false);
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -807,9 +807,9 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3", isPhotoMessage: true);
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -832,9 +832,9 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3", isVideoMessage: true);
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -863,9 +863,9 @@ public class ReportCallbackHandlerTests
         // Arrange - message is null (can happen if message was deleted before callback)
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:3", includeMessage: false);
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
 
-        _mockReportsRepo.TryUpdateReportStatusAsync(
+        _mockReviewsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -899,7 +899,7 @@ public class ReportCallbackHandlerTests
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
         SetupValidContext();
-        SetupPendingReport();
+        SetupPendingReview();
         SetupTargetUser();
 
         _mockModerationService.BanUserAsync(
@@ -1035,36 +1035,39 @@ public class ReportCallbackHandlerTests
         return JsonSerializer.Deserialize<Message>(json, JsonSerializerOptions.Web)!;
     }
 
-    private static ReportCallbackContext CreateTestContext()
+    private static ReviewCallbackContext CreateTestContext()
     {
-        return new ReportCallbackContext(
+        return new ReviewCallbackContext(
             Id: TestContextId,
-            ReportId: TestReportId,
+            ReviewId: TestReportId,
+            ReviewType: ReviewType.Report,
             ChatId: TestChatId,
             UserId: TestUserId,
             CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-5));
     }
 
-    private static Report CreateTestReport(
+    private static Review CreateTestReview(
         ReportStatus status = ReportStatus.Pending,
         string? reviewedBy = null,
         string? actionTaken = null,
         DateTimeOffset? reviewedAt = null,
         int? reportCommandMessageId = null)
     {
-        return new Report(
-            Id: TestReportId,
-            MessageId: TestMessageId,
-            ChatId: TestChatId,
-            ReportCommandMessageId: reportCommandMessageId,
-            ReportedByUserId: 11111L,
-            ReportedByUserName: "reporter",
-            ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
-            Status: status,
-            ReviewedBy: reviewedBy,
-            ReviewedAt: reviewedAt,
-            ActionTaken: actionTaken,
-            AdminNotes: null);
+        return new Review
+        {
+            Id = TestReportId,
+            Type = ReviewType.Report,
+            ChatId = TestChatId,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status = status,
+            ReviewedBy = reviewedBy,
+            ReviewedAt = reviewedAt,
+            ActionTaken = actionTaken,
+            AdminNotes = null,
+            SubjectUserId = TestUserId,
+            MessageId = TestMessageId,
+            ReportCommandMessageId = reportCommandMessageId
+        };
     }
 
     private static TelegramUser CreateTestUser()
@@ -1095,11 +1098,11 @@ public class ReportCallbackHandlerTests
             .Returns(context);
     }
 
-    private void SetupPendingReport()
+    private void SetupPendingReview()
     {
-        var report = CreateTestReport(status: ReportStatus.Pending);
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
-            .Returns(report);
+        var review = CreateTestReview(status: ReportStatus.Pending);
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(review);
     }
 
     private void SetupTargetUser()

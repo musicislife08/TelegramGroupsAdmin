@@ -14,7 +14,7 @@ public static class ReviewMappings
         /// Convert ReviewDto to base Review model for generic operations.
         /// Does not include type-specific context - use type-specific repository methods for that.
         /// </summary>
-        public UiModels.Review ToBaseModel(string? chatName = null) => new()
+        public UiModels.Review ToBaseModel(string? chatName = null, long? subjectUserId = null) => new()
         {
             Id = data.Id,
             Type = data.Type,
@@ -27,8 +27,10 @@ public static class ReviewMappings
             AdminNotes = data.AdminNotes,
             Context = data.Context,
             ChatName = chatName,
-            // SubjectUserId depends on type - callers needing this should use type-specific methods
-            SubjectUserId = null
+            SubjectUserId = subjectUserId,
+            // Report-specific fields
+            MessageId = data.MessageId > 0 ? data.MessageId : null,
+            ReportCommandMessageId = data.ReportCommandMessageId
         };
     }
 }

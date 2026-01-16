@@ -33,4 +33,14 @@ public record Review
     /// For ExamFailure: the user who failed the exam
     /// </summary>
     public long? SubjectUserId { get; init; }
+
+    // Common Report-specific fields (hydrated from base columns)
+    /// <summary>Message ID for Report type reviews</summary>
+    public int? MessageId { get; init; }
+
+    /// <summary>ID of the /report command message (for cleanup)</summary>
+    public int? ReportCommandMessageId { get; init; }
+
+    /// <summary>User ID of the reported user (alias for SubjectUserId for Report type)</summary>
+    public long? ReportedUserId => SubjectUserId;
 }

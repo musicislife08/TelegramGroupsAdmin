@@ -15,7 +15,7 @@ public class UpdateProcessor(
     IChatManagementService chatManagementService,
     IWelcomeService welcomeService,
     IBanCallbackHandler banCallbackHandler,
-    IReportCallbackHandler reportCallbackHandler,
+    IReviewCallbackHandler reviewCallbackHandler,
     ITelegramBotClientFactory botFactory,
     ILogger<UpdateProcessor> logger) : IUpdateProcessor
 {
@@ -62,9 +62,9 @@ public class UpdateProcessor(
 
             // Route to appropriate handler based on callback data prefix
             var callbackData = callbackQuery.Data ?? "";
-            if (reportCallbackHandler.CanHandle(callbackData))
+            if (reviewCallbackHandler.CanHandle(callbackData))
             {
-                await reportCallbackHandler.HandleCallbackAsync(callbackQuery, cancellationToken);
+                await reviewCallbackHandler.HandleCallbackAsync(callbackQuery, cancellationToken);
             }
             else if (banCallbackHandler.CanHandle(callbackData))
             {

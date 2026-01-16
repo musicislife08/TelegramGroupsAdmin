@@ -74,7 +74,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
-    public DbSet<ReportCallbackContextDto> ReportCallbackContexts => Set<ReportCallbackContextDto>();
+    public DbSet<ReviewCallbackContextDto> ReviewCallbackContexts => Set<ReviewCallbackContextDto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -707,11 +707,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasFilter("similarity_hash IS NOT NULL")
             .HasDatabaseName("ix_message_translations_similarity_hash");
 
-        // ReportCallbackContexts indexes (DM action button contexts)
-        modelBuilder.Entity<ReportCallbackContextDto>()
-            .HasIndex(rcc => rcc.ReportId)
-            .HasDatabaseName("ix_report_callback_contexts_report_id");  // Cleanup when report is handled
-        modelBuilder.Entity<ReportCallbackContextDto>()
+        // ReviewCallbackContexts indexes (DM action button contexts)
+        modelBuilder.Entity<ReviewCallbackContextDto>()
+            .HasIndex(rcc => rcc.ReviewId)
+            .HasDatabaseName("ix_report_callback_contexts_report_id");  // Cleanup when review is handled
+        modelBuilder.Entity<ReviewCallbackContextDto>()
             .HasIndex(rcc => rcc.CreatedAt)
             .HasDatabaseName("ix_report_callback_contexts_created_at");  // Expiry cleanup job
     }
