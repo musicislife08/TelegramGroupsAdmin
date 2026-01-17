@@ -427,6 +427,60 @@ public class ModerationOrchestrator : IModerationOrchestrator
         };
     }
 
+    /// <inheritdoc/>
+    public async Task<ModerationResult> RestoreUserPermissionsAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        if (protectionResult != null) return protectionResult;
+
+        var restrictResult = await _restrictHandler.RestorePermissionsAsync(
+            userId, chatId, executor, reason, cancellationToken);
+
+        if (!restrictResult.Success)
+            return ModerationResult.Failed(restrictResult.ErrorMessage ?? "Failed to restore permissions");
+
+        // Audit successful permission restoration
+        await _auditHandler.LogRestorePermissionsAsync(userId, chatId, executor, reason, cancellationToken);
+
+        return new ModerationResult
+        {
+            Success = true,
+            ChatsAffected = restrictResult.ChatsAffected
+        };
+    }
+
+    /// <inheritdoc/>
+    public async Task<ModerationResult> KickUserFromChatAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        if (protectionResult != null) return protectionResult;
+
+        var kickResult = await _banHandler.KickFromChatAsync(
+            userId, chatId, executor, reason, cancellationToken);
+
+        if (!kickResult.Success)
+            return ModerationResult.Failed(kickResult.ErrorMessage ?? "Failed to kick user");
+
+        // Audit successful kick
+        await _auditHandler.LogKickAsync(userId, chatId, executor, reason, cancellationToken);
+
+        return new ModerationResult
+        {
+            Success = true,
+            ChatsAffected = kickResult.ChatsAffected
+        };
+    }
+
     /// <summary>
     /// Checks if user is a Telegram system account (777000, 1087968824, etc.) and returns error if moderation is attempted.
     /// </summary>

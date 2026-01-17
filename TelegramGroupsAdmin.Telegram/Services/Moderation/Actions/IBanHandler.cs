@@ -51,4 +51,22 @@ public interface IBanHandler
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kick user from a specific chat (ban then immediately unban).
+    /// Does not affect other chats or create permanent ban record.
+    /// Used for welcome flow denials and exam failures.
+    /// </summary>
+    /// <param name="userId">Telegram user ID to kick.</param>
+    /// <param name="chatId">Chat to kick the user from.</param>
+    /// <param name="executor">Who initiated the kick.</param>
+    /// <param name="reason">Reason for the kick (for logging).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Result with success status.</returns>
+    Task<BanResult> KickFromChatAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string? reason,
+        CancellationToken cancellationToken = default);
 }

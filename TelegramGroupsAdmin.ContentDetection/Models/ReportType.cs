@@ -9,5 +9,8 @@ public enum ReportType
     Spam = 0,
 
     /// <summary>Potential user impersonation alert</summary>
-    Impersonation = 1
+    Impersonation = 1,
+
+    /// <summary>Failed entrance exam pending review</summary>
+    ExamFailure = 2
 }

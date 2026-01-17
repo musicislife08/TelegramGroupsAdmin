@@ -1,0 +1,458 @@
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.Configuration
+@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Core
+@using TelegramGroupsAdmin.Core.Utilities
+
+@inject IConfigService ConfigService
+@inject ITelegramUserRepository TelegramUserRepository
+@inject IMessageHistoryRepository MessageRepository
+@inject IManagedChatsRepository ManagedChatsRepository
+
+<MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Warning" Size="Size.Small" />
+                <MudText Typo="Typo.h6">Exam Review</MudText>
+                <MudSpacer />
+                @if (ExamFailure.ReviewedAt.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Reviewed</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Pending</MudChip>
+                }
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    <span class="local-timestamp" data-utc="@ExamFailure.FailedAt.ToString("o")">@ExamFailure.FailedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                </MudText>
+            </MudStack>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudStack Spacing="3">
+            @* User Info Section *@
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Start">
+                @if (ExamFailure.UserPhotoPath != null)
+                {
+                    <MudImage Src="@GetPhotoUrl(ExamFailure.UserPhotoPath)"
+                              Alt="User photo"
+                              Elevation="2"
+                              Class="rounded-lg"
+                              Style="width: 80px; height: 80px; object-fit: cover;" />
+                }
+                else
+                {
+                    <MudAvatar Size="Size.Large" Style="width: 80px; height: 80px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
+                    </MudAvatar>
+                }
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.h6">@GetUserDisplayName()</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @(ExamFailure.UserName != null ? $"@{ExamFailure.UserName}" : "No username") · ID: @ExamFailure.UserId
+                    </MudText>
+                    @if (_user != null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            First seen: @DateTimeUtilities.FormatRelativeTimeVerbose(_user.FirstSeenAt)
+                        </MudText>
+                    }
+                </MudStack>
+            </MudStack>
+
+            @* Context Section *@
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Context</b></MudText>
+                <MudStack Spacing="1">
+                    @* Trust status *@
+                    @if (_user?.IsTrusted == true)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Success" />
+                            <MudText Typo="Typo.body2" Color="Color.Success">User is trusted</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Small" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body2">Not trusted</MudText>
+                        </MudStack>
+                    }
+
+                    @* Other managed groups *@
+                    @if (_otherManagedChats.Count > 0)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Color="Color.Info" />
+                            <MudText Typo="Typo.body2">
+                                Member of: @string.Join(", ", _otherManagedChats.Take(3))@(_otherManagedChats.Count > 3 ? $" +{_otherManagedChats.Count - 3} more" : "")
+                            </MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.GroupOff" Size="Size.Small" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body2">Not in other managed groups</MudText>
+                        </MudStack>
+                    }
+
+                    @* Chat *@
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
+                        <MudText Typo="Typo.body2">Chat: @(ExamFailure.ChatName ?? "Unknown")</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+
+            @* MC Questions Section *@
+            @if (_examConfig?.HasMcQuestions == true && ExamFailure.McAnswers?.Count > 0)
+            {
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudText Typo="Typo.subtitle2"><b>Multiple Choice</b></MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@GetScoreColor()">
+                            @_correctCount/@ExamFailure.McAnswers.Count correct (@ExamFailure.Score%)
+                        </MudChip>
+                        @if (ExamFailure.Score >= ExamFailure.PassingThreshold)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Passed</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">Failed</MudChip>
+                        }
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                        Passing threshold: @ExamFailure.PassingThreshold%
+                    </MudText>
+
+                    <MudStack Spacing="2">
+                        @for (var i = 0; i < _examConfig.McQuestions.Count && i < ExamFailure.McAnswers.Count; i++)
+                        {
+                            var questionIndex = i;
+                            var question = _examConfig.McQuestions[questionIndex];
+                            var answerInfo = GetAnswerInfo(questionIndex);
+
+                            <MudPaper Elevation="1" Class="pa-3">
+                                <MudText Typo="Typo.body2" Class="mb-2">
+                                    <b>Q@(questionIndex + 1):</b> @question.Question
+                                </MudText>
+
+                                @if (answerInfo.IsCorrect)
+                                {
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                                        <MudText Typo="Typo.body2" Color="Color.Success">
+                                            @answerInfo.SelectedLetter) @answerInfo.SelectedText
+                                        </MudText>
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudStack Spacing="1">
+                                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" />
+                                            <MudText Typo="Typo.body2" Color="Color.Error">
+                                                @answerInfo.SelectedLetter) @answerInfo.SelectedText
+                                            </MudText>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="margin-left: 28px;">
+                                            Correct: @answerInfo.CorrectLetter) @answerInfo.CorrectText
+                                        </MudText>
+                                    </MudStack>
+                                }
+                            </MudPaper>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @* Open-Ended Section *@
+            @if (_examConfig?.HasOpenEndedQuestion == true && ExamFailure.OpenEndedAnswer != null)
+            {
+                <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Open-Ended Question</b></MudText>
+                    <MudText Typo="Typo.body2" Class="mb-3">@_examConfig.OpenEndedQuestion</MudText>
+
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Answer:</MudText>
+                    <MudPaper Elevation="1" Class="pa-3 mb-3" Style="background-color: var(--mud-palette-surface);">
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
+                            @ExamFailure.OpenEndedAnswer
+                        </MudText>
+                    </MudPaper>
+
+                    @if (ExamFailure.AiEvaluation != null)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">AI Evaluation:</MudText>
+                            @if (_aiPassed == true)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success">Passed</MudChip>
+                            }
+                            else if (_aiPassed == false)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error">Failed</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">Unknown</MudChip>
+                            }
+                            @if (_aiConfidence.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    (Confidence: @(_aiConfidence.Value.ToString("P0")))
+                                </MudText>
+                            }
+                        </MudStack>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-style: italic;">
+                            "@ExamFailure.AiEvaluation"
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true">
+                            AI evaluation unavailable - manual review required
+                        </MudAlert>
+                    }
+                </MudPaper>
+            }
+
+            @* Review info *@
+            @if (ExamFailure.ReviewedAt.HasValue)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <b>Reviewed:</b> @ExamFailure.ActionTaken by @(ExamFailure.ReviewedBy ?? "Unknown")
+                    on <span class="local-timestamp" data-utc="@ExamFailure.ReviewedAt.Value.ToString("o")">@ExamFailure.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    @if (ExamFailure.AdminNotes != null)
+                    {
+                        <br /><b>Notes:</b> @ExamFailure.AdminNotes
+                    }
+                </MudAlert>
+            }
+        </MudStack>
+    </MudCardContent>
+    <MudCardActions>
+        @if (!ExamFailure.ReviewedAt.HasValue)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.Check"
+                       OnClick="@OnApprove"
+                       Disabled="@_actionInProgress">
+                Approve
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.Close"
+                       OnClick="@OnDeny"
+                       Disabled="@_actionInProgress">
+                Deny
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Block"
+                       OnClick="@OnDenyAndBan"
+                       Disabled="@_actionInProgress">
+                Deny + Ban
+            </MudButton>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Action: <b>@ExamFailure.ActionTaken</b>
+            </MudText>
+        }
+    </MudCardActions>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public required ExamFailureRecord ExamFailure { get; set; }
+
+    [Parameter]
+    public EventCallback<(ExamFailureRecord ExamFailure, string Action)> OnAction { get; set; }
+
+    private bool _actionInProgress;
+    private TelegramUser? _user;
+    private ExamConfig? _examConfig;
+    private List<string> _otherManagedChats = [];
+    private int _correctCount;
+    private bool? _aiPassed;
+    private double? _aiConfidence;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Load user details
+        _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamFailure.UserId);
+
+        // Load exam config for question details
+        var welcomeConfig = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ExamFailure.ChatId);
+        _examConfig = welcomeConfig?.ExamConfig;
+
+        // Calculate correct answers
+        _correctCount = CountCorrectAnswers();
+
+        // Parse AI evaluation for pass/fail and confidence
+        ParseAiEvaluation();
+
+        // Load other managed chats
+        await LoadOtherManagedChatsAsync();
+    }
+
+    private int CountCorrectAnswers()
+    {
+        if (ExamFailure.McAnswers == null || ExamFailure.ShuffleState == null)
+            return 0;
+
+        var correct = 0;
+        foreach (var (questionIndex, answerLetter) in ExamFailure.McAnswers)
+        {
+            if (ExamFailure.ShuffleState.TryGetValue(questionIndex, out var shuffle))
+            {
+                var answerPosition = answerLetter[0] - 'A';
+                if (answerPosition >= 0 && answerPosition < shuffle.Length)
+                {
+                    // Original index 0 is always correct
+                    if (shuffle[answerPosition] == 0)
+                        correct++;
+                }
+            }
+        }
+        return correct;
+    }
+
+    private void ParseAiEvaluation()
+    {
+        if (string.IsNullOrEmpty(ExamFailure.AiEvaluation))
+        {
+            _aiPassed = null;
+            _aiConfidence = null;
+            return;
+        }
+
+        // Try to extract pass/fail from the evaluation text
+        var evalLower = ExamFailure.AiEvaluation.ToLowerInvariant();
+        if (evalLower.Contains("pass") || evalLower.Contains("accept") || evalLower.Contains("approve"))
+            _aiPassed = true;
+        else if (evalLower.Contains("fail") || evalLower.Contains("reject") || evalLower.Contains("deny"))
+            _aiPassed = false;
+        else
+            _aiPassed = null;
+
+        // Confidence is typically stored separately - for now mark as unknown
+        _aiConfidence = null;
+    }
+
+    private async Task LoadOtherManagedChatsAsync()
+    {
+        try
+        {
+            var userMessages = await MessageRepository.GetUserMessagesAsync(ExamFailure.UserId);
+            var distinctChatIds = userMessages
+                .Select(m => m.ChatId)
+                .Where(chatId => chatId != ExamFailure.ChatId)
+                .Distinct()
+                .ToList();
+
+            if (distinctChatIds.Count > 0)
+            {
+                var allManagedChats = await ManagedChatsRepository.GetActiveChatsAsync();
+                _otherManagedChats = allManagedChats
+                    .Where(c => distinctChatIds.Contains(c.ChatId))
+                    .Select(c => c.ChatName ?? $"Chat {c.ChatId}")
+                    .ToList();
+            }
+        }
+        catch
+        {
+            _otherManagedChats = [];
+        }
+    }
+
+    private (bool IsCorrect, string SelectedLetter, string SelectedText, string CorrectLetter, string CorrectText) GetAnswerInfo(int questionIndex)
+    {
+        if (_examConfig == null || questionIndex >= _examConfig.McQuestions.Count)
+            return (false, "?", "Unknown", "?", "Unknown");
+
+        var question = _examConfig.McQuestions[questionIndex];
+        var answerLetter = ExamFailure.McAnswers?.GetValueOrDefault(questionIndex) ?? "?";
+
+        // Get shuffle for this question
+        var shuffle = ExamFailure.ShuffleState?.GetValueOrDefault(questionIndex);
+        if (shuffle == null || answerLetter == "?")
+            return (false, answerLetter, "Unknown", "A", question.Answers.FirstOrDefault() ?? "Unknown");
+
+        var answerPosition = answerLetter[0] - 'A';
+        if (answerPosition < 0 || answerPosition >= shuffle.Length)
+            return (false, answerLetter, "Unknown", "A", question.Answers.FirstOrDefault() ?? "Unknown");
+
+        var originalIndex = shuffle[answerPosition];
+        var selectedText = originalIndex < question.Answers.Count ? question.Answers[originalIndex] : "Unknown";
+        var isCorrect = originalIndex == 0; // Original index 0 is always correct
+
+        // Find where the correct answer (original index 0) is in the shuffle
+        var correctPosition = Array.IndexOf(shuffle, 0);
+        var correctLetter = correctPosition >= 0 ? ((char)('A' + correctPosition)).ToString() : "?";
+        var correctText = question.Answers.FirstOrDefault() ?? "Unknown";
+
+        return (isCorrect, answerLetter, selectedText, correctLetter, correctText);
+    }
+
+    private string GetUserDisplayName()
+    {
+        return TelegramDisplayName.Format(
+            ExamFailure.UserFirstName,
+            ExamFailure.UserLastName,
+            ExamFailure.UserName,
+            ExamFailure.UserId);
+    }
+
+    private string GetCardStyle()
+    {
+        if (!ExamFailure.ReviewedAt.HasValue)
+            return "border-left: 4px solid var(--mud-palette-warning);";
+        return "";
+    }
+
+    private Color GetScoreColor()
+    {
+        return ExamFailure.Score >= ExamFailure.PassingThreshold ? Color.Success :
+               ExamFailure.Score >= ExamFailure.PassingThreshold * 0.6 ? Color.Warning :
+               Color.Error;
+    }
+
+    private string GetPhotoUrl(string photoPath)
+    {
+        var fileName = Path.GetFileName(photoPath);
+        return $"/api/photos/{fileName}";
+    }
+
+    private async Task OnApprove()
+    {
+        _actionInProgress = true;
+        await OnAction.InvokeAsync((ExamFailure, "approve"));
+        _actionInProgress = false;
+    }
+
+    private async Task OnDeny()
+    {
+        _actionInProgress = true;
+        await OnAction.InvokeAsync((ExamFailure, "deny"));
+        _actionInProgress = false;
+    }
+
+    private async Task OnDenyAndBan()
+    {
+        _actionInProgress = true;
+        await OnAction.InvokeAsync((ExamFailure, "deny_ban"));
+        _actionInProgress = false;
+    }
+}

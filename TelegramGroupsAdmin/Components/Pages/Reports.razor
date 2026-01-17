@@ -3,14 +3,16 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Data.Models
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
+@using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Reports
-@inject IReportsRepository ReportsRepository
-@* TODO Phase 2.9: Replace with IReviewsRepository for unified reviews UI *@
-@* @inject IReviewsRepository ReviewsRepository *@
+@inject IReviewsRepository ReviewsRepository
 @inject IReportActionsService ReportActionsService
 @inject IManagedChatsRepository ManagedChatsRepository
+@inject IModerationOrchestrator ModerationOrchestrator
 @inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
@@ -35,6 +37,7 @@
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.All">All Types</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Spam">Moderation Reports</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Impersonation">Impersonation Alerts</MudSelectItem>
+                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ExamFailure">Exam Reviews</MudSelectItem>
             </MudSelect>
 
             <MudSelect T="StatusFilter"
@@ -71,6 +74,12 @@
                         @_pendingImpersonationCount Impersonation
                     </MudChip>
                 }
+                @if (_pendingExamCount > 0)
+                {
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Icon="@Icons.Material.Filled.Quiz">
+                        @_pendingExamCount Exam
+                    </MudChip>
+                }
             </MudStack>
         </MudStack>
     </MudPaper>
@@ -97,6 +106,11 @@
                     <ImpersonationAlertCard Alert="@item.ImpersonationAlert"
                                             OnAction="@HandleImpersonationAction" />
                 }
+                else if (item.ExamFailure != null)
+                {
+                    <ExamReviewCard ExamFailure="@item.ExamFailure"
+                                    OnAction="@HandleExamAction" />
+                }
             }
         </MudStack>
     }
@@ -122,7 +136,7 @@
 </MudContainer>
 
 @code {
-    private enum ReportTypeFilter { All, Spam, Impersonation }
+    private enum ReportTypeFilter { All, Spam, Impersonation, ExamFailure }
     private enum StatusFilter { Pending, All }
 
     private List<ReportQueueItem> _allReports = [];
@@ -132,6 +146,7 @@
     private bool _loading = true;
     private int _pendingSpamCount;
     private int _pendingImpersonationCount;
+    private int _pendingExamCount;
     private string _currentUserId = string.Empty;
 
     protected override async Task OnInitializedAsync()
@@ -181,60 +196,69 @@
 
             var unifiedQueue = new List<ReportQueueItem>();
 
-            // Load spam reports
-            var spamReports = await ReportsRepository.GetReportsAsync(
+            // Load each type using type-specific repository methods
+            // This returns properly hydrated models without exposing internal mappings
+
+            // Load moderation reports
+            var reports = await ReviewsRepository.GetReportsAsync(
                 chatId: null,
-                status: null, // Load all, filter client-side
-                limit: 100,
-                offset: 0);
+                status: null,
+                limit: 100);
 
-            // Filter to accessible chats only
-            var filteredSpamReports = spamReports
-                .Where(r => accessibleChatIds.Contains(r.ChatId))
-                .ToList();
-
-            foreach (var report in filteredSpamReports)
+            foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.ChatId)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
                     Type = ReportType.Spam,
                     Timestamp = report.ReportedAt,
-                    Priority = CalculateSpamPriority(report),
-                    IsPending = report.Status == DataModels.ReportStatus.Pending,
+                    Priority = CalculateReportPriority(report),
+                    IsPending = report.Status == ReportStatus.Pending,
                     SpamReport = report,
                     ImpersonationAlert = null,
+                    ExamFailure = null,
                     DisplayTitle = "Moderation Report",
                     UserId = report.ReportedByUserId ?? 0,
                     UserName = report.ReportedByUserName
                 });
             }
 
-            // TODO Phase 2.9: Load impersonation alerts from unified ReviewsRepository
-            // var impersonationAlerts = await ReviewsRepository.GetPendingImpersonationAlertsAsync(
-            //     chatId: null,
-            //     cancellationToken: CancellationToken.None);
-            var filteredImpersonationAlerts = new List<ImpersonationAlertRecord>();
+            // Load impersonation alerts
+            var alerts = await ReviewsRepository.GetPendingImpersonationAlertsAsync();
+            foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.ChatId)))
+            {
+                unifiedQueue.Add(new ReportQueueItem
+                {
+                    Type = ReportType.Impersonation,
+                    Timestamp = alert.DetectedAt,
+                    Priority = CalculateImpersonationPriority(alert),
+                    IsPending = !alert.ReviewedAt.HasValue,
+                    SpamReport = null,
+                    ImpersonationAlert = alert,
+                    ExamFailure = null,
+                    DisplayTitle = "Impersonation Alert",
+                    UserId = alert.SuspectedUserId,
+                    UserName = alert.SuspectedUserName
+                });
+            }
 
-            // // Filter to accessible chats only
-            // var filteredImpersonationAlerts = impersonationAlerts
-            //     .Where(a => accessibleChatIds.Contains(a.ChatId))
-            //     .ToList();
-            //
-            // foreach (var alert in filteredImpersonationAlerts)
-            // {
-            //     unifiedQueue.Add(new ReportQueueItem
-            //     {
-            //         Type = ReportType.Impersonation,
-            //         Timestamp = alert.DetectedAt,
-            //         Priority = CalculateImpersonationPriority(alert),
-            //         IsPending = !alert.ReviewedAt.HasValue,
-            //         SpamReport = null,
-            //         ImpersonationAlert = alert,
-            //         DisplayTitle = "Impersonation Alert",
-            //         UserId = alert.SuspectedUserId,
-            //         UserName = alert.SuspectedUserName
-            //     });
-            // }
+            // Load exam failures
+            var examFailures = await ReviewsRepository.GetPendingExamFailuresAsync();
+            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.ChatId)))
+            {
+                unifiedQueue.Add(new ReportQueueItem
+                {
+                    Type = ReportType.ExamFailure,
+                    Timestamp = examFailure.FailedAt,
+                    Priority = CalculateExamPriority(examFailure),
+                    IsPending = !examFailure.ReviewedAt.HasValue,
+                    SpamReport = null,
+                    ImpersonationAlert = null,
+                    ExamFailure = examFailure,
+                    DisplayTitle = "Exam Review",
+                    UserId = examFailure.UserId,
+                    UserName = examFailure.UserName
+                });
+            }
 
             // Sort by priority (high → low), then timestamp (new → old)
             _allReports = unifiedQueue
@@ -242,9 +266,10 @@
                 .ThenByDescending(x => x.Timestamp)
                 .ToList();
 
-            // Update counts (based on filtered reports)
-            _pendingSpamCount = filteredSpamReports.Count(r => r.Status == DataModels.ReportStatus.Pending);
-            _pendingImpersonationCount = filteredImpersonationAlerts.Count(a => !a.ReviewedAt.HasValue);
+            // Update counts
+            _pendingSpamCount = unifiedQueue.Count(x => x.Type == ReportType.Spam && x.IsPending);
+            _pendingImpersonationCount = unifiedQueue.Count(x => x.Type == ReportType.Impersonation && x.IsPending);
+            _pendingExamCount = unifiedQueue.Count(x => x.Type == ReportType.ExamFailure && x.IsPending);
 
             ApplyFilters();
         }
@@ -267,7 +292,14 @@
         // Type filter
         if (_selectedTypeFilter != ReportTypeFilter.All)
         {
-            filtered = filtered.Where(x => x.Type == (_selectedTypeFilter == ReportTypeFilter.Spam ? ReportType.Spam : ReportType.Impersonation));
+            var targetType = _selectedTypeFilter switch
+            {
+                ReportTypeFilter.Spam => ReportType.Spam,
+                ReportTypeFilter.Impersonation => ReportType.Impersonation,
+                ReportTypeFilter.ExamFailure => ReportType.ExamFailure,
+                _ => ReportType.Spam
+            };
+            filtered = filtered.Where(x => x.Type == targetType);
         }
 
         // Status filter
@@ -293,9 +325,9 @@
         StateHasChanged();
     }
 
-    private int CalculateSpamPriority(Report report)
+    private int CalculateReportPriority(Report report)
     {
-        if (report.Status != DataModels.ReportStatus.Pending) return 0;
+        if (report.Status != ReportStatus.Pending) return 0;
         // Higher priority for newer reports
         var age = (DateTimeOffset.UtcNow - report.ReportedAt).TotalHours;
         return (int)(100 - age); // Newer = higher priority
@@ -306,11 +338,20 @@
         if (alert.ReviewedAt.HasValue) return 0;
 
         // Critical impersonation (100 points, auto-banned) = highest priority
-        if (alert.RiskLevel == Data.Models.ImpersonationRiskLevel.Critical)
+        if (alert.RiskLevel == ImpersonationRiskLevel.Critical)
             return 1000 + alert.TotalScore;
 
         // Medium risk = medium priority
         return 500 + alert.TotalScore;
+    }
+
+    private int CalculateExamPriority(ExamFailureRecord examFailure)
+    {
+        if (examFailure.ReviewedAt.HasValue) return 0;
+
+        // Higher priority for recent failures (users waiting for approval)
+        var age = (DateTimeOffset.UtcNow - examFailure.FailedAt).TotalHours;
+        return (int)(200 - age); // Higher base priority than reports
     }
 
     private async Task HandleSpamAction((Report Report, string Action) args)
@@ -353,10 +394,166 @@
         }
     }
 
-    // TODO Phase 2.9: Implement HandleImpersonationAction using unified ReviewsRepository
-    private Task HandleImpersonationAction((ImpersonationAlertRecord Alert, string Action) args)
+    private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, string Action) args)
     {
-        Snackbar.Add("Impersonation actions temporarily disabled - Phase 2.9 will implement unified reviews UI", Severity.Warning);
-        return Task.CompletedTask;
+        try
+        {
+            var executor = Actor.FromWebUser(_currentUserId);
+
+            switch (args.Action)
+            {
+                case "confirm":
+                    // Ban the suspected impersonator globally
+                    var banResult = await ModerationOrchestrator.BanUserAsync(
+                        userId: args.Alert.SuspectedUserId,
+                        messageId: null,
+                        executor: executor,
+                        reason: $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetDisplayName}");
+
+                    await ReviewsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Reviewed,
+                        _currentUserId,
+                        "confirm_scam",
+                        $"Confirmed impersonation, banned from {banResult.ChatsAffected} chats");
+
+                    Snackbar.Add($"Impersonation confirmed: User banned from {banResult.ChatsAffected} chats", Severity.Success);
+                    break;
+
+                case "dismiss":
+                    // Mark as false positive
+                    await ReviewsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Dismissed,
+                        _currentUserId,
+                        "false_positive",
+                        "Marked as false positive");
+
+                    Snackbar.Add("Alert dismissed as false positive", Severity.Info);
+                    break;
+
+                case "trust":
+                    // Trust the suspected user (they're legitimate)
+                    await ModerationOrchestrator.TrustUserAsync(
+                        args.Alert.SuspectedUserId,
+                        executor,
+                        $"Trusted after impersonation review #{args.Alert.Id}");
+
+                    await ReviewsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Dismissed,
+                        _currentUserId,
+                        "trust",
+                        "User trusted - not impersonation");
+
+                    Snackbar.Add("User marked as trusted", Severity.Success);
+                    break;
+
+                default:
+                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
+                    return;
+            }
+
+            await LoadReportsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error handling impersonation action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
+            Snackbar.Add($"Failed to process alert: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleExamAction((ExamFailureRecord ExamFailure, string Action) args)
+    {
+        try
+        {
+            var executor = Actor.FromWebUser(_currentUserId);
+
+            switch (args.Action)
+            {
+                case "approve":
+                    // Restore user permissions (they passed admin review)
+                    var restoreResult = await ModerationOrchestrator.RestoreUserPermissionsAsync(
+                        userId: args.ExamFailure.UserId,
+                        chatId: args.ExamFailure.ChatId,
+                        executor: executor,
+                        reason: $"Exam failure #{args.ExamFailure.Id} - manually approved after review");
+
+                    if (!restoreResult.Success)
+                    {
+                        Snackbar.Add($"Failed to restore permissions: {restoreResult.ErrorMessage}", Severity.Error);
+                        return;
+                    }
+
+                    await ReviewsRepository.UpdateStatusAsync(
+                        args.ExamFailure.Id,
+                        ReportStatus.Reviewed,
+                        _currentUserId,
+                        "approve",
+                        "Manually approved after exam failure");
+
+                    Snackbar.Add("User approved - permissions restored", Severity.Success);
+                    break;
+
+                case "deny":
+                    // Kick user from chat (they can re-join and try again)
+                    var kickResult = await ModerationOrchestrator.KickUserFromChatAsync(
+                        userId: args.ExamFailure.UserId,
+                        chatId: args.ExamFailure.ChatId,
+                        executor: executor,
+                        reason: $"Exam failure #{args.ExamFailure.Id} - denied after review");
+
+                    if (!kickResult.Success)
+                    {
+                        Snackbar.Add($"Failed to kick user: {kickResult.ErrorMessage}", Severity.Error);
+                        return;
+                    }
+
+                    await ReviewsRepository.UpdateStatusAsync(
+                        args.ExamFailure.Id,
+                        ReportStatus.Reviewed,
+                        _currentUserId,
+                        "deny",
+                        "Denied entry after exam review");
+
+                    Snackbar.Add("User denied - they can re-join to try again", Severity.Warning);
+                    break;
+
+                case "deny_ban":
+                    // Ban user globally (prevents repeat spam joins across all chats)
+                    var banResult = await ModerationOrchestrator.BanUserAsync(
+                        userId: args.ExamFailure.UserId,
+                        messageId: null,
+                        executor: executor,
+                        reason: $"Exam failure #{args.ExamFailure.Id} - denied and banned after review");
+
+                    if (!banResult.Success)
+                    {
+                        Snackbar.Add($"Failed to ban user: {banResult.ErrorMessage}", Severity.Error);
+                        return;
+                    }
+
+                    await ReviewsRepository.UpdateStatusAsync(
+                        args.ExamFailure.Id,
+                        ReportStatus.Reviewed,
+                        _currentUserId,
+                        "deny_ban",
+                        $"Denied and banned from {banResult.ChatsAffected} chats");
+
+                    Snackbar.Add($"User denied and banned from {banResult.ChatsAffected} chats", Severity.Error);
+                    break;
+
+                default:
+                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
+                    return;
+            }
+
+            await LoadReportsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error handling exam action {Action} for exam failure {ExamId}", args.Action, args.ExamFailure.Id);
+            Snackbar.Add($"Failed to process exam review: {ex.Message}", Severity.Error);
+        }
     }
 }

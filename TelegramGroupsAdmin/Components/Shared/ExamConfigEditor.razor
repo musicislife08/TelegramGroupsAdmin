@@ -1,0 +1,321 @@
+@using TelegramGroupsAdmin.Telegram.Models
+
+<MudPaper Class="pa-4" Elevation="0">
+    @* Multiple Choice Questions Section *@
+    <MudExpansionPanels MultiExpansion="true">
+        <MudExpansionPanel Text="Multiple Choice Questions" @bind-Expanded="_mcExpanded">
+            <TitleContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckBox" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle2">Multiple Choice Questions</MudText>
+                    @if (Config?.HasMcQuestions == true)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                            @Config.McQuestions.Count question(s)
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Optional</MudChip>
+                    }
+                </MudStack>
+            </TitleContent>
+            <ChildContent>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                    Add 1-4 questions. The first answer is always correct; others are wrong. Answers are shuffled when shown to users.
+                </MudText>
+
+                @if (Config != null)
+                {
+                    @for (var i = 0; i < Config.McQuestions.Count; i++)
+                    {
+                        var questionIndex = i;
+                        var question = Config.McQuestions[questionIndex];
+
+                        <MudPaper Class="pa-3 mb-3" Elevation="1" Outlined="true">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">Question @(questionIndex + 1)</MudText>
+                                <MudTooltip Text="Remove question">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                   Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => RemoveQuestion(questionIndex))" />
+                                </MudTooltip>
+                            </MudStack>
+
+                            <MudTextField @bind-Value="question.Question"
+                                          Label="Question"
+                                          Variant="Variant.Outlined"
+                                          Class="mb-3"
+                                          Immediate="true"
+                                          Placeholder="e.g., What is this group about?" />
+
+                            @for (var j = 0; j < question.Answers.Count; j++)
+                            {
+                                var answerIndex = j;
+                                var isCorrect = answerIndex == 0;
+
+                                <MudTextField Value="@question.Answers[answerIndex]"
+                                              ValueChanged="@((string val) => UpdateAnswer(questionIndex, answerIndex, val))"
+                                              Label="@(isCorrect ? "Correct Answer" : $"Wrong Answer {answerIndex + 1}")"
+                                              Variant="Variant.Outlined"
+                                              Class="mb-2"
+                                              Immediate="true"
+                                              Adornment="@(isCorrect ? Adornment.Start : Adornment.None)"
+                                              AdornmentIcon="@Icons.Material.Filled.Check"
+                                              AdornmentColor="Color.Success"
+                                              Placeholder="@(isCorrect ? "The correct answer" : "A wrong answer")" />
+                            }
+
+                            <MudStack Row="true" Spacing="2" Class="mt-2">
+                                @if (question.Answers.Count < 4)
+                                {
+                                    <MudButton Variant="Variant.Text"
+                                               Color="Color.Primary"
+                                               Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Add"
+                                               OnClick="@(() => AddAnswer(questionIndex))">
+                                        Add Wrong Answer
+                                    </MudButton>
+                                }
+                                @if (question.Answers.Count > 2)
+                                {
+                                    <MudButton Variant="Variant.Text"
+                                               Color="Color.Secondary"
+                                               Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Remove"
+                                               OnClick="@(() => RemoveLastAnswer(questionIndex))">
+                                        Remove Last Answer
+                                    </MudButton>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+
+                    @if (Config.McQuestions.Count < 4)
+                    {
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="AddQuestion"
+                                   Class="mt-2">
+                            Add Question
+                        </MudButton>
+                    }
+
+                    @if (Config.HasMcQuestions)
+                    {
+                        <MudDivider Class="my-3" />
+                        <MudNumericField @bind-Value="Config.McPassingThreshold"
+                                         Label="Passing Threshold (%)"
+                                         Min="1"
+                                         Max="100"
+                                         HelperText="Percentage of questions that must be answered correctly (e.g., 80% means 4 out of 5)" />
+                    }
+                }
+            </ChildContent>
+        </MudExpansionPanel>
+
+        @* Open-Ended Question Section *@
+        <MudExpansionPanel Text="Open-Ended Question" @bind-Expanded="_openEndedExpanded">
+            <TitleContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.TextFields" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle2">Open-Ended Question</MudText>
+                    @if (Config?.HasOpenEndedQuestion == true)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">Configured</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Optional</MudChip>
+                    }
+                </MudStack>
+            </TitleContent>
+            <ChildContent>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                    Ask a question that requires a text response. AI evaluates the answer based on criteria you define.
+                </MudText>
+
+                @if (Config != null)
+                {
+                    <MudTextField @bind-Value="Config.OpenEndedQuestion"
+                                  Label="Question"
+                                  Variant="Variant.Outlined"
+                                  Class="mb-3"
+                                  Immediate="true"
+                                  Placeholder="e.g., Why do you want to join this group?" />
+
+                    <MudTextField @bind-Value="Config.GroupTopic"
+                                  Label="Group Topic (for AI context)"
+                                  Variant="Variant.Outlined"
+                                  Class="mb-3"
+                                  Immediate="true"
+                                  HelperText="Describe what your group is about so AI can evaluate answers appropriately"
+                                  Placeholder="e.g., Technology support community for developers" />
+
+                    <MudTextField @bind-Value="Config.EvaluationCriteria"
+                                  Label="Evaluation Criteria"
+                                  Variant="Variant.Outlined"
+                                  Lines="6"
+                                  Class="mb-3"
+                                  Immediate="true"
+                                  HelperText="Define what makes an answer pass or fail. Leave blank to auto-generate."
+                                  Placeholder="PASS if answer:&#10;- Shows genuine interest in the topic&#10;- Demonstrates understanding of group purpose&#10;&#10;FAIL if answer:&#10;- Generic or very short response&#10;- Off-topic or promotional" />
+
+                    @if (!string.IsNullOrWhiteSpace(Config.OpenEndedQuestion) && !string.IsNullOrWhiteSpace(Config.GroupTopic))
+                    {
+                        <MudStack Row="true" Spacing="2">
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Secondary"
+                                       StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                       OnClick="GenerateCriteria"
+                                       Disabled="_generatingCriteria">
+                                @if (_generatingCriteria)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Generating...</span>
+                                }
+                                else
+                                {
+                                    <span>Generate Criteria with AI</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    }
+                }
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+    @* Validation Warning *@
+    @if (Config != null && !Config.IsValid)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-3">
+            At least one question type (multiple choice or open-ended) must be configured for the entrance exam.
+        </MudAlert>
+    }
+
+    @* Passing Requirements Info *@
+    @if (Config != null && Config.HasMcQuestions && Config.HasOpenEndedQuestion)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-3" Icon="@Icons.Material.Filled.Info">
+            When both question types are configured, users must pass <strong>both</strong> to gain access.
+        </MudAlert>
+    }
+</MudPaper>
+
+@code {
+    private bool _mcExpanded;
+    private bool _openEndedExpanded;
+    private bool _generatingCriteria;
+
+    [Parameter]
+    public ExamConfig? Config { get; set; }
+
+    [Parameter]
+    public EventCallback<ExamConfig?> ConfigChanged { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        // Ensure we have a config object to work with
+        if (Config == null)
+        {
+            Config = new ExamConfig();
+            ConfigChanged.InvokeAsync(Config);
+        }
+
+        // Set initial expansion state based on content
+        _mcExpanded = Config.HasMcQuestions;
+        _openEndedExpanded = Config.HasOpenEndedQuestion;
+    }
+
+    private void AddQuestion()
+    {
+        if (Config == null || Config.McQuestions.Count >= 4) return;
+
+        Config.McQuestions.Add(new ExamMcQuestion
+        {
+            Question = "",
+            Answers = ["", ""] // Start with correct + 1 wrong
+        });
+        _mcExpanded = true;
+        NotifyConfigChanged();
+    }
+
+    private void RemoveQuestion(int index)
+    {
+        if (Config == null || index < 0 || index >= Config.McQuestions.Count) return;
+
+        Config.McQuestions.RemoveAt(index);
+        NotifyConfigChanged();
+    }
+
+    private void AddAnswer(int questionIndex)
+    {
+        if (Config == null) return;
+        var question = Config.McQuestions[questionIndex];
+        if (question.Answers.Count >= 4) return;
+
+        question.Answers.Add("");
+        NotifyConfigChanged();
+    }
+
+    private void RemoveLastAnswer(int questionIndex)
+    {
+        if (Config == null) return;
+        var question = Config.McQuestions[questionIndex];
+        if (question.Answers.Count <= 2) return;
+
+        question.Answers.RemoveAt(question.Answers.Count - 1);
+        NotifyConfigChanged();
+    }
+
+    private void UpdateAnswer(int questionIndex, int answerIndex, string value)
+    {
+        if (Config == null) return;
+        Config.McQuestions[questionIndex].Answers[answerIndex] = value;
+        NotifyConfigChanged();
+    }
+
+    private async Task GenerateCriteria()
+    {
+        if (Config == null || string.IsNullOrWhiteSpace(Config.OpenEndedQuestion) || string.IsNullOrWhiteSpace(Config.GroupTopic))
+            return;
+
+        _generatingCriteria = true;
+        StateHasChanged();
+
+        try
+        {
+            // Generate default criteria based on the question and topic
+            // In a full implementation, this would call an AI service
+            Config.EvaluationCriteria = $"""
+                PASS if answer:
+                - Shows genuine interest in {Config.GroupTopic}
+                - Demonstrates understanding of the group's purpose
+                - Contains specific details (not just generic responses)
+                - Is at least 10 words long
+
+                FAIL if answer:
+                - Generic responses like "just looking", "hi", "yes"
+                - Completely off-topic or promotional content
+                - Under 5 words
+                - Contains spam indicators or suspicious links
+                """;
+
+            NotifyConfigChanged();
+        }
+        finally
+        {
+            _generatingCriteria = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NotifyConfigChanged()
+    {
+        ConfigChanged.InvokeAsync(Config);
+        StateHasChanged();
+    }
+}

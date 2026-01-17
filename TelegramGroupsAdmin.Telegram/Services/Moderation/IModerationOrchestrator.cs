@@ -183,4 +183,39 @@ public interface IModerationOrchestrator
         string reason,
         long? triggeredByMessageId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Restore user permissions to the chat's default permissions.
+    /// Used when approving users through welcome/exam flows.
+    /// </summary>
+    /// <param name="userId">The Telegram user ID to restore permissions for.</param>
+    /// <param name="chatId">The chat ID to restore permissions in.</param>
+    /// <param name="executor">The actor performing this action.</param>
+    /// <param name="reason">Reason for restoring permissions.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Result indicating success.</returns>
+    Task<ModerationResult> RestoreUserPermissionsAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string reason,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kick user from a specific chat (ban then immediately unban).
+    /// Does not affect other chats or create permanent ban record.
+    /// Used for welcome flow denials and exam failures.
+    /// </summary>
+    /// <param name="userId">The Telegram user ID to kick.</param>
+    /// <param name="chatId">The chat to kick the user from.</param>
+    /// <param name="executor">The actor performing this action.</param>
+    /// <param name="reason">Reason for the kick.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Result indicating success.</returns>
+    Task<ModerationResult> KickUserFromChatAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string reason,
+        CancellationToken cancellationToken = default);
 }

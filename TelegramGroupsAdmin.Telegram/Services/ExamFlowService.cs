@@ -371,12 +371,13 @@ public class ExamFlowService : IExamFlowService
             return new ExamAnswerResult(ExamComplete: true, Passed: true, SentToReview: false);
         }
 
-        // Create exam failure review
+        // Create exam failure review (include shuffle state for review display)
         var examFailure = new ExamFailureRecord
         {
             ChatId = session.ChatId,
             UserId = user.Id,
             McAnswers = session.McAnswers,
+            ShuffleState = session.ShuffleState,
             OpenEndedAnswer = session.OpenEndedAnswer,
             Score = mcScore,
             PassingThreshold = examConfig.McPassingThreshold,

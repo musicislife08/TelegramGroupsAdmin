@@ -284,6 +284,87 @@ public class ReviewsRepository : IReviewsRepository
         return entity?.ToModel();
     }
 
+    public async Task<Report?> GetReportAsync(long id, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var result = await (
+            from review in context.Reviews
+            where review.Id == id && review.Type == ReviewType.Report
+            join chat in context.ManagedChats on review.ChatId equals chat.ChatId into chatGroup
+            from c in chatGroup.DefaultIfEmpty()
+            select new
+            {
+                Review = review,
+                ChatName = c != null ? c.ChatName : null
+            }
+        )
+        .AsNoTracking()
+        .FirstOrDefaultAsync(cancellationToken);
+
+        if (result == null)
+            return null;
+
+        return await HydrateReportAsync(context, result.Review, result.ChatName, cancellationToken);
+    }
+
+    public async Task<List<Report>> GetReportsAsync(
+        long? chatId = null,
+        ReportStatus? status = null,
+        int limit = 100,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.Reviews
+            .AsNoTracking()
+            .Where(r => r.Type == ReviewType.Report);
+
+        if (chatId.HasValue)
+            query = query.Where(r => r.ChatId == chatId.Value);
+
+        if (status.HasValue)
+            query = query.Where(r => r.Status == status.Value);
+
+        var results = await (
+            from review in query
+            join chat in context.ManagedChats on review.ChatId equals chat.ChatId into chatGroup
+            from c in chatGroup.DefaultIfEmpty()
+            orderby review.ReportedAt descending
+            select new
+            {
+                Review = review,
+                ChatName = c != null ? c.ChatName : null
+            }
+        )
+        .Skip(offset)
+        .Take(limit)
+        .ToListAsync(cancellationToken);
+
+        var reports = new List<Report>();
+        foreach (var r in results)
+        {
+            var report = await HydrateReportAsync(context, r.Review, r.ChatName, cancellationToken);
+            if (report != null)
+                reports.Add(report);
+        }
+
+        return reports;
+    }
+
+    public async Task<List<Report>> GetPendingReportsAsync(
+        long? chatId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await GetReportsAsync(
+            chatId: chatId,
+            status: DataModels.ReportStatus.Pending,
+            limit: 100,
+            offset: 0,
+            cancellationToken: cancellationToken);
+    }
+
     // ============================================================
     // ImpersonationAlert-specific operations (Type = ImpersonationAlert)
     // ============================================================
@@ -537,6 +618,20 @@ public class ReviewsRepository : IReviewsRepository
     // ============================================================
     // Private helper methods
     // ============================================================
+
+    private Task<Report?> HydrateReportAsync(
+        AppDbContext context,
+        ReviewDto entity,
+        string? chatName,
+        CancellationToken cancellationToken)
+    {
+        // Report model doesn't need additional hydration - all data is in ReviewDto columns
+        // ChatName is available but Report model doesn't have that field currently
+        _ = context;
+        _ = chatName;
+        _ = cancellationToken;
+        return Task.FromResult<Report?>(entity.ToModel());
+    }
 
     private async Task<ImpersonationAlertRecord?> HydrateImpersonationAlertAsync(
         AppDbContext context,

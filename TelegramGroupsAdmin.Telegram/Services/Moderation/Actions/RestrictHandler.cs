@@ -134,6 +134,58 @@ public class RestrictHandler : IRestrictHandler
         return RestrictResult.Succeeded(chatsAffected: ModerationConstants.SingleChatSuccess, expiresAt, chatsFailed: ModerationConstants.NoFailures);
     }
 
+    /// <inheritdoc />
+    public async Task<RestrictResult> RestorePermissionsAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+
+        _logger.LogDebug(
+            "Restoring permissions for user {User} in {Chat} by {Executor}",
+            user.ToLogDebug(userId), chat.ToLogDebug(chatId), executor.GetDisplayText());
+
+        try
+        {
+            var operations = await _botClientFactory.GetOperationsAsync();
+
+            // Get the chat's default permissions
+            var chatDetails = await operations.GetChatAsync(chatId, cancellationToken);
+            var defaultPermissions = chatDetails.Permissions ?? CreateDefaultPermissions();
+
+            _logger.LogDebug(
+                "Restoring {User} to {Chat} default permissions: Messages={CanSendMessages}, Media={CanSendPhotos}",
+                user.ToLogDebug(userId), chat.ToLogDebug(chatId),
+                defaultPermissions.CanSendMessages, defaultPermissions.CanSendPhotos);
+
+            await operations.RestrictChatMemberAsync(
+                chatId: chatId,
+                userId: userId,
+                permissions: defaultPermissions,
+                cancellationToken: cancellationToken);
+
+            _logger.LogInformation(
+                "Restored permissions for {User} in {Chat}",
+                user.ToLogInfo(userId), chat.ToLogInfo(chatId));
+
+            return RestrictResult.Succeeded(
+                chatsAffected: ModerationConstants.SingleChatSuccess,
+                expiresAt: null,
+                chatsFailed: ModerationConstants.NoFailures);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restore permissions for user {User} in {Chat}",
+                user.ToLogDebug(userId), chat.ToLogDebug(chatId));
+            return RestrictResult.Failed(ex.Message);
+        }
+    }
+
     /// <summary>
     /// Create full mute permissions (all permissions disabled).
     /// </summary>
@@ -151,6 +203,28 @@ public class RestrictHandler : IRestrictHandler
         CanAddWebPagePreviews = false,
         CanChangeInfo = false,
         CanInviteUsers = false,
+        CanPinMessages = false,
+        CanManageTopics = false
+    };
+
+    /// <summary>
+    /// Create default permissions (standard member permissions).
+    /// Used as fallback when chat doesn't have explicit default permissions.
+    /// </summary>
+    private static ChatPermissions CreateDefaultPermissions() => new()
+    {
+        CanSendMessages = true,
+        CanSendAudios = true,
+        CanSendDocuments = true,
+        CanSendPhotos = true,
+        CanSendVideos = true,
+        CanSendVideoNotes = true,
+        CanSendVoiceNotes = true,
+        CanSendPolls = true,
+        CanSendOtherMessages = true,
+        CanAddWebPagePreviews = true,
+        CanChangeInfo = false,
+        CanInviteUsers = true,
         CanPinMessages = false,
         CanManageTopics = false
     };

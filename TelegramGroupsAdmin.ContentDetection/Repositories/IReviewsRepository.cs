@@ -87,6 +87,28 @@ public interface IReviewsRepository
     Task<long> InsertReportAsync(Report report, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get report by ID with full context.
+    /// </summary>
+    Task<Report?> GetReportAsync(long id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get reports with optional filters.
+    /// </summary>
+    Task<List<Report>> GetReportsAsync(
+        long? chatId = null,
+        ReportStatus? status = null,
+        int limit = 100,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get pending reports, optionally filtered by chat.
+    /// </summary>
+    Task<List<Report>> GetPendingReportsAsync(
+        long? chatId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Check if a message already has a pending report (duplicate prevention).
     /// </summary>
     Task<Report?> GetExistingPendingReportAsync(

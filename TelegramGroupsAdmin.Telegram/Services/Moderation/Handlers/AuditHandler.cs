@@ -112,6 +112,32 @@ public class AuditHandler : IAuditHandler
         LogRecorded(UserActionType.Mute, user, userId, executor);
     }
 
+    /// <inheritdoc />
+    public async Task LogRestorePermissionsAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default)
+    {
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+        var record = CreateRecord(userId, UserActionType.RestorePermissions, executor, reason);
+        await _userActionsRepository.InsertAsync(record, cancellationToken);
+
+        _logger.LogDebug(
+            "Recorded {ActionType} action for {User} in {Chat} by {Executor}",
+            UserActionType.RestorePermissions, user.ToLogDebug(userId), chat.ToLogDebug(chatId), executor.GetDisplayText());
+    }
+
+    /// <inheritdoc />
+    public async Task LogKickAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default)
+    {
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+        var record = CreateRecord(userId, UserActionType.Kick, executor, reason);
+        await _userActionsRepository.InsertAsync(record, cancellationToken);
+
+        _logger.LogDebug(
+            "Recorded {ActionType} action for {User} in {Chat} by {Executor}",
+            UserActionType.Kick, user.ToLogDebug(userId), chat.ToLogDebug(chatId), executor.GetDisplayText());
+    }
+
     private static UserActionRecord CreateRecord(
         long userId,
         UserActionType actionType,

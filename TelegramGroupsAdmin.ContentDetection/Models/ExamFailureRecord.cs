@@ -17,6 +17,13 @@ public record ExamFailureRecord
     public Dictionary<int, string>? McAnswers { get; init; }
 
     /// <summary>
+    /// Shuffle state for each question (maps display position to original answer index).
+    /// Key = question index, Value = array of original indices in display order.
+    /// Example: [2, 0, 1, 3] means position 0 (A) shows original answer 2, position 1 (B) shows original answer 0 (correct), etc.
+    /// </summary>
+    public Dictionary<int, int[]>? ShuffleState { get; init; }
+
+    /// <summary>
     /// User's response to the open-ended question (if configured).
     /// </summary>
     public string? OpenEndedAnswer { get; init; }

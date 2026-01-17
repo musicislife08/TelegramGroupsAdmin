@@ -49,6 +49,15 @@
                                 Faster onboarding, rules visible to all. Shows Accept/Deny buttons in chat.
                             </MudText>
                         </MudRadio>
+
+                        <MudRadio Value="@WelcomeMode.EntranceExam" Color="Color.Primary" Class="mt-2">
+                            <MudText>
+                                <strong>Entrance Exam</strong> - User must pass a quiz to join
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-6">
+                                Strongest protection against spam. Multiple choice questions and/or AI-evaluated open-ended response.
+                            </MudText>
+                        </MudRadio>
                     </MudRadioGroup>
                 </MudItem>
 
@@ -187,6 +196,24 @@
                                       Label="DM Button Text"
                                       Immediate="true"
                                       HelperText="Button text in chat teaser (DM mode only)" />
+                    </MudItem>
+                }
+
+                @* Entrance Exam Configuration - Only shown for EntranceExam mode *@
+                @if (_config.Mode == WelcomeMode.EntranceExam)
+                {
+                    <MudItem xs="12">
+                        <MudDivider Class="my-2" />
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Quiz" Size="Size.Small" Class="mr-1" />
+                            Entrance Exam Configuration
+                        </MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                            Configure questions that new members must answer correctly to join. At least one question type is required.
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <ExamConfigEditor @bind-Config="_config.ExamConfig" />
                     </MudItem>
                 }
 
