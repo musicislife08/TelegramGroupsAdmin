@@ -1,12 +1,14 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Telegram.Extensions
+@using TelegramGroupsAdmin.Telegram.Models
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @implements IAsyncDisposable
 
-<MudPaper Class="pa-4" Elevation="@(ChatId.HasValue ? 0 : 1)">
-    @if (!ChatId.HasValue)
+<MudPaper Class="pa-4" Elevation="@(Chat != null ? 0 : 1)">
+    @if (Chat == null)
     {
         <MudText Typo="Typo.h6" GutterBottom="true">Welcome Message System</MudText>
         <MudText Typo="Typo.body2" Class="mb-4">
@@ -213,11 +215,11 @@
                         </MudText>
                     </MudItem>
                     <MudItem xs="12">
-                        <ExamConfigEditor @bind-Config="_config.ExamConfig" />
+                        <ExamConfigEditor Chat="Chat" @bind-Config="_config.ExamConfig" />
                     </MudItem>
                 }
 
-                @if (!ChatId.HasValue)
+                @if (Chat == null)
                 {
                     <MudItem xs="12" Class="d-flex justify-space-between">
                         <MudButton Variant="Variant.Filled"
@@ -253,10 +255,10 @@
 
 @code {
     /// <summary>
-    /// Optional chat ID for per-chat configuration. If null, uses global configuration.
+    /// Optional chat for per-chat configuration. If null, uses global configuration.
     /// </summary>
     [Parameter]
-    public long? ChatId { get; set; }
+    public ManagedChatRecord? Chat { get; set; }
 
     /// <summary>
     /// Optional callback when configuration is saved (for per-chat mode)
@@ -292,7 +294,7 @@
         try
         {
             // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
-            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, ChatId ?? 0);
+            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, Chat?.ChatId ?? 0);
 
             if (config == null)
             {
@@ -351,10 +353,8 @@
         _saving = true;
         try
         {
-            // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
-            await ConfigService.SaveAsync(ConfigType.Welcome, ChatId ?? 0, _config);
-            var scope = ChatId.HasValue ? $"for chat {ChatId}" : "globally";
-            Snackbar.Add($"Welcome configuration saved {scope}", Severity.Success);
+            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.ChatId ?? 0, _config, Chat?.ToLogInfo());
+            Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.ToLogInfo()}" : "globally")}", Severity.Success);
 
             // Invoke callback if provided
             if (OnSaved.HasDelegate)

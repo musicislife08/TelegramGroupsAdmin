@@ -1,4 +1,7 @@
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Extensions
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="0">
     @* Multiple Choice Questions Section *@
@@ -169,16 +172,14 @@
                             <MudButton Variant="Variant.Outlined"
                                        Color="Color.Secondary"
                                        StartIcon="@Icons.Material.Filled.AutoAwesome"
-                                       OnClick="GenerateCriteria"
-                                       Disabled="_generatingCriteria">
-                                @if (_generatingCriteria)
+                                       OnClick="GenerateCriteria">
+                                @if (string.IsNullOrWhiteSpace(Config.EvaluationCriteria))
                                 {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                                    <span>Generating...</span>
+                                    <span>Generate Criteria with AI</span>
                                 }
                                 else
                                 {
-                                    <span>Generate Criteria with AI</span>
+                                    <span>Edit Criteria with AI</span>
                                 }
                             </MudButton>
                         </MudStack>
@@ -208,7 +209,12 @@
 @code {
     private bool _mcExpanded;
     private bool _openEndedExpanded;
-    private bool _generatingCriteria;
+
+    /// <summary>
+    /// The chat this configuration is for. Null for global default.
+    /// </summary>
+    [Parameter]
+    public ManagedChatRecord? Chat { get; set; }
 
     [Parameter]
     public ExamConfig? Config { get; set; }
@@ -283,33 +289,35 @@
         if (Config == null || string.IsNullOrWhiteSpace(Config.OpenEndedQuestion) || string.IsNullOrWhiteSpace(Config.GroupTopic))
             return;
 
-        _generatingCriteria = true;
-        StateHasChanged();
-
-        try
+        var parameters = new DialogParameters<ExamCriteriaBuilderDialog>
         {
-            // Generate default criteria based on the question and topic
-            // In a full implementation, this would call an AI service
-            Config.EvaluationCriteria = $"""
-                PASS if answer:
-                - Shows genuine interest in {Config.GroupTopic}
-                - Demonstrates understanding of the group's purpose
-                - Contains specific details (not just generic responses)
-                - Is at least 10 words long
+            { x => x.Chat, Chat },
+            { x => x.Question, Config.OpenEndedQuestion },
+            { x => x.GroupTopic, Config.GroupTopic },
+            { x => x.ExistingCriteria, Config.EvaluationCriteria }
+        };
 
-                FAIL if answer:
-                - Generic responses like "just looking", "hi", "yes"
-                - Completely off-topic or promotional content
-                - Under 5 words
-                - Contains spam indicators or suspicious links
-                """;
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
 
+        var dialog = await DialogService.ShowAsync<ExamCriteriaBuilderDialog>(
+            "Generate Evaluation Criteria",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string generatedCriteria })
+        {
+            Config.EvaluationCriteria = generatedCriteria;
             NotifyConfigChanged();
-        }
-        finally
-        {
-            _generatingCriteria = false;
-            StateHasChanged();
+
+            var chatContext = Chat != null ? $" for {Chat.ToLogInfo()}" : "";
+            Snackbar.Add($"Evaluation criteria saved{chatContext}!", Severity.Success);
         }
     }
 

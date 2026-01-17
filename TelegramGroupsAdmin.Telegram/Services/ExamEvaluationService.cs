@@ -55,29 +55,44 @@ public class ExamEvaluationService : IExamEvaluationService
             var systemPrompt = """
                 You are an entrance exam evaluator for an online community.
                 Your job is to determine if a user's answer demonstrates genuine interest in joining the group.
-                Evaluate answers fairly but firmly - the goal is to filter out spammers and bots while accepting genuine users.
-                Always respond with ONLY raw JSON, no markdown code blocks.
-                """;
 
-            var userPrompt = $"""
-                Evaluate this entrance exam answer for a group about: {groupTopic}
+                IMPORTANT CONTEXT:
+                - This is a ONE-SHOT evaluation, not a conversation
+                - The user submitted their answer once with no chance for follow-up or clarification
+                - If you mark as failed, the user goes to a human review queue (not auto-rejected)
+                - Be fair for a single attempt - give benefit of the doubt for minor issues
 
-                QUESTION: {question}
-
-                USER'S ANSWER: {userAnswer}
-
-                EVALUATION CRITERIA:
-                {evaluationCriteria}
-
-                Respond with a JSON object containing:
-                1. "passed": boolean - true if the answer meets the criteria, false otherwise
-                2. "reasoning": string - brief explanation of your decision (1-2 sentences)
-                3. "confidence": number - your confidence in this decision (0.0 to 1.0)
+                You must respond with valid JSON in this exact format:
+                {
+                  "passed": true or false,
+                  "reasoning": "brief explanation of your decision (1-2 sentences)",
+                  "confidence": 0.0 to 1.0
+                }
 
                 Be fair but firm. Accept answers that show genuine effort even if imperfect.
                 Reject generic, off-topic, or bot-like responses.
+                """;
 
-                IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown code blocks.
+            var userPrompt = $"""
+                Evaluate this entrance exam answer.
+
+                <group_context>
+                  <topic>{groupTopic}</topic>
+                </group_context>
+
+                <exam_question>
+                {question}
+                </exam_question>
+
+                <user_answer>
+                {userAnswer}
+                </user_answer>
+
+                <evaluation_criteria>
+                {evaluationCriteria}
+                </evaluation_criteria>
+
+                Respond with JSON matching the format specified in the system prompt.
                 """;
 
             var options = new ChatCompletionOptions

@@ -98,9 +98,21 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     [Test]
     public void HidesTitle_WhenChatMode()
     {
-        // Arrange & Act - With ChatId means per-chat mode
+        // Arrange & Act - With Chat means per-chat mode
+        var testChat = new ManagedChatRecord(
+            ChatId: 123456L,
+            ChatName: "Test Chat",
+            ChatType: ManagedChatType.Supergroup,
+            BotStatus: BotChatStatus.Administrator,
+            IsAdmin: true,
+            AddedAt: DateTimeOffset.UtcNow,
+            IsActive: true,
+            IsDeleted: false,
+            LastSeenAt: null,
+            SettingsJson: null,
+            ChatIconPath: null);
         var cut = Render<WelcomeSystemConfig>(p => p
-            .Add(x => x.ChatId, 123456L));
+            .Add(x => x.Chat, testChat));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -413,9 +425,21 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     [Test]
     public void HidesSaveButtons_ChatMode()
     {
-        // Arrange & Act - Per-chat mode (has ChatId)
+        // Arrange & Act - Per-chat mode (has Chat)
+        var testChat = new ManagedChatRecord(
+            ChatId: 123456L,
+            ChatName: "Test Chat",
+            ChatType: ManagedChatType.Supergroup,
+            BotStatus: BotChatStatus.Administrator,
+            IsAdmin: true,
+            AddedAt: DateTimeOffset.UtcNow,
+            IsActive: true,
+            IsDeleted: false,
+            LastSeenAt: null,
+            SettingsJson: null,
+            ChatIconPath: null);
         var cut = Render<WelcomeSystemConfig>(p => p
-            .Add(x => x.ChatId, 123456L));
+            .Add(x => x.Chat, testChat));
 
         // Assert - Buttons should be hidden in per-chat mode
         cut.WaitForAssertion(() =>

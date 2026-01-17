@@ -1,0 +1,244 @@
+@using TelegramGroupsAdmin.Services.ExamCriteriaBuilder
+@using TelegramGroupsAdmin.Telegram.Models
+@inject IExamCriteriaBuilderService CriteriaBuilderService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (_isGenerating)
+            {
+                <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-4">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+                    <MudText Typo="Typo.body1">Generating evaluation criteria with AI...</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        This may take 10-30 seconds
+                    </MudText>
+                </MudStack>
+            }
+            else if (_generatedCriteria != null)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true">
+                    Criteria generated successfully! Review and save to use.
+                </MudAlert>
+
+                <MudTextField @bind-Value="_generatedCriteria"
+                             Label="Generated Evaluation Criteria"
+                             Lines="12"
+                             Variant="Variant.Outlined"
+                             HelperText="You can edit the generated criteria before saving" />
+
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@SaveCriteria" Class="flex-grow-1">
+                        Use These Criteria
+                    </MudButton>
+                    <MudButton Color="Color.Secondary" Variant="Variant.Outlined" OnClick="@ShowImproveDialog" StartIcon="@Icons.Material.Filled.AutoFixHigh">
+                        Improve With AI
+                    </MudButton>
+                </MudStack>
+                <MudButton Color="Color.Default" Variant="Variant.Text" OnClick="@StartOver" FullWidth="true">
+                    Start Over
+                </MudButton>
+            }
+            else
+            {
+                <MudText Typo="Typo.h6" Color="Color.Primary">AI-Powered Criteria Builder</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Let AI help you create evaluation criteria tailored to your group's entrance question.
+                </MudText>
+
+                <MudTextField Value="@Question"
+                             Label="Question"
+                             Variant="Variant.Outlined"
+                             Disabled="true"
+                             HelperText="The open-ended question you're creating criteria for" />
+
+                <MudTextField Value="@GroupTopic"
+                             Label="Group Topic"
+                             Variant="Variant.Outlined"
+                             Disabled="true"
+                             HelperText="Context about what your group is about" />
+
+                <MudTextField @bind-Value="_request.GoodAnswerHints"
+                             Label="What Makes a Good Answer (Optional)"
+                             Lines="3"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., Mentions specific interests in the topic, shows they read the rules"
+                             HelperText="Describe what you're looking for in passing answers" />
+
+                <MudTextField @bind-Value="_request.FailureIndicators"
+                             Label="Red Flags to Reject (Optional)"
+                             Lines="3"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., One-word answers, promotional content, asking to buy/sell"
+                             HelperText="Describe patterns that should fail" />
+
+                <MudSelect @bind-Value="_request.Strictness"
+                          Label="Strictness Level"
+                          Variant="Variant.Outlined"
+                          HelperText="How strict should the evaluation be?">
+                    <MudSelectItem Value="@ExamStrictnessLevel.Lenient">
+                        Lenient (Accept most genuine attempts)
+                    </MudSelectItem>
+                    <MudSelectItem Value="@ExamStrictnessLevel.Balanced">
+                        Balanced (Require reasonable effort)
+                    </MudSelectItem>
+                    <MudSelectItem Value="@ExamStrictnessLevel.Strict">
+                        Strict (Require detailed, thoughtful answers)
+                    </MudSelectItem>
+                </MudSelect>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <MudText Typo="Typo.caption">
+                        The AI will generate specific PASS/FAIL criteria based on your question and group context.
+                        You can refine the generated criteria before saving.
+                    </MudText>
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel" Disabled="@_isGenerating">Cancel</MudButton>
+        @if (_generatedCriteria == null && !_isGenerating)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@GenerateCriteria" Disabled="@(!IsValid())">
+                Generate Criteria
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The chat this configuration is for. Null for global default.
+    /// </summary>
+    [Parameter] public ManagedChatRecord? Chat { get; set; }
+
+    /// <summary>
+    /// The open-ended question being asked.
+    /// </summary>
+    [Parameter] public string Question { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The group topic for context.
+    /// </summary>
+    [Parameter] public string GroupTopic { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Existing criteria to start from (for editing).
+    /// </summary>
+    [Parameter] public string? ExistingCriteria { get; set; }
+
+    private ExamCriteriaBuilderRequest _request = new();
+    private string? _generatedCriteria;
+    private bool _isGenerating;
+
+    protected override void OnInitialized()
+    {
+        _request.Chat = Chat;
+        _request.Question = Question;
+        _request.GroupTopic = GroupTopic;
+        _request.Strictness = ExamStrictnessLevel.Balanced;
+
+        // If we have existing criteria, show it for editing
+        if (!string.IsNullOrWhiteSpace(ExistingCriteria))
+        {
+            _generatedCriteria = ExistingCriteria;
+        }
+    }
+
+    private bool IsValid()
+    {
+        return !string.IsNullOrWhiteSpace(Question) &&
+               !string.IsNullOrWhiteSpace(GroupTopic);
+    }
+
+    private async Task GenerateCriteria()
+    {
+        _isGenerating = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await CriteriaBuilderService.GenerateCriteriaAsync(_request);
+
+            if (response.Success)
+            {
+                _generatedCriteria = response.GeneratedCriteria;
+                Snackbar.Add("Criteria generated successfully!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to generate criteria: {response.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating criteria: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SaveCriteria()
+    {
+        if (string.IsNullOrWhiteSpace(_generatedCriteria))
+        {
+            Snackbar.Add("No criteria to save", Severity.Warning);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(_generatedCriteria));
+    }
+
+    private void StartOver()
+    {
+        _generatedCriteria = null;
+        _request = new ExamCriteriaBuilderRequest
+        {
+            Chat = Chat,
+            Question = Question,
+            GroupTopic = GroupTopic,
+            Strictness = ExamStrictnessLevel.Balanced
+        };
+    }
+
+    private async Task ShowImproveDialog()
+    {
+        if (string.IsNullOrWhiteSpace(_generatedCriteria)) return;
+
+        var parameters = new DialogParameters<ExamCriteriaImprovementDialog>
+        {
+            { x => x.CurrentCriteria, _generatedCriteria },
+            { x => x.Chat, Chat }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ExamCriteriaImprovementDialog>(
+            "Improve Criteria",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string improvedCriteria })
+        {
+            _generatedCriteria = improvedCriteria;
+            Snackbar.Add("Criteria improved! Review and save when ready.", Severity.Success);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

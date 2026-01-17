@@ -141,6 +141,9 @@ public static class ServiceCollectionExtensions
             // Prompt builder service (Phase 4.X: AI-powered prompt generation)
             services.AddScoped<Services.PromptBuilder.IPromptBuilderService, Services.PromptBuilder.PromptBuilderService>();
 
+            // Exam criteria builder service (Phase 2: Entrance exam evaluation criteria generation)
+            services.AddScoped<Services.ExamCriteriaBuilder.IExamCriteriaBuilderService, Services.ExamCriteriaBuilder.ExamCriteriaBuilderService>();
+
             // Backup services (replaces old UserDataExportService)
             services.AddBackupServices();
 
