@@ -222,8 +222,8 @@
                 });
             }
 
-            // Load impersonation alerts
-            var alerts = await ReportsRepository.GetPendingImpersonationAlertsAsync();
+            // Load all impersonation alerts (filter by status is done client-side in ApplyFilters)
+            var alerts = await ReportsRepository.GetImpersonationAlertsAsync(pendingOnly: false);
             foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.ChatId)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -241,8 +241,8 @@
                 });
             }
 
-            // Load exam failures
-            var examFailures = await ReportsRepository.GetPendingExamFailuresAsync();
+            // Load all exam failures (filter by status is done client-side in ApplyFilters)
+            var examFailures = await ReportsRepository.GetExamFailuresAsync(pendingOnly: false);
             foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.ChatId)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -465,6 +465,9 @@
 
     private async Task HandleExamAction((ExamFailureRecord ExamFailure, string Action) args)
     {
+        Logger.LogInformation("HandleExamAction called: Action={Action}, ExamFailureId={Id}, UserId={UserId}",
+            args.Action, args.ExamFailure.Id, args.ExamFailure.UserId);
+
         try
         {
             var executor = Actor.FromWebUser(_currentUserId);
@@ -472,12 +475,18 @@
             switch (args.Action)
             {
                 case "approve":
+                    Logger.LogInformation("Calling RestoreUserPermissionsAsync for user {UserId} in chat {ChatId}",
+                        args.ExamFailure.UserId, args.ExamFailure.ChatId);
+
                     // Restore user permissions (they passed admin review)
                     var restoreResult = await ModerationOrchestrator.RestoreUserPermissionsAsync(
                         userId: args.ExamFailure.UserId,
                         chatId: args.ExamFailure.ChatId,
                         executor: executor,
                         reason: $"Exam failure #{args.ExamFailure.Id} - manually approved after review");
+
+                    Logger.LogInformation("RestoreUserPermissionsAsync returned: Success={Success}, Error={Error}",
+                        restoreResult.Success, restoreResult.ErrorMessage);
 
                     if (!restoreResult.Success)
                     {

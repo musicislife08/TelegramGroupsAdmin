@@ -431,16 +431,19 @@ public class ReportsRepository : IReportsRepository
         return await HydrateImpersonationAlertAsync(context, entity, cancellationToken);
     }
 
-    public async Task<List<ImpersonationAlertRecord>> GetPendingImpersonationAlertsAsync(
+    public async Task<List<ImpersonationAlertRecord>> GetImpersonationAlertsAsync(
         long? chatId = null,
+        bool pendingOnly = true,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var query = context.Reports
             .AsNoTracking()
-            .Where(r => r.Type == (short)ReportType.ImpersonationAlert)
-            .Where(r => r.Status == (int)ReportStatus.Pending);
+            .Where(r => r.Type == (short)ReportType.ImpersonationAlert);
+
+        if (pendingOnly)
+            query = query.Where(r => r.Status == (int)ReportStatus.Pending);
 
         if (chatId.HasValue)
             query = query.Where(r => r.ChatId == chatId.Value);
@@ -578,16 +581,23 @@ public class ReportsRepository : IReportsRepository
         return await HydrateExamFailureAsync(context, result.Report, result.ChatName, cancellationToken);
     }
 
-    public async Task<List<ExamFailureRecord>> GetPendingExamFailuresAsync(
+    public async Task<List<ExamFailureRecord>> GetExamFailuresAsync(
         long? chatId = null,
+        bool pendingOnly = true,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
+        _logger.LogInformation(
+            "GetExamFailuresAsync called: chatId={ChatId}, pendingOnly={PendingOnly}",
+            chatId, pendingOnly);
+
         var query = context.Reports
             .AsNoTracking()
-            .Where(r => r.Type == (short)ReportType.ExamFailure)
-            .Where(r => r.Status == (int)ReportStatus.Pending);
+            .Where(r => r.Type == (short)ReportType.ExamFailure);
+
+        if (pendingOnly)
+            query = query.Where(r => r.Status == (int)ReportStatus.Pending);
 
         if (chatId.HasValue)
             query = query.Where(r => r.ChatId == chatId.Value);
@@ -604,6 +614,17 @@ public class ReportsRepository : IReportsRepository
             }
         ).ToListAsync(cancellationToken);
 
+        _logger.LogInformation(
+            "GetExamFailuresAsync: found {Count} raw results from database",
+            results.Count);
+
+        foreach (var r in results)
+        {
+            _logger.LogInformation(
+                "  - Report Id={Id}, Status={Status}, ChatId={ChatId}, ReviewedAt={ReviewedAt}",
+                r.Report.Id, r.Report.Status, r.Report.ChatId, r.Report.ReviewedAt);
+        }
+
         var records = new List<ExamFailureRecord>();
         foreach (var r in results)
         {
@@ -611,6 +632,10 @@ public class ReportsRepository : IReportsRepository
             if (record != null)
                 records.Add(record);
         }
+
+        _logger.LogInformation(
+            "GetExamFailuresAsync: returning {Count} hydrated records",
+            records.Count);
 
         return records;
     }

@@ -482,7 +482,7 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetPendingExamFailuresAsync_ReturnsOnlyPending()
+    public async Task GetExamFailuresAsync_WithPendingOnly_ReturnsOnlyPending()
     {
         // Arrange
         var pending1 = CreateTestExamFailure(userId: 1);
@@ -499,7 +499,7 @@ public class ReportsRepositoryTests
             actionTaken: "Approved");
 
         // Act
-        var pending = await _repository.GetPendingExamFailuresAsync();
+        var pending = await _repository.GetExamFailuresAsync(pendingOnly: true);
 
         // Assert - only the unreviewed one
         Assert.That(pending, Has.Count.EqualTo(1));
@@ -507,7 +507,31 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetPendingExamFailuresAsync_FiltersByChatId()
+    public async Task GetExamFailuresAsync_WithPendingOnlyFalse_ReturnsAll()
+    {
+        // Arrange
+        var pending1 = CreateTestExamFailure(userId: 1);
+        var pending2 = CreateTestExamFailure(userId: 2);
+
+        var id1 = await _repository!.InsertExamFailureAsync(pending1);
+        await _repository.InsertExamFailureAsync(pending2);
+
+        // Mark first as reviewed
+        await _repository.TryUpdateStatusAsync(
+            id1,
+            ReportStatus.Reviewed,
+            reviewedBy: "admin@test.com",
+            actionTaken: "Approved");
+
+        // Act
+        var all = await _repository.GetExamFailuresAsync(pendingOnly: false);
+
+        // Assert - both items returned
+        Assert.That(all, Has.Count.EqualTo(2));
+    }
+
+    [Test]
+    public async Task GetExamFailuresAsync_FiltersByChatId()
     {
         // Arrange
         const long targetChatId = -1001111111111;
@@ -517,7 +541,7 @@ public class ReportsRepositoryTests
         await _repository.InsertExamFailureAsync(CreateTestExamFailure(chatId: -1002222222222, userId: 3));
 
         // Act
-        var pending = await _repository.GetPendingExamFailuresAsync(chatId: targetChatId);
+        var pending = await _repository.GetExamFailuresAsync(chatId: targetChatId);
 
         // Assert
         Assert.That(pending, Has.Count.EqualTo(2));
@@ -664,7 +688,7 @@ public class ReportsRepositoryTests
     }
 
     [Test]
-    public async Task GetPendingImpersonationAlertsAsync_OrdersByRiskLevelThenDate()
+    public async Task GetImpersonationAlertsAsync_OrdersByRiskLevelThenDate()
     {
         // Arrange - insert in random order (Medium=0, Critical=1)
         await _repository!.InsertImpersonationAlertAsync(
@@ -675,7 +699,7 @@ public class ReportsRepositoryTests
             CreateTestImpersonationAlert(suspectedUserId: 3, riskLevel: ImpersonationRiskLevel.Medium));
 
         // Act
-        var pending = await _repository.GetPendingImpersonationAlertsAsync();
+        var pending = await _repository.GetImpersonationAlertsAsync(pendingOnly: true);
 
         // Assert - should be ordered by risk level (Critical first, then by detection date)
         Assert.That(pending, Has.Count.EqualTo(3));

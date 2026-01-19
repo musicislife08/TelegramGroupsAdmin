@@ -10,10 +10,12 @@ using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
@@ -43,6 +45,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly ITelegramConfigLoader _mockTelegramConfigLoader;
     private readonly ITelegramBotClient _mockTelegramBotClient;
     private readonly ITelegramBotClientFactory _mockTelegramBotClientFactory;
+    private readonly IModerationOrchestrator _mockModerationOrchestrator;
 
     public TestWebApplicationFactory(string? databaseName = null)
     {
@@ -82,6 +85,20 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _mockTelegramBotClientFactory.GetOperationsAsync()
             .Returns(_ => Task.FromResult<ITelegramOperations>(
                 new TelegramOperations(_mockTelegramBotClient, NullLogger<TelegramOperations>.Instance)));
+
+        // Mock IModerationOrchestrator - returns success for all moderation actions
+        // (E2E tests don't have a real Telegram bot, so we mock the orchestrator)
+        _mockModerationOrchestrator = Substitute.For<IModerationOrchestrator>();
+        var successResult = new ModerationResult { Success = true, ChatsAffected = 1 };
+        _mockModerationOrchestrator.RestoreUserPermissionsAsync(
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(successResult);
+        _mockModerationOrchestrator.KickUserFromChatAsync(
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(successResult);
+        _mockModerationOrchestrator.BanUserAsync(
+                Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(successResult);
 
         // Configure to use Kestrel with dynamic port (port 0)
         // This MUST be called before StartServer() or accessing Services
@@ -208,6 +225,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<ITelegramBotClientFactory>();
             services.AddSingleton(_mockTelegramBotClientFactory);
+
+            // Moderation orchestrator mock (for exam actions that don't have real Telegram)
+            // Must be Scoped to match the original registration
+            services.RemoveAll<IModerationOrchestrator>();
+            services.AddScoped<IModerationOrchestrator>(_ => _mockModerationOrchestrator);
         });
     }
 

@@ -133,10 +133,14 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get pending impersonation alerts, ordered by risk level then date.
+    /// Get impersonation alerts, ordered by risk level then date.
     /// </summary>
-    Task<List<ImpersonationAlertRecord>> GetPendingImpersonationAlertsAsync(
+    /// <param name="chatId">Optional chat ID filter</param>
+    /// <param name="pendingOnly">If true, only returns pending (unreviewed) alerts. Default true for backward compatibility.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<List<ImpersonationAlertRecord>> GetImpersonationAlertsAsync(
         long? chatId = null,
+        bool pendingOnly = true,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -172,9 +176,13 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get pending exam failures for a specific chat.
+    /// Get exam failures, optionally filtered by chat and status.
     /// </summary>
-    Task<List<ExamFailureRecord>> GetPendingExamFailuresAsync(
+    /// <param name="chatId">Optional chat ID filter</param>
+    /// <param name="pendingOnly">If true, only returns pending (unreviewed) failures. Default true for backward compatibility.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<List<ExamFailureRecord>> GetExamFailuresAsync(
         long? chatId = null,
+        bool pendingOnly = true,
         CancellationToken cancellationToken = default);
 }
