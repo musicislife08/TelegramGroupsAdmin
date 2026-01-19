@@ -38,7 +38,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
-    public DbSet<ReviewDto> Reviews => Set<ReviewDto>();
+    public DbSet<ReportDto> Reports => Set<ReportDto>();
 
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
@@ -74,7 +74,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
-    public DbSet<ReviewCallbackContextDto> ReviewCallbackContexts => Set<ReviewCallbackContextDto>();
+    public DbSet<ReportCallbackContextDto> ReportCallbackContexts => Set<ReportCallbackContextDto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -190,10 +190,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(rc => rc.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Users → Reviews (one-to-many, via web_user_id)
-        modelBuilder.Entity<ReviewDto>()
+        // Users → Reports (one-to-many, via web_user_id)
+        modelBuilder.Entity<ReportDto>()
             .HasOne(r => r.WebUser)
-            .WithMany(u => u.Reviews)
+            .WithMany(u => u.Reports)
             .HasForeignKey(r => r.WebUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
@@ -707,11 +707,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasFilter("similarity_hash IS NOT NULL")
             .HasDatabaseName("ix_message_translations_similarity_hash");
 
-        // ReviewCallbackContexts indexes (DM action button contexts)
-        modelBuilder.Entity<ReviewCallbackContextDto>()
-            .HasIndex(rcc => rcc.ReviewId)
-            .HasDatabaseName("ix_report_callback_contexts_report_id");  // Cleanup when review is handled
-        modelBuilder.Entity<ReviewCallbackContextDto>()
+        // ReportCallbackContexts indexes (DM action button contexts)
+        modelBuilder.Entity<ReportCallbackContextDto>()
+            .HasIndex(rcc => rcc.ReportId)
+            .HasDatabaseName("ix_report_callback_contexts_report_id");  // Cleanup when report is handled
+        modelBuilder.Entity<ReportCallbackContextDto>()
             .HasIndex(rcc => rcc.CreatedAt)
             .HasDatabaseName("ix_report_callback_contexts_created_at");  // Expiry cleanup job
     }
@@ -747,30 +747,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(ua => ua.ActionType)
             .HasConversion<int>();
 
-        modelBuilder.Entity<ReviewDto>()
-            .Property(r => r.Status)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<ReviewDto>()
+        modelBuilder.Entity<ReportDto>()
             .Property(r => r.Type)
-            .HasConversion<short>()
-            .HasDefaultValue(ReviewType.Report);
+            .HasDefaultValue((short)0);
 
-        modelBuilder.Entity<ReviewDto>()
+        modelBuilder.Entity<ReportDto>()
             .Property(r => r.Context)
             .HasColumnType("jsonb");
 
-        // Partial unique index: Only ONE pending review per message (prevents duplicate reviews)
-        modelBuilder.Entity<ReviewDto>()
+        // Partial unique index: Only ONE pending ContentReport per message (prevents duplicate reports)
+        // ExamFailures and ImpersonationAlerts don't have message IDs, so exclude them
+        modelBuilder.Entity<ReportDto>()
             .HasIndex(r => new { r.MessageId, r.ChatId })
-            .HasFilter("status = 0")
+            .HasFilter("status = 0 AND type = 0")
             .IsUnique()
-            .HasDatabaseName("IX_reviews_unique_pending_per_message");
+            .HasDatabaseName("IX_reports_unique_pending_per_message");
 
-        // Index for filtering by review type
-        modelBuilder.Entity<ReviewDto>()
+        // Index for filtering by report type
+        modelBuilder.Entity<ReportDto>()
             .HasIndex(r => r.Type)
-            .HasDatabaseName("IX_reviews_type");
+            .HasDatabaseName("IX_reports_type");
 
         modelBuilder.Entity<AuditLogRecordDto>()
             .Property(al => al.EventType)

@@ -176,7 +176,7 @@ public class TestReportBuilder
             WebUserId: _webUserId
         );
 
-        var id = await reportRepository.InsertAsync(report, cancellationToken);
+        var id = await reportRepository.InsertContentReportAsync(report, cancellationToken);
 
         // Return the report with the assigned ID
         var savedReport = report with { Id = id };

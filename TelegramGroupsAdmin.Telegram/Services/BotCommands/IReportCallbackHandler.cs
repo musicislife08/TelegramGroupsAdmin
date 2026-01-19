@@ -3,10 +3,10 @@ using Telegram.Bot.Types;
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 /// <summary>
-/// Handles callback queries for review moderation action buttons in DMs.
-/// Routes to type-specific handlers based on ReviewType (Report, ImpersonationAlert, ExamFailure).
+/// Handles callback queries for report moderation action buttons in DMs.
+/// Routes to type-specific handlers based on ReportType (ContentReport, ImpersonationAlert, ExamFailure).
 /// </summary>
-public interface IReviewCallbackHandler
+public interface IReportCallbackHandler
 {
     /// <summary>
     /// Returns true if this handler can handle the given callback data.

@@ -21,12 +21,12 @@ public static class CallbackConstants
     // TODO: Remove ReportActionPrefix after 2026-02-01 (see GitHub issue #281)
     // Legacy prefix kept temporarily for existing DM buttons that haven't expired yet.
     // DM callback contexts expire after 7 days, so this can be removed ~2 weeks after
-    // the unified ReviewCallbackHandler is deployed.
+    // the unified ReportCallbackHandler is deployed.
     /// <summary>
     /// Prefix for report moderation action callbacks (legacy, kept for existing DM buttons).
     /// Format: rpt:{contextId}:{actionInt}
     /// Uses compact format to stay within Telegram's 64-byte callback data limit.
-    /// New code should use ReviewActionPrefix.
+    /// New code should use ReportActionPrefix.
     /// </summary>
     public const string ReportActionPrefix = "rpt:";
 

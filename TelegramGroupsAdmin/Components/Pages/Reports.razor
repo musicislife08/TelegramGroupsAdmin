@@ -9,7 +9,7 @@
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Reports
-@inject IReviewsRepository ReviewsRepository
+@inject IReportsRepository ReportsRepository
 @inject IReportActionsService ReportActionsService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IModerationOrchestrator ModerationOrchestrator
@@ -200,7 +200,7 @@
             // This returns properly hydrated models without exposing internal mappings
 
             // Load moderation reports
-            var reports = await ReviewsRepository.GetReportsAsync(
+            var reports = await ReportsRepository.GetContentReportsAsync(
                 chatId: null,
                 status: null,
                 limit: 100);
@@ -209,7 +209,7 @@
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
-                    Type = ReportType.Spam,
+                    Type = ReportType.ContentReport,
                     Timestamp = report.ReportedAt,
                     Priority = CalculateReportPriority(report),
                     IsPending = report.Status == ReportStatus.Pending,
@@ -223,12 +223,12 @@
             }
 
             // Load impersonation alerts
-            var alerts = await ReviewsRepository.GetPendingImpersonationAlertsAsync();
+            var alerts = await ReportsRepository.GetPendingImpersonationAlertsAsync();
             foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.ChatId)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
-                    Type = ReportType.Impersonation,
+                    Type = ReportType.ImpersonationAlert,
                     Timestamp = alert.DetectedAt,
                     Priority = CalculateImpersonationPriority(alert),
                     IsPending = !alert.ReviewedAt.HasValue,
@@ -242,7 +242,7 @@
             }
 
             // Load exam failures
-            var examFailures = await ReviewsRepository.GetPendingExamFailuresAsync();
+            var examFailures = await ReportsRepository.GetPendingExamFailuresAsync();
             foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.ChatId)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -267,8 +267,8 @@
                 .ToList();
 
             // Update counts
-            _pendingSpamCount = unifiedQueue.Count(x => x.Type == ReportType.Spam && x.IsPending);
-            _pendingImpersonationCount = unifiedQueue.Count(x => x.Type == ReportType.Impersonation && x.IsPending);
+            _pendingSpamCount = unifiedQueue.Count(x => x.Type == ReportType.ContentReport && x.IsPending);
+            _pendingImpersonationCount = unifiedQueue.Count(x => x.Type == ReportType.ImpersonationAlert && x.IsPending);
             _pendingExamCount = unifiedQueue.Count(x => x.Type == ReportType.ExamFailure && x.IsPending);
 
             ApplyFilters();
@@ -294,10 +294,10 @@
         {
             var targetType = _selectedTypeFilter switch
             {
-                ReportTypeFilter.Spam => ReportType.Spam,
-                ReportTypeFilter.Impersonation => ReportType.Impersonation,
+                ReportTypeFilter.Spam => ReportType.ContentReport,
+                ReportTypeFilter.Impersonation => ReportType.ImpersonationAlert,
                 ReportTypeFilter.ExamFailure => ReportType.ExamFailure,
-                _ => ReportType.Spam
+                _ => ReportType.ContentReport
             };
             filtered = filtered.Where(x => x.Type == targetType);
         }
@@ -410,7 +410,7 @@
                         executor: executor,
                         reason: $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetDisplayName}");
 
-                    await ReviewsRepository.UpdateStatusAsync(
+                    await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Reviewed,
                         _currentUserId,
@@ -422,7 +422,7 @@
 
                 case "dismiss":
                     // Mark as false positive
-                    await ReviewsRepository.UpdateStatusAsync(
+                    await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
                         _currentUserId,
@@ -439,7 +439,7 @@
                         executor,
                         $"Trusted after impersonation review #{args.Alert.Id}");
 
-                    await ReviewsRepository.UpdateStatusAsync(
+                    await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
                         _currentUserId,
@@ -485,7 +485,7 @@
                         return;
                     }
 
-                    await ReviewsRepository.UpdateStatusAsync(
+                    await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
                         _currentUserId,
@@ -509,7 +509,7 @@
                         return;
                     }
 
-                    await ReviewsRepository.UpdateStatusAsync(
+                    await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
                         _currentUserId,
@@ -533,7 +533,7 @@
                         return;
                     }
 
-                    await ReviewsRepository.UpdateStatusAsync(
+                    await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
                         _currentUserId,

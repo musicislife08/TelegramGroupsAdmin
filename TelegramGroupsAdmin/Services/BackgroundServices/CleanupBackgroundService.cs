@@ -116,7 +116,7 @@ public class CleanupBackgroundService : BackgroundService
                 // 2. Clean up old resolved reports
                 var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
                 var reportsCutoff = DateTimeOffset.UtcNow - reportRetention;
-                var reportsDeleted = await reportsRepo.DeleteOldReportsAsync(reportsCutoff, stoppingToken);
+                var reportsDeleted = await reportsRepo.DeleteOldReportsAsync(reportsCutoff, type: null, stoppingToken);
 
                 if (reportsDeleted > 0)
                 {
@@ -127,7 +127,7 @@ public class CleanupBackgroundService : BackgroundService
                 }
 
                 // 3. Clean up expired DM callback contexts
-                var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReviewCallbackContextRepository>();
+                var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
                 var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(contextRetention, stoppingToken);
 
                 if (contextsDeleted > 0)

@@ -12,50 +12,46 @@ namespace TelegramGroupsAdmin.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Drop the old impersonation_alerts table (data stored in unified reviews via JSONB context)
+            // Drop the old impersonation_alerts table (data stored in unified reports via JSONB context)
             migrationBuilder.DropTable(
                 name: "impersonation_alerts");
 
-            // RENAME reports -> reviews (preserves existing data!)
-            // EF Core generates DROP + CREATE which would lose data
-            migrationBuilder.RenameTable(
-                name: "reports",
-                newName: "reviews");
-
-            // Rename indexes to match new table name
-            migrationBuilder.RenameIndex(
-                name: "IX_reports_unique_pending_per_message",
-                table: "reviews",
-                newName: "IX_reviews_unique_pending_per_message");
-
-            migrationBuilder.RenameIndex(
-                name: "IX_reports_web_user_id",
-                table: "reviews",
-                newName: "IX_reviews_web_user_id");
-
-            // Add new columns to the unified reviews table
+            // Add new columns to the unified reports table (keeping original table name)
             migrationBuilder.AddColumn<short>(
                 name: "type",
-                table: "reviews",
+                table: "reports",
                 type: "smallint",
                 nullable: false,
                 defaultValue: (short)0); // Default to Report type for existing rows
 
             migrationBuilder.AddColumn<string>(
                 name: "context",
-                table: "reviews",
+                table: "reports",
                 type: "jsonb",
                 nullable: true);
 
             // Create index on type column
             migrationBuilder.CreateIndex(
-                name: "IX_reviews_type",
-                table: "reviews",
+                name: "IX_reports_type",
+                table: "reports",
                 column: "type");
 
-            // Add review_type column to report_callback_contexts
+            // Update partial unique index to only apply to ContentReport type (type=0)
+            // ExamFailures and ImpersonationAlerts don't have message IDs
+            migrationBuilder.DropIndex(
+                name: "IX_reports_unique_pending_per_message",
+                table: "reports");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_reports_unique_pending_per_message",
+                table: "reports",
+                columns: new[] { "message_id", "chat_id" },
+                unique: true,
+                filter: "status = 0 AND type = 0");
+
+            // Add report_type column to report_callback_contexts
             migrationBuilder.AddColumn<short>(
-                name: "review_type",
+                name: "report_type",
                 table: "report_callback_contexts",
                 type: "smallint",
                 nullable: false,
@@ -100,37 +96,34 @@ namespace TelegramGroupsAdmin.Data.Migrations
             migrationBuilder.DropTable(
                 name: "exam_sessions");
 
-            // Remove added columns
+            // Restore original partial unique index (without type filter)
             migrationBuilder.DropIndex(
-                name: "IX_reviews_type",
-                table: "reviews");
+                name: "IX_reports_unique_pending_per_message",
+                table: "reports");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_reports_unique_pending_per_message",
+                table: "reports",
+                columns: new[] { "message_id", "chat_id" },
+                unique: true,
+                filter: "status = 0");
+
+            // Remove added columns from reports table
+            migrationBuilder.DropIndex(
+                name: "IX_reports_type",
+                table: "reports");
 
             migrationBuilder.DropColumn(
                 name: "type",
-                table: "reviews");
+                table: "reports");
 
             migrationBuilder.DropColumn(
                 name: "context",
-                table: "reviews");
+                table: "reports");
 
             migrationBuilder.DropColumn(
-                name: "review_type",
+                name: "report_type",
                 table: "report_callback_contexts");
-
-            // Rename back to reports
-            migrationBuilder.RenameIndex(
-                name: "IX_reviews_unique_pending_per_message",
-                table: "reviews",
-                newName: "IX_reports_unique_pending_per_message");
-
-            migrationBuilder.RenameIndex(
-                name: "IX_reviews_web_user_id",
-                table: "reviews",
-                newName: "IX_reports_web_user_id");
-
-            migrationBuilder.RenameTable(
-                name: "reviews",
-                newName: "reports");
 
             // Recreate impersonation_alerts table
             migrationBuilder.CreateTable(

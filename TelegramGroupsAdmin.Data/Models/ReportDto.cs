@@ -4,12 +4,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// EF Core entity for reviews table (unified review queue).
-/// Handles Report, ImpersonationAlert, and ExamFailure review types.
-/// Renamed from ReportDto as part of unified reviews migration.
+/// EF Core entity for reports table (unified report queue).
+/// Handles Report, ImpersonationAlert, and ExamFailure types.
 /// </summary>
-[Table("reviews")]
-public class ReviewDto
+[Table("reports")]
+public class ReportDto
 {
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -17,16 +16,14 @@ public class ReviewDto
     public long Id { get; set; }
 
     /// <summary>
-    /// Discriminator for review type (Report, ImpersonationAlert, ExamFailure).
+    /// Discriminator for report type. Repository maps to domain enum.
+    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamFailure
     /// </summary>
     [Column("type")]
-    public ReviewType Type { get; set; } = ReviewType.Report;
+    public short Type { get; set; }
 
     /// <summary>
     /// Type-specific context data stored as JSONB.
-    /// Report: { "messageText": "...", "source": "telegram|web|system" }
-    /// ImpersonationAlert: { "targetUserId": 123, "photoSimilarity": 0.85, ... }
-    /// ExamFailure: { "mcAnswers": [...], "score": 67, ... }
     /// </summary>
     [Column("context")]
     public string? Context { get; set; }
@@ -51,10 +48,14 @@ public class ReviewDto
     [Column("reported_at")]
     public DateTimeOffset ReportedAt { get; set; }
 
-    // === Common review workflow fields ===
+    // === Common workflow fields ===
 
+    /// <summary>
+    /// Report status. Repository maps to domain enum.
+    /// 0=Pending, 1=Reviewed, 2=Dismissed
+    /// </summary>
     [Column("status")]
-    public ReportStatus Status { get; set; }
+    public int Status { get; set; }
 
     [Column("reviewed_by")]
     public string? ReviewedBy { get; set; }

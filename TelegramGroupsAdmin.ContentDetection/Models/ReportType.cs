@@ -1,16 +1,17 @@
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
-/// Type of report in the unified reports queue
+/// Type of report in the unified reports queue (domain enum).
+/// Repository maps this to/from short in Data layer.
 /// </summary>
 public enum ReportType
 {
-    /// <summary>Spam or suspicious content report</summary>
-    Spam = 0,
+    /// <summary>Content report (user /report, web UI, or system OpenAI veto)</summary>
+    ContentReport = 0,
 
-    /// <summary>Potential user impersonation alert</summary>
-    Impersonation = 1,
+    /// <summary>Auto-detected account impersonation</summary>
+    ImpersonationAlert = 1,
 
-    /// <summary>Failed entrance exam pending review</summary>
+    /// <summary>Failed entrance exam awaiting admin decision</summary>
     ExamFailure = 2
 }

@@ -2095,7 +2095,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("recovery_codes", (string)null);
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReviewCallbackContextDto", b =>
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReportCallbackContextDto", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -2112,13 +2112,13 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("ReviewId")
+                    b.Property<long>("ReportId")
                         .HasColumnType("bigint")
                         .HasColumnName("report_id");
 
-                    b.Property<short>("ReviewType")
+                    b.Property<short>("ReportType")
                         .HasColumnType("smallint")
-                        .HasColumnName("review_type");
+                        .HasColumnName("report_type");
 
                     b.Property<long>("UserId")
                         .HasColumnType("bigint")
@@ -2129,13 +2129,13 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_report_callback_contexts_created_at");
 
-                    b.HasIndex("ReviewId")
+                    b.HasIndex("ReportId")
                         .HasDatabaseName("ix_report_callback_contexts_report_id");
 
                     b.ToTable("report_callback_contexts", (string)null);
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReviewDto", b =>
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReportDto", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -2205,16 +2205,17 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Type")
-                        .HasDatabaseName("IX_reviews_type");
+                        .HasDatabaseName("IX_reports_type");
 
-                    b.HasIndex("WebUserId");
+                    b.HasIndex("WebUserId")
+                        .HasDatabaseName("IX_reports_web_user_id");
 
                     b.HasIndex("MessageId", "ChatId")
                         .IsUnique()
-                        .HasDatabaseName("IX_reviews_unique_pending_per_message")
-                        .HasFilter("status = 0");
+                        .HasDatabaseName("IX_reports_unique_pending_per_message")
+                        .HasFilter("status = 0 AND type = 0");
 
-                    b.ToTable("reviews", (string)null);
+                    b.ToTable("reports", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.StopWordDto", b =>
@@ -3760,10 +3761,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReviewDto", b =>
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReportDto", b =>
                 {
                     b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", "WebUser")
-                        .WithMany("Reviews")
+                        .WithMany("Reports")
                         .HasForeignKey("WebUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
@@ -4028,7 +4029,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.Navigation("RecoveryCodes");
 
-                    b.Navigation("Reviews");
+                    b.Navigation("Reports");
 
                     b.Navigation("TelegramMappings");
 

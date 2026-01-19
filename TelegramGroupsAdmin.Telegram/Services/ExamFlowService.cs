@@ -388,7 +388,7 @@ public class ExamFlowService : IExamFlowService
     {
         using var scope = _serviceProvider.CreateScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
-        var reviewsRepo = scope.ServiceProvider.GetRequiredService<IReviewsRepository>();
+        var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
         var operations = await _botClientFactory.GetOperationsAsync();
 
         // Calculate MC score
@@ -496,7 +496,7 @@ public class ExamFlowService : IExamFlowService
             FailedAt = DateTimeOffset.UtcNow
         };
 
-        await reviewsRepo.InsertExamFailureAsync(examFailure, cancellationToken);
+        await reportsRepo.InsertExamFailureAsync(examFailure, cancellationToken);
 
         // Send pending message to user in DM
         await operations.SendMessageAsync(

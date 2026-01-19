@@ -14,21 +14,21 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 /// <summary>
-/// Handles callback queries for review moderation buttons in DMs.
-/// Routes to type-specific handlers based on ReviewType.
+/// Handles callback queries for report moderation buttons in DMs.
+/// Routes to type-specific handlers based on ReportType.
 /// Callback format: rev:{contextId}:{actionInt} (or legacy rpt:{contextId}:{actionInt})
 /// </summary>
 /// <remarks>
 /// Registered as Singleton - creates scopes internally for scoped services.
 /// </remarks>
-public class ReviewCallbackHandler : IReviewCallbackHandler
+public class ReportCallbackHandler : IReportCallbackHandler
 {
-    private readonly ILogger<ReviewCallbackHandler> _logger;
+    private readonly ILogger<ReportCallbackHandler> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ITelegramBotClientFactory _botClientFactory;
 
-    public ReviewCallbackHandler(
-        ILogger<ReviewCallbackHandler> logger,
+    public ReportCallbackHandler(
+        ILogger<ReportCallbackHandler> logger,
         IServiceScopeFactory scopeFactory,
         ITelegramBotClientFactory botClientFactory)
     {
@@ -82,8 +82,8 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         }
 
         using var scope = _scopeFactory.CreateScope();
-        var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReviewCallbackContextRepository>();
-        var reviewsRepo = scope.ServiceProvider.GetRequiredService<IReviewsRepository>();
+        var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
+        var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var moderationService = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
 
@@ -96,19 +96,19 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
             return;
         }
 
-        var reviewId = context.ReviewId;
-        var reviewType = context.ReviewType;
+        var reviewId = context.ReportId;
+        var reportType = context.ReportType;
         var chatId = context.ChatId;
         var userId = context.UserId;
         var executorUser = callbackQuery.From;
 
         _logger.LogInformation(
-            "Review callback: Type={ReviewType}, Action={ActionInt}, ReviewId={ReviewId}, ChatId={ChatId}, UserId={UserId}, Executor={Executor}",
-            reviewType, actionInt, reviewId, chatId, userId, executorUser.ToLogInfo());
+            "Review callback: Type={ReportType}, Action={ActionInt}, ReviewId={ReviewId}, ChatId={ChatId}, UserId={UserId}, Executor={Executor}",
+            reportType, actionInt, reviewId, chatId, userId, executorUser.ToLogInfo());
 
-        // Get review and check status
-        var review = await reviewsRepo.GetByIdAsync(reviewId, cancellationToken);
-        if (review == null)
+        // Get report and check status
+        var report = await reportsRepo.GetByIdAsync(reviewId, cancellationToken);
+        if (report == null)
         {
             _logger.LogWarning("Review {ReviewId} not found", reviewId);
             await UpdateMessageWithResultAsync(callbackQuery, "Review not found", cancellationToken);
@@ -116,11 +116,11 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
             return;
         }
 
-        if (review.Status != ReportStatus.Pending)
+        if (report.Status != ReportStatus.Pending)
         {
-            _logger.LogInformation("Review {ReviewId} already handled (status: {Status})", reviewId, review.Status);
+            _logger.LogInformation("Review {ReviewId} already handled (status: {Status})", reviewId, report.Status);
             await UpdateMessageWithResultAsync(callbackQuery,
-                FormatAlreadyHandledMessage(review.ReviewedBy, review.ActionTaken, review.ReviewedAt), cancellationToken);
+                FormatAlreadyHandledMessage(report.ReviewedBy, report.ActionTaken, report.ReviewedAt), cancellationToken);
             await callbackContextRepo.DeleteAsync(contextId, cancellationToken);
             return;
         }
@@ -139,21 +139,21 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         ReviewActionResult result;
         try
         {
-            result = reviewType switch
+            result = reportType switch
             {
-                ReviewType.Report => await HandleReportActionAsync(
-                    moderationService, reviewsRepo, review, userId, actionInt, executor, targetUser, cancellationToken),
-                ReviewType.ImpersonationAlert => await HandleImpersonationActionAsync(
-                    moderationService, reviewsRepo, review, userId, actionInt, executor, targetUser, cancellationToken),
-                ReviewType.ExamFailure => await HandleExamActionAsync(
-                    moderationService, reviewsRepo, review, chatId, userId, actionInt, executor, targetUser, cancellationToken),
-                _ => new ReviewActionResult(Success: false, Message: $"Unknown review type: {reviewType}")
+                ReportType.ContentReport => await HandleReportActionAsync(
+                    moderationService, reportsRepo, report, userId, actionInt, executor, targetUser, cancellationToken),
+                ReportType.ImpersonationAlert => await HandleImpersonationActionAsync(
+                    moderationService, reportsRepo, report, userId, actionInt, executor, targetUser, cancellationToken),
+                ReportType.ExamFailure => await HandleExamActionAsync(
+                    moderationService, reportsRepo, report, chatId, userId, actionInt, executor, targetUser, cancellationToken),
+                _ => new ReviewActionResult(Success: false, Message: $"Unknown review type: {reportType}")
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute review action {Action} for review {ReviewId} (type: {ReviewType})",
-                actionInt, reviewId, reviewType);
+            _logger.LogError(ex, "Failed to execute review action {Action} for review {ReviewId} (type: {ReportType})",
+                actionInt, reviewId, reportType);
             result = new ReviewActionResult(Success: false, Message: $"Action failed: {ex.Message}");
         }
 
@@ -161,7 +161,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         if (result.Success)
         {
             var executorName = executor.DisplayName ?? "Admin";
-            var updated = await reviewsRepo.TryUpdateStatusAsync(
+            var updated = await reportsRepo.TryUpdateStatusAsync(
                 reviewId,
                 ReportStatus.Reviewed,
                 executorName,
@@ -172,7 +172,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
             if (!updated)
             {
                 // Race condition: another admin/web user handled it first
-                var currentReview = await reviewsRepo.GetByIdAsync(reviewId, cancellationToken);
+                var currentReview = await reportsRepo.GetByIdAsync(reviewId, cancellationToken);
                 await UpdateMessageWithResultAsync(callbackQuery,
                     FormatAlreadyHandledMessage(currentReview?.ReviewedBy, currentReview?.ActionTaken, currentReview?.ReviewedAt),
                     cancellationToken);
@@ -190,7 +190,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         // Cleanup: type-specific post-action tasks
         if (result.Success)
         {
-            await CleanupAfterReviewAsync(review, reviewType, result.ActionName, cancellationToken);
+            await CleanupAfterReportAsync(report, reportType, result.ActionName, cancellationToken);
         }
     }
 
@@ -198,8 +198,8 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
     private async Task<ReviewActionResult> HandleReportActionAsync(
         IModerationOrchestrator moderationService,
-        IReviewsRepository reviewsRepo,
-        Review review,
+        IReportsRepository reportsRepo,
+        ReportBase report,
         long userId,
         int actionInt,
         Core.Models.Actor executor,
@@ -218,25 +218,25 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         return action switch
         {
             ReportAction.Spam => await HandleSpamActionAsync(
-                moderationService, review, userId, executor, targetUser, cancellationToken),
+                moderationService, report, userId, executor, targetUser, cancellationToken),
             ReportAction.Warn => await HandleWarnActionAsync(
-                moderationService, review, userId, executor, targetUser, cancellationToken),
+                moderationService, report, userId, executor, targetUser, cancellationToken),
             ReportAction.TempBan => await HandleTempBanActionAsync(
-                moderationService, review, userId, executor, targetUser, cancellationToken),
-            ReportAction.Dismiss => HandleDismissAction(review.Id, executor),
+                moderationService, report, userId, executor, targetUser, cancellationToken),
+            ReportAction.Dismiss => HandleDismissAction(report.Id, executor),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
         };
     }
 
     private async Task<ReviewActionResult> HandleSpamActionAsync(
         IModerationOrchestrator moderationService,
-        Review review,
+        ReportBase report,
         long userId,
         Core.Models.Actor executor,
         TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        var messageId = review.MessageId ?? 0;
+        var messageId = report.MessageId ?? 0;
 
         var result = await moderationService.BanUserAsync(
             userId,
@@ -249,7 +249,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         {
             _logger.LogInformation(
                 "Review {ReviewId}: User {User} banned as spam by {Executor}",
-                review.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
+                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
             return new ReviewActionResult(
                 Success: true,
                 Message: $"Marked as spam - user banned from {result.ChatsAffected} chat(s)",
@@ -261,14 +261,14 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
     private async Task<ReviewActionResult> HandleWarnActionAsync(
         IModerationOrchestrator moderationService,
-        Review review,
+        ReportBase report,
         long userId,
         Core.Models.Actor executor,
         TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        var messageId = review.MessageId ?? 0;
-        var chatId = review.ChatId;
+        var messageId = report.MessageId ?? 0;
+        var chatId = report.ChatId;
 
         var result = await moderationService.WarnUserAsync(
             userId,
@@ -282,7 +282,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         {
             _logger.LogInformation(
                 "Review {ReviewId}: User {User} warned by {Executor} (count: {Count})",
-                review.Id, targetUser.ToLogInfo(userId), executor.DisplayName, result.WarningCount);
+                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName, result.WarningCount);
             return new ReviewActionResult(
                 Success: true,
                 Message: $"Warning issued (warning #{result.WarningCount})",
@@ -294,13 +294,13 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
     private async Task<ReviewActionResult> HandleTempBanActionAsync(
         IModerationOrchestrator moderationService,
-        Review review,
+        ReportBase report,
         long userId,
         Core.Models.Actor executor,
         TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        var messageId = review.MessageId ?? 0;
+        var messageId = report.MessageId ?? 0;
         var duration = CommandConstants.DefaultTempBanDuration;
 
         var result = await moderationService.TempBanUserAsync(
@@ -315,7 +315,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         {
             _logger.LogInformation(
                 "Review {ReviewId}: User {User} temp banned for {Duration} by {Executor}",
-                review.Id, targetUser.ToLogInfo(userId), duration, executor.DisplayName);
+                report.Id, targetUser.ToLogInfo(userId), duration, executor.DisplayName);
             return new ReviewActionResult(
                 Success: true,
                 Message: $"Temp banned for {TimeSpanUtilities.FormatDuration(duration)} from {result.ChatsAffected} chat(s)",
@@ -337,8 +337,8 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
     private async Task<ReviewActionResult> HandleImpersonationActionAsync(
         IModerationOrchestrator moderationService,
-        IReviewsRepository reviewsRepo,
-        Review review,
+        IReportsRepository reportsRepo,
+        ReportBase report,
         long userId,
         int actionInt,
         Core.Models.Actor executor,
@@ -357,17 +357,17 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         return action switch
         {
             ImpersonationAction.ConfirmScam => await HandleConfirmScamAsync(
-                moderationService, review, userId, executor, targetUser, cancellationToken),
-            ImpersonationAction.FalsePositive => HandleFalsePositiveAction(review.Id, executor),
+                moderationService, report, userId, executor, targetUser, cancellationToken),
+            ImpersonationAction.FalsePositive => HandleFalsePositiveAction(report.Id, executor),
             ImpersonationAction.Whitelist => await HandleWhitelistActionAsync(
-                reviewsRepo, review, userId, executor, cancellationToken),
+                reportsRepo, report, userId, executor, cancellationToken),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
         };
     }
 
     private async Task<ReviewActionResult> HandleConfirmScamAsync(
         IModerationOrchestrator moderationService,
-        Review review,
+        ReportBase report,
         long userId,
         Core.Models.Actor executor,
         TelegramUser? targetUser,
@@ -385,7 +385,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         {
             _logger.LogInformation(
                 "Impersonation review {ReviewId}: User {User} banned as scammer by {Executor}",
-                review.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
+                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
             return new ReviewActionResult(
                 Success: true,
                 Message: $"Confirmed scam - user banned from {result.ChatsAffected} chat(s)",
@@ -407,8 +407,8 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleWhitelistActionAsync(
-        IReviewsRepository reviewsRepo,
-        Review review,
+        IReportsRepository reportsRepo,
+        ReportBase report,
         long userId,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
@@ -417,7 +417,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         // TODO: Implement whitelist logic when TelegramUserRepository.MarkAsTrustedAsync is available
         _logger.LogInformation(
             "Impersonation review {ReviewId}: User {UserId} whitelisted by {Executor}",
-            review.Id, userId, executor.DisplayName);
+            report.Id, userId, executor.DisplayName);
 
         return new ReviewActionResult(
             Success: true,
@@ -431,8 +431,8 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
     private async Task<ReviewActionResult> HandleExamActionAsync(
         IModerationOrchestrator moderationService,
-        IReviewsRepository reviewsRepo,
-        Review review,
+        IReportsRepository reportsRepo,
+        ReportBase report,
         long chatId,
         long userId,
         int actionInt,
@@ -452,17 +452,17 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         return action switch
         {
             ExamAction.Approve => await HandleExamApproveAsync(
-                review, chatId, userId, executor, cancellationToken),
+                report, chatId, userId, executor, cancellationToken),
             ExamAction.Deny => await HandleExamDenyAsync(
-                review, chatId, userId, executor, cancellationToken),
+                report, chatId, userId, executor, cancellationToken),
             ExamAction.DenyAndBan => await HandleExamDenyAndBanAsync(
-                moderationService, review, chatId, userId, executor, targetUser, cancellationToken),
+                moderationService, report, chatId, userId, executor, targetUser, cancellationToken),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
         };
     }
 
     private async Task<ReviewActionResult> HandleExamApproveAsync(
-        Review review,
+        ReportBase report,
         long chatId,
         long userId,
         Core.Models.Actor executor,
@@ -497,7 +497,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
             _logger.LogInformation(
                 "Exam review {ReviewId}: User {UserId} approved by {Executor}, permissions restored",
-                review.Id, userId, executor.DisplayName);
+                report.Id, userId, executor.DisplayName);
 
             return new ReviewActionResult(
                 Success: true,
@@ -512,7 +512,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleExamDenyAsync(
-        Review review,
+        ReportBase report,
         long chatId,
         long userId,
         Core.Models.Actor executor,
@@ -529,7 +529,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
             _logger.LogInformation(
                 "Exam review {ReviewId}: User {UserId} denied (kicked) by {Executor}",
-                review.Id, userId, executor.DisplayName);
+                report.Id, userId, executor.DisplayName);
 
             return new ReviewActionResult(
                 Success: true,
@@ -545,7 +545,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
     private async Task<ReviewActionResult> HandleExamDenyAndBanAsync(
         IModerationOrchestrator moderationService,
-        Review review,
+        ReportBase report,
         long chatId,
         long userId,
         Core.Models.Actor executor,
@@ -564,7 +564,7 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
         {
             _logger.LogInformation(
                 "Exam review {ReviewId}: User {User} denied and banned by {Executor}",
-                review.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
+                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
             return new ReviewActionResult(
                 Success: true,
                 Message: $"User denied and banned from {result.ChatsAffected} chat(s)",
@@ -578,69 +578,69 @@ public class ReviewCallbackHandler : IReviewCallbackHandler
 
     #region Helpers
 
-    private async Task CleanupAfterReviewAsync(
-        Review review,
-        ReviewType reviewType,
+    private async Task CleanupAfterReportAsync(
+        ReportBase report,
+        ReportType reportType,
         string? actionName,
         CancellationToken cancellationToken)
     {
         // Type-specific cleanup
-        if (reviewType == ReviewType.Report)
+        if (reportType == ReportType.ContentReport)
         {
-            await CleanupAfterReportReviewAsync(review, actionName, cancellationToken);
+            await CleanupAfterContentReportAsync(report, actionName, cancellationToken);
         }
         // Other types don't have specific cleanup yet
     }
 
-    private async Task CleanupAfterReportReviewAsync(
-        Review review,
+    private async Task CleanupAfterContentReportAsync(
+        ReportBase report,
         string? actionName,
         CancellationToken cancellationToken)
     {
         var operations = await _botClientFactory.GetOperationsAsync();
 
         // 1. Delete the /report command message (for all actions)
-        if (review.ReportCommandMessageId.HasValue)
+        if (report.ReportCommandMessageId.HasValue)
         {
             try
             {
                 await operations.DeleteMessageAsync(
-                    review.ChatId,
-                    review.ReportCommandMessageId.Value,
+                    report.ChatId,
+                    report.ReportCommandMessageId.Value,
                     cancellationToken);
 
                 _logger.LogDebug(
                     "Deleted /report command message {MessageId} in chat {ChatId}",
-                    review.ReportCommandMessageId.Value, review.ChatId);
+                    report.ReportCommandMessageId.Value, report.ChatId);
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex,
                     "Could not delete /report command message {MessageId} (may already be deleted)",
-                    review.ReportCommandMessageId);
+                    report.ReportCommandMessageId);
             }
         }
 
         // 2. On dismiss only: Reply to original reported message
-        if (actionName == "Dismiss" && review.MessageId.HasValue)
+        if (actionName == "Dismiss" && report.MessageId.HasValue)
         {
             try
             {
                 await operations.SendMessageAsync(
-                    chatId: review.ChatId,
+                    chatId: report.ChatId,
                     text: "✓ This message was reviewed and no action was taken",
-                    replyParameters: new ReplyParameters { MessageId = review.MessageId.Value },
+                    replyParameters: new ReplyParameters { MessageId = report.MessageId.Value },
                     cancellationToken: cancellationToken);
 
                 _logger.LogDebug(
                     "Sent dismiss notification as reply to message {MessageId} in chat {ChatId}",
-                    review.MessageId, review.ChatId);
+                    report.MessageId, report.ChatId);
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex,
                     "Could not reply to reported message {MessageId} (may be deleted)",
-                    review.MessageId);
+                    report.MessageId);
             }
         }
     }

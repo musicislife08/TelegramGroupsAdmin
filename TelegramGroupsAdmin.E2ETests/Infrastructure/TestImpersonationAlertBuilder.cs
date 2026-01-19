@@ -211,7 +211,7 @@ public class TestImpersonationAlertBuilder
     public async Task<TestImpersonationAlert> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
-        var reviewsRepository = scope.ServiceProvider.GetRequiredService<IReviewsRepository>();
+        var reviewsRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
 
         var alert = new ImpersonationAlertRecord
         {

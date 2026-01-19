@@ -4,17 +4,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Database entity for review moderation callback button contexts.
+/// Database entity for report moderation callback button contexts.
 /// Stores context data for DM action buttons, enabling short callback IDs.
 /// Action is passed in callback data, not stored here.
 /// Deleted after button is clicked or after expiry (7 days).
 /// </summary>
-/// <remarks>
-/// Table still named report_callback_contexts for backward compatibility.
-/// Will be renamed to review_callback_contexts in a future migration.
-/// </remarks>
 [Table("report_callback_contexts")]
-public class ReviewCallbackContextDto
+public class ReportCallbackContextDto
 {
     /// <summary>
     /// Unique identifier for this callback context
@@ -24,19 +20,19 @@ public class ReviewCallbackContextDto
     public long Id { get; set; }
 
     /// <summary>
-    /// ID of the review this context applies to (in unified reviews table)
+    /// ID of the report this context applies to (in unified reports table)
     /// </summary>
     [Required]
     [Column("report_id")]
-    public long ReviewId { get; set; }
+    public long ReportId { get; set; }
 
     /// <summary>
-    /// Type of review (Report, ImpersonationAlert, ExamFailure).
-    /// Determines which action handler to use.
+    /// Type of report. Repository maps to domain enum.
+    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamFailure
     /// </summary>
     [Required]
-    [Column("review_type")]
-    public ReviewType ReviewType { get; set; } = ReviewType.Report;
+    [Column("report_type")]
+    public short ReportType { get; set; }
 
     /// <summary>
     /// Chat ID where the review subject occurred
@@ -46,7 +42,7 @@ public class ReviewCallbackContextDto
     public long ChatId { get; set; }
 
     /// <summary>
-    /// Telegram user ID of the user being reviewed (target for moderation)
+    /// Telegram user ID of the user being reported (target for moderation)
     /// </summary>
     [Required]
     [Column("user_id")]

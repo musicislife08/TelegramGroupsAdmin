@@ -48,7 +48,7 @@ public class ReportCommand(
         var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
 
         // Check for duplicate report (one pending report per message)
-        var existingReport = await reportsRepository.GetExistingPendingReportAsync(
+        var existingReport = await reportsRepository.GetExistingPendingContentReportAsync(
             reportedMessage.MessageId,
             message.Chat.Id,
             cancellationToken);
@@ -75,7 +75,7 @@ public class ReportCommand(
             ReportedByUserId: reporter.Id,
             ReportedByUserName: reporter.Username ?? reporter.FirstName,
             ReportedAt: DateTimeOffset.UtcNow,
-            Status: DataModels.ReportStatus.Pending,
+            Status: ReportStatus.Pending,
             ReviewedBy: null,
             ReviewedAt: null,
             ActionTaken: null,

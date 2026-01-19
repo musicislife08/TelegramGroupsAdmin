@@ -5,35 +5,35 @@ using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
-public class ReviewCallbackContextRepository : IReviewCallbackContextRepository
+public class ReportCallbackContextRepository : IReportCallbackContextRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
-    public ReviewCallbackContextRepository(IDbContextFactory<AppDbContext> contextFactory)
+    public ReportCallbackContextRepository(IDbContextFactory<AppDbContext> contextFactory)
     {
         _contextFactory = contextFactory;
     }
 
     public async Task<long> CreateAsync(
-        ReviewCallbackContext context,
+        ReportCallbackContext context,
         CancellationToken cancellationToken = default)
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = context.ToDto();
-        dbContext.ReviewCallbackContexts.Add(entity);
+        dbContext.ReportCallbackContexts.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return entity.Id;
     }
 
-    public async Task<ReviewCallbackContext?> GetByIdAsync(
+    public async Task<ReportCallbackContext?> GetByIdAsync(
         long id,
         CancellationToken cancellationToken = default)
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await dbContext.ReviewCallbackContexts
+        var entity = await dbContext.ReportCallbackContexts
             .FirstOrDefaultAsync(rcc => rcc.Id == id, cancellationToken);
 
         return entity?.ToModel();
@@ -45,19 +45,19 @@ public class ReviewCallbackContextRepository : IReviewCallbackContextRepository
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        await dbContext.ReviewCallbackContexts
+        await dbContext.ReportCallbackContexts
             .Where(rcc => rcc.Id == id)
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public async Task DeleteByReviewIdAsync(
-        long reviewId,
+    public async Task DeleteByReportIdAsync(
+        long reportId,
         CancellationToken cancellationToken = default)
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        await dbContext.ReviewCallbackContexts
-            .Where(rcc => rcc.ReviewId == reviewId)
+        await dbContext.ReportCallbackContexts
+            .Where(rcc => rcc.ReportId == reportId)
             .ExecuteDeleteAsync(cancellationToken);
     }
 
@@ -69,7 +69,7 @@ public class ReviewCallbackContextRepository : IReviewCallbackContextRepository
 
         var cutoff = DateTimeOffset.UtcNow - maxAge;
 
-        return await dbContext.ReviewCallbackContexts
+        return await dbContext.ReportCallbackContexts
             .Where(rcc => rcc.CreatedAt < cutoff)
             .ExecuteDeleteAsync(cancellationToken);
     }

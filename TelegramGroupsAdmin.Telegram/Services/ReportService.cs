@@ -28,7 +28,7 @@ public class ReportService(
         CancellationToken cancellationToken = default)
     {
         // 1. Insert report into database
-        var reportId = await reportsRepository.InsertAsync(report, cancellationToken);
+        var reportId = await reportsRepository.InsertContentReportAsync(report, cancellationToken);
 
         logger.LogInformation(
             "Report {ReportId} created: ChatId={ChatId}, MessageId={MessageId}, IsAutomated={IsAutomated}, ReportedBy={ReportedBy}",

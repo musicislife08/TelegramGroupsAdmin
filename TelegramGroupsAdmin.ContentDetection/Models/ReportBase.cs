@@ -1,15 +1,13 @@
-using TelegramGroupsAdmin.Data.Models;
-
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
-/// Base review model for generic operations across all review types.
+/// Base report model for generic operations across all report types.
 /// Used when the caller doesn't need type-specific context.
 /// </summary>
-public record Review
+public record ReportBase
 {
     public long Id { get; init; }
-    public ReviewType Type { get; init; }
+    public ReportType Type { get; init; }
     public long ChatId { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public ReportStatus Status { get; init; }
@@ -29,18 +27,18 @@ public record Review
 
     /// <summary>
     /// For ImpersonationAlert: the suspected user ID
-    /// For Report: the message author user ID
+    /// For ContentReport: the message author user ID
     /// For ExamFailure: the user who failed the exam
     /// </summary>
     public long? SubjectUserId { get; init; }
 
-    // Common Report-specific fields (hydrated from base columns)
-    /// <summary>Message ID for Report type reviews</summary>
+    // Common ContentReport-specific fields (hydrated from base columns)
+    /// <summary>Message ID for ContentReport type</summary>
     public int? MessageId { get; init; }
 
     /// <summary>ID of the /report command message (for cleanup)</summary>
     public int? ReportCommandMessageId { get; init; }
 
-    /// <summary>User ID of the reported user (alias for SubjectUserId for Report type)</summary>
+    /// <summary>User ID of the reported user (alias for SubjectUserId for ContentReport type)</summary>
     public long? ReportedUserId => SubjectUserId;
 }

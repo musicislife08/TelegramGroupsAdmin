@@ -22,7 +22,7 @@ public class UpdateProcessorTests
     private IChatManagementService _mockChatManagementService = null!;
     private IWelcomeService _mockWelcomeService = null!;
     private IBanCallbackHandler _mockBanCallbackHandler = null!;
-    private IReviewCallbackHandler _mockReviewCallbackHandler = null!;
+    private IReportCallbackHandler _mockReviewCallbackHandler = null!;
     private ITelegramBotClientFactory _mockBotFactory = null!;
     private ITelegramOperations _mockOperations = null!;
     private ILogger<UpdateProcessor> _mockLogger = null!;
@@ -35,7 +35,7 @@ public class UpdateProcessorTests
         _mockChatManagementService = Substitute.For<IChatManagementService>();
         _mockWelcomeService = Substitute.For<IWelcomeService>();
         _mockBanCallbackHandler = Substitute.For<IBanCallbackHandler>();
-        _mockReviewCallbackHandler = Substitute.For<IReviewCallbackHandler>();
+        _mockReviewCallbackHandler = Substitute.For<IReportCallbackHandler>();
         _mockBotFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockOperations = Substitute.For<ITelegramOperations>();
         _mockLogger = Substitute.For<ILogger<UpdateProcessor>>();

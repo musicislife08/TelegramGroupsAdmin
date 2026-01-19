@@ -14,7 +14,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using Report = TelegramGroupsAdmin.ContentDetection.Models.Report;
 using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.ModerationResult;
-using DataModels = TelegramGroupsAdmin.Data.Models;
+using ReportStatus = TelegramGroupsAdmin.ContentDetection.Models.ReportStatus;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
 
@@ -37,7 +37,7 @@ public class ReportActionsServiceTests
     private IModerationOrchestrator _mockModerationService = null!;
     private IAuditService _mockAuditService = null!;
     private IBotMessageService _mockBotMessageService = null!;
-    private IReviewCallbackContextRepository _mockCallbackContextRepo = null!;
+    private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
     private ILogger<ReportActionsService> _mockLogger = null!;
 
     private ReportActionsService _service = null!;
@@ -50,7 +50,7 @@ public class ReportActionsServiceTests
         _mockModerationService = Substitute.For<IModerationOrchestrator>();
         _mockAuditService = Substitute.For<IAuditService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
-        _mockCallbackContextRepo = Substitute.For<IReviewCallbackContextRepository>();
+        _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
         _mockLogger = Substitute.For<ILogger<ReportActionsService>>();
 
         _service = new ReportActionsService(
@@ -96,9 +96,9 @@ public class ReportActionsServiceTests
             Arg.Any<Message?>(),
             Arg.Any<CancellationToken>());
 
-        await _mockReportsRepo.Received(1).UpdateReportStatusAsync(
+        await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
-            DataModels.ReportStatus.Reviewed,
+            ReportStatus.Reviewed,
             TestReviewerId,
             "spam",
             Arg.Is<string>(s => s.Contains("5 chats")),
@@ -109,7 +109,7 @@ public class ReportActionsServiceTests
     public async Task HandleSpamActionAsync_ReportNotFound_ThrowsInvalidOperationException()
     {
         // Arrange
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns((Report?)null);
 
         // Act & Assert
@@ -123,7 +123,7 @@ public class ReportActionsServiceTests
     {
         // Arrange
         var report = CreateTestReport();
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
         _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
@@ -193,7 +193,7 @@ public class ReportActionsServiceTests
 
         // Assert
         await _mockCallbackContextRepo.Received(1)
-            .DeleteByReviewIdAsync(TestReportId, Arg.Any<CancellationToken>());
+            .DeleteByReportIdAsync(TestReportId, Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -283,9 +283,9 @@ public class ReportActionsServiceTests
         await _service.HandleBanActionAsync(TestReportId, TestReviewerId);
 
         // Assert - report status still updated
-        await _mockReportsRepo.Received(1).UpdateReportStatusAsync(
+        await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
-            DataModels.ReportStatus.Reviewed,
+            ReportStatus.Reviewed,
             TestReviewerId,
             "ban",
             Arg.Any<string>(),
@@ -325,9 +325,9 @@ public class ReportActionsServiceTests
             TestChatId,
             Arg.Any<CancellationToken>());
 
-        await _mockReportsRepo.Received(1).UpdateReportStatusAsync(
+        await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
-            DataModels.ReportStatus.Reviewed,
+            ReportStatus.Reviewed,
             TestReviewerId,
             "warn",
             Arg.Any<string>(),
@@ -395,7 +395,7 @@ public class ReportActionsServiceTests
     {
         // Arrange
         var report = CreateTestReport();
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
         // Act
@@ -410,9 +410,9 @@ public class ReportActionsServiceTests
                 Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
 
         // Report updated to dismissed
-        await _mockReportsRepo.Received(1).UpdateReportStatusAsync(
+        await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
-            DataModels.ReportStatus.Dismissed,
+            ReportStatus.Dismissed,
             TestReviewerId,
             "dismiss",
             "Not spam",
@@ -424,16 +424,16 @@ public class ReportActionsServiceTests
     {
         // Arrange
         var report = CreateTestReport();
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
         // Act
         await _service.HandleDismissActionAsync(TestReportId, TestReviewerId, null);
 
         // Assert
-        await _mockReportsRepo.Received(1).UpdateReportStatusAsync(
+        await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
-            DataModels.ReportStatus.Dismissed,
+            ReportStatus.Dismissed,
             TestReviewerId,
             "dismiss",
             "No action needed",
@@ -445,7 +445,7 @@ public class ReportActionsServiceTests
     {
         // Arrange
         var report = CreateTestReport();
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
         // Act
@@ -466,7 +466,7 @@ public class ReportActionsServiceTests
         // Arrange
         var reportCommandMessageId = 999;
         var report = CreateTestReport(reportCommandMessageId: reportCommandMessageId);
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
         // Act
@@ -485,7 +485,7 @@ public class ReportActionsServiceTests
     {
         // Arrange
         var report = CreateTestReport();
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
 
         _mockBotMessageService.SendAndSaveMessageAsync(
@@ -500,9 +500,9 @@ public class ReportActionsServiceTests
         await _service.HandleDismissActionAsync(TestReportId, TestReviewerId);
 
         // Assert - report status still updated
-        await _mockReportsRepo.Received(1).UpdateReportStatusAsync(
+        await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
-            DataModels.ReportStatus.Dismissed,
+            ReportStatus.Dismissed,
             TestReviewerId,
             "dismiss",
             Arg.Any<string>(),
@@ -523,7 +523,7 @@ public class ReportActionsServiceTests
             ReportedByUserId: 11111L,
             ReportedByUserName: "reporter",
             ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
-            Status: DataModels.ReportStatus.Pending,
+            Status: ReportStatus.Pending,
             ReviewedBy: null,
             ReviewedAt: null,
             ActionTaken: null,
@@ -569,7 +569,7 @@ public class ReportActionsServiceTests
 
     private void SetupReportAndMessage(Report report, MessageRecord message)
     {
-        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
         _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
             .Returns(message);
