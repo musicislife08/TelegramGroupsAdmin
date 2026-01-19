@@ -1,3 +1,4 @@
+@using Humanizer
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Telegram.Extensions
@@ -71,8 +72,8 @@
                                      HelperText="Time before auto-kicking non-responsive users (10-300s)" />
                 </MudItem>
 
-                @* DM Chat Teaser - Only shown for DmWelcome mode - appears FIRST because it's shown first in actual flow *@
-                @if (_config.Mode == WelcomeMode.DmWelcome)
+                @* DM Chat Teaser - Shown for DmWelcome and EntranceExam modes - appears FIRST because it's shown first in actual flow *@
+                @if (_config.Mode is WelcomeMode.DmWelcome or WelcomeMode.EntranceExam)
                 {
                     <MudItem xs="12">
                         <MudDivider Class="my-2" />
@@ -105,7 +106,8 @@
                         <MudTextField @bind-Value="_config.DmChatTeaserMessage"
                                       id="dmTeaserInput"
                                       Label="DM Chat Teaser"
-                                      Lines="3"
+                                      Lines="6"
+                                      FullWidth="true"
                                       Immediate="true"
                                       @onfocus="@(() => _lastFocusedInputId = "dmTeaserInput")"
                                       HelperText="Prompt users to click button. Don't say 'I've sent you...' - clicking initiates the DM!" />
@@ -120,6 +122,18 @@
                             Button text: "@_config.DmButtonText"
                         </MudText>
                     </MudItem>
+
+                    @* For Exam mode, put button text field right here where the button is used *@
+                    @if (_config.Mode == WelcomeMode.EntranceExam)
+                    {
+                        <MudItem xs="12" lg="6">
+                            <MudTextField @bind-Value="_config.DmButtonText"
+                                          Label="Start Exam Button Text"
+                                          FullWidth="true"
+                                          Immediate="true"
+                                          HelperText="Button shown on the teaser message above" />
+                        </MudItem>
+                    }
                 }
 
                 @* Main Welcome Message - Always Visible *@
@@ -127,11 +141,20 @@
                     <MudDivider Class="my-2" />
                     <MudText Typo="Typo.subtitle2" Class="mb-2">
                         <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Small" Class="mr-1" />
-                        Main Welcome Message
+                        @(_config.Mode == WelcomeMode.EntranceExam ? "Rules / Guidelines" : "Main Welcome Message")
                     </MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                        Complete message shown to users. Used in Chat mode (posted to chat), DM mode (sent in DM), and DM fallback (if DM fails).
-                    </MudText>
+                    @if (_config.Mode == WelcomeMode.EntranceExam)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                            Sent in DM before exam questions. No buttons - just your rules/guidelines. Remove any "click below to accept" language.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                            Complete message shown to users. Used in Chat mode (posted to chat), DM mode (sent in DM), and DM fallback (if DM fails).
+                        </MudText>
+                    }
                 </MudItem>
                 <MudItem xs="12">
                     <MudText Typo="Typo.caption" Class="mb-2 mud-text-secondary">
@@ -155,50 +178,56 @@
                                   id="mainWelcomeInput"
                                   Label="Main Welcome Message"
                                   Lines="8"
+                                  FullWidth="true"
                                   Immediate="true"
                                   @onfocus="@(() => _lastFocusedInputId = "mainWelcomeInput")"
                                   HelperText="Complete message with greeting, rules/guidelines, and instructions." />
                 </MudItem>
                 <MudItem xs="12" lg="6">
                     <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                        Live Preview (@(_config.Mode == WelcomeMode.DmWelcome ? "In DM" : "In Chat")):
+                        Live Preview (@(_config.Mode == WelcomeMode.ChatAcceptDeny ? "In Chat" : "In DM")):
                     </MudText>
                     <TelegramMessagePreview PreviewText="@GetPreviewText(_config.MainWelcomeMessage)"
-                                           ShowUserCommand="@(_config.Mode == WelcomeMode.DmWelcome)"
+                                           ShowUserCommand="@(_config.Mode != WelcomeMode.ChatAcceptDeny)"
                                            ShowWarning="true"
                                            Buttons="@GetMainWelcomeButtons()" />
                 </MudItem>
 
-                <MudItem xs="12">
-                    <MudDivider Class="my-2" />
-                    <MudText Typo="Typo.subtitle2" Class="mb-2">
-                        <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Small" Class="mr-1" />
-                        Button Customization
-                    </MudText>
-                </MudItem>
-
-                <MudItem xs="12" md="4">
-                    <MudTextField @bind-Value="_config.AcceptButtonText"
-                                  Label="Accept Button Text"
-                                  Immediate="true"
-                                  HelperText="Text shown on the accept button" />
-                </MudItem>
-
-                <MudItem xs="12" md="4">
-                    <MudTextField @bind-Value="_config.DenyButtonText"
-                                  Label="Deny Button Text"
-                                  Immediate="true"
-                                  HelperText="Text shown on the deny button" />
-                </MudItem>
-
-                @if (_config.Mode == WelcomeMode.DmWelcome)
+                @* Button Customization - NOT shown for EntranceExam (button is in teaser section above) *@
+                @if (_config.Mode != WelcomeMode.EntranceExam)
                 {
-                    <MudItem xs="12" md="4">
-                        <MudTextField @bind-Value="_config.DmButtonText"
-                                      Label="DM Button Text"
-                                      Immediate="true"
-                                      HelperText="Button text in chat teaser (DM mode only)" />
+                    <MudItem xs="12">
+                        <MudDivider Class="my-2" />
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Small" Class="mr-1" />
+                            Button Customization
+                        </MudText>
                     </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_config.AcceptButtonText"
+                                      Label="Accept Button Text"
+                                      Immediate="true"
+                                      HelperText="Text shown on the accept button" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_config.DenyButtonText"
+                                      Label="Deny Button Text"
+                                      Immediate="true"
+                                      HelperText="Text shown on the deny button" />
+                    </MudItem>
+
+                    @* DM teaser button - only for DmWelcome mode *@
+                    @if (_config.Mode == WelcomeMode.DmWelcome)
+                    {
+                        <MudItem xs="12" md="4">
+                            <MudTextField @bind-Value="_config.DmButtonText"
+                                          Label="DM Button Text"
+                                          Immediate="true"
+                                          HelperText="Button text in chat teaser" />
+                        </MudItem>
+                    }
                 }
 
                 @* Entrance Exam Configuration - Only shown for EntranceExam mode *@
@@ -385,9 +414,12 @@
         var preview = template;
 
         // Replace valid variables with sample data
+        var timeoutSeconds = _config?.TimeoutSeconds ?? 60;
+        var formattedTimeout = TimeSpan.FromSeconds(timeoutSeconds).Humanize(precision: 2);
+
         preview = preview.Replace("{username}", "@SampleUser");
         preview = preview.Replace("{chat_name}", "Sample Chat Group");
-        preview = preview.Replace("{timeout}", _config?.TimeoutSeconds.ToString() ?? "60");
+        preview = preview.Replace("{timeout}", formattedTimeout);
 
         // Highlight invalid/incomplete variables
         var invalidVariablePattern = System.Text.RegularExpressions.Regex.Matches(preview, @"\{[^}]*\}");
@@ -428,7 +460,11 @@
     /// </summary>
     private string[][] GetMainWelcomeButtons()
     {
-        // Both modes show Accept/Decline buttons on the main welcome message
+        // EntranceExam mode: no buttons on welcome message (exam questions sent separately in DM)
+        if (_config?.Mode == WelcomeMode.EntranceExam)
+            return [];
+
+        // DmWelcome and ChatAcceptDeny show Accept/Decline buttons on the main welcome message
         return
         [
             [_config?.AcceptButtonText ?? "✅ I Accept", _config?.DenyButtonText ?? "❌ Decline"]

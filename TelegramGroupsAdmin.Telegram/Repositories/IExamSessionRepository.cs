@@ -90,6 +90,17 @@ public interface IExamSessionRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get an active session for a user across any group chat.
+    /// Used to find session when user sends a DM (open-ended answer).
+    /// </summary>
+    /// <param name="userId">The Telegram user ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Active session if found, null otherwise</returns>
+    Task<ExamSession?> GetActiveSessionForUserAsync(
+        long userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get all active sessions for a chat (admin visibility).
     /// </summary>
     Task<List<ExamSession>> GetActiveSessionsAsync(

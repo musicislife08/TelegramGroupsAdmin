@@ -263,50 +263,19 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
-            // Step 4: Handle based on welcome mode
-            int welcomeMessageId;
+            // Step 4: Send welcome/teaser message based on mode
+            // All modes now use SendWelcomeMessageAsync:
+            // - ChatAcceptDeny: Shows full message with Accept/Deny buttons in group
+            // - DmWelcome: Shows teaser with "Read Rules" button (deep link to DM)
+            // - EntranceExam: Shows teaser with "Start Exam" button (deep link to DM)
+            var welcomeMessage = await SendWelcomeMessageAsync(
+                operations,
+                chatMemberUpdate.Chat.Id,
+                user,
+                config,
+                cancellationToken);
 
-            if (config.Mode == WelcomeMode.EntranceExam)
-            {
-                // Entrance exam mode: start exam via ExamFlowService
-                var examResult = await WithExamFlowServiceAsync(async examFlowService =>
-                    await examFlowService.StartExamAsync(
-                        chatMemberUpdate.Chat,
-                        user,
-                        config,
-                        cancellationToken));
-
-                if (!examResult.Success)
-                {
-                    _logger.LogWarning(
-                        "Failed to start exam for {User} in {Chat}, restoring permissions",
-                        user.ToLogDebug(),
-                        chatMemberUpdate.Chat.ToLogDebug());
-
-                    // Restore permissions if exam start failed
-                    await RestoreUserPermissionsAsync(operations, chatMemberUpdate.Chat, user, cancellationToken);
-                    return;
-                }
-
-                welcomeMessageId = examResult.WelcomeMessageId;
-
-                _logger.LogInformation(
-                    "Started entrance exam for {User} in {Chat}",
-                    user.ToLogInfo(),
-                    chatMemberUpdate.Chat.ToLogInfo());
-            }
-            else
-            {
-                // Chat accept/deny or DM mode: send welcome message with inline buttons
-                var welcomeMessage = await SendWelcomeMessageAsync(
-                    operations,
-                    chatMemberUpdate.Chat.Id,
-                    user,
-                    config,
-                    cancellationToken);
-
-                welcomeMessageId = welcomeMessage.MessageId;
-            }
+            var welcomeMessageId = welcomeMessage.MessageId;
 
             // Step 5: Create welcome response record (pending state)
             var welcomeResponse = new WelcomeResponse(
@@ -612,6 +581,16 @@ public class WelcomeService : IWelcomeService
 
             _logger.LogInformation(
                 "Sending DM welcome message to {User} in {Chat}",
+                user.ToLogInfo(),
+                chatInfo.ToLogInfo());
+        }
+        else if (config.Mode == WelcomeMode.EntranceExam)
+        {
+            var botInfo = await operations.GetMeAsync(cancellationToken);
+            keyboard = WelcomeKeyboardBuilder.BuildExamModeKeyboard(config, chatId, user.Id, botInfo.Username!);
+
+            _logger.LogInformation(
+                "Sending entrance exam teaser to {User} in {Chat}",
                 user.ToLogInfo(),
                 chatInfo.ToLogInfo());
         }

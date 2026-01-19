@@ -528,7 +528,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("admin_notes", t =>
+                    b.ToTable("admin_notes", null, t =>
                         {
                             t.HasCheckConstraint("CK_admin_notes_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
                         });
@@ -589,7 +589,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TargetWebUserId");
 
-                    b.ToTable("audit_log", t =>
+                    b.ToTable("audit_log", null, t =>
                         {
                             t.HasCheckConstraint("CK_audit_log_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
 
@@ -684,7 +684,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Url");
 
-                    b.ToTable("blocklist_subscriptions");
+                    b.ToTable("blocklist_subscriptions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.CachedBlockedDomainDto", b =>
@@ -735,7 +735,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("Domain", "BlockMode", "ChatId")
                         .IsUnique();
 
-                    b.ToTable("cached_blocked_domains");
+                    b.ToTable("cached_blocked_domains", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatAdminRecordDto", b =>
@@ -777,7 +777,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TelegramId");
 
-                    b.ToTable("chat_admins");
+                    b.ToTable("chat_admins", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ConfigRecordDto", b =>
@@ -880,7 +880,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("idx_configs_chat_specific")
                         .HasFilter("chat_id != 0");
 
-                    b.ToTable("configs");
+                    b.ToTable("configs", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ContentDetectionConfigRecordDto", b =>
@@ -911,7 +911,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("idx_content_detection_configs_chat")
                         .HasFilter("chat_id IS NOT NULL");
 
-                    b.ToTable("content_detection_configs");
+                    b.ToTable("content_detection_configs", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DetectionResultRecordDto", b =>
@@ -1012,7 +1012,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("IsSpam", "DetectedAt")
                         .HasDatabaseName("ix_detection_results_is_spam_detected_at");
 
-                    b.ToTable("detection_results", t =>
+                    b.ToTable("detection_results", null, t =>
                         {
                             t.HasCheckConstraint("CK_detection_results_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
@@ -1080,7 +1080,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("FilterType", "BlockMode")
                         .HasFilter("enabled = true");
 
-                    b.ToTable("domain_filters");
+                    b.ToTable("domain_filters", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.EnrichedMessageView", b =>
@@ -1302,7 +1302,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("ChatId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("exam_sessions");
+                    b.ToTable("exam_sessions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanQuotaRecord", b =>
@@ -1353,7 +1353,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("Service", "QuotaType", "QuotaWindowStart")
                         .IsUnique();
 
-                    b.ToTable("file_scan_quota");
+                    b.ToTable("file_scan_quota", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanResultRecord", b =>
@@ -1406,7 +1406,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Scanner", "ScannedAt");
 
-                    b.ToTable("file_scan_results");
+                    b.ToTable("file_scan_results", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ImageTrainingSampleDto", b =>
@@ -1530,7 +1530,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserRecordDtoId");
 
-                    b.ToTable("invites");
+                    b.ToTable("invites", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.LinkedChannelRecordDto", b =>
@@ -1573,7 +1573,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("ManagedChatId")
                         .IsUnique();
 
-                    b.ToTable("linked_channels");
+                    b.ToTable("linked_channels", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", b =>
@@ -1629,7 +1629,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("ChatId");
 
-                    b.ToTable("managed_chats");
+                    b.ToTable("managed_chats", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageEditRecordDto", b =>
@@ -1671,7 +1671,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("MessageId");
 
-                    b.ToTable("message_edits");
+                    b.ToTable("message_edits", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageRecordDto", b =>
@@ -1800,7 +1800,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Timestamp", "DeletedAt");
 
-                    b.ToTable("messages");
+                    b.ToTable("messages", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageTranslationDto", b =>
@@ -1859,7 +1859,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("ix_message_translations_similarity_hash")
                         .HasFilter("similarity_hash IS NOT NULL");
 
-                    b.ToTable("message_translations", t =>
+                    b.ToTable("message_translations", null, t =>
                         {
                             t.HasCheckConstraint("CK_message_translations_exclusive_source", "(message_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1");
                         });
@@ -1895,7 +1895,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("notification_preferences");
+                    b.ToTable("notification_preferences", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PendingNotificationRecordDto", b =>
@@ -1942,7 +1942,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("NotificationType", "CreatedAt");
 
-                    b.ToTable("pending_notifications");
+                    b.ToTable("pending_notifications", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PromptVersionDto", b =>
@@ -1986,7 +1986,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("prompt_versions");
+                    b.ToTable("prompt_versions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PushSubscriptionDto", b =>
@@ -2034,7 +2034,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("UserId", "Endpoint")
                         .IsUnique();
 
-                    b.ToTable("push_subscriptions");
+                    b.ToTable("push_subscriptions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.RawAlgorithmPerformanceStatsDto", b =>
@@ -2092,7 +2092,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("recovery_codes");
+                    b.ToTable("recovery_codes", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReviewCallbackContextDto", b =>
@@ -2132,7 +2132,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("ReviewId")
                         .HasDatabaseName("ix_report_callback_contexts_report_id");
 
-                    b.ToTable("report_callback_contexts");
+                    b.ToTable("report_callback_contexts", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReviewDto", b =>
@@ -2214,7 +2214,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("IX_reviews_unique_pending_per_message")
                         .HasFilter("status = 0");
 
-                    b.ToTable("reviews");
+                    b.ToTable("reviews", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.StopWordDto", b =>
@@ -2263,7 +2263,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("stop_words", t =>
+                    b.ToTable("stop_words", null, t =>
                         {
                             t.HasCheckConstraint("CK_stop_words_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
@@ -2292,7 +2292,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UsageCount");
 
-                    b.ToTable("tag_definitions");
+                    b.ToTable("tag_definitions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramLinkTokenRecordDto", b =>
@@ -2332,7 +2332,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserRecordDtoId");
 
-                    b.ToTable("telegram_link_tokens");
+                    b.ToTable("telegram_link_tokens", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramUserDto", b =>
@@ -2431,7 +2431,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Username");
 
-                    b.ToTable("telegram_users");
+                    b.ToTable("telegram_users", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramUserMappingRecordDto", b =>
@@ -2471,7 +2471,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("telegram_user_mappings");
+                    b.ToTable("telegram_user_mappings", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ThresholdRecommendationDto", b =>
@@ -2562,7 +2562,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("AlgorithmName", "Status");
 
-                    b.ToTable("threshold_recommendations");
+                    b.ToTable("threshold_recommendations", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TrainingLabelDto", b =>
@@ -2599,7 +2599,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Label", "LabeledAt");
 
-                    b.ToTable("training_labels", t =>
+                    b.ToTable("training_labels", null, t =>
                         {
                             t.HasCheckConstraint("CK_training_labels_label", "label IN (0, 1)");
                         });
@@ -2664,7 +2664,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("user_actions", t =>
+                    b.ToTable("user_actions", null, t =>
                         {
                             t.HasCheckConstraint("CK_user_actions_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
@@ -2787,7 +2787,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
 
-                    b.ToTable("users");
+                    b.ToTable("users", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserTagDto", b =>
@@ -2857,7 +2857,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("user_tags", t =>
+                    b.ToTable("user_tags", null, t =>
                         {
                             t.HasCheckConstraint("CK_user_tags_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
                         });
@@ -2909,7 +2909,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("verification_tokens");
+                    b.ToTable("verification_tokens", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.VideoTrainingSampleDto", b =>
@@ -3036,7 +3036,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("ix_web_notifications_user_id_created_at");
 
-                    b.ToTable("web_notifications");
+                    b.ToTable("web_notifications", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.WelcomeResponseDto", b =>
@@ -3095,7 +3095,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("welcome_responses");
+                    b.ToTable("welcome_responses", (string)null);
                 });
 
             modelBuilder.Entity("AppAny.Quartz.EntityFrameworkCore.Migrations.QuartzBlobTrigger", b =>
@@ -3242,7 +3242,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                             b1.HasKey("ContentDetectionConfigRecordDtoId");
 
-                            b1.ToTable("content_detection_configs");
+                            b1.ToTable("content_detection_configs", (string)null);
 
                             b1.ToJson("config_json");
 
@@ -3267,7 +3267,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3289,7 +3289,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3314,7 +3314,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3332,7 +3332,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3368,7 +3368,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3386,7 +3386,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3406,7 +3406,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3426,7 +3426,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3454,7 +3454,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3474,7 +3474,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3496,7 +3496,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3529,7 +3529,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3549,7 +3549,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3585,7 +3585,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                                     b2.HasKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
 
-                                    b2.ToTable("content_detection_configs");
+                                    b2.ToTable("content_detection_configs", (string)null);
 
                                     b2.WithOwner()
                                         .HasForeignKey("ContentDetectionConfigDataContentDetectionConfigRecordDtoId");
@@ -3825,7 +3825,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                             b1.HasKey("TelegramUserDtoTelegramUserId", "__synthesizedOrdinal");
 
-                            b1.ToTable("telegram_users");
+                            b1.ToTable("telegram_users", (string)null);
 
                             b1.ToJson("warnings");
 

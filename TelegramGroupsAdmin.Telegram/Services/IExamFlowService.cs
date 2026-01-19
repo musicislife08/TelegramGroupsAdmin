@@ -19,13 +19,21 @@ public record ExamStartResult(bool Success, int WelcomeMessageId);
 public record ExamAnswerResult(bool ExamComplete, bool? Passed, bool SentToReview);
 
 /// <summary>
+/// Context for an active exam session, including whether it's awaiting an open-ended answer.
+/// </summary>
+/// <param name="GroupChatId">The group chat where user joined</param>
+/// <param name="AwaitingOpenEndedAnswer">True if MC questions are complete and open-ended is pending</param>
+public record ActiveExamContext(long GroupChatId, bool AwaitingOpenEndedAnswer);
+
+/// <summary>
 /// Service for managing entrance exam flow.
 /// Handles MC question display, answer validation, open-ended evaluation.
 /// </summary>
 public interface IExamFlowService
 {
     /// <summary>
-    /// Start an exam session for a new user
+    /// Start an exam session for a new user.
+    /// Note: This sends questions to the group chat. Consider using StartExamInDmAsync instead.
     /// </summary>
     /// <param name="chat">The chat the user joined</param>
     /// <param name="user">The user taking the exam</param>
@@ -35,6 +43,22 @@ public interface IExamFlowService
     Task<ExamStartResult> StartExamAsync(
         Chat chat,
         User user,
+        WelcomeConfig config,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Start an exam session in user's DM (triggered via deep link)
+    /// </summary>
+    /// <param name="groupChatId">The group chat where user joined</param>
+    /// <param name="user">The user taking the exam</param>
+    /// <param name="dmChatId">User's private chat with bot (where questions are sent)</param>
+    /// <param name="config">Welcome config with exam settings</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result with first question message ID</returns>
+    Task<ExamStartResult> StartExamInDmAsync(
+        long groupChatId,
+        User user,
+        long dmChatId,
         WelcomeConfig config,
         CancellationToken cancellationToken = default);
 
@@ -74,6 +98,15 @@ public interface IExamFlowService
     /// Check if a user has an active exam session in a chat
     /// </summary>
     Task<bool> HasActiveSessionAsync(long chatId, long userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get an active exam session for a user (across any group chat).
+    /// Used to find session when user sends a DM with open-ended answer.
+    /// </summary>
+    /// <param name="userId">The Telegram user ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Active session with exam config context, or null if none</returns>
+    Task<ActiveExamContext?> GetActiveExamContextAsync(long userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Cancel an exam session (e.g., user left chat)

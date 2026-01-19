@@ -1,17 +1,69 @@
 using Bunit;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using MudBlazor.Services;
+using NSubstitute;
 using TelegramGroupsAdmin.Components.Reports;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
+
+/// <summary>
+/// Custom test context for ImpersonationAlertCard with mocked dependencies.
+/// </summary>
+public abstract class ImpersonationAlertCardTestContext : BunitContext
+{
+    protected ITelegramUserRepository TelegramUserRepository { get; }
+    protected IMessageHistoryRepository MessageRepository { get; }
+    protected IManagedChatsRepository ManagedChatsRepository { get; }
+
+    protected ImpersonationAlertCardTestContext()
+    {
+        // Create mocks FIRST (before AddMudServices locks the container)
+        TelegramUserRepository = Substitute.For<ITelegramUserRepository>();
+        MessageRepository = Substitute.For<IMessageHistoryRepository>();
+        ManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
+
+        // Configure default mock behavior
+        TelegramUserRepository.GetByTelegramIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        MessageRepository.GetMessageCountAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(0);
+        MessageRepository.GetUserMessagesAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new List<UserMessageInfo>());
+        ManagedChatsRepository.GetActiveChatsAsync(Arg.Any<CancellationToken>())
+            .Returns(new List<ManagedChatRecord>());
+
+        // Register mocks
+        Services.AddSingleton(TelegramUserRepository);
+        Services.AddSingleton(MessageRepository);
+        Services.AddSingleton(ManagedChatsRepository);
+
+        // THEN add MudBlazor services
+        Services.AddMudServices(options =>
+        {
+            options.PopoverOptions.ThrowOnDuplicateProvider = false;
+            options.PopoverOptions.CheckForPopoverProvider = false;
+        });
+
+        // Set up JSInterop
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        JSInterop.SetupVoid("mudPopover.initialize", _ => true).SetVoidResult();
+        JSInterop.SetupVoid("mudPopover.connect", _ => true).SetVoidResult();
+        JSInterop.SetupVoid("mudPopover.disconnect", _ => true).SetVoidResult();
+        JSInterop.Setup<int>("mudpopoverHelper.countProviders").SetResult(1);
+    }
+}
 
 /// <summary>
 /// Component tests for ImpersonationAlertCard.razor
 /// Tests impersonation alert display, risk levels, match indicators, and action buttons.
 /// </summary>
 [TestFixture]
-public class ImpersonationAlertCardTests : MudBlazorTestContext
+public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
 {
     #region Helper Methods
 
@@ -137,28 +189,6 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
         Assert.That(cut.Markup, Does.Contain("Medium"));
     }
 
-    [Test]
-    public void DisplaysAutoBannedChip_WhenAutoBanned()
-    {
-        // Arrange & Act
-        var cut = Render<ImpersonationAlertCard>(p => p
-            .Add(x => x.Alert, CreateAlert(autoBanned: true)));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("AUTO-BANNED"));
-    }
-
-    [Test]
-    public void HidesAutoBannedChip_WhenNotAutoBanned()
-    {
-        // Arrange & Act
-        var cut = Render<ImpersonationAlertCard>(p => p
-            .Add(x => x.Alert, CreateAlert(autoBanned: false)));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Not.Contain("AUTO-BANNED"));
-    }
-
     #endregion
 
     #region Match Indicator Tests
@@ -172,7 +202,6 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Name Match"));
-        Assert.That(cut.Markup, Does.Contain("50 points"));
     }
 
     [Test]
@@ -193,10 +222,8 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
         var cut = Render<ImpersonationAlertCard>(p => p
             .Add(x => x.Alert, CreateAlert(photoMatch: true, photoSimilarityScore: 0.87)));
 
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("Photo Match"));
-        // PhotoSimilarityScore formatted as percentage (locale-agnostic: may be "87%" or "87 %")
-        Assert.That(cut.Markup, Does.Match(@"87\s?%"));
+        // Assert - Component shows "Photo {percentage}" (e.g., "Photo 87%")
+        Assert.That(cut.Markup, Does.Match(@"Photo\s+87\s?%"));
     }
 
     [Test]
@@ -206,8 +233,8 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
         var cut = Render<ImpersonationAlertCard>(p => p
             .Add(x => x.Alert, CreateAlert(photoMatch: false, photoSimilarityScore: null)));
 
-        // Assert
-        Assert.That(cut.Markup, Does.Not.Contain("Photo Match"));
+        // Assert - No photo chip when photoMatch is false
+        Assert.That(cut.Markup, Does.Not.Match(@"Photo\s+\d+\s?%"));
     }
 
     #endregion
@@ -244,7 +271,7 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
                 targetUserId: 935157741)));
 
         // Assert
-        Assert.That(cut.Markup, Does.Contain("Target Admin"));
+        Assert.That(cut.Markup, Does.Contain("Target Being Copied"));
         Assert.That(cut.Markup, Does.Contain("Real Admin")); // Display name
         Assert.That(cut.Markup, Does.Contain("realadmin")); // Username
         Assert.That(cut.Markup, Does.Contain("ID: 935157741"));
@@ -274,31 +301,10 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
         var cut = Render<ImpersonationAlertCard>(p => p
             .Add(x => x.Alert, CreateAlert(reviewedAt: null)));
 
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("Confirm Ban"));
-        Assert.That(cut.Markup, Does.Contain("Dismiss"));
-    }
-
-    [Test]
-    public void ShowsUnbanButton_WhenAutoBannedAndNotReviewed()
-    {
-        // Arrange & Act
-        var cut = Render<ImpersonationAlertCard>(p => p
-            .Add(x => x.Alert, CreateAlert(autoBanned: true, reviewedAt: null)));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Contain("Unban (False Positive)"));
-    }
-
-    [Test]
-    public void HidesUnbanButton_WhenNotAutoBanned()
-    {
-        // Arrange & Act
-        var cut = Render<ImpersonationAlertCard>(p => p
-            .Add(x => x.Alert, CreateAlert(autoBanned: false, reviewedAt: null)));
-
-        // Assert
-        Assert.That(cut.Markup, Does.Not.Contain("Unban"));
+        // Assert - Component shows: Confirm Scam, False Positive, Trust
+        Assert.That(cut.Markup, Does.Contain("Confirm Scam"));
+        Assert.That(cut.Markup, Does.Contain("False Positive"));
+        Assert.That(cut.Markup, Does.Contain("Trust"));
     }
 
     [Test]
@@ -311,9 +317,10 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
                 reviewedByUserId: "admin@test.com",
                 verdict: ImpersonationVerdict.ConfirmedScam)));
 
-        // Assert
-        Assert.That(cut.Markup, Does.Not.Contain("Confirm Ban"));
-        Assert.That(cut.Markup, Does.Not.Contain(">Dismiss<")); // Not in button form
+        // Assert - Action buttons hidden when already reviewed
+        Assert.That(cut.Markup, Does.Not.Contain("Confirm Scam"));
+        Assert.That(cut.Markup, Does.Not.Contain(">False Positive<")); // Not in button form
+        Assert.That(cut.Markup, Does.Not.Contain(">Trust<")); // Not in button form
     }
 
     [Test]
@@ -351,7 +358,7 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
     #region Event Callback Tests
 
     [Test]
-    public async Task InvokesOnAction_WhenConfirmBanClicked()
+    public async Task InvokesOnAction_WhenConfirmScamClicked()
     {
         // Arrange
         (ImpersonationAlertRecord alert, string action)? receivedAction = null;
@@ -363,7 +370,7 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
                 this, args => receivedAction = args)));
 
         // Act
-        var confirmButton = cut.FindAll("button").First(b => b.TextContent.Contains("Confirm Ban"));
+        var confirmButton = cut.FindAll("button").First(b => b.TextContent.Contains("Confirm Scam"));
         await confirmButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         // Assert
@@ -373,28 +380,7 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
     }
 
     [Test]
-    public async Task InvokesOnAction_WhenUnbanClicked()
-    {
-        // Arrange
-        (ImpersonationAlertRecord alert, string action)? receivedAction = null;
-        var alert = CreateAlert(autoBanned: true, reviewedAt: null);
-
-        var cut = Render<ImpersonationAlertCard>(p => p
-            .Add(x => x.Alert, alert)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, string)>(
-                this, args => receivedAction = args)));
-
-        // Act
-        var unbanButton = cut.FindAll("button").First(b => b.TextContent.Contains("Unban"));
-        await unbanButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-
-        // Assert
-        Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("unban"));
-    }
-
-    [Test]
-    public async Task InvokesOnAction_WhenDismissClicked()
+    public async Task InvokesOnAction_WhenTrustClicked()
     {
         // Arrange
         (ImpersonationAlertRecord alert, string action)? receivedAction = null;
@@ -406,8 +392,29 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
                 this, args => receivedAction = args)));
 
         // Act
-        var dismissButton = cut.FindAll("button").First(b => b.TextContent.Contains("Dismiss"));
-        await dismissButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        var trustButton = cut.FindAll("button").First(b => b.TextContent.Contains("Trust"));
+        await trustButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        // Assert
+        Assert.That(receivedAction, Is.Not.Null);
+        Assert.That(receivedAction!.Value.action, Is.EqualTo("trust"));
+    }
+
+    [Test]
+    public async Task InvokesOnAction_WhenFalsePositiveClicked()
+    {
+        // Arrange
+        (ImpersonationAlertRecord alert, string action)? receivedAction = null;
+        var alert = CreateAlert(reviewedAt: null);
+
+        var cut = Render<ImpersonationAlertCard>(p => p
+            .Add(x => x.Alert, alert)
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, string)>(
+                this, args => receivedAction = args)));
+
+        // Act
+        var falsePositiveButton = cut.FindAll("button").First(b => b.TextContent.Contains("False Positive"));
+        await falsePositiveButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);

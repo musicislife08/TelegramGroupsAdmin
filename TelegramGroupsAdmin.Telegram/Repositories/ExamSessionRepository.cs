@@ -236,6 +236,22 @@ public class ExamSessionRepository : IExamSessionRepository
 
         return entities.Select(e => e.ToModel()).ToList();
     }
+
+    public async Task<ExamSession?> GetActiveSessionForUserAsync(
+        long userId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+        var entity = await context.ExamSessions
+            .AsNoTracking()
+            .Where(s => s.UserId == userId && s.ExpiresAt > now)
+            .OrderByDescending(s => s.StartedAt)  // Most recent first
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return entity?.ToModel();
+    }
 }
 
 /// <summary>

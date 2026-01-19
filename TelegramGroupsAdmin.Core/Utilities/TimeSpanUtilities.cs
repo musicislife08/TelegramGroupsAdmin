@@ -87,7 +87,8 @@ public static class TimeSpanUtilities
     }
 
     /// <summary>
-    /// Format a TimeSpan duration as a human-readable string
+    /// Format a TimeSpan duration as a human-readable string.
+    /// Consider using Humanizer's TimeSpan.Humanize() for more accurate formatting.
     /// </summary>
     /// <param name="duration">TimeSpan to format</param>
     /// <returns>Formatted string like "5 minutes", "1 hour", "2 days", "1 week", "1 month", "1 year"</returns>

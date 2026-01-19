@@ -18,21 +18,23 @@
         </div>
     </div>
 
-    @* Inline keyboard buttons (rendered below the message) *@
+    @* Inline keyboard buttons (rendered below the message, aligned with bot bubble) *@
     @if (Buttons != null && Buttons.Any())
     {
-        <div class="telegram-inline-keyboard">
-            @foreach (var buttonRow in Buttons)
-            {
-                <div class="telegram-button-row">
-                    @foreach (var button in buttonRow)
-                    {
-                        <button class="telegram-inline-button" type="button">
-                            @button
-                        </button>
-                    }
-                </div>
-            }
+        <div class="telegram-message-wrapper telegram-bot-message">
+            <div class="telegram-inline-keyboard">
+                @foreach (var buttonRow in Buttons)
+                {
+                    <div class="telegram-button-row">
+                        @foreach (var button in buttonRow)
+                        {
+                            <button class="telegram-inline-button" type="button">
+                                @button
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
         </div>
     }
 

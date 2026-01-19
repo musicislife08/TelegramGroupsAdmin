@@ -328,8 +328,9 @@ public class ReportsPage
     }
 
     /// <summary>
-    /// Clicks the "Dismiss" button on a report/alert card.
+    /// Clicks the "Dismiss" button on a moderation report card.
     /// This is a NO-CONFIRMATION action that immediately dismisses the report.
+    /// Note: For impersonation alerts, use ClickFalsePositiveAsync instead.
     /// </summary>
     public async Task ClickDismissAsync()
     {
@@ -338,22 +339,32 @@ public class ReportsPage
     }
 
     /// <summary>
-    /// Clicks the "Confirm Ban" button on an impersonation alert card.
+    /// Clicks the "Confirm Scam" button on an impersonation alert card.
     /// This is a NO-CONFIRMATION action.
     /// </summary>
-    public async Task ClickConfirmBanAsync()
+    public async Task ClickConfirmScamAsync()
     {
-        var button = _page.Locator("button:has-text('Confirm Ban')").First;
+        var button = _page.Locator("button:has-text('Confirm Scam')").First;
         await button.ClickAsync();
     }
 
     /// <summary>
-    /// Clicks the "Unban (False Positive)" button on an impersonation alert card.
-    /// This is a NO-CONFIRMATION action.
+    /// Clicks the "False Positive" button on an impersonation alert card.
+    /// This is a NO-CONFIRMATION action that dismisses the alert.
     /// </summary>
-    public async Task ClickUnbanFalsePositiveAsync()
+    public async Task ClickFalsePositiveAsync()
     {
-        var button = _page.Locator("button:has-text('Unban (False Positive)')").First;
+        var button = _page.Locator("button:has-text('False Positive')").First;
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Trust" button on an impersonation alert card.
+    /// This is a NO-CONFIRMATION action that trusts/whitelists the user.
+    /// </summary>
+    public async Task ClickTrustAsync()
+    {
+        var button = _page.Locator("button:has-text('Trust')").First;
         await button.ClickAsync();
     }
 
