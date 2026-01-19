@@ -24,7 +24,7 @@ public class WelcomeMessageBuilderTests
         {
             Mode = WelcomeMode.ChatAcceptDeny,
             TimeoutSeconds = 120,
-            MainWelcomeMessage = "Welcome {username} to {chat_name}! You have {timeout} seconds."
+            MainWelcomeMessage = "Welcome {username} to {chat_name}! You have {timeout}."
         };
 
         // Act
@@ -33,8 +33,8 @@ public class WelcomeMessageBuilderTests
             username: "@testuser",
             chatName: "Test Chat");
 
-        // Assert
-        Assert.That(result, Is.EqualTo("Welcome @testuser to Test Chat! You have 120 seconds."));
+        // Assert - Humanizer formats 120s as "2 minutes"
+        Assert.That(result, Is.EqualTo("Welcome @testuser to Test Chat! You have 2 minutes."));
     }
 
     [Test]
@@ -46,7 +46,7 @@ public class WelcomeMessageBuilderTests
             Mode = WelcomeMode.DmWelcome,
             TimeoutSeconds = 60,
             MainWelcomeMessage = "This should NOT be used in DM mode",
-            DmChatTeaserMessage = "Hey {username}, check your DMs for {chat_name} rules! ({timeout}s)"
+            DmChatTeaserMessage = "Hey {username}, check your DMs for {chat_name} rules! ({timeout})"
         };
 
         // Act
@@ -55,8 +55,8 @@ public class WelcomeMessageBuilderTests
             username: "John",
             chatName: "Crypto Group");
 
-        // Assert
-        Assert.That(result, Is.EqualTo("Hey John, check your DMs for Crypto Group rules! (60s)"));
+        // Assert - Humanizer formats 60s as "1 minute"
+        Assert.That(result, Is.EqualTo("Hey John, check your DMs for Crypto Group rules! (1 minute)"));
     }
 
     [Test]
@@ -130,7 +130,7 @@ public class WelcomeMessageBuilderTests
         {
             Mode = WelcomeMode.ChatAcceptDeny,
             TimeoutSeconds = 45,
-            MainWelcomeMessage = "{username}, welcome! Remember {username}, you have {timeout}s. Yes, {timeout} seconds!"
+            MainWelcomeMessage = "{username}, welcome! Remember {username}, you have {timeout}. Yes, {timeout}!"
         };
 
         // Act
@@ -139,8 +139,8 @@ public class WelcomeMessageBuilderTests
             username: "@alice",
             chatName: "Test");
 
-        // Assert
-        Assert.That(result, Is.EqualTo("@alice, welcome! Remember @alice, you have 45s. Yes, 45 seconds!"));
+        // Assert - Humanizer formats 45s as "45 seconds"
+        Assert.That(result, Is.EqualTo("@alice, welcome! Remember @alice, you have 45 seconds. Yes, 45 seconds!"));
     }
 
     #endregion
@@ -175,7 +175,7 @@ public class WelcomeMessageBuilderTests
         var config = new WelcomeConfig
         {
             TimeoutSeconds = 90,
-            MainWelcomeMessage = "{username} joined {chat_name} with {timeout}s timeout"
+            MainWelcomeMessage = "{username} joined {chat_name} with {timeout} timeout"
         };
 
         // Act
@@ -184,8 +184,8 @@ public class WelcomeMessageBuilderTests
             username: "Bob",
             chatName: "Dev Group");
 
-        // Assert
-        Assert.That(result, Does.Contain("Bob joined Dev Group with 90s timeout"));
+        // Assert - Humanizer formats 90s as "1 minute, 30 seconds"
+        Assert.That(result, Does.Contain("Bob joined Dev Group with 1 minute, 30 seconds timeout"));
     }
 
     #endregion
@@ -281,6 +281,102 @@ public class WelcomeMessageBuilderTests
 
         // Assert
         Assert.That(result, Is.EqualTo("Welcome to 🚀 Crypto & NFT <Group>!"));
+    }
+
+    #endregion
+
+    #region FormatExamIntro Tests
+
+    [Test]
+    public void FormatExamIntro_SubstitutesAllVariables()
+    {
+        // Arrange
+        var config = new WelcomeConfig
+        {
+            Mode = WelcomeMode.EntranceExam,
+            TimeoutSeconds = 240,
+            MainWelcomeMessage = "Welcome {username} to {chat_name}! Complete the exam within {timeout}."
+        };
+
+        // Act
+        var result = WelcomeMessageBuilder.FormatExamIntro(
+            config,
+            username: "@examtaker",
+            chatName: "Crypto Group");
+
+        // Assert - variables replaced, timeout formatted by Humanizer
+        Assert.That(result, Does.Contain("@examtaker"));
+        Assert.That(result, Does.Contain("Crypto Group"));
+        Assert.That(result, Does.Not.Contain("{username}"));
+        Assert.That(result, Does.Not.Contain("{chat_name}"));
+        Assert.That(result, Does.Not.Contain("{timeout}"));
+    }
+
+    [Test]
+    public void FormatExamIntro_UsesMainWelcomeMessage()
+    {
+        // Arrange - MainWelcomeMessage should be used (not DmChatTeaserMessage)
+        var config = new WelcomeConfig
+        {
+            Mode = WelcomeMode.EntranceExam,
+            TimeoutSeconds = 60,
+            MainWelcomeMessage = "MAIN MESSAGE CONTENT",
+            DmChatTeaserMessage = "TEASER MESSAGE CONTENT"
+        };
+
+        // Act
+        var result = WelcomeMessageBuilder.FormatExamIntro(
+            config,
+            username: "@user",
+            chatName: "Test");
+
+        // Assert - should use MainWelcomeMessage for exam intro
+        Assert.That(result, Does.Contain("MAIN MESSAGE CONTENT"));
+        Assert.That(result, Does.Not.Contain("TEASER MESSAGE CONTENT"));
+    }
+
+    [Test]
+    public void FormatExamIntro_NoConfirmationFooter()
+    {
+        // Arrange - FormatExamIntro should NOT add confirmation footer
+        var config = new WelcomeConfig
+        {
+            Mode = WelcomeMode.EntranceExam,
+            TimeoutSeconds = 60,
+            MainWelcomeMessage = "Welcome to exam"
+        };
+
+        // Act
+        var result = WelcomeMessageBuilder.FormatExamIntro(
+            config,
+            username: "@user",
+            chatName: "Test");
+
+        // Assert - no confirmation footer (unlike FormatRulesConfirmation)
+        Assert.That(result, Does.Not.Contain("You're all set"));
+        Assert.That(result, Does.Not.Contain("participate"));
+    }
+
+    [Test]
+    public void FormatExamIntro_PreservesEmoji()
+    {
+        // Arrange
+        var config = new WelcomeConfig
+        {
+            Mode = WelcomeMode.EntranceExam,
+            TimeoutSeconds = 60,
+            MainWelcomeMessage = "👋 Welcome {username}! 📝 Please complete the exam."
+        };
+
+        // Act
+        var result = WelcomeMessageBuilder.FormatExamIntro(
+            config,
+            username: "John",
+            chatName: "Test");
+
+        // Assert
+        Assert.That(result, Does.Contain("👋"));
+        Assert.That(result, Does.Contain("📝"));
     }
 
     #endregion

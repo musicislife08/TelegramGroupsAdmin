@@ -204,17 +204,29 @@ public class ReviewCallbackHandlerTests
     [TestCase(-1, Description = "Negative action value")]
     [TestCase(4, Description = "Action value exceeds Dismiss (3)")]
     [TestCase(99, Description = "Way out of range")]
-    public async Task HandleCallbackAsync_ActionOutOfRange_ReturnsEarly(int invalidAction)
+    public async Task HandleCallbackAsync_ActionOutOfRange_ReturnsInvalidActionMessage(int invalidAction)
     {
-        // Arrange
+        // Arrange - action validation depends on review type, so context lookup must happen first
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:{invalidAction}");
+
+        var context = CreateTestContext();
+        _mockCallbackContextRepo.GetByIdAsync(TestContextId, Arg.Any<CancellationToken>())
+            .Returns(context);
+
+        var report = CreateTestReview();
+        _mockReviewsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
 
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert - should not attempt context lookup for invalid action
-        await _mockCallbackContextRepo.DidNotReceive()
-            .GetByIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        // Assert - message updated to show invalid action
+        await _mockOperations.Received(1).EditMessageTextAsync(
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Is<string>(s => s.Contains("Invalid action") || s.Contains("failed")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
     }
 
     #endregion
