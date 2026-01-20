@@ -207,7 +207,8 @@
             var reports = await ReportsRepository.GetContentReportsAsync(
                 chatId: null,
                 status: null,
-                limit: 100);
+                limit: 100,
+                cancellationToken: _cts.Token);
 
             foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.ChatId)))
             {
@@ -227,7 +228,8 @@
             }
 
             // Load all impersonation alerts (filter by status is done client-side in ApplyFilters)
-            var alerts = await ReportsRepository.GetImpersonationAlertsAsync(pendingOnly: false);
+            var alerts = await ReportsRepository.GetImpersonationAlertsAsync(
+                pendingOnly: false, cancellationToken: _cts.Token);
             foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.ChatId)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -246,7 +248,8 @@
             }
 
             // Load all exam failures (filter by status is done client-side in ApplyFilters)
-            var examFailures = await ReportsRepository.GetExamFailuresAsync(pendingOnly: false);
+            var examFailures = await ReportsRepository.GetExamFailuresAsync(
+                pendingOnly: false, cancellationToken: _cts.Token);
             foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.ChatId)))
             {
                 unifiedQueue.Add(new ReportQueueItem

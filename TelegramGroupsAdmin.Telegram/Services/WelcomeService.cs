@@ -511,7 +511,7 @@ public class WelcomeService : IWelcomeService
                 message,
                 cancellationToken);
 
-            if (result.ExamComplete)
+            if (result.ExamComplete && result.GroupChatId.HasValue)
             {
                 _logger.LogInformation(
                     "Exam completed for {User}: Passed={Passed}, SentToReview={SentToReview}",
@@ -520,8 +520,9 @@ public class WelcomeService : IWelcomeService
                     result.SentToReview);
 
                 // Cancel welcome timeout job if exam completed
+                // Use GroupChatId from result (not message.Chat.Id which is the DM chat)
                 var welcomeResponse = await WithRepositoryAsync((repo, cancellationToken) =>
-                    repo.GetByUserAndChatAsync(user.Id, message.Chat.Id, cancellationToken), cancellationToken);
+                    repo.GetByUserAndChatAsync(user.Id, result.GroupChatId.Value, cancellationToken), cancellationToken);
 
                 if (welcomeResponse?.TimeoutJobId != null)
                 {

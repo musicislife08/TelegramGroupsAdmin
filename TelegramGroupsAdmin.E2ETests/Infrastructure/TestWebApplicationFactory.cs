@@ -7,6 +7,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using NSubstitute;
 using Telegram.Bot;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -16,6 +19,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
@@ -45,7 +49,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly ITelegramConfigLoader _mockTelegramConfigLoader;
     private readonly ITelegramBotClient _mockTelegramBotClient;
     private readonly ITelegramBotClientFactory _mockTelegramBotClientFactory;
+    private readonly ITelegramOperations _mockTelegramOperations;
     private readonly IModerationOrchestrator _mockModerationOrchestrator;
+
+    // Job scheduler mock (for verifying timeout cancellation in exam flow tests)
+    private readonly IJobScheduler _mockJobScheduler;
+
+    // Exam evaluation mock (for controlling AI responses in exam flow tests)
+    private readonly IExamEvaluationService _mockExamEvaluationService;
 
     public TestWebApplicationFactory(string? databaseName = null)
     {
@@ -73,18 +84,65 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _mockTelegramConfigLoader = Substitute.For<ITelegramConfigLoader>();
         _mockTelegramConfigLoader.LoadConfigAsync().Returns(Task.FromResult("test-bot-token-for-e2e-tests"));
 
-        // Mock ITelegramBotClient for low-level API access
+        // Mock ITelegramBotClient for low-level API access (used by some services directly)
         _mockTelegramBotClient = Substitute.For<ITelegramBotClient>();
 
-        // Mock ITelegramBotClientFactory that returns real TelegramOperations wrapping the mock client
-        // Note: Using a factory lambda to create fresh instances per call prevents test pollution
-        // (though TelegramOperations is stateless, this is the correct pattern for mocks)
+        // Mock ITelegramOperations directly (instead of wrapping mock client in real TelegramOperations)
+        // This gives us full control over returns without dealing with extension methods
+        _mockTelegramOperations = Substitute.For<ITelegramOperations>();
+
+        // Configure GetChatAsync to return valid ChatFullInfo for any chat
+        _mockTelegramOperations.GetChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var chatId = callInfo.Arg<long>();
+                return new ChatFullInfo
+                {
+                    Id = chatId,
+                    Type = ChatType.Supergroup,
+                    Title = "Test Group",
+                    AccentColorId = 0
+                };
+            });
+
+        // Configure SendMessageAsync to return valid Message
+        _mockTelegramOperations.SendMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(), Arg.Any<ReplyMarkup?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => new Message
+            {
+                Id = Random.Shared.Next(1, 100000),
+                Date = DateTime.UtcNow,
+                Chat = new Chat { Id = callInfo.Arg<long>(), Type = ChatType.Private }
+            });
+
+        // Configure EditMessageTextAsync to return valid Message
+        _mockTelegramOperations.EditMessageTextAsync(
+                Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => new Message
+            {
+                Id = callInfo.ArgAt<int>(1),
+                Date = DateTime.UtcNow,
+                Chat = new Chat { Id = callInfo.Arg<long>(), Type = ChatType.Private }
+            });
+
+        // Configure AnswerCallbackQueryAsync (used after processing exam callbacks)
+        _mockTelegramOperations.AnswerCallbackQueryAsync(
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        // Configure DeleteMessageAsync (used to delete exam question messages)
+        _mockTelegramOperations.DeleteMessageAsync(
+                Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        // Mock ITelegramBotClientFactory that returns the mock operations
         _mockTelegramBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockTelegramBotClientFactory.GetBotClientAsync()
             .Returns(Task.FromResult(_mockTelegramBotClient));
         _mockTelegramBotClientFactory.GetOperationsAsync()
-            .Returns(_ => Task.FromResult<ITelegramOperations>(
-                new TelegramOperations(_mockTelegramBotClient, NullLogger<TelegramOperations>.Instance)));
+            .Returns(Task.FromResult(_mockTelegramOperations));
 
         // Mock IModerationOrchestrator - returns success for all moderation actions
         // (E2E tests don't have a real Telegram bot, so we mock the orchestrator)
@@ -108,6 +166,25 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 Arg.Any<CancellationToken>())
             .Returns(successResult);
 
+        // Mock IJobScheduler - returns predictable job IDs and tracks cancellations
+        _mockJobScheduler = Substitute.For<IJobScheduler>();
+        _mockJobScheduler.ScheduleJobAsync(
+                Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.FromResult($"job-{Guid.NewGuid():N}"));
+        _mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+        _mockJobScheduler.IsScheduledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        // Mock IExamEvaluationService - default to pass with high confidence
+        // Tests can reconfigure via MockExamEvaluation property
+        _mockExamEvaluationService = Substitute.For<IExamEvaluationService>();
+        _mockExamEvaluationService.IsAvailableAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+        _mockExamEvaluationService.EvaluateAnswerAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new ExamEvaluationResult(Passed: true, Reasoning: "Test passed", Confidence: 0.95));
+
         // Configure to use Kestrel with dynamic port (port 0)
         // This MUST be called before StartServer() or accessing Services
         UseKestrel(0);
@@ -122,6 +199,16 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// Gets the mock AI translation service. Configure in tests to return specific translations.
     /// </summary>
     public IAITranslationService MockAITranslation => _mockAITranslationService;
+
+    /// <summary>
+    /// Gets the mock job scheduler. Use to verify job scheduling/cancellation in tests.
+    /// </summary>
+    public IJobScheduler MockJobScheduler => _mockJobScheduler;
+
+    /// <summary>
+    /// Gets the mock exam evaluation service. Configure in tests to control AI pass/fail responses.
+    /// </summary>
+    public IExamEvaluationService MockExamEvaluation => _mockExamEvaluationService;
 
     /// <summary>
     /// Gets the mock file scanner service (ClamAV). Configure in tests for specific scan results.
@@ -238,6 +325,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Must be Scoped to match the original registration
             services.RemoveAll<IModerationOrchestrator>();
             services.AddScoped<IModerationOrchestrator>(_ => _mockModerationOrchestrator);
+
+            // Job scheduler mock (for verifying timeout job cancellation in exam flow tests)
+            services.RemoveAll<IJobScheduler>();
+            services.AddSingleton(_mockJobScheduler);
+
+            // Exam evaluation mock (Scoped to match real app registration)
+            services.RemoveAll<IExamEvaluationService>();
+            services.AddScoped<IExamEvaluationService>(_ => _mockExamEvaluationService);
         });
     }
 

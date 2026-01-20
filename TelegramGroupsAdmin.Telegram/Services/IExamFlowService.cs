@@ -16,7 +16,8 @@ public record ExamStartResult(bool Success, int WelcomeMessageId);
 /// <param name="ExamComplete">Whether all questions have been answered</param>
 /// <param name="Passed">Whether the user passed (only valid if ExamComplete)</param>
 /// <param name="SentToReview">Whether the user was sent to review queue</param>
-public record ExamAnswerResult(bool ExamComplete, bool? Passed, bool SentToReview);
+/// <param name="GroupChatId">The group chat ID where user joined (for welcome response lookup in DM flow)</param>
+public record ExamAnswerResult(bool ExamComplete, bool? Passed, bool SentToReview, long? GroupChatId = null);
 
 /// <summary>
 /// Context for an active exam session, including whether it's awaiting an open-ended answer.

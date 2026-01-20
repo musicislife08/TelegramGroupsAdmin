@@ -215,8 +215,9 @@ public class ExamFlowService : IExamFlowService
         if (session.IsExpired)
         {
             _logger.LogWarning("Exam session {SessionId} has expired", sessionId);
+            var expiredChatId = session.ChatId;
             await sessionRepo.DeleteSessionAsync(sessionId, cancellationToken);
-            return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: false);
+            return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: false, GroupChatId: expiredChatId);
         }
 
         // Verify user matches session
@@ -297,12 +298,15 @@ public class ExamFlowService : IExamFlowService
         }
 
         // All questions complete - evaluate
+        // Capture ChatId before re-fetch in case session is deleted
+        var groupChatId = session.ChatId;
+
         // Re-fetch session to get all answers
         session = await sessionRepo.GetByIdAsync(sessionId, cancellationToken);
         if (session == null)
         {
             _logger.LogWarning("Exam session {SessionId} was deleted before evaluation", sessionId);
-            return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: false);
+            return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: false, GroupChatId: groupChatId);
         }
         return await EvaluateAndCompleteAsync(session, examConfig, user, cancellationToken);
     }
@@ -493,7 +497,7 @@ public class ExamFlowService : IExamFlowService
             _logger.LogInformation("User {User} passed entrance exam in chat {ChatId}",
                 user.ToLogInfo(), session.ChatId);
 
-            return new ExamAnswerResult(ExamComplete: true, Passed: true, SentToReview: false);
+            return new ExamAnswerResult(ExamComplete: true, Passed: true, SentToReview: false, GroupChatId: session.ChatId);
         }
 
         // Create exam failure review (include shuffle state for review display)
@@ -521,7 +525,7 @@ public class ExamFlowService : IExamFlowService
         _logger.LogInformation("User {User} failed entrance exam in chat {ChatId}, sent to review",
             user.ToLogInfo(), session.ChatId);
 
-        return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: true);
+        return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: true, GroupChatId: session.ChatId);
     }
 
     private async Task<int> SendMcQuestionAsync(

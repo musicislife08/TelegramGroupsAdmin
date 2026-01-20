@@ -119,6 +119,30 @@ public partial class MessageProcessingService(
                         logger.LogInformation(
                             "Processed open-ended exam answer for user {UserId}: Complete={Complete}, Passed={Passed}",
                             message.From.Id, result.ExamComplete, result.Passed);
+
+                        // Cancel welcome timeout and update response if exam completed
+                        if (result.ExamComplete && result.GroupChatId.HasValue)
+                        {
+                            var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+                            var jobScheduler = scope.ServiceProvider.GetRequiredService<IJobScheduler>();
+
+                            var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(
+                                message.From.Id, result.GroupChatId.Value, cancellationToken);
+
+                            if (welcomeResponse?.TimeoutJobId != null)
+                            {
+                                await jobScheduler.CancelJobAsync(welcomeResponse.TimeoutJobId, cancellationToken);
+                                await welcomeRepo.SetTimeoutJobIdAsync(welcomeResponse.Id, null, cancellationToken);
+                            }
+
+                            if (result.Passed == true && welcomeResponse != null)
+                            {
+                                await welcomeRepo.UpdateResponseAsync(
+                                    welcomeResponse.Id, WelcomeResponseType.Accepted,
+                                    dmSent: true, dmFallback: false, cancellationToken);
+                            }
+                            // SentToReview case: keep as Pending - admin will decide
+                        }
                     }
                 }
                 catch (Exception ex)
