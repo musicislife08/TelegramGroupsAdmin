@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
@@ -154,5 +155,133 @@ public class CriticalMigrationTests
             )
         ");
         Assert.That(typeIndexExists, Is.True, "Index IX_reports_type should exist");
+    }
+
+    /// <summary>
+    /// Validates that impersonation_alerts data is correctly migrated to the unified reports table.
+    ///
+    /// This test ensures the data migration SQL properly:
+    /// - Maps detected_at → reported_at
+    /// - Sets type = 1 (ImpersonationAlert)
+    /// - Creates JSONB context with all impersonation-specific fields
+    /// - Maps risk_level and verdict enums to strings
+    /// - Preserves reviewer relationship (web_user_id, reviewed_by)
+    ///
+    /// Uses golden dataset SQL scripts for test data (FK dependency order):
+    /// - 00_base_telegram_users.sql (suspected_user_id, target_user_id FKs)
+    /// - 01_base_web_users.sql (reviewed_by_user_id FK)
+    /// - 40_pre_migration_impersonation_alerts.sql (test alerts in old schema)
+    /// </summary>
+    [Test]
+    public async Task UnifiedReviewsAndExamSessions_ImpersonationAlertData_MigratedCorrectly()
+    {
+        using var helper = new MigrationTestHelper();
+
+        // Arrange - Apply migrations up to (but not including) the data migration
+        await helper.CreateDatabaseAndMigrateToAsync("20260114023351_AddEnrichedMessagesView");
+
+        // Seed prerequisite data using golden dataset SQL scripts (FK dependency order)
+        await GoldenDataset.LoadSqlScriptAsync("SQL.00_base_telegram_users.sql", helper.ExecuteSqlAsync);
+        await GoldenDataset.LoadSqlScriptAsync("SQL.01_base_web_users.sql", helper.ExecuteSqlAsync);
+        await GoldenDataset.LoadSqlScriptAsync("SQL.40_pre_migration_impersonation_alerts.sql", helper.ExecuteSqlAsync);
+
+        var alertCountBefore = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM impersonation_alerts");
+        Assert.That(alertCountBefore, Is.EqualTo(4), "Should have 4 test alerts before migration");
+
+        // Act - Apply the migration with data migration SQL
+        await helper.ApplyNextMigrationAsync("20260117003553_UnifiedReviewsAndExamSessions");
+
+        // Assert - Verify data was migrated correctly
+
+        // 1. All alerts migrated to reports with type=1 (ImpersonationAlert)
+        var migratedCount = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM reports WHERE type = 1");
+        Assert.That(migratedCount, Is.EqualTo(4), "All 4 impersonation alerts should be migrated");
+
+        // 2. Verify reviewed alert (Alert 1: Critical, ConfirmedScam) has correct status and reviewer
+        var reviewedAlert = await helper.ExecuteScalarAsync<string>(@"
+            SELECT jsonb_build_object(
+                'status', status,
+                'reviewed_by', reviewed_by,
+                'web_user_id', web_user_id,
+                'reviewed_at_not_null', (reviewed_at IS NOT NULL)
+            )::text
+            FROM reports
+            WHERE type = 1 AND chat_id = -1001234567890
+            AND context->>'suspectedUserId' = '100001'
+        ");
+        Assert.That(reviewedAlert, Does.Contain("\"status\": 1"), "Reviewed alert should have status=1 (Reviewed)");
+        Assert.That(reviewedAlert, Does.Contain($"\"reviewed_by\": \"{GoldenDataset.Users.User1_Email}\""), "Should have reviewer email");
+        Assert.That(reviewedAlert, Does.Contain($"\"web_user_id\": \"{GoldenDataset.Users.User1_Id}\""), "Should have web_user_id FK");
+        Assert.That(reviewedAlert, Does.Contain("\"reviewed_at_not_null\": true"), "Should have reviewed_at");
+
+        // 3. Verify pending alert (Alert 2: Medium, no review) has correct status
+        var pendingAlert = await helper.ExecuteScalarAsync<string>(@"
+            SELECT jsonb_build_object(
+                'status', status,
+                'reviewed_by', reviewed_by,
+                'web_user_id', web_user_id
+            )::text
+            FROM reports
+            WHERE type = 1 AND chat_id = -1001234567890
+            AND context->>'suspectedUserId' = '100002'
+        ");
+        Assert.That(pendingAlert, Does.Contain("\"status\": 0"), "Pending alert should have status=0 (Pending)");
+        Assert.That(pendingAlert, Does.Contain("\"reviewed_by\": null"), "Pending alert should have no reviewer");
+        Assert.That(pendingAlert, Does.Contain("\"web_user_id\": null"), "Pending alert should have no web_user_id");
+
+        // 4. Verify JSONB context for Critical/ConfirmedScam alert (all fields populated)
+        var criticalContext = await helper.ExecuteScalarAsync<string>(@"
+            SELECT context::text FROM reports
+            WHERE type = 1 AND chat_id = -1001234567890
+            AND context->>'suspectedUserId' = '100001'
+        ");
+        Assert.That(criticalContext, Does.Contain($"\"suspectedUserId\": {GoldenDataset.TelegramUsers.User1_TelegramUserId}"), "Context should have suspectedUserId");
+        Assert.That(criticalContext, Does.Contain($"\"targetUserId\": {GoldenDataset.TelegramUsers.User3_TelegramUserId}"), "Context should have targetUserId");
+        Assert.That(criticalContext, Does.Contain("\"totalScore\": 100"), "Context should have totalScore");
+        Assert.That(criticalContext, Does.Contain("\"riskLevel\": \"critical\""), "Risk level 3 should map to 'critical'");
+        Assert.That(criticalContext, Does.Contain("\"nameMatch\": true"), "Context should have nameMatch");
+        Assert.That(criticalContext, Does.Contain("\"photoMatch\": true"), "Context should have photoMatch");
+        Assert.That(criticalContext, Does.Contain("\"photoSimilarity\": 0.95"), "Context should have photoSimilarity");
+        Assert.That(criticalContext, Does.Contain("\"autoBanned\": true"), "Context should have autoBanned");
+        Assert.That(criticalContext, Does.Contain("\"verdict\": \"confirmed_scam\""), "Verdict 1 should map to 'confirmed_scam'");
+
+        // 5. Verify JSONB context for pending alert (partial data, nulls)
+        var pendingContext = await helper.ExecuteScalarAsync<string>(@"
+            SELECT context::text FROM reports
+            WHERE type = 1 AND chat_id = -1001234567890
+            AND context->>'suspectedUserId' = '100002'
+        ");
+        Assert.That(pendingContext, Does.Contain("\"riskLevel\": \"medium\""), "Risk level 1 should map to 'medium'");
+        Assert.That(pendingContext, Does.Contain("\"nameMatch\": true"), "Context should have nameMatch=true");
+        Assert.That(pendingContext, Does.Contain("\"photoMatch\": false"), "Context should have photoMatch=false");
+        Assert.That(pendingContext, Does.Contain("\"photoSimilarity\": null"), "Context should have null photoSimilarity");
+        Assert.That(pendingContext, Does.Contain("\"autoBanned\": false"), "Context should have autoBanned=false");
+        Assert.That(pendingContext, Does.Contain("\"verdict\": null"), "Context should have null verdict");
+
+        // 6. Verify FalsePositive verdict mapping (Alert 3)
+        var falsePositiveContext = await helper.ExecuteScalarAsync<string>(@"
+            SELECT context::text FROM reports
+            WHERE type = 1 AND chat_id = -1009876543210
+        ");
+        Assert.That(falsePositiveContext, Does.Contain("\"verdict\": \"false_positive\""), "Verdict 0 should map to 'false_positive'");
+        Assert.That(falsePositiveContext, Does.Contain("\"riskLevel\": \"low\""), "Risk level 0 should map to 'low'");
+
+        // 7. Verify Whitelisted verdict mapping (Alert 4)
+        var whitelistedContext = await helper.ExecuteScalarAsync<string>(@"
+            SELECT context::text FROM reports
+            WHERE type = 1 AND context->>'suspectedUserId' = '100007'
+        ");
+        Assert.That(whitelistedContext, Does.Contain("\"verdict\": \"whitelisted\""), "Verdict 2 should map to 'whitelisted'");
+        Assert.That(whitelistedContext, Does.Contain("\"riskLevel\": \"high\""), "Risk level 2 should map to 'high'");
+
+        // 8. Verify reported_at was mapped from detected_at
+        var reportedAt = await helper.ExecuteScalarAsync<DateTimeOffset>(@"
+            SELECT reported_at FROM reports
+            WHERE type = 1 AND context->>'suspectedUserId' = '100001'
+        ");
+        Assert.That(reportedAt.Year, Is.EqualTo(2025), "reported_at should be mapped from detected_at");
+        Assert.That(reportedAt.Month, Is.EqualTo(12), "reported_at month should match");
+        Assert.That(reportedAt.Day, Is.EqualTo(15), "reported_at day should match");
     }
 }

@@ -12,11 +12,8 @@ namespace TelegramGroupsAdmin.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Drop the old impersonation_alerts table (data stored in unified reports via JSONB context)
-            migrationBuilder.DropTable(
-                name: "impersonation_alerts");
-
-            // Add new columns to the unified reports table (keeping original table name)
+            // STEP 1: Add new columns to the unified reports table FIRST
+            // (Must exist before we can migrate data into them)
             migrationBuilder.AddColumn<short>(
                 name: "type",
                 table: "reports",
@@ -56,6 +53,51 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 type: "smallint",
                 nullable: false,
                 defaultValue: (short)0);
+
+            // STEP 2: Migrate existing impersonation_alerts data to unified reports table
+            // This must happen BEFORE dropping the table to preserve data for existing deployments.
+            // Maps: detected_at→reported_at, risk_level int→string, verdict int→string,
+            //       all impersonation-specific fields→JSONB context
+            migrationBuilder.Sql(@"
+                INSERT INTO reports (type, message_id, chat_id, reported_at, status, reviewed_by, reviewed_at, web_user_id, context)
+                SELECT
+                    1 as type,  -- ReportType.ImpersonationAlert
+                    0 as message_id,  -- Sentinel value (no message for impersonation alerts)
+                    ia.chat_id,
+                    ia.detected_at as reported_at,
+                    CASE WHEN ia.reviewed_at IS NULL THEN 0 ELSE 1 END as status,
+                    u.email as reviewed_by,
+                    ia.reviewed_at,
+                    ia.reviewed_by_user_id as web_user_id,
+                    jsonb_build_object(
+                        'suspectedUserId', ia.suspected_user_id,
+                        'targetUserId', ia.target_user_id,
+                        'totalScore', ia.total_score,
+                        'riskLevel', CASE ia.risk_level
+                            WHEN 0 THEN 'low'
+                            WHEN 1 THEN 'medium'
+                            WHEN 2 THEN 'high'
+                            WHEN 3 THEN 'critical'
+                            ELSE 'medium'
+                        END,
+                        'nameMatch', ia.name_match,
+                        'photoMatch', ia.photo_match,
+                        'photoSimilarity', ia.photo_similarity_score,
+                        'autoBanned', ia.auto_banned,
+                        'verdict', CASE ia.verdict
+                            WHEN 0 THEN 'false_positive'
+                            WHEN 1 THEN 'confirmed_scam'
+                            WHEN 2 THEN 'whitelisted'
+                            ELSE null
+                        END
+                    ) as context
+                FROM impersonation_alerts ia
+                LEFT JOIN users u ON u.id = ia.reviewed_by_user_id;
+            ");
+
+            // STEP 3: Now safe to drop the old table (data has been migrated)
+            migrationBuilder.DropTable(
+                name: "impersonation_alerts");
 
             // Create the new exam_sessions table
             migrationBuilder.CreateTable(

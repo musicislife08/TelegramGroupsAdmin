@@ -28,7 +28,7 @@ public class ReportDto
     [Column("context")]
     public string? Context { get; set; }
 
-    // === Report-specific fields (nullable for other types) ===
+    // === ContentReport-specific fields (0 for ImpersonationAlert/ExamFailure) ===
 
     [Column("message_id")]
     public int MessageId { get; set; }

@@ -494,6 +494,17 @@ public static class GoldenDataset
     /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.11_training_full.sql")</param>
     private static async Task LoadSqlScriptAsync(AppDbContext context, string scriptPath)
     {
+        await LoadSqlScriptAsync(scriptPath, sql => context.Database.ExecuteSqlRawAsync(sql));
+    }
+
+    /// <summary>
+    /// Loads and executes an embedded SQL script using a custom executor.
+    /// Use this for migration tests where DbContext isn't available (schema mismatch at migration points).
+    /// </summary>
+    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.40_pre_migration_impersonation_alerts.sql")</param>
+    /// <param name="sqlExecutor">Delegate to execute the SQL (e.g., helper.ExecuteSqlAsync)</param>
+    public static async Task LoadSqlScriptAsync(string scriptPath, Func<string, Task> sqlExecutor)
+    {
         var assembly = typeof(GoldenDataset).Assembly;
         var resourceName = $"TelegramGroupsAdmin.IntegrationTests.TestData.{scriptPath}";
         await using var stream = assembly.GetManifestResourceStream(resourceName);
@@ -504,6 +515,6 @@ public static class GoldenDataset
 
         using var reader = new StreamReader(stream);
         var sqlScript = await reader.ReadToEndAsync();
-        await context.Database.ExecuteSqlRawAsync(sqlScript);
+        await sqlExecutor(sqlScript);
     }
 }
