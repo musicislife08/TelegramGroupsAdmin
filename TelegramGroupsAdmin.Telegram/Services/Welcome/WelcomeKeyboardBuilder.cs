@@ -87,4 +87,29 @@ public static class WelcomeKeyboardBuilder
             ]
         ]);
     }
+
+    /// <summary>
+    /// Builds the deep link keyboard for entrance exam mode.
+    /// User clicks to open DM with bot and start the exam.
+    /// Reuses DmButtonText from config for button text.
+    /// </summary>
+    /// <param name="config">Welcome configuration with button text</param>
+    /// <param name="chatId">Group chat ID (for deep link payload)</param>
+    /// <param name="userId">Target user ID (for deep link payload)</param>
+    /// <param name="botUsername">Bot username (without @)</param>
+    /// <returns>Inline keyboard with single URL button</returns>
+    public static InlineKeyboardMarkup BuildExamModeKeyboard(
+        WelcomeConfig config,
+        long chatId,
+        long userId,
+        string botUsername)
+    {
+        var deepLink = WelcomeDeepLinkBuilder.BuildExamStartDeepLink(botUsername, chatId, userId);
+
+        return new InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton.WithUrl(config.DmButtonText, deepLink)
+            ]
+        ]);
+    }
 }

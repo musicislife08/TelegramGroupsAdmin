@@ -16,8 +16,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MessageTranslationDto> MessageTranslations => Set<MessageTranslationDto>();
     public DbSet<DetectionResultRecordDto> DetectionResults => Set<DetectionResultRecordDto>();
 
-    // Message views (read-only, query optimization)
+    // Views (read-only, query optimization)
     public DbSet<EnrichedMessageView> EnrichedMessages => Set<EnrichedMessageView>();
+    public DbSet<EnrichedReportView> EnrichedReports => Set<EnrichedReportView>();
 
     // User and auth tables
     public DbSet<UserRecordDto> Users => Set<UserRecordDto>();
@@ -39,7 +40,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
     public DbSet<ReportDto> Reports => Set<ReportDto>();
-    public DbSet<ImpersonationAlertRecordDto> ImpersonationAlerts => Set<ImpersonationAlertRecordDto>();
 
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
@@ -61,6 +61,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Welcome system (Phase 4.4)
     public DbSet<WelcomeResponseDto> WelcomeResponses => Set<WelcomeResponseDto>();
+    public DbSet<ExamSessionDto> ExamSessions => Set<ExamSessionDto>();
 
     // User notes and tags (Phase 4.12)
     public DbSet<AdminNoteDto> AdminNotes => Set<AdminNoteDto>();
@@ -230,25 +231,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(ut => ut.TelegramUserId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        // Impersonation Alerts relationships
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasOne(ia => ia.SuspectedUser)
-            .WithMany()
-            .HasForeignKey(ia => ia.SuspectedUserId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasOne(ia => ia.TargetUser)
-            .WithMany()
-            .HasForeignKey(ia => ia.TargetUserId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasOne(ia => ia.ReviewedBy)
-            .WithMany()
-            .HasForeignKey(ia => ia.ReviewedByUserId)
-            .OnDelete(DeleteBehavior.SetNull);
 
         // ============================================================================
         // Actor System Foreign Keys (Phase 4.19)
@@ -615,15 +597,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TagDefinitionDto>()
             .HasIndex(td => td.UsageCount);
 
-        // ImpersonationAlerts indexes
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasIndex(ia => new { ia.RiskLevel, ia.DetectedAt })
-            .HasFilter("reviewed_at IS NULL");  // Pending alerts only
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasIndex(ia => ia.ChatId);
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasIndex(ia => ia.SuspectedUserId);
-
         // URL Filtering indexes (Phase 4.13)
         // BlocklistSubscriptions indexes
         modelBuilder.Entity<BlocklistSubscriptionDto>()
@@ -776,15 +749,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasConversion<int>();
 
         modelBuilder.Entity<ReportDto>()
-            .Property(r => r.Status)
-            .HasConversion<int>();
+            .Property(r => r.Type)
+            .HasDefaultValue((short)0);
 
-        // Partial unique index: Only ONE pending report per message (prevents duplicate reports)
+        modelBuilder.Entity<ReportDto>()
+            .Property(r => r.Context)
+            .HasColumnType("jsonb");
+
+        // Partial unique index: Only ONE pending ContentReport per message (prevents duplicate reports)
+        // ExamFailures and ImpersonationAlerts don't have message IDs, so exclude them
         modelBuilder.Entity<ReportDto>()
             .HasIndex(r => new { r.MessageId, r.ChatId })
-            .HasFilter("status = 0")
+            .HasFilter("status = 0 AND type = 0")
             .IsUnique()
             .HasDatabaseName("IX_reports_unique_pending_per_message");
+
+        // Index for filtering by report type
+        modelBuilder.Entity<ReportDto>()
+            .HasIndex(r => r.Type)
+            .HasDatabaseName("IX_reports_type");
 
         modelBuilder.Entity<AuditLogRecordDto>()
             .Property(al => al.EventType)
@@ -792,14 +775,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<TagDefinitionDto>()
             .Property(td => td.Color)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .Property(ia => ia.RiskLevel)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .Property(ia => ia.Verdict)
             .HasConversion<int>();
 
         modelBuilder.Entity<WelcomeResponseDto>()
@@ -818,6 +793,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(wr => wr.UserId)
             .HasPrincipalKey(tu => tu.TelegramUserId)
             .OnDelete(DeleteBehavior.Restrict); // Don't cascade delete users when welcome response deleted
+
+        // ExamSessionDto configuration (entrance exam tracking)
+        modelBuilder.Entity<ExamSessionDto>(entity =>
+        {
+            entity.Property(e => e.CurrentQuestionIndex).HasDefaultValue((short)0);
+            entity.Property(e => e.McAnswers).HasColumnType("jsonb");
+            entity.Property(e => e.ShuffleState).HasColumnType("jsonb");
+            entity.Property(e => e.StartedAt).HasDefaultValueSql("now()");
+
+            // Unique constraint: one active session per user per chat
+            entity.HasIndex(e => new { e.ChatId, e.UserId }).IsUnique();
+
+            // Index for cleanup job to find expired sessions
+            entity.HasIndex(e => e.ExpiresAt);
+        });
 
         // VerificationTokenDto stores token_type as string in DB but exposes as enum
         // The entity already handles this with TokenTypeString property
@@ -905,6 +895,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<EnrichedMessageView>()
             .HasNoKey()
             .ToView("enriched_messages");
+
+        // Configure EnrichedReportView as keyless entity mapping to enriched_reports view
+        // Provides report enrichment (users from JSONB, chat, reviewer) for efficient queries
+        modelBuilder.Entity<EnrichedReportView>()
+            .HasNoKey()
+            .ToView("enriched_reports");
 
         // ============================================================================
         // Content Detection Config JSON Mapping (Issue #252)

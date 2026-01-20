@@ -79,4 +79,9 @@
       <ProjectReference Include="..\TelegramGroupsAdmin.BackgroundJobs\TelegramGroupsAdmin.BackgroundJobs.csproj" />
     </ItemGroup>
 
+    <!-- Allow unit tests to access internal members for testing prompt builders -->
+    <ItemGroup>
+      <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+    </ItemGroup>
+
 </Project>

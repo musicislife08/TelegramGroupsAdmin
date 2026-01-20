@@ -1,3 +1,4 @@
+using Humanizer;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
@@ -10,7 +11,7 @@ public static class WelcomeMessageBuilder
 {
     /// <summary>
     /// Formats the welcome message with variable substitution.
-    /// Uses MainWelcomeMessage for ChatAcceptDeny mode, DmChatTeaserMessage for DmWelcome mode.
+    /// Uses MainWelcomeMessage for ChatAcceptDeny mode, DmChatTeaserMessage for DM-based modes (DmWelcome, EntranceExam).
     /// </summary>
     /// <param name="config">Welcome configuration containing message templates</param>
     /// <param name="username">User's @username or first name if no username</param>
@@ -21,7 +22,9 @@ public static class WelcomeMessageBuilder
         string username,
         string chatName)
     {
-        var template = config.Mode == WelcomeMode.DmWelcome
+        // DM-based modes (DmWelcome, EntranceExam) show teaser in group, main content in DM
+        // ChatAcceptDeny shows main message directly in group
+        var template = config.Mode is WelcomeMode.DmWelcome or WelcomeMode.EntranceExam
             ? config.DmChatTeaserMessage
             : config.MainWelcomeMessage;
 
@@ -71,15 +74,38 @@ public static class WelcomeMessageBuilder
         return $"{username}, ⚠️ this button is not for you. Only the mentioned user can respond.";
     }
 
+    /// <summary>
+    /// Formats the exam intro message (MainWelcomeMessage with variable substitution).
+    /// Used in EntranceExam mode as the first DM message before questions.
+    /// No footer, no buttons - just the rules/guidelines.
+    /// </summary>
+    /// <param name="config">Welcome configuration containing message templates</param>
+    /// <param name="username">User's @username or first name if no username</param>
+    /// <param name="chatName">Display name of the chat</param>
+    /// <returns>Formatted message text with variables substituted</returns>
+    public static string FormatExamIntro(
+        WelcomeConfig config,
+        string username,
+        string chatName)
+    {
+        return SubstituteVariables(
+            config.MainWelcomeMessage,
+            username,
+            chatName,
+            config.TimeoutSeconds);
+    }
+
     private static string SubstituteVariables(
         string template,
         string username,
         string chatName,
         int timeoutSeconds)
     {
+        var formattedTimeout = TimeSpan.FromSeconds(timeoutSeconds).Humanize(precision: 2);
+
         return template
             .Replace("{username}", username)
             .Replace("{chat_name}", chatName)
-            .Replace("{timeout}", timeoutSeconds.ToString());
+            .Replace("{timeout}", formattedTimeout);
     }
 }

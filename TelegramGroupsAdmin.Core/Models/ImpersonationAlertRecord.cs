@@ -1,14 +1,14 @@
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// UI model for impersonation alerts
 /// </summary>
 public record ImpersonationAlertRecord
 {
-    public int Id { get; init; }
+    public long Id { get; init; }
     public long SuspectedUserId { get; init; }
     public long TargetUserId { get; init; }
     public long ChatId { get; init; }

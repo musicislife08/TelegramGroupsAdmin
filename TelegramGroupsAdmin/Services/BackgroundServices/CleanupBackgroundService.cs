@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -116,7 +117,7 @@ public class CleanupBackgroundService : BackgroundService
                 // 2. Clean up old resolved reports
                 var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
                 var reportsCutoff = DateTimeOffset.UtcNow - reportRetention;
-                var reportsDeleted = await reportsRepo.DeleteOldReportsAsync(reportsCutoff, stoppingToken);
+                var reportsDeleted = await reportsRepo.DeleteOldReportsAsync(reportsCutoff, type: null, stoppingToken);
 
                 if (reportsDeleted > 0)
                 {

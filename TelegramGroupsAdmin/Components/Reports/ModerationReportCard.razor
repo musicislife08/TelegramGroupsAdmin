@@ -3,7 +3,6 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
-@* @using DataModels = TelegramGroupsAdmin.Data.Models *@
 
 @inject IMessageHistoryRepository MessageRepository
 @inject ITelegramUserRepository TelegramUserRepository
@@ -75,7 +74,7 @@
         }
     </MudCardContent>
     <MudCardActions>
-        @if (Report.Status == DataModels.ReportStatus.Pending)
+        @if (Report.Status == ReportStatus.Pending)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
@@ -170,8 +169,8 @@
     {
         return Report.Status switch
         {
-            DataModels.ReportStatus.Pending => Color.Warning,
-            DataModels.ReportStatus.Reviewed => Color.Success,
+            ReportStatus.Pending => Color.Warning,
+            ReportStatus.Reviewed => Color.Success,
             _ => Color.Default
         };
     }

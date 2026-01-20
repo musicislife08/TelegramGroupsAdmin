@@ -6,7 +6,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Core.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -43,7 +43,7 @@ public class ReportActionsService : IReportActionsService
 
     public async Task HandleSpamActionAsync(long reportId, string reviewerId, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
+        var report = await _reportsRepository.GetContentReportAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
@@ -74,9 +74,9 @@ public class ReportActionsService : IReportActionsService
         }
 
         // Update report status
-        await _reportsRepository.UpdateReportStatusAsync(
+        await _reportsRepository.UpdateStatusAsync(
             reportId,
-            DataModels.ReportStatus.Reviewed,
+            ReportStatus.Reviewed,
             reviewerId,
             "spam",
             $"User banned from {result.ChatsAffected} chats, message deleted",
@@ -99,7 +99,7 @@ public class ReportActionsService : IReportActionsService
 
     public async Task HandleBanActionAsync(long reportId, string reviewerId, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
+        var report = await _reportsRepository.GetContentReportAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
@@ -145,9 +145,9 @@ public class ReportActionsService : IReportActionsService
         }
 
         // Update report status
-        await _reportsRepository.UpdateReportStatusAsync(
+        await _reportsRepository.UpdateStatusAsync(
             reportId,
-            DataModels.ReportStatus.Reviewed,
+            ReportStatus.Reviewed,
             reviewerId,
             "ban",
             $"User banned from {result.ChatsAffected} chats",
@@ -170,7 +170,7 @@ public class ReportActionsService : IReportActionsService
 
     public async Task HandleWarnActionAsync(long reportId, string reviewerId, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
+        var report = await _reportsRepository.GetContentReportAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
@@ -201,9 +201,9 @@ public class ReportActionsService : IReportActionsService
         }
 
         // Update report status
-        await _reportsRepository.UpdateReportStatusAsync(
+        await _reportsRepository.UpdateStatusAsync(
             reportId,
-            DataModels.ReportStatus.Reviewed,
+            ReportStatus.Reviewed,
             reviewerId,
             "warn",
             $"User {message.UserId} warned",
@@ -226,16 +226,16 @@ public class ReportActionsService : IReportActionsService
 
     public async Task HandleDismissActionAsync(long reportId, string reviewerId, string? reason = null, CancellationToken cancellationToken = default)
     {
-        var report = await _reportsRepository.GetByIdAsync(reportId, cancellationToken);
+        var report = await _reportsRepository.GetContentReportAsync(reportId, cancellationToken);
         if (report == null)
         {
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
         // Update report status
-        await _reportsRepository.UpdateReportStatusAsync(
+        await _reportsRepository.UpdateStatusAsync(
             reportId,
-            DataModels.ReportStatus.Dismissed,
+            ReportStatus.Dismissed,
             reviewerId,
             "dismiss",
             reason ?? "No action needed",

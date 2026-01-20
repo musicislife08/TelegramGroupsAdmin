@@ -109,16 +109,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
         }
 
         // Step 4: Create training data (non-critical - failure doesn't affect ban success)
-        try
-        {
-            await _trainingHandler.CreateSpamSampleAsync(messageId, executor, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to create training data for message {MessageId}, continuing with successful ban",
-                messageId);
-        }
+        await SafeExecuteAsync(
+            () => _trainingHandler.CreateSpamSampleAsync(messageId, executor, cancellationToken),
+            $"Create training data for message {messageId}");
 
         return new ModerationResult
         {
@@ -163,6 +156,11 @@ public class ModerationOrchestrator : IModerationOrchestrator
 
         // Notify admins
         await _notificationHandler.NotifyAdminsBanAsync(userId, executor, reason, cancellationToken);
+
+        // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
+        await SafeExecuteAsync(
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(userId, cancellationToken),
+            $"Schedule messages cleanup for user {userId}");
 
         return new ModerationResult
         {
@@ -225,9 +223,12 @@ public class ModerationOrchestrator : IModerationOrchestrator
 
             if (banResult.Success)
             {
-                result.AutoBanTriggered = true;
-                result.ChatsAffected = banResult.ChatsAffected;
-                result.TrustRemoved = banResult.TrustRemoved;
+                result = result with
+                {
+                    AutoBanTriggered = true,
+                    ChatsAffected = banResult.ChatsAffected,
+                    TrustRemoved = banResult.TrustRemoved
+                };
             }
             else
             {
@@ -304,7 +305,7 @@ public class ModerationOrchestrator : IModerationOrchestrator
             var trustResult = await TrustUserAsync(
                 userId, executor,
                 "Trust restored after unban (false positive correction)", cancellationToken);
-            result.TrustRestored = trustResult.Success;
+            result = result with { TrustRestored = trustResult.Success };
         }
 
         return result;
@@ -417,6 +418,60 @@ public class ModerationOrchestrator : IModerationOrchestrator
         };
     }
 
+    /// <inheritdoc/>
+    public async Task<ModerationResult> RestoreUserPermissionsAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        if (protectionResult != null) return protectionResult;
+
+        var restrictResult = await _restrictHandler.RestorePermissionsAsync(
+            userId, chatId, executor, reason, cancellationToken);
+
+        if (!restrictResult.Success)
+            return ModerationResult.Failed(restrictResult.ErrorMessage ?? "Failed to restore permissions");
+
+        // Audit successful permission restoration
+        await _auditHandler.LogRestorePermissionsAsync(userId, chatId, executor, reason, cancellationToken);
+
+        return new ModerationResult
+        {
+            Success = true,
+            ChatsAffected = restrictResult.ChatsAffected
+        };
+    }
+
+    /// <inheritdoc/>
+    public async Task<ModerationResult> KickUserFromChatAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        if (protectionResult != null) return protectionResult;
+
+        var kickResult = await _banHandler.KickFromChatAsync(
+            userId, chatId, executor, reason, cancellationToken);
+
+        if (!kickResult.Success)
+            return ModerationResult.Failed(kickResult.ErrorMessage ?? "Failed to kick user");
+
+        // Audit successful kick
+        await _auditHandler.LogKickAsync(userId, chatId, executor, reason, cancellationToken);
+
+        return new ModerationResult
+        {
+            Success = true,
+            ChatsAffected = kickResult.ChatsAffected
+        };
+    }
+
     /// <summary>
     /// Checks if user is a Telegram system account (777000, 1087968824, etc.) and returns error if moderation is attempted.
     /// </summary>
@@ -434,25 +489,20 @@ public class ModerationOrchestrator : IModerationOrchestrator
 
         return null;
     }
-}
 
-/// <summary>
-/// Result of a moderation action.
-/// </summary>
-public class ModerationResult
-{
-    public bool Success { get; set; }
-    public string? ErrorMessage { get; set; }
-    public bool MessageDeleted { get; set; }
-    public bool TrustRemoved { get; set; }
-    public bool TrustRestored { get; set; }
-    public int ChatsAffected { get; set; }
-    public int WarningCount { get; set; }
-    public bool AutoBanTriggered { get; set; }
-
-    public static ModerationResult Failed(string errorMessage) =>
-        new() { Success = false, ErrorMessage = errorMessage };
-
-    public static ModerationResult SystemAccountBlocked() =>
-        new() { Success = false, ErrorMessage = "Cannot perform moderation actions on Telegram system accounts (channel posts, anonymous admins, etc.)" };
+    /// <summary>
+    /// Executes a non-critical operation, logging and swallowing any exceptions.
+    /// Use for operations that shouldn't fail the primary workflow (e.g., training data, cleanup scheduling).
+    /// </summary>
+    private async Task SafeExecuteAsync(Func<Task> action, string operationName)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "{Operation} failed, continuing", operationName);
+        }
+    }
 }

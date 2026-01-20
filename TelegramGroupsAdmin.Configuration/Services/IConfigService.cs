@@ -15,7 +15,8 @@ public interface IConfigService
     /// <param name="configType">Type of config (enum for type safety)</param>
     /// <param name="chatId">Chat ID (0 for global config)</param>
     /// <param name="config">Configuration object</param>
-    Task SaveAsync<T>(ConfigType configType, long chatId, T config) where T : class;
+    /// <param name="displayName">Optional display name for logging (e.g., chat name)</param>
+    Task SaveAsync<T>(ConfigType configType, long chatId, T config, string? displayName = null) where T : class;
 
     /// <summary>
     /// Get a configuration value for a specific config type and chat

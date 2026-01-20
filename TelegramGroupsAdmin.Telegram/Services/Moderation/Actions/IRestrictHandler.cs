@@ -27,4 +27,21 @@ public interface IRestrictHandler
         TimeSpan duration,
         string? reason,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Restore user permissions to the chat's default permissions (unrestrict/unmute).
+    /// Used when approving users through welcome/exam flows.
+    /// </summary>
+    /// <param name="userId">Telegram user ID to restore.</param>
+    /// <param name="chatId">Target chat ID.</param>
+    /// <param name="executor">Who initiated the restoration.</param>
+    /// <param name="reason">Reason for restoring permissions (for logging).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Result with success status.</returns>
+    Task<RestrictResult> RestorePermissionsAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string? reason,
+        CancellationToken cancellationToken = default);
 }

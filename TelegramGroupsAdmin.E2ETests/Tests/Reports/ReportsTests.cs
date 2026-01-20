@@ -723,8 +723,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         // Verify alert exists
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Click Confirm Ban - NO CONFIRMATION DIALOG
-        await _reportsPage.ClickConfirmBanAsync();
+        // Click Confirm Scam - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickConfirmScamAsync();
 
         // Assert - snackbar confirms action
         var snackbarText = await _reportsPage.WaitForSnackbarAsync();
@@ -776,26 +776,26 @@ public class ReportsTests : SharedAuthenticatedTestBase
         // Verify alert exists
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Click Unban (False Positive) - NO CONFIRMATION DIALOG
-        await _reportsPage.ClickUnbanFalsePositiveAsync();
+        // Click Trust - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickTrustAsync();
 
         // Assert - snackbar confirms action
         var snackbarText = await _reportsPage.WaitForSnackbarAsync();
-        Assert.That(snackbarText, Does.Contain("unban").IgnoreCase.Or.Contain("false positive").IgnoreCase.Or.Contain("processed").IgnoreCase,
-            "Snackbar should confirm the false positive action");
+        Assert.That(snackbarText, Does.Contain("trust").IgnoreCase.Or.Contain("whitelist").IgnoreCase.Or.Contain("processed").IgnoreCase,
+            "Snackbar should confirm the trust action");
     }
 
     /// <summary>
-    /// Tests that the Dismiss action on an impersonation alert executes immediately.
+    /// Tests that the False Positive action on an impersonation alert executes immediately.
     /// </summary>
     [Test]
-    public async Task ImpersonationAlert_Dismiss_ProcessesImmediately()
+    public async Task ImpersonationAlert_FalsePositive_ProcessesImmediately()
     {
         // Arrange
         await LoginAsOwnerAsync();
 
         var chat = await new TestChatBuilder(SharedFactory.Services)
-            .WithTitle("Dismiss Alert Chat")
+            .WithTitle("False Positive Alert Chat")
             .BuildAsync();
 
         // Create telegram users
@@ -827,16 +827,15 @@ public class ReportsTests : SharedAuthenticatedTestBase
         // Verify alert exists
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Click Dismiss - NO CONFIRMATION DIALOG
-        await _reportsPage.ClickDismissAsync();
+        // Click False Positive - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickFalsePositiveAsync();
 
         // Assert - snackbar confirms action
-        // Note: For impersonation alerts, "Dismiss" action whitelists the user (see Reports.razor line 348-354)
         var snackbarText = await _reportsPage.WaitForSnackbarAsync();
         Assert.That(snackbarText, Does.Contain("dismiss").IgnoreCase
-            .Or.Contain("whitelist").IgnoreCase
+            .Or.Contain("false positive").IgnoreCase
             .Or.Contain("processed").IgnoreCase,
-            "Snackbar should confirm the dismiss/whitelist action");
+            "Snackbar should confirm the false positive action");
     }
 
     /// <summary>

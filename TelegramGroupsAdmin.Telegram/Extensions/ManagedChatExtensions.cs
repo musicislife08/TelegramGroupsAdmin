@@ -13,6 +13,7 @@ public static class ManagedChatExtensions
     {
         /// <summary>
         /// Format chat for INFO-level logs (name only).
+        /// Use this overload when chat might be null and you have the ID separately.
         /// </summary>
         /// <param name="chatId">Chat ID (used as fallback when chat is null)</param>
         /// <returns>"Chat Name" or "Chat 123" if name unavailable</returns>
@@ -21,6 +22,7 @@ public static class ManagedChatExtensions
 
         /// <summary>
         /// Format chat for DEBUG/WARNING/ERROR logs (name + ID).
+        /// Use this overload when chat might be null and you have the ID separately.
         /// </summary>
         /// <param name="chatId">Chat ID</param>
         /// <returns>"Chat Name (-123)" or "Chat 123 (-123)" if name unavailable</returns>

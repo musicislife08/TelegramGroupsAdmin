@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -28,7 +29,7 @@ public class ReportService(
         CancellationToken cancellationToken = default)
     {
         // 1. Insert report into database
-        var reportId = await reportsRepository.InsertAsync(report, cancellationToken);
+        var reportId = await reportsRepository.InsertContentReportAsync(report, cancellationToken);
 
         logger.LogInformation(
             "Report {ReportId} created: ChatId={ChatId}, MessageId={MessageId}, IsAutomated={IsAutomated}, ReportedBy={ReportedBy}",

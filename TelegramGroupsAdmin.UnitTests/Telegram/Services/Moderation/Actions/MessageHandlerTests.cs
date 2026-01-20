@@ -5,6 +5,7 @@ using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -25,6 +26,7 @@ public class MessageHandlerTests
     private IMessageBackfillService _mockMessageBackfillService = null!;
     private IBotMessageService _mockBotMessageService = null!;
     private IManagedChatsRepository _mockChatsRepository = null!;
+    private IJobScheduler _mockJobScheduler = null!;
     private ILogger<MessageHandler> _mockLogger = null!;
     private MessageHandler _handler = null!;
 
@@ -35,6 +37,7 @@ public class MessageHandlerTests
         _mockMessageBackfillService = Substitute.For<IMessageBackfillService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
         _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
+        _mockJobScheduler = Substitute.For<IJobScheduler>();
         _mockLogger = Substitute.For<ILogger<MessageHandler>>();
 
         _handler = new MessageHandler(
@@ -42,6 +45,7 @@ public class MessageHandlerTests
             _mockMessageBackfillService,
             _mockBotMessageService,
             _mockChatsRepository,
+            _mockJobScheduler,
             _mockLogger);
     }
 

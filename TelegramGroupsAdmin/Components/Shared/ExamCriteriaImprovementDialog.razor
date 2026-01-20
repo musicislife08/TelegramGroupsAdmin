@@ -1,0 +1,90 @@
+@using TelegramGroupsAdmin.Services.ExamCriteriaBuilder
+@using TelegramGroupsAdmin.Telegram.Models
+@inject IExamCriteriaBuilderService CriteriaBuilderService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (_isImproving)
+            {
+                <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-4">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+                    <MudText Typo="Typo.body1">Improving criteria with AI...</MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Describe how you'd like to improve the current evaluation criteria.
+                </MudText>
+
+                <MudTextField @bind-Value="_feedback"
+                             Label="Improvement Feedback"
+                             Lines="4"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., Make it more lenient for non-native English speakers, add checks for promotional content"
+                             HelperText="Describe what changes you want to make" />
+
+                <MudExpansionPanels>
+                    <MudExpansionPanel Text="View Current Criteria">
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace;">
+                            @CurrentCriteria
+                        </MudText>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel" Disabled="@_isImproving">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@ImproveCriteria"
+                   Disabled="@(string.IsNullOrWhiteSpace(_feedback) || _isImproving)">
+            Improve
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string CurrentCriteria { get; set; } = string.Empty;
+
+    [Parameter] public ManagedChatRecord? Chat { get; set; }
+
+    private string _feedback = string.Empty;
+    private bool _isImproving;
+
+    private async Task ImproveCriteria()
+    {
+        if (string.IsNullOrWhiteSpace(_feedback)) return;
+
+        _isImproving = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await CriteriaBuilderService.ImproveCriteriaAsync(CurrentCriteria, _feedback, Chat);
+
+            if (response.Success)
+            {
+                MudDialog.Close(DialogResult.Ok(response.GeneratedCriteria));
+            }
+            else
+            {
+                Snackbar.Add($"Failed to improve criteria: {response.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error improving criteria: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isImproving = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

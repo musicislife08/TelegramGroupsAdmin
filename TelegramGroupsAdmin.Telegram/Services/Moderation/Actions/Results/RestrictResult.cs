@@ -16,10 +16,16 @@ public record RestrictResult(
     string? ErrorMessage = null)
 {
     /// <summary>
-    /// Create a successful restrict result.
+    /// Create a successful restrict result with expiry time.
     /// </summary>
     public static RestrictResult Succeeded(int chatsAffected, DateTimeOffset expiresAt, int chatsFailed = 0) =>
         new(true, chatsAffected, chatsFailed, expiresAt);
+
+    /// <summary>
+    /// Create a successful restrict result without expiry (e.g., permission restoration).
+    /// </summary>
+    public static RestrictResult Succeeded(int chatsAffected, DateTimeOffset? expiresAt, int chatsFailed = 0) =>
+        new(true, chatsAffected, chatsFailed, expiresAt ?? DateTimeOffset.MaxValue);
 
     /// <summary>
     /// Create a failed restrict result.

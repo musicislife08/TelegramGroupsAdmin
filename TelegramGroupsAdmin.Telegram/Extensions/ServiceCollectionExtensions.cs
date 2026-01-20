@@ -43,6 +43,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ILinkedChannelsRepository, LinkedChannelsRepository>(); // Linked channel impersonation detection
             // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+            services.AddScoped<IExamSessionRepository, ExamSessionRepository>(); // Phase 2: Entrance exam state tracking
             // REFACTOR-3: Extracted services from MessageHistoryRepository
             services.AddScoped<IMessageQueryService, MessageQueryService>();
             services.AddScoped<IMessageStatsService, MessageStatsService>();
@@ -122,6 +123,10 @@ public static class ServiceCollectionExtensions
             // Phase 4.10: Anti-Impersonation Detection
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
+
+            // Entrance exam evaluation (uses content moderation AI connection)
+            services.AddScoped<IExamEvaluationService, ExamEvaluationService>();
+            services.AddScoped<IExamFlowService, ExamFlowService>(); // Phase 2: Exam flow orchestration
 
             // CAS (Combot Anti-Spam) check on user join
             services.AddSingleton<ICasCheckService, CasCheckService>();

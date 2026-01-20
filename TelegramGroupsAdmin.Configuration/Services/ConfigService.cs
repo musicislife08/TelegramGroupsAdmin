@@ -30,9 +30,12 @@ public class ConfigService(
         WriteIndented = false
     };
 
-    public async Task SaveAsync<T>(ConfigType configType, long chatId, T config) where T : class
+    public async Task SaveAsync<T>(ConfigType configType, long chatId, T config, string? displayName = null) where T : class
     {
         ArgumentNullException.ThrowIfNull(config);
+
+        // Build scope string for logging
+        var scope = chatId == 0 ? "global" : (displayName ?? $"chat {chatId}");
 
         // Route ContentDetection to separate repository
         if (configType == ConfigType.ContentDetection)
@@ -45,7 +48,7 @@ public class ConfigService(
             else
                 await contentDetectionConfigRepository.UpdateChatConfigAsync(chatId, cdConfig);
 
-            logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, chatId == 0 ? "global" : $"chat {chatId}");
+            logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, scope);
 
             // Invalidate cache
             await cache.RemoveAsync($"cfg_{configType}_{chatId}");
@@ -74,7 +77,6 @@ public class ConfigService(
 
         await configRepository.UpsertAsync(record);
 
-        var scope = chatId == 0 ? "global" : $"chat {chatId}";
         logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, scope);
 
         // CRITICAL: Invalidate cache immediately for instant UI updates

@@ -20,14 +20,22 @@ public class ReportCallbackContextDto
     public long Id { get; set; }
 
     /// <summary>
-    /// ID of the report this context applies to
+    /// ID of the report this context applies to (in unified reports table)
     /// </summary>
     [Required]
     [Column("report_id")]
     public long ReportId { get; set; }
 
     /// <summary>
-    /// Chat ID where the reported message was sent
+    /// Type of report. Repository maps to domain enum.
+    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamFailure
+    /// </summary>
+    [Required]
+    [Column("report_type")]
+    public short ReportType { get; set; }
+
+    /// <summary>
+    /// Chat ID where the review subject occurred
     /// </summary>
     [Required]
     [Column("chat_id")]

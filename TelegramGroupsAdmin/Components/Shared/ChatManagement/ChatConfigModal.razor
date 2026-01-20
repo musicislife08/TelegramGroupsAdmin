@@ -187,7 +187,7 @@
                     @if (_useCustomWelcomeConfig)
                     {
                         <!-- Reusable WelcomeSystemConfig component for per-chat configuration -->
-                        <WelcomeSystemConfig @ref="_welcomeConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnWelcomeConfigSaved" />
+                        <WelcomeSystemConfig @ref="_welcomeConfigComponent" Chat="@ChatInfo.Chat" OnSaved="OnWelcomeConfigSaved" />
 
                         <!-- Save Button -->
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"

@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Core.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Extensions;
 
@@ -63,11 +64,8 @@ public static class ServiceCollectionExtensions
             // Register threshold recommendations repository (ML.NET threshold optimization)
             services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>();
 
-            // Register reports repository
+            // Register unified reports repository (handles Reports, ImpersonationAlerts, ExamFailures)
             services.AddScoped<IReportsRepository, ReportsRepository>();
-
-            // Register impersonation alerts repository (Phase 4.10: Anti-Impersonation Detection)
-            services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>();
 
             // Register URL filtering services (Phase 4.13)
             services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();

@@ -1,6 +1,4 @@
-using TelegramGroupsAdmin.Data.Models;
-
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// Report record for UI display (user-submitted reports from /report command OR web UI)

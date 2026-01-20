@@ -1250,6 +1250,196 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToView("enriched_messages", (string)null);
                 });
 
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.EnrichedReportView", b =>
+                {
+                    b.Property<string>("ActionTaken")
+                        .HasColumnType("text")
+                        .HasColumnName("action_taken");
+
+                    b.Property<string>("AdminNotes")
+                        .HasColumnType("text")
+                        .HasColumnName("admin_notes");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("ChatName")
+                        .HasColumnType("text")
+                        .HasColumnName("chat_name");
+
+                    b.Property<string>("Context")
+                        .HasColumnType("text")
+                        .HasColumnName("context");
+
+                    b.Property<string>("ExamFirstName")
+                        .HasColumnType("text")
+                        .HasColumnName("exam_first_name");
+
+                    b.Property<string>("ExamLastName")
+                        .HasColumnType("text")
+                        .HasColumnName("exam_last_name");
+
+                    b.Property<string>("ExamPhotoPath")
+                        .HasColumnType("text")
+                        .HasColumnName("exam_photo_path");
+
+                    b.Property<long?>("ExamUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exam_user_id");
+
+                    b.Property<string>("ExamUsername")
+                        .HasColumnType("text")
+                        .HasColumnName("exam_username");
+
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    b.Property<int>("MessageId")
+                        .HasColumnType("integer")
+                        .HasColumnName("message_id");
+
+                    b.Property<int?>("ReportCommandMessageId")
+                        .HasColumnType("integer")
+                        .HasColumnName("report_command_message_id");
+
+                    b.Property<DateTimeOffset>("ReportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reported_at");
+
+                    b.Property<long?>("ReportedByUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reported_by_user_id");
+
+                    b.Property<string>("ReportedByUserName")
+                        .HasColumnType("text")
+                        .HasColumnName("reported_by_user_name");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<string>("ReviewedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<string>("ReviewerEmail")
+                        .HasColumnType("text")
+                        .HasColumnName("reviewer_email");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("SuspectedFirstName")
+                        .HasColumnType("text")
+                        .HasColumnName("suspected_first_name");
+
+                    b.Property<string>("SuspectedLastName")
+                        .HasColumnType("text")
+                        .HasColumnName("suspected_last_name");
+
+                    b.Property<string>("SuspectedPhotoPath")
+                        .HasColumnType("text")
+                        .HasColumnName("suspected_photo_path");
+
+                    b.Property<long?>("SuspectedUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("suspected_user_id");
+
+                    b.Property<string>("SuspectedUsername")
+                        .HasColumnType("text")
+                        .HasColumnName("suspected_username");
+
+                    b.Property<string>("TargetFirstName")
+                        .HasColumnType("text")
+                        .HasColumnName("target_first_name");
+
+                    b.Property<string>("TargetLastName")
+                        .HasColumnType("text")
+                        .HasColumnName("target_last_name");
+
+                    b.Property<string>("TargetPhotoPath")
+                        .HasColumnType("text")
+                        .HasColumnName("target_photo_path");
+
+                    b.Property<long?>("TargetUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("target_user_id");
+
+                    b.Property<string>("TargetUsername")
+                        .HasColumnType("text")
+                        .HasColumnName("target_username");
+
+                    b.Property<short>("Type")
+                        .HasColumnType("smallint")
+                        .HasColumnName("type");
+
+                    b.Property<string>("WebUserId")
+                        .HasColumnType("text")
+                        .HasColumnName("web_user_id");
+
+                    b.ToTable((string)null);
+
+                    b.ToView("enriched_reports", (string)null);
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ExamSessionDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<short>("CurrentQuestionIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("current_question_index");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("McAnswers")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("mc_answers");
+
+                    b.Property<string>("OpenEndedAnswer")
+                        .HasColumnType("text")
+                        .HasColumnName("open_ended_answer");
+
+                    b.Property<string>("ShuffleState")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("shuffle_state");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("ChatId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("exam_sessions");
+                });
+
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanQuotaRecord", b =>
                 {
                     b.Property<long>("Id")
@@ -1426,84 +1616,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_image_training_exclusive_actor", "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1");
                         });
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ImpersonationAlertRecordDto", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("AutoBanned")
-                        .HasColumnType("boolean")
-                        .HasColumnName("auto_banned");
-
-                    b.Property<long>("ChatId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("chat_id");
-
-                    b.Property<DateTimeOffset>("DetectedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("detected_at");
-
-                    b.Property<bool>("NameMatch")
-                        .HasColumnType("boolean")
-                        .HasColumnName("name_match");
-
-                    b.Property<bool>("PhotoMatch")
-                        .HasColumnType("boolean")
-                        .HasColumnName("photo_match");
-
-                    b.Property<double?>("PhotoSimilarityScore")
-                        .HasColumnType("double precision")
-                        .HasColumnName("photo_similarity_score");
-
-                    b.Property<DateTimeOffset?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<string>("ReviewedByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("reviewed_by_user_id");
-
-                    b.Property<int>("RiskLevel")
-                        .HasColumnType("integer")
-                        .HasColumnName("risk_level");
-
-                    b.Property<long>("SuspectedUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("suspected_user_id");
-
-                    b.Property<long>("TargetUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("target_user_id");
-
-                    b.Property<int>("TotalScore")
-                        .HasColumnType("integer")
-                        .HasColumnName("total_score");
-
-                    b.Property<int?>("Verdict")
-                        .HasColumnType("integer")
-                        .HasColumnName("verdict");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChatId");
-
-                    b.HasIndex("ReviewedByUserId");
-
-                    b.HasIndex("SuspectedUserId");
-
-                    b.HasIndex("TargetUserId");
-
-                    b.HasIndex("RiskLevel", "DetectedAt")
-                        .HasFilter("reviewed_at IS NULL");
-
-                    b.ToTable("impersonation_alerts");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.InviteRecordDto", b =>
@@ -2139,6 +2251,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("report_id");
 
+                    b.Property<short>("ReportType")
+                        .HasColumnType("smallint")
+                        .HasColumnName("report_type");
+
                     b.Property<long>("UserId")
                         .HasColumnType("bigint")
                         .HasColumnName("user_id");
@@ -2175,6 +2291,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
+                    b.Property<string>("Context")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("context");
+
                     b.Property<int>("MessageId")
                         .HasColumnType("integer")
                         .HasColumnName("message_id");
@@ -2207,18 +2327,27 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("status");
 
+                    b.Property<short>("Type")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("type");
+
                     b.Property<string>("WebUserId")
                         .HasColumnType("character varying(450)")
                         .HasColumnName("web_user_id");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Type")
+                        .HasDatabaseName("IX_reports_type");
+
                     b.HasIndex("WebUserId");
 
                     b.HasIndex("MessageId", "ChatId")
                         .IsUnique()
                         .HasDatabaseName("IX_reports_unique_pending_per_message")
-                        .HasFilter("status = 0");
+                        .HasFilter("status = 0 AND type = 0");
 
                     b.ToTable("reports");
                 });
@@ -3683,32 +3812,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Message");
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ImpersonationAlertRecordDto", b =>
-                {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", "ReviewedBy")
-                        .WithMany()
-                        .HasForeignKey("ReviewedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "SuspectedUser")
-                        .WithMany()
-                        .HasForeignKey("SuspectedUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "TargetUser")
-                        .WithMany()
-                        .HasForeignKey("TargetUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ReviewedBy");
-
-                    b.Navigation("SuspectedUser");
-
-                    b.Navigation("TargetUser");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.InviteRecordDto", b =>

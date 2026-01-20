@@ -4,9 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// EF Core entity for reports table
-/// Public to allow cross-assembly repository usage
-/// Phase 2.6: Supports both Telegram /report and web UI "Flag for Review"
+/// EF Core entity for reports table (unified report queue).
+/// Handles Report, ImpersonationAlert, and ExamFailure types.
 /// </summary>
 [Table("reports")]
 public class ReportDto
@@ -16,6 +15,21 @@ public class ReportDto
     [Column("id")]
     public long Id { get; set; }
 
+    /// <summary>
+    /// Discriminator for report type. Repository maps to domain enum.
+    /// 0=ContentReport, 1=ImpersonationAlert, 2=ExamFailure
+    /// </summary>
+    [Column("type")]
+    public short Type { get; set; }
+
+    /// <summary>
+    /// Type-specific context data stored as JSONB.
+    /// </summary>
+    [Column("context")]
+    public string? Context { get; set; }
+
+    // === ContentReport-specific fields (0 for ImpersonationAlert/ExamFailure) ===
+
     [Column("message_id")]
     public int MessageId { get; set; }
 
@@ -23,10 +37,10 @@ public class ReportDto
     public long ChatId { get; set; }
 
     [Column("report_command_message_id")]
-    public int? ReportCommandMessageId { get; set; }  // NULL for web reports
+    public int? ReportCommandMessageId { get; set; }
 
     [Column("reported_by_user_id")]
-    public long? ReportedByUserId { get; set; }       // NULL for web reports
+    public long? ReportedByUserId { get; set; }
 
     [Column("reported_by_user_name")]
     public string? ReportedByUserName { get; set; }
@@ -34,8 +48,14 @@ public class ReportDto
     [Column("reported_at")]
     public DateTimeOffset ReportedAt { get; set; }
 
+    // === Common workflow fields ===
+
+    /// <summary>
+    /// Report status. Repository maps to domain enum.
+    /// 0=Pending, 1=Reviewed, 2=Dismissed
+    /// </summary>
     [Column("status")]
-    public ReportStatus Status { get; set; }
+    public int Status { get; set; }
 
     [Column("reviewed_by")]
     public string? ReviewedBy { get; set; }
@@ -50,7 +70,7 @@ public class ReportDto
     public string? AdminNotes { get; set; }
 
     [Column("web_user_id")]
-    public string? WebUserId { get; set; }            // Phase 2.6: Web user ID (FK to users table)
+    public string? WebUserId { get; set; }
 
     // Navigation property
     [ForeignKey(nameof(WebUserId))]

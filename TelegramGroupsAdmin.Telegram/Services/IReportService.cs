@@ -1,5 +1,6 @@
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 

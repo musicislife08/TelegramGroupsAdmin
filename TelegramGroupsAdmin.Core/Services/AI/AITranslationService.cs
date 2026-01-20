@@ -55,9 +55,7 @@ public class AITranslationService : IAITranslationService
 
             var options = new ChatCompletionOptions
             {
-                MaxTokens = AIConstants.TranslationMaxTokens,
-                Temperature = AIConstants.TranslationTemperature,
-                JsonMode = true
+                JsonMode = true  // Required for structured response parsing; other settings from feature config
             };
 
             var result = await _chatService.GetCompletionAsync(

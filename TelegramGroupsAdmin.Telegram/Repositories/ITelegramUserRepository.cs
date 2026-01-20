@@ -10,6 +10,12 @@ public interface ITelegramUserRepository
 {
     Task<UiModels.TelegramUser?> GetByTelegramIdAsync(long telegramUserId, CancellationToken cancellationToken = default);
     Task<UiModels.TelegramUser?> GetByIdAsync(long telegramUserId, CancellationToken cancellationToken = default); // Alias for GetByTelegramIdAsync
+
+    /// <summary>
+    /// Gets multiple Telegram users by their Telegram IDs in a single query.
+    /// Used for batch hydration to avoid N+1 query patterns.
+    /// </summary>
+    Task<List<UiModels.TelegramUser>> GetByTelegramIdsAsync(IEnumerable<long> telegramIds, CancellationToken cancellationToken = default);
     Task<string?> GetUserPhotoPathAsync(long telegramUserId, CancellationToken cancellationToken = default);
     Task UpsertAsync(UiModels.TelegramUser user, CancellationToken cancellationToken = default);
     Task UpdateUserPhotoPathAsync(long telegramUserId, string? photoPath, string? photoHash = null, CancellationToken cancellationToken = default);

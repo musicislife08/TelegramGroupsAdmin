@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -18,6 +20,7 @@ public class MessageHandler : IMessageHandler
     private readonly IMessageBackfillService _messageBackfillService;
     private readonly IBotMessageService _botMessageService;
     private readonly IManagedChatsRepository _chatsRepository;
+    private readonly IJobScheduler _jobScheduler;
     private readonly ILogger<MessageHandler> _logger;
 
     public MessageHandler(
@@ -25,12 +28,14 @@ public class MessageHandler : IMessageHandler
         IMessageBackfillService messageBackfillService,
         IBotMessageService botMessageService,
         IManagedChatsRepository chatsRepository,
+        IJobScheduler jobScheduler,
         ILogger<MessageHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
         _messageBackfillService = messageBackfillService;
         _botMessageService = botMessageService;
         _chatsRepository = chatsRepository;
+        _jobScheduler = jobScheduler;
         _logger = logger;
     }
 
@@ -118,5 +123,19 @@ public class MessageHandler : IMessageHandler
 
             return DeleteResult.Failed(ex.Message);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task ScheduleUserMessagesCleanupAsync(
+        long userId,
+        CancellationToken cancellationToken = default)
+    {
+        await _jobScheduler.ScheduleJobAsync(
+            BackgroundJobNames.DeleteUserMessages,
+            new DeleteUserMessagesPayload { TelegramUserId = userId },
+            delaySeconds: 0,
+            cancellationToken);
+
+        _logger.LogInformation("Scheduled messages cleanup job for user {UserId}", userId);
     }
 }

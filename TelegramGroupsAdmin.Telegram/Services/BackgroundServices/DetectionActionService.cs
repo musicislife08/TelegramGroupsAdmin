@@ -337,7 +337,7 @@ public class DetectionActionService(
             ReportedByUserId: null, // System-generated (not user-reported)
             ReportedByUserName: "Auto-Detection",
             ReportedAt: DateTimeOffset.UtcNow,
-            Status: DataModels.ReportStatus.Pending,
+            Status: ReportStatus.Pending,
             ReviewedBy: null,
             ReviewedAt: null,
             ActionTaken: null,

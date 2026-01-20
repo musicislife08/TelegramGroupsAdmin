@@ -44,6 +44,16 @@ public class WelcomeService : IWelcomeService
         _casCheckService = casCheckService;
     }
 
+    /// <summary>
+    /// Helper to get scoped ExamFlowService for entrance exam handling.
+    /// </summary>
+    private async Task<T> WithExamFlowServiceAsync<T>(Func<IExamFlowService, Task<T>> action)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+        return await action(examFlowService);
+    }
+
     private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
     {
         using var scope = _serviceProvider.CreateScope();
@@ -253,7 +263,11 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
-            // Step 4: Send welcome message with inline buttons
+            // Step 4: Send welcome/teaser message based on mode
+            // All modes now use SendWelcomeMessageAsync:
+            // - ChatAcceptDeny: Shows full message with Accept/Deny buttons in group
+            // - DmWelcome: Shows teaser with "Read Rules" button (deep link to DM)
+            // - EntranceExam: Shows teaser with "Start Exam" button (deep link to DM)
             var welcomeMessage = await SendWelcomeMessageAsync(
                 operations,
                 chatMemberUpdate.Chat.Id,
@@ -261,13 +275,15 @@ public class WelcomeService : IWelcomeService
                 config,
                 cancellationToken);
 
+            var welcomeMessageId = welcomeMessage.MessageId;
+
             // Step 5: Create welcome response record (pending state)
             var welcomeResponse = new WelcomeResponse(
                 Id: 0, // Will be set by database
                 ChatId: chatMemberUpdate.Chat.Id,
                 UserId: user.Id,
                 Username: user.Username,
-                WelcomeMessageId: welcomeMessage.MessageId,
+                WelcomeMessageId: welcomeMessageId,
                 Response: WelcomeResponseType.Pending,
                 RespondedAt: DateTimeOffset.UtcNow,
                 DmSent: false,
@@ -282,7 +298,7 @@ public class WelcomeService : IWelcomeService
             var payload = new WelcomeTimeoutPayload(
                 chatMemberUpdate.Chat.Id,
                 user.Id,
-                welcomeMessage.MessageId
+                welcomeMessageId
             );
 
             var jobId = await _jobScheduler.ScheduleJobAsync(
@@ -295,9 +311,10 @@ public class WelcomeService : IWelcomeService
             await WithRepositoryAsync((repo, cancellationToken) => repo.SetTimeoutJobIdAsync(responseId, jobId, cancellationToken), cancellationToken);
 
             _logger.LogInformation(
-                "Successfully scheduled welcome timeout for {User} in {Chat} (timeout: {Timeout}s, JobId: {JobId})",
+                "Successfully scheduled welcome timeout for {User} in {Chat} (mode: {Mode}, timeout: {Timeout}s, JobId: {JobId})",
                 user.ToLogInfo(),
                 chatMemberUpdate.Chat.ToLogInfo(),
+                config.Mode,
                 config.TimeoutSeconds,
                 jobId);
         }
@@ -328,6 +345,16 @@ public class WelcomeService : IWelcomeService
         }
 
         var chatId = message.Chat.Id;
+
+        // Check if this is an exam callback (handled separately)
+        var isExamCallback = await WithExamFlowServiceAsync(examFlowService =>
+            Task.FromResult(examFlowService.IsExamCallback(data)));
+
+        if (isExamCallback)
+        {
+            await HandleExamCallbackAsync(callbackQuery, data, user, message, cancellationToken);
+            return;
+        }
 
         _logger.LogInformation(
             "Callback query received: {Data} from {User} in {Chat}",
@@ -449,6 +476,86 @@ public class WelcomeService : IWelcomeService
         }
     }
 
+    private async Task HandleExamCallbackAsync(
+        CallbackQuery callbackQuery,
+        string data,
+        User user,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "Exam callback received: {Data} from {User}",
+            data,
+            user.ToLogInfo());
+
+        try
+        {
+            // Parse callback and handle via ExamFlowService
+            using var scope = _serviceProvider.CreateScope();
+            var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+
+            var parsed = examFlowService.ParseExamCallback(data);
+            if (parsed == null)
+            {
+                _logger.LogWarning("Failed to parse exam callback: {Data}", data);
+                return;
+            }
+
+            var (sessionId, questionIndex, answerIndex) = parsed.Value;
+
+            var result = await examFlowService.HandleMcAnswerAsync(
+                sessionId,
+                questionIndex,
+                answerIndex,
+                user,
+                message,
+                cancellationToken);
+
+            if (result.ExamComplete && result.GroupChatId.HasValue)
+            {
+                _logger.LogInformation(
+                    "Exam completed for {User}: Passed={Passed}, SentToReview={SentToReview}",
+                    user.ToLogInfo(),
+                    result.Passed,
+                    result.SentToReview);
+
+                // Cancel welcome timeout job if exam completed
+                // Use GroupChatId from result (not message.Chat.Id which is the DM chat)
+                var welcomeResponse = await WithRepositoryAsync((repo, cancellationToken) =>
+                    repo.GetByUserAndChatAsync(user.Id, result.GroupChatId.Value, cancellationToken), cancellationToken);
+
+                if (welcomeResponse?.TimeoutJobId != null)
+                {
+                    await _jobScheduler.CancelJobAsync(welcomeResponse.TimeoutJobId, cancellationToken);
+                    await WithRepositoryAsync((repo, cancellationToken) =>
+                        repo.SetTimeoutJobIdAsync(welcomeResponse.Id, null, cancellationToken), cancellationToken);
+                }
+
+                // Update welcome response based on exam result
+                if (result.Passed == true)
+                {
+                    await WithRepositoryAsync((repo, cancellationToken) =>
+                        repo.UpdateResponseAsync(welcomeResponse!.Id, WelcomeResponseType.Accepted, dmSent: false, dmFallback: false, cancellationToken), cancellationToken);
+                }
+                else if (result.SentToReview)
+                {
+                    // Keep as pending - admin will decide
+                    _logger.LogInformation(
+                        "{User} failed exam and sent to review queue",
+                        user.ToLogInfo());
+                }
+            }
+
+            // Answer callback to clear loading state
+            var operations = await _botClientFactory.GetOperationsAsync();
+            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to handle exam callback {Data}", data);
+        }
+    }
+
     private async Task<Message> SendWelcomeMessageAsync(
         ITelegramOperations operations,
         long chatId,
@@ -475,6 +582,16 @@ public class WelcomeService : IWelcomeService
 
             _logger.LogInformation(
                 "Sending DM welcome message to {User} in {Chat}",
+                user.ToLogInfo(),
+                chatInfo.ToLogInfo());
+        }
+        else if (config.Mode == WelcomeMode.EntranceExam)
+        {
+            var botInfo = await operations.GetMeAsync(cancellationToken);
+            keyboard = WelcomeKeyboardBuilder.BuildExamModeKeyboard(config, chatId, user.Id, botInfo.Username!);
+
+            _logger.LogInformation(
+                "Sending entrance exam teaser to {User} in {Chat}",
                 user.ToLogInfo(),
                 chatInfo.ToLogInfo());
         }
@@ -963,6 +1080,18 @@ public class WelcomeService : IWelcomeService
 
         try
         {
+            // Cancel any active exam session
+            using var examScope = _serviceProvider.CreateScope();
+            var examFlowService = examScope.ServiceProvider.GetRequiredService<IExamFlowService>();
+            if (await examFlowService.HasActiveSessionAsync(chat.Id, user.Id, cancellationToken))
+            {
+                await examFlowService.CancelSessionAsync(chat.Id, user.Id, cancellationToken);
+                _logger.LogInformation(
+                    "Cancelled exam session for {User} who left {Chat}",
+                    user.ToLogInfo(),
+                    chat.ToLogInfo());
+            }
+
             // Find any pending welcome response for this user
             var response = await WithRepositoryAsync((repo, cancellationToken) => repo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken), cancellationToken);
 
