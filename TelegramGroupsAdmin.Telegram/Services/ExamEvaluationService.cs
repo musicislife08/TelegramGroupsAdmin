@@ -97,9 +97,7 @@ public class ExamEvaluationService : IExamEvaluationService
 
             var options = new ChatCompletionOptions
             {
-                MaxTokens = 200,
-                Temperature = 0.3,
-                JsonMode = true
+                JsonMode = true  // Required for structured response parsing; other settings from feature config
             };
 
             // Reuse the SpamDetection/ContentDetection AI connection (Issue #282 tracks rename)

@@ -564,7 +564,7 @@ public class ExamEvaluationServiceTests
     #region EvaluateAnswerAsync - Request Options Tests
 
     [Test]
-    public async Task EvaluateAnswerAsync_UsesJsonModeAndLowTemperature()
+    public async Task EvaluateAnswerAsync_UsesJsonModeAndFeatureConfigDefaults()
     {
         // Arrange
         ChatCompletionOptions? capturedOptions = null;
@@ -581,11 +581,11 @@ public class ExamEvaluationServiceTests
         await _service.EvaluateAnswerAsync(
             question: "Q", userAnswer: "A", evaluationCriteria: "C", groupTopic: "T");
 
-        // Assert - verify JSON mode and low temperature for consistent results
+        // Assert - verify JSON mode for structured parsing; Temperature/MaxTokens come from feature config
         Assert.That(capturedOptions, Is.Not.Null);
         Assert.That(capturedOptions!.JsonMode, Is.True);
-        Assert.That(capturedOptions.Temperature, Is.EqualTo(0.3));
-        Assert.That(capturedOptions.MaxTokens, Is.EqualTo(200));
+        Assert.That(capturedOptions.Temperature, Is.Null, "Temperature should come from feature config, not hardcoded");
+        Assert.That(capturedOptions.MaxTokens, Is.Null, "MaxTokens should come from feature config, not hardcoded");
     }
 
     #endregion

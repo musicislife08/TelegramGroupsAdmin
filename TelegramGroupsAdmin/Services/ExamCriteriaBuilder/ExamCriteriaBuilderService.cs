@@ -46,11 +46,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
                 AIFeatureType.PromptBuilder,
                 systemPrompt,
                 userPrompt,
-                new ChatCompletionOptions
-                {
-                    MaxTokens = 800,
-                    Temperature = 0.4
-                },
+                options: null,  // Use feature config defaults
                 cancellationToken);
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
@@ -111,11 +107,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
                 AIFeatureType.PromptBuilder,
                 systemPrompt,
                 userPrompt,
-                new ChatCompletionOptions
-                {
-                    MaxTokens = 800,
-                    Temperature = 0.4
-                },
+                options: null,  // Use feature config defaults
                 cancellationToken);
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
