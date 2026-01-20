@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// Domain model for exam failure reviews.

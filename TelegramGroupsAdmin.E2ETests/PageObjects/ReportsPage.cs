@@ -403,6 +403,10 @@ public class ReportsPage
     public async Task ClickDeleteAsSpamAsync()
     {
         var button = _page.Locator("button:has-text('Delete as Spam')").First;
+
+        // Wait for Blazor SignalR circuit to be fully established before clicking
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         await button.ClickAsync();
     }
 
@@ -413,6 +417,10 @@ public class ReportsPage
     public async Task ClickBanUserAsync()
     {
         var button = _page.Locator("button:has-text('Ban User')").First;
+
+        // Wait for Blazor SignalR circuit to be fully established before clicking
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         await button.ClickAsync();
     }
 
@@ -423,6 +431,10 @@ public class ReportsPage
     public async Task ClickWarnAsync()
     {
         var button = _page.Locator("button:has-text('Warn')").First;
+
+        // Wait for Blazor SignalR circuit to be fully established before clicking
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         await button.ClickAsync();
     }
 
@@ -434,6 +446,10 @@ public class ReportsPage
     public async Task ClickDismissAsync()
     {
         var button = _page.Locator("button:has-text('Dismiss')").First;
+
+        // Wait for Blazor SignalR circuit to be fully established before clicking
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         await button.ClickAsync();
     }
 
@@ -444,6 +460,10 @@ public class ReportsPage
     public async Task ClickConfirmScamAsync()
     {
         var button = _page.Locator("button:has-text('Confirm Scam')").First;
+
+        // Wait for Blazor SignalR circuit to be fully established before clicking
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         await button.ClickAsync();
     }
 
@@ -454,6 +474,10 @@ public class ReportsPage
     public async Task ClickFalsePositiveAsync()
     {
         var button = _page.Locator("button:has-text('False Positive')").First;
+
+        // Wait for Blazor SignalR circuit to be fully established before clicking
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         await button.ClickAsync();
     }
 
@@ -464,6 +488,10 @@ public class ReportsPage
     public async Task ClickTrustAsync()
     {
         var button = _page.Locator("button:has-text('Trust')").First;
+
+        // Wait for Blazor SignalR circuit to be fully established before clicking
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         await button.ClickAsync();
     }
 
@@ -498,9 +526,8 @@ public class ReportsPage
         var examCard = _page.Locator(".mud-card:has-text('Exam Review')").First;
         await Expect(examCard).ToBeVisibleAsync(new() { Timeout = 5000 });
 
-        // Find the middle Deny button (not Approve, not Deny + Ban)
-        // The buttons appear in order: Approve, Deny, Deny + Ban
-        var denyButton = examCard.Locator(".mud-card-actions button").Nth(1);
+        // Find the Deny button (exact match, not "Deny + Ban")
+        var denyButton = examCard.GetByRole(AriaRole.Button, new() { Name = "Deny", Exact = true });
         await Expect(denyButton).ToBeVisibleAsync(new() { Timeout = 5000 });
         await Expect(denyButton).ToBeEnabledAsync(new() { Timeout = 5000 });
 

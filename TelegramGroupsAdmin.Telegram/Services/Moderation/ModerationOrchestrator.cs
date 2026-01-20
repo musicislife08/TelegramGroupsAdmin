@@ -109,16 +109,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
         }
 
         // Step 4: Create training data (non-critical - failure doesn't affect ban success)
-        try
-        {
-            await _trainingHandler.CreateSpamSampleAsync(messageId, executor, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Failed to create training data for message {MessageId}, continuing with successful ban",
-                messageId);
-        }
+        await SafeExecuteAsync(
+            () => _trainingHandler.CreateSpamSampleAsync(messageId, executor, cancellationToken),
+            $"Create training data for message {messageId}");
 
         return new ModerationResult
         {
@@ -165,14 +158,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
         await _notificationHandler.NotifyAdminsBanAsync(userId, executor, reason, cancellationToken);
 
         // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
-        try
-        {
-            await _messageHandler.ScheduleUserMessagesCleanupAsync(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to schedule messages cleanup for user {UserId}, ban succeeded", userId);
-        }
+        await SafeExecuteAsync(
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(userId, cancellationToken),
+            $"Schedule messages cleanup for user {userId}");
 
         return new ModerationResult
         {
@@ -235,9 +223,12 @@ public class ModerationOrchestrator : IModerationOrchestrator
 
             if (banResult.Success)
             {
-                result.AutoBanTriggered = true;
-                result.ChatsAffected = banResult.ChatsAffected;
-                result.TrustRemoved = banResult.TrustRemoved;
+                result = result with
+                {
+                    AutoBanTriggered = true,
+                    ChatsAffected = banResult.ChatsAffected,
+                    TrustRemoved = banResult.TrustRemoved
+                };
             }
             else
             {
@@ -314,7 +305,7 @@ public class ModerationOrchestrator : IModerationOrchestrator
             var trustResult = await TrustUserAsync(
                 userId, executor,
                 "Trust restored after unban (false positive correction)", cancellationToken);
-            result.TrustRestored = trustResult.Success;
+            result = result with { TrustRestored = trustResult.Success };
         }
 
         return result;
@@ -497,5 +488,21 @@ public class ModerationOrchestrator : IModerationOrchestrator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Executes a non-critical operation, logging and swallowing any exceptions.
+    /// Use for operations that shouldn't fail the primary workflow (e.g., training data, cleanup scheduling).
+    /// </summary>
+    private async Task SafeExecuteAsync(Func<Task> action, string operationName)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "{Operation} failed, continuing", operationName);
+        }
     }
 }

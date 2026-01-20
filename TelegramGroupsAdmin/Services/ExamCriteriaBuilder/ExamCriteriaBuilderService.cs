@@ -150,7 +150,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
         }
     }
 
-    private static string BuildSystemPrompt()
+    internal static string BuildSystemPrompt()
     {
         return """
             You are an expert at creating evaluation criteria for community entrance exams.
@@ -175,7 +175,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
             """;
     }
 
-    private static string BuildUserPrompt(ExamCriteriaBuilderRequest request)
+    internal static string BuildUserPrompt(ExamCriteriaBuilderRequest request)
     {
         var strictnessGuidance = request.Strictness switch
         {
@@ -226,7 +226,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
             """;
     }
 
-    private static string BuildImprovementPrompt(string currentCriteria, string improvementFeedback)
+    internal static string BuildImprovementPrompt(string currentCriteria, string improvementFeedback)
     {
         return $"""
             Improve these entrance exam evaluation criteria based on the admin's feedback.

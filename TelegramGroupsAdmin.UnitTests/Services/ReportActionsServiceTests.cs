@@ -6,15 +6,16 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
-using Report = TelegramGroupsAdmin.ContentDetection.Models.Report;
+using Report = TelegramGroupsAdmin.Core.Models.Report;
 using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.ModerationResult;
-using ReportStatus = TelegramGroupsAdmin.ContentDetection.Models.ReportStatus;
+using ReportStatus = TelegramGroupsAdmin.Core.Models.ReportStatus;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
 

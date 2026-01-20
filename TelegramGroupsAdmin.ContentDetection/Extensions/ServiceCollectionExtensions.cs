@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Core.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Extensions;
 

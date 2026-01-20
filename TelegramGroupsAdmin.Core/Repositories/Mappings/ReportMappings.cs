@@ -1,7 +1,7 @@
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.ContentDetection.Models;
 
-namespace TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
+namespace TelegramGroupsAdmin.Core.Repositories.Mappings;
 
 /// <summary>
 /// Mapping extensions for Report records (maps to ReportDto in Data layer).
@@ -14,7 +14,7 @@ public static class ReportMappings
         /// <summary>
         /// Convert ReportDto to ContentReport model (full details for content reports)
         /// </summary>
-        public UiModels.Report ToModel() => new(
+        public Report ToModel() => new(
             Id: data.Id,
             MessageId: data.MessageId,
             ChatId: data.ChatId,
@@ -22,7 +22,7 @@ public static class ReportMappings
             ReportedByUserId: data.ReportedByUserId,
             ReportedByUserName: data.ReportedByUserName,
             ReportedAt: data.ReportedAt,
-            Status: (UiModels.ReportStatus)data.Status,  // int → enum
+            Status: (ReportStatus)data.Status,  // int → enum
             ReviewedBy: data.ReviewedBy,
             ReviewedAt: data.ReviewedAt,
             ActionTaken: data.ActionTaken,
@@ -33,13 +33,13 @@ public static class ReportMappings
         /// Convert ReportDto to base ReportBase model for generic operations.
         /// Does not include type-specific context - use type-specific repository methods for that.
         /// </summary>
-        public UiModels.ReportBase ToBaseModel(string? chatName = null, long? subjectUserId = null) => new()
+        public ReportBase ToBaseModel(string? chatName = null, long? subjectUserId = null) => new()
         {
             Id = data.Id,
-            Type = (UiModels.ReportType)data.Type,  // short → enum
+            Type = (ReportType)data.Type,  // short → enum
             ChatId = data.ChatId,
             CreatedAt = data.ReportedAt,
-            Status = (UiModels.ReportStatus)data.Status,  // int → enum
+            Status = (ReportStatus)data.Status,  // int → enum
             ReviewedBy = data.ReviewedBy,
             ReviewedAt = data.ReviewedAt,
             ActionTaken = data.ActionTaken,
@@ -53,12 +53,12 @@ public static class ReportMappings
         };
     }
 
-    extension(UiModels.Report ui)
+    extension(Report ui)
     {
         public DataModels.ReportDto ToDto() => new()
         {
             Id = ui.Id,
-            Type = (short)UiModels.ReportType.ContentReport,  // enum → short
+            Type = (short)ReportType.ContentReport,  // enum → short
             MessageId = ui.MessageId,
             ChatId = ui.ChatId,
             ReportCommandMessageId = ui.ReportCommandMessageId,

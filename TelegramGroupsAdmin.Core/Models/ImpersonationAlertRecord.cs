@@ -1,7 +1,7 @@
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// UI model for impersonation alerts

@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 

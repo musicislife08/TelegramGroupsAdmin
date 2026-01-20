@@ -6,6 +6,7 @@ using NSubstitute;
 using TelegramGroupsAdmin.Components.Reports;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramModels = TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;

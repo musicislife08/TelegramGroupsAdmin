@@ -16,8 +16,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MessageTranslationDto> MessageTranslations => Set<MessageTranslationDto>();
     public DbSet<DetectionResultRecordDto> DetectionResults => Set<DetectionResultRecordDto>();
 
-    // Message views (read-only, query optimization)
+    // Views (read-only, query optimization)
     public DbSet<EnrichedMessageView> EnrichedMessages => Set<EnrichedMessageView>();
+    public DbSet<EnrichedReportView> EnrichedReports => Set<EnrichedReportView>();
 
     // User and auth tables
     public DbSet<UserRecordDto> Users => Set<UserRecordDto>();
@@ -894,6 +895,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<EnrichedMessageView>()
             .HasNoKey()
             .ToView("enriched_messages");
+
+        // Configure EnrichedReportView as keyless entity mapping to enriched_reports view
+        // Provides report enrichment (users from JSONB, chat, reviewer) for efficient queries
+        modelBuilder.Entity<EnrichedReportView>()
+            .HasNoKey()
+            .ToView("enriched_reports");
 
         // ============================================================================
         // Content Detection Config JSON Mapping (Issue #252)

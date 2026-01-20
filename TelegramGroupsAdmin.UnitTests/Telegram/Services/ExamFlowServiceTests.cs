@@ -5,8 +5,9 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
 /// <summary>
-/// Test suite for ExamFlowService public methods.
+/// Test suite for ExamFlowService pure logic methods.
 /// Tests callback parsing and validation logic.
+/// Orchestration methods (HandleMcAnswerAsync, etc.) are covered by integration tests.
 /// </summary>
 [TestFixture]
 public class ExamFlowServiceTests

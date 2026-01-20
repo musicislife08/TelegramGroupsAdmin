@@ -62,6 +62,24 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
+    /// <inheritdoc/>
+    public async Task<List<UserRecord>> GetByIdsAsync(
+        IEnumerable<string> userIds,
+        CancellationToken cancellationToken = default)
+    {
+        var idList = userIds.ToList();
+        if (idList.Count == 0)
+            return [];
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.Users
+            .AsNoTracking()
+            .Where(u => idList.Contains(u.Id))
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(e => e.ToModel()).ToList();
+    }
+
     public async Task<string> CreateAsync(UserRecord user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

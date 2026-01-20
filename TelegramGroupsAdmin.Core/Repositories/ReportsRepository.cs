@@ -1,16 +1,16 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.ContentDetection.Repositories;
+namespace TelegramGroupsAdmin.Core.Repositories;
 
 /// <summary>
 /// Unified repository for all report types (ContentReport, ImpersonationAlert, ExamFailure).
-/// Stores all reports in the unified 'reports' table with type-specific context in JSONB.
+/// Uses enriched_reports view for efficient queries with pre-joined user/chat data.
 /// </summary>
 public class ReportsRepository : IReportsRepository
 {
@@ -39,21 +39,11 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var result = await (
-            from report in context.Reports
-            where report.Id == id
-            join chat in context.ManagedChats on report.ChatId equals chat.ChatId into chatGroup
-            from c in chatGroup.DefaultIfEmpty()
-            select new
-            {
-                Report = report,
-                ChatName = c != null ? c.ChatName : null
-            }
-        )
-        .AsNoTracking()
-        .FirstOrDefaultAsync(cancellationToken);
+        var view = await context.EnrichedReports
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
-        return result?.Report.ToBaseModel(result.ChatName);
+        return view?.ToBaseModel();
     }
 
     public async Task<List<ReportBase>> GetPendingAsync(
@@ -63,7 +53,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = context.Reports
+        var query = context.EnrichedReports
             .AsNoTracking()
             .Where(r => r.Status == (int)ReportStatus.Pending);
 
@@ -73,19 +63,11 @@ public class ReportsRepository : IReportsRepository
         if (type.HasValue)
             query = query.Where(r => r.Type == (short)type.Value);
 
-        var results = await (
-            from report in query
-            join chat in context.ManagedChats on report.ChatId equals chat.ChatId into chatGroup
-            from c in chatGroup.DefaultIfEmpty()
-            orderby report.ReportedAt descending
-            select new
-            {
-                Report = report,
-                ChatName = c != null ? c.ChatName : null
-            }
-        ).ToListAsync(cancellationToken);
+        var results = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .ToListAsync(cancellationToken);
 
-        return results.Select(r => r.Report.ToBaseModel(r.ChatName)).ToList();
+        return results.Select(r => r.ToBaseModel()).ToList();
     }
 
     public async Task<List<ReportBase>> GetAsync(
@@ -98,7 +80,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = context.Reports.AsNoTracking();
+        var query = context.EnrichedReports.AsNoTracking();
 
         if (chatId.HasValue)
             query = query.Where(r => r.ChatId == chatId.Value);
@@ -109,22 +91,13 @@ public class ReportsRepository : IReportsRepository
         if (status.HasValue)
             query = query.Where(r => r.Status == (int)status.Value);
 
-        var results = await (
-            from report in query
-            join chat in context.ManagedChats on report.ChatId equals chat.ChatId into chatGroup
-            from c in chatGroup.DefaultIfEmpty()
-            orderby report.ReportedAt descending
-            select new
-            {
-                Report = report,
-                ChatName = c != null ? c.ChatName : null
-            }
-        )
-        .Skip(offset)
-        .Take(limit)
-        .ToListAsync(cancellationToken);
+        var results = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
 
-        return results.Select(r => r.Report.ToBaseModel(r.ChatName)).ToList();
+        return results.Select(r => r.ToBaseModel()).ToList();
     }
 
     public async Task<int> GetPendingCountAsync(
@@ -287,24 +260,11 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var result = await (
-            from report in context.Reports
-            where report.Id == id && report.Type == (short)ReportType.ContentReport
-            join chat in context.ManagedChats on report.ChatId equals chat.ChatId into chatGroup
-            from c in chatGroup.DefaultIfEmpty()
-            select new
-            {
-                Report = report,
-                ChatName = c != null ? c.ChatName : null
-            }
-        )
-        .AsNoTracking()
-        .FirstOrDefaultAsync(cancellationToken);
+        var view = await context.EnrichedReports
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ContentReport, cancellationToken);
 
-        if (result == null)
-            return null;
-
-        return await HydrateContentReportAsync(context, result.Report, result.ChatName, cancellationToken);
+        return view?.ToContentReport();
     }
 
     public async Task<List<Report>> GetContentReportsAsync(
@@ -316,7 +276,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = context.Reports
+        var query = context.EnrichedReports
             .AsNoTracking()
             .Where(r => r.Type == (short)ReportType.ContentReport);
 
@@ -326,30 +286,13 @@ public class ReportsRepository : IReportsRepository
         if (status.HasValue)
             query = query.Where(r => r.Status == (int)status.Value);
 
-        var results = await (
-            from report in query
-            join chat in context.ManagedChats on report.ChatId equals chat.ChatId into chatGroup
-            from c in chatGroup.DefaultIfEmpty()
-            orderby report.ReportedAt descending
-            select new
-            {
-                Report = report,
-                ChatName = c != null ? c.ChatName : null
-            }
-        )
-        .Skip(offset)
-        .Take(limit)
-        .ToListAsync(cancellationToken);
+        var results = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
 
-        var reports = new List<Report>();
-        foreach (var r in results)
-        {
-            var report = await HydrateContentReportAsync(context, r.Report, r.ChatName, cancellationToken);
-            if (report != null)
-                reports.Add(report);
-        }
-
-        return reports;
+        return results.Select(r => r.ToContentReport()).ToList();
     }
 
     public async Task<List<Report>> GetPendingContentReportsAsync(
@@ -421,14 +364,11 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.Reports
+        var view = await context.EnrichedReports
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ImpersonationAlert, cancellationToken);
 
-        if (entity == null)
-            return null;
-
-        return await HydrateImpersonationAlertAsync(context, entity, cancellationToken);
+        return view?.ToImpersonationAlert();
     }
 
     public async Task<List<ImpersonationAlertRecord>> GetImpersonationAlertsAsync(
@@ -438,7 +378,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = context.Reports
+        var query = context.EnrichedReports
             .AsNoTracking()
             .Where(r => r.Type == (short)ReportType.ImpersonationAlert);
 
@@ -448,20 +388,15 @@ public class ReportsRepository : IReportsRepository
         if (chatId.HasValue)
             query = query.Where(r => r.ChatId == chatId.Value);
 
-        var entities = await query
+        var results = await query
             .OrderByDescending(r => r.ReportedAt)
             .ToListAsync(cancellationToken);
 
-        var results = new List<ImpersonationAlertRecord>();
-        foreach (var entity in entities)
-        {
-            var record = await HydrateImpersonationAlertAsync(context, entity, cancellationToken);
-            if (record != null)
-                results.Add(record);
-        }
-
-        // Sort by risk level (critical first), then by date
+        // Map and sort by risk level (critical first), then by date
         return results
+            .Select(r => r.ToImpersonationAlert())
+            .Where(r => r != null)
+            .Cast<ImpersonationAlertRecord>()
             .OrderByDescending(r => r.RiskLevel)
             .ThenByDescending(r => r.DetectedAt)
             .ToList();
@@ -473,8 +408,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // We need to check the Context JSONB for suspectedUserId
-        // Using raw SQL for JSONB query efficiency
+        // Use JSONB query for efficiency
         var count = await context.Reports
             .AsNoTracking()
             .Where(r => r.Type == (short)ReportType.ImpersonationAlert)
@@ -491,23 +425,28 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Query by suspectedUserId in the JSONB context
-        var entities = await context.Reports
+        // Use JSONB query to find by suspectedUserId, then join with view for enrichment
+        var ids = await context.Reports
             .AsNoTracking()
             .Where(r => r.Type == (short)ReportType.ImpersonationAlert)
             .Where(r => EF.Functions.JsonContains(r.Context!, $"{{\"suspectedUserId\":{userId}}}"))
+            .Select(r => r.Id)
+            .ToListAsync(cancellationToken);
+
+        if (ids.Count == 0)
+            return [];
+
+        var results = await context.EnrichedReports
+            .AsNoTracking()
+            .Where(r => ids.Contains(r.Id))
             .OrderByDescending(r => r.ReportedAt)
             .ToListAsync(cancellationToken);
 
-        var results = new List<ImpersonationAlertRecord>();
-        foreach (var entity in entities)
-        {
-            var record = await HydrateImpersonationAlertAsync(context, entity, cancellationToken);
-            if (record != null)
-                results.Add(record);
-        }
-
-        return results;
+        return results
+            .Select(r => r.ToImpersonationAlert())
+            .Where(r => r != null)
+            .Cast<ImpersonationAlertRecord>()
+            .ToList();
     }
 
     // ============================================================
@@ -561,24 +500,11 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var result = await (
-            from report in context.Reports
-            where report.Id == id && report.Type == (short)ReportType.ExamFailure
-            join chat in context.ManagedChats on report.ChatId equals chat.ChatId into chatGroup
-            from c in chatGroup.DefaultIfEmpty()
-            select new
-            {
-                Report = report,
-                ChatName = c != null ? c.ChatName : null
-            }
-        )
-        .AsNoTracking()
-        .FirstOrDefaultAsync(cancellationToken);
+        var view = await context.EnrichedReports
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ExamFailure, cancellationToken);
 
-        if (result == null)
-            return null;
-
-        return await HydrateExamFailureAsync(context, result.Report, result.ChatName, cancellationToken);
+        return view?.ToExamFailure();
     }
 
     public async Task<List<ExamFailureRecord>> GetExamFailuresAsync(
@@ -588,11 +514,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        _logger.LogInformation(
-            "GetExamFailuresAsync called: chatId={ChatId}, pendingOnly={PendingOnly}",
-            chatId, pendingOnly);
-
-        var query = context.Reports
+        var query = context.EnrichedReports
             .AsNoTracking()
             .Where(r => r.Type == (short)ReportType.ExamFailure);
 
@@ -602,177 +524,14 @@ public class ReportsRepository : IReportsRepository
         if (chatId.HasValue)
             query = query.Where(r => r.ChatId == chatId.Value);
 
-        var results = await (
-            from report in query
-            join chat in context.ManagedChats on report.ChatId equals chat.ChatId into chatGroup
-            from c in chatGroup.DefaultIfEmpty()
-            orderby report.ReportedAt descending
-            select new
-            {
-                Report = report,
-                ChatName = c != null ? c.ChatName : null
-            }
-        ).ToListAsync(cancellationToken);
+        var results = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .ToListAsync(cancellationToken);
 
-        _logger.LogInformation(
-            "GetExamFailuresAsync: found {Count} raw results from database",
-            results.Count);
-
-        foreach (var r in results)
-        {
-            _logger.LogInformation(
-                "  - Report Id={Id}, Status={Status}, ChatId={ChatId}, ReviewedAt={ReviewedAt}",
-                r.Report.Id, r.Report.Status, r.Report.ChatId, r.Report.ReviewedAt);
-        }
-
-        var records = new List<ExamFailureRecord>();
-        foreach (var r in results)
-        {
-            var record = await HydrateExamFailureAsync(context, r.Report, r.ChatName, cancellationToken);
-            if (record != null)
-                records.Add(record);
-        }
-
-        _logger.LogInformation(
-            "GetExamFailuresAsync: returning {Count} hydrated records",
-            records.Count);
-
-        return records;
-    }
-
-    // ============================================================
-    // Private helper methods
-    // ============================================================
-
-    private Task<Report?> HydrateContentReportAsync(
-        AppDbContext context,
-        ReportDto entity,
-        string? chatName,
-        CancellationToken cancellationToken)
-    {
-        // Report model doesn't need additional hydration - all data is in ReportDto columns
-        // ChatName is available but Report model doesn't have that field currently
-        _ = context;
-        _ = chatName;
-        _ = cancellationToken;
-        return Task.FromResult<Report?>(entity.ToModel());
-    }
-
-    private async Task<ImpersonationAlertRecord?> HydrateImpersonationAlertAsync(
-        AppDbContext context,
-        ReportDto entity,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(entity.Context))
-            return null;
-
-        var alertContext = JsonSerializer.Deserialize<ImpersonationAlertContext>(entity.Context, JsonOptions);
-        if (alertContext == null)
-            return null;
-
-        // Fetch user details for display
-        var suspectedUser = await context.TelegramUsers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.TelegramUserId == alertContext.SuspectedUserId, cancellationToken);
-
-        var targetUser = await context.TelegramUsers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.TelegramUserId == alertContext.TargetUserId, cancellationToken);
-
-        var chat = await context.ManagedChats
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ChatId == entity.ChatId, cancellationToken);
-
-        string? reviewerEmail = null;
-        if (!string.IsNullOrEmpty(entity.WebUserId))
-        {
-            var reviewer = await context.Users
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == entity.WebUserId, cancellationToken);
-            reviewerEmail = reviewer?.Email;
-        }
-
-        // Parse risk level from string
-        var riskLevel = Enum.TryParse<ImpersonationRiskLevel>(alertContext.RiskLevel, true, out var parsed)
-            ? parsed
-            : ImpersonationRiskLevel.Medium;
-
-        // Parse verdict from string
-        ImpersonationVerdict? verdict = null;
-        if (!string.IsNullOrEmpty(alertContext.Verdict) &&
-            Enum.TryParse<ImpersonationVerdict>(alertContext.Verdict, true, out var parsedVerdict))
-        {
-            verdict = parsedVerdict;
-        }
-
-        return new ImpersonationAlertRecord
-        {
-            Id = (int)entity.Id,
-            SuspectedUserId = alertContext.SuspectedUserId,
-            TargetUserId = alertContext.TargetUserId,
-            ChatId = entity.ChatId,
-            TotalScore = alertContext.TotalScore,
-            RiskLevel = riskLevel,
-            NameMatch = alertContext.NameMatch,
-            PhotoMatch = alertContext.PhotoMatch,
-            PhotoSimilarityScore = alertContext.PhotoSimilarity,
-            DetectedAt = entity.ReportedAt,
-            AutoBanned = alertContext.AutoBanned,
-            ReviewedByUserId = entity.WebUserId,
-            ReviewedAt = entity.ReviewedAt,
-            Verdict = verdict,
-            SuspectedUserName = suspectedUser?.Username,
-            SuspectedFirstName = suspectedUser?.FirstName,
-            SuspectedLastName = suspectedUser?.LastName,
-            SuspectedPhotoPath = suspectedUser?.UserPhotoPath,
-            TargetUserName = targetUser?.Username,
-            TargetFirstName = targetUser?.FirstName,
-            TargetLastName = targetUser?.LastName,
-            TargetPhotoPath = targetUser?.UserPhotoPath,
-            ChatName = chat?.ChatName,
-            ReviewedByEmail = reviewerEmail ?? entity.ReviewedBy
-        };
-    }
-
-    private async Task<ExamFailureRecord?> HydrateExamFailureAsync(
-        AppDbContext context,
-        ReportDto entity,
-        string? chatName,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(entity.Context))
-            return null;
-
-        var examContext = JsonSerializer.Deserialize<ExamFailureContext>(entity.Context, JsonOptions);
-        if (examContext == null)
-            return null;
-
-        // Fetch user details for display
-        var user = await context.TelegramUsers
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.TelegramUserId == examContext.UserId, cancellationToken);
-
-        return new ExamFailureRecord
-        {
-            Id = entity.Id,
-            ChatId = entity.ChatId,
-            UserId = examContext.UserId,
-            McAnswers = examContext.McAnswers,
-            ShuffleState = examContext.ShuffleState,
-            OpenEndedAnswer = examContext.OpenEndedAnswer,
-            Score = examContext.Score,
-            PassingThreshold = examContext.PassingThreshold,
-            AiEvaluation = examContext.AiEvaluation,
-            FailedAt = entity.ReportedAt,
-            ReviewedBy = entity.ReviewedBy,
-            ReviewedAt = entity.ReviewedAt,
-            ActionTaken = entity.ActionTaken,
-            AdminNotes = entity.AdminNotes,
-            UserName = user?.Username,
-            UserFirstName = user?.FirstName,
-            UserLastName = user?.LastName,
-            UserPhotoPath = user?.UserPhotoPath,
-            ChatName = chatName
-        };
+        return results
+            .Select(r => r.ToExamFailure())
+            .Where(r => r != null)
+            .Cast<ExamFailureRecord>()
+            .ToList();
     }
 }

@@ -74,7 +74,7 @@
         }
     </MudCardContent>
     <MudCardActions>
-        @if (Report.Status == ContentDetection.Models.ReportStatus.Pending)
+        @if (Report.Status == ReportStatus.Pending)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
@@ -169,8 +169,8 @@
     {
         return Report.Status switch
         {
-            ContentDetection.Models.ReportStatus.Pending => Color.Warning,
-            ContentDetection.Models.ReportStatus.Reviewed => Color.Success,
+            ReportStatus.Pending => Color.Warning,
+            ReportStatus.Reviewed => Color.Success,
             _ => Color.Default
         };
     }

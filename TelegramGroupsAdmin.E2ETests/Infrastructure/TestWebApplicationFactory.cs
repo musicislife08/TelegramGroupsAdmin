@@ -99,6 +99,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _mockModerationOrchestrator.BanUserAsync(
                 Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
+        _mockModerationOrchestrator.MarkAsSpamAndBanAsync(
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(),
+                Arg.Any<global::Telegram.Bot.Types.Message?>(), Arg.Any<CancellationToken>())
+            .Returns(successResult);
+        _mockModerationOrchestrator.WarnUserAsync(
+                Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long>(),
+                Arg.Any<CancellationToken>())
+            .Returns(successResult);
 
         // Configure to use Kestrel with dynamic port (port 0)
         // This MUST be called before StartServer() or accessing Services

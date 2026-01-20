@@ -4,6 +4,8 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -207,6 +209,14 @@ public class ExamFlowService : IExamFlowService
         {
             _logger.LogWarning("Exam session {SessionId} not found", sessionId);
             return new ExamAnswerResult(ExamComplete: false, Passed: null, SentToReview: false);
+        }
+
+        // Check if session has expired (timeout = automatic fail)
+        if (session.IsExpired)
+        {
+            _logger.LogWarning("Exam session {SessionId} has expired", sessionId);
+            await sessionRepo.DeleteSessionAsync(sessionId, cancellationToken);
+            return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: false);
         }
 
         // Verify user matches session

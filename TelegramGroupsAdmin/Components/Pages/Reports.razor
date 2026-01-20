@@ -9,6 +9,7 @@
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Reports
+@using TelegramGroupsAdmin.Core.Repositories
 @inject IReportsRepository ReportsRepository
 @inject IReportActionsService ReportActionsService
 @inject IManagedChatsRepository ManagedChatsRepository
@@ -135,6 +136,8 @@
     }
 </MudContainer>
 
+@implements IDisposable
+
 @code {
     private enum ReportTypeFilter { All, Spam, Impersonation, ExamFailure }
     private enum StatusFilter { Pending, All }
@@ -148,6 +151,7 @@
     private int _pendingImpersonationCount;
     private int _pendingExamCount;
     private string _currentUserId = string.Empty;
+    private readonly CancellationTokenSource _cts = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -191,7 +195,7 @@
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
                 permissionLevel,
-                cancellationToken: CancellationToken.None);
+                cancellationToken: _cts.Token);
             var accessibleChatIds = accessibleChats.Select(c => c.ChatId).ToHashSet();
 
             var unifiedQueue = new List<ReportQueueItem>();
@@ -564,5 +568,11 @@
             Logger.LogError(ex, "Error handling exam action {Action} for exam failure {ExamId}", args.Action, args.ExamFailure.Id);
             Snackbar.Add($"Failed to process exam review: {ex.Message}", Severity.Error);
         }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
     }
 }

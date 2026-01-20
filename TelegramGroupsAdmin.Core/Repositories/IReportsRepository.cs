@@ -1,6 +1,6 @@
-using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Models;
 
-namespace TelegramGroupsAdmin.ContentDetection.Repositories;
+namespace TelegramGroupsAdmin.Core.Repositories;
 
 /// <summary>
 /// Unified repository for all report types (ContentReport, ImpersonationAlert, ExamFailure).
