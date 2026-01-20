@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -178,10 +179,22 @@ public class RegisterPage
     /// <summary>
     /// Checks if this is first-run mode (no invite code required).
     /// First run shows "Setup Owner Account" title.
+    ///
+    /// Uses Playwright's Expect() with auto-retry to handle Blazor async state changes.
+    /// The page initially renders with default _isFirstRun=false, then OnInitializedAsync()
+    /// updates the state causing a re-render with the correct title.
     /// </summary>
     public async Task<bool> IsFirstRunModeAsync()
     {
-        return await _page.GetByText("Setup Owner Account").IsVisibleAsync();
+        try
+        {
+            await Expect(_page.GetByText("Setup Owner Account")).ToBeVisibleAsync();
+            return true;
+        }
+        catch (PlaywrightException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -195,10 +208,19 @@ public class RegisterPage
 
     /// <summary>
     /// Checks if the restore backup button is visible (first-run only).
+    /// Uses Playwright's Expect() with auto-retry for Blazor async rendering.
     /// </summary>
     public async Task<bool> IsRestoreBackupAvailableAsync()
     {
-        return await _page.Locator(RestoreBackupButton).IsVisibleAsync();
+        try
+        {
+            await Expect(_page.Locator(RestoreBackupButton)).ToBeVisibleAsync();
+            return true;
+        }
+        catch (PlaywrightException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
