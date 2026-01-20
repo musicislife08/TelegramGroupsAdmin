@@ -47,7 +47,7 @@ internal static class EnrichedReportMappings
 
         return new ImpersonationAlertRecord
         {
-            Id = (int)view.Id,
+            Id = view.Id,
             ChatId = view.ChatId,
             DetectedAt = view.ReportedAt,
             ReviewedByUserId = view.WebUserId,

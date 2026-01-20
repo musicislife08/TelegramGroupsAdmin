@@ -299,8 +299,12 @@ public class ExamFlowService : IExamFlowService
         // All questions complete - evaluate
         // Re-fetch session to get all answers
         session = await sessionRepo.GetByIdAsync(sessionId, cancellationToken);
-        return await EvaluateAndCompleteAsync(
-            session!, examConfig, user, cancellationToken);
+        if (session == null)
+        {
+            _logger.LogWarning("Exam session {SessionId} was deleted before evaluation", sessionId);
+            return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: false);
+        }
+        return await EvaluateAndCompleteAsync(session, examConfig, user, cancellationToken);
     }
 
     public async Task<ExamAnswerResult> HandleOpenEndedAnswerAsync(

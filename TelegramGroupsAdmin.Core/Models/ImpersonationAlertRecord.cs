@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Core.Models;
 /// </summary>
 public record ImpersonationAlertRecord
 {
-    public int Id { get; init; }
+    public long Id { get; init; }
     public long SuspectedUserId { get; init; }
     public long TargetUserId { get; init; }
     public long ChatId { get; init; }
