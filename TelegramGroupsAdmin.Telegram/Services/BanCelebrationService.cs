@@ -173,7 +173,7 @@ public class BanCelebrationService : IBanCelebrationService
                     return null;
                 }
 
-                var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
+                await using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
                 var fileName = Path.GetFileName(gif.FilePath);
                 inputFile = InputFile.FromStream(fileStream, fileName);
                 _logger.LogDebug("Uploading GIF from disk: {Path}", fullPath);
