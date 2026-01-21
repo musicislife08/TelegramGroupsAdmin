@@ -179,6 +179,9 @@ public static class ServiceCollectionExtensions
             // Similarity hash backfill service (one-time migration for SimHash deduplication)
             services.AddScoped<SimilarityHashBackfillService>();
 
+            // Ban celebration GIF hash backfill service (one-time migration for duplicate detection)
+            services.AddScoped<BanCelebrationHashBackfillService>();
+
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
             services.AddHostedService<Services.Docs.DocumentationStartupService>();

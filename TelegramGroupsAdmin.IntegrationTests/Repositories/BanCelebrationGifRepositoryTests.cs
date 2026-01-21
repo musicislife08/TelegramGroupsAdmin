@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -57,6 +59,24 @@ public class BanCelebrationGifRepositoryTests
 
         // Add HttpClientFactory for URL downloads
         services.AddHttpClient();
+
+        // Mock IVideoFrameExtractionService for video conversion tests
+        var mockVideoService = Substitute.For<IVideoFrameExtractionService>();
+        mockVideoService.IsAvailable.Returns(true);
+        // Mock successful conversion - writes an empty file to the output path
+        mockVideoService.ConvertVideoToGifAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                // Create an empty file at the output path to simulate successful conversion
+                var outputPath = callInfo.ArgAt<string>(1);
+                File.WriteAllBytes(outputPath, CreateMinimalGifBytes());
+                return true;
+            });
+        services.AddSingleton(mockVideoService);
 
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();
 
@@ -231,16 +251,17 @@ public class BanCelebrationGifRepositoryTests
     }
 
     [Test]
-    public async Task AddFromFileAsync_Mp4File_SavesWithCorrectExtension()
+    public async Task AddFromFileAsync_Mp4File_ConvertedToGifExtension()
     {
-        // Arrange
-        using var stream = CreateTestGifStream(); // Content doesn't matter for this test
+        // Arrange - Create test GIF stream (MP4 conversion is mocked so content doesn't matter)
+        // The mock IVideoFrameExtractionService.ConvertVideoToGifAsync returns true
+        using var stream = CreateTestGifStream();
 
-        // Act
+        // Act - When FFmpeg mock returns true, file is saved as .gif
         var result = await _repository!.AddFromFileAsync(stream, "video.mp4", "Video GIF");
 
-        // Assert
-        Assert.That(result.FilePath, Does.EndWith(".mp4"));
+        // Assert - After MP4→GIF conversion, extension is always .gif
+        Assert.That(result.FilePath, Does.EndWith(".gif"));
     }
 
     [Test]
@@ -541,31 +562,165 @@ public class BanCelebrationGifRepositoryTests
 
     #endregion
 
+    #region UpdatePhotoHashAsync Tests
+
+    [Test]
+    public async Task UpdatePhotoHashAsync_ExistingGif_UpdatesPhotoHash()
+    {
+        // Arrange
+        using var stream = CreateTestGifStream();
+        var gif = await _repository!.AddFromFileAsync(stream, "forhash.gif", "For Hash");
+        var testHash = new byte[] { 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0 };
+
+        // Act
+        await _repository.UpdatePhotoHashAsync(gif.Id, testHash);
+
+        // Assert
+        var updated = await _repository.GetByIdAsync(gif.Id);
+        Assert.That(updated!.PhotoHash, Is.EqualTo(testHash));
+    }
+
+    [Test]
+    public async Task UpdatePhotoHashAsync_NonExistentId_DoesNotThrow()
+    {
+        // Arrange
+        var testHash = new byte[] { 0x12, 0x34, 0x56, 0x78 };
+
+        // Act & Assert - Should not throw
+        Assert.DoesNotThrowAsync(async () =>
+            await _repository!.UpdatePhotoHashAsync(99999, testHash));
+    }
+
+    #endregion
+
+    #region FindSimilarAsync Tests
+
+    [Test]
+    public async Task FindSimilarAsync_NoGifsWithHashes_ReturnsNull()
+    {
+        // Arrange - Add GIF without hash
+        using var stream = CreateTestGifStream();
+        await _repository!.AddFromFileAsync(stream, "nohash.gif", "No Hash");
+
+        var searchHash = new byte[] { 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0 };
+
+        // Act
+        var result = await _repository.FindSimilarAsync(searchHash, maxHammingDistance: 8);
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task FindSimilarAsync_ExactMatch_ReturnsGif()
+    {
+        // Arrange
+        using var stream = CreateTestGifStream();
+        var gif = await _repository!.AddFromFileAsync(stream, "exact.gif", "Exact Match");
+        var hash = new byte[] { 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0 };
+        await _repository.UpdatePhotoHashAsync(gif.Id, hash);
+
+        // Act - Search with same hash (0 bit difference)
+        var result = await _repository.FindSimilarAsync(hash, maxHammingDistance: 8);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(gif.Id));
+    }
+
+    [Test]
+    public async Task FindSimilarAsync_SimilarHash_WithinThreshold_ReturnsGif()
+    {
+        // Arrange
+        using var stream = CreateTestGifStream();
+        var gif = await _repository!.AddFromFileAsync(stream, "similar.gif", "Similar");
+        var storedHash = new byte[] { 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00 };
+        await _repository.UpdatePhotoHashAsync(gif.Id, storedHash);
+
+        // Search hash differs by 2 bits (0xFF vs 0xFE = 1 bit, twice)
+        var searchHash = new byte[] { 0xFE, 0x00, 0xFE, 0x00, 0xFF, 0x00, 0xFF, 0x00 };
+
+        // Act - maxHammingDistance of 8 bits should find it (only 2 bits different)
+        var result = await _repository.FindSimilarAsync(searchHash, maxHammingDistance: 8);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(gif.Id));
+    }
+
+    [Test]
+    public async Task FindSimilarAsync_DifferentHash_ExceedsThreshold_ReturnsNull()
+    {
+        // Arrange
+        using var stream = CreateTestGifStream();
+        var gif = await _repository!.AddFromFileAsync(stream, "different.gif", "Different");
+        var storedHash = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        await _repository.UpdatePhotoHashAsync(gif.Id, storedHash);
+
+        // Search hash is completely different (64 bits different for 8 bytes)
+        var searchHash = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+
+        // Act - maxHammingDistance of 8 bits should NOT find it (64 bits different)
+        var result = await _repository.FindSimilarAsync(searchHash, maxHammingDistance: 8);
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task FindSimilarAsync_MultipleGifs_ReturnsFirstSimilar()
+    {
+        // Arrange - Add multiple GIFs with hashes
+        using var stream1 = CreateTestGifStream();
+        using var stream2 = CreateTestGifStream();
+        using var stream3 = CreateTestGifStream();
+
+        var gif1 = await _repository!.AddFromFileAsync(stream1, "first.gif", "First");
+        var gif2 = await _repository!.AddFromFileAsync(stream2, "second.gif", "Second");
+        var gif3 = await _repository!.AddFromFileAsync(stream3, "third.gif", "Third");
+
+        // Different hashes - only gif2 is similar to search
+        await _repository.UpdatePhotoHashAsync(gif1.Id, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        await _repository.UpdatePhotoHashAsync(gif2.Id, [0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00]);
+        await _repository.UpdatePhotoHashAsync(gif3.Id, [0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+        // Search hash is close to gif2
+        var searchHash = new byte[] { 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0x00, 0x00 };
+
+        // Act
+        var result = await _repository.FindSimilarAsync(searchHash, maxHammingDistance: 8);
+
+        // Assert - Should find gif2 (only 1 bit different)
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(gif2.Id));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
-    /// Creates a minimal valid GIF stream for testing.
+    /// Creates a minimal valid GIF byte array for testing.
     /// This is the smallest valid GIF (1x1 transparent pixel).
     /// </summary>
-    private static MemoryStream CreateTestGifStream()
-    {
-        // Minimal 1x1 transparent GIF
-        var gifBytes = new byte[]
-        {
-            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, // GIF89a header
-            0x01, 0x00, 0x01, 0x00,             // 1x1 dimensions
-            0x00,                               // No global color table
-            0x00, 0x00,                         // Background + aspect ratio
-            0x2C,                               // Image separator
-            0x00, 0x00, 0x00, 0x00,             // Position
-            0x01, 0x00, 0x01, 0x00,             // Dimensions
-            0x00,                               // No local color table
-            0x02, 0x01, 0x01, 0x00, 0x00,       // LZW minimum code size + data
-            0x3B                                // Trailer
-        };
+    private static byte[] CreateMinimalGifBytes() =>
+    [
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, // GIF89a header
+        0x01, 0x00, 0x01, 0x00,             // 1x1 dimensions
+        0x00,                               // No global color table
+        0x00, 0x00,                         // Background + aspect ratio
+        0x2C,                               // Image separator
+        0x00, 0x00, 0x00, 0x00,             // Position
+        0x01, 0x00, 0x01, 0x00,             // Dimensions
+        0x00,                               // No local color table
+        0x02, 0x01, 0x01, 0x00, 0x00,       // LZW minimum code size + data
+        0x3B                                // Trailer
+    ];
 
-        return new MemoryStream(gifBytes);
-    }
+    /// <summary>
+    /// Creates a minimal valid GIF stream for testing.
+    /// </summary>
+    private static MemoryStream CreateTestGifStream() => new(CreateMinimalGifBytes());
 
     #endregion
 }

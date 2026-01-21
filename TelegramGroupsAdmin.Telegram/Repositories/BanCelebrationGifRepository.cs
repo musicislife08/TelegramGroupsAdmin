@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -288,6 +289,43 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         await context.SaveChangesAsync(ct);
 
         _logger.LogDebug("Set thumbnail path for GIF {Id}: {Path}", id, thumbnailPath);
+    }
+
+    public async Task UpdatePhotoHashAsync(int id, byte[] photoHash, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(photoHash);
+
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await context.BanCelebrationGifs
+            .Where(g => g.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.PhotoHash, photoHash), ct);
+
+        _logger.LogDebug("Updated photo hash for GIF {Id}", id);
+    }
+
+    public async Task<BanCelebrationGif?> FindSimilarAsync(byte[] photoHash, int maxHammingDistance = 8, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(photoHash);
+
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Load all GIFs that have a photo hash - in a small library this is efficient
+        var gifsWithHash = await context.BanCelebrationGifs
+            .Where(g => g.PhotoHash != null)
+            .ToListAsync(ct);
+
+        // Compare hashes using Hamming distance (number of different bits)
+        foreach (var gif in gifsWithHash)
+        {
+            var distance = BitwiseUtilities.HammingDistance(photoHash, gif.PhotoHash!);
+            if (distance <= maxHammingDistance)
+            {
+                _logger.LogDebug("Found similar GIF: {Id} with Hamming distance {Distance}", gif.Id, distance);
+                return gif.ToModel();
+            }
+        }
+
+        return null;
     }
 
     public string GetFullPath(string relativePath)

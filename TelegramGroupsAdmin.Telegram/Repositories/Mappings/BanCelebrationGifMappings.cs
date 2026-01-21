@@ -17,6 +17,7 @@ public static class BanCelebrationGifMappings
             FileId = data.FileId,
             Name = data.Name,
             ThumbnailPath = data.ThumbnailPath,
+            PhotoHash = data.PhotoHash,
             CreatedAt = data.CreatedAt
         };
     }
@@ -30,6 +31,7 @@ public static class BanCelebrationGifMappings
             FileId = ui.FileId,
             Name = ui.Name,
             ThumbnailPath = ui.ThumbnailPath,
+            PhotoHash = ui.PhotoHash,
             CreatedAt = ui.CreatedAt
         };
     }

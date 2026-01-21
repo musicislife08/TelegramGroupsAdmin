@@ -161,6 +161,17 @@ public static class WebApplicationExtensions
             {
                 app.Logger.LogWarning(ex, "Failed to seed default ban celebration captions (non-fatal)");
             }
+
+            // One-time backfill: Populate photo_hash columns for ban celebration GIF duplicate detection
+            try
+            {
+                var gifHashBackfill = scope.ServiceProvider.GetRequiredService<BanCelebrationHashBackfillService>();
+                await gifHashBackfill.BackfillAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to backfill ban celebration GIF hashes (non-fatal)");
+            }
         }
     }
 

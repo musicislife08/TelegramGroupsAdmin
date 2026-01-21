@@ -725,6 +725,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(g => g.CreatedAt)
             .HasDatabaseName("ix_ban_celebration_gifs_created_at");
 
+        modelBuilder.Entity<BanCelebrationGifDto>()
+            .HasIndex(g => g.PhotoHash)
+            .HasDatabaseName("ix_ban_celebration_gifs_photo_hash");
+
         // BanCelebrationCaptions indexes
         modelBuilder.Entity<BanCelebrationCaptionDto>()
             .HasIndex(c => c.CreatedAt)

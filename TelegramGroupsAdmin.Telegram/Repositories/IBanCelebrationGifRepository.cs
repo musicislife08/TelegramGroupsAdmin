@@ -54,6 +54,19 @@ public interface IBanCelebrationGifRepository
     Task UpdateThumbnailPathAsync(int id, string thumbnailPath, CancellationToken ct = default);
 
     /// <summary>
+    /// Updates the perceptual hash for a GIF (used after duplicate check completes)
+    /// </summary>
+    Task UpdatePhotoHashAsync(int id, byte[] photoHash, CancellationToken ct = default);
+
+    /// <summary>
+    /// Finds a GIF with a similar perceptual hash (for duplicate detection)
+    /// </summary>
+    /// <param name="photoHash">The hash to compare against</param>
+    /// <param name="maxHammingDistance">Maximum allowed bit differences (default 8 = 87.5% similarity)</param>
+    /// <returns>The first similar GIF found, or null if no duplicates</returns>
+    Task<BanCelebrationGif?> FindSimilarAsync(byte[] photoHash, int maxHammingDistance = 8, CancellationToken ct = default);
+
+    /// <summary>
     /// Resolves a relative file path to the full path on disk
     /// </summary>
     string GetFullPath(string relativePath);
