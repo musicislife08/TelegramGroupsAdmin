@@ -1,0 +1,93 @@
+@using TelegramGroupsAdmin.Configuration
+@using TelegramGroupsAdmin.Configuration.Services
+@inject IConfigService ConfigService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Ban Celebration</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            Post celebratory GIFs when spammers are banned from this chat.
+        </MudText>
+
+        <MudSwitch @bind-Value="_config.Enabled"
+                  Color="Color.Primary"
+                  Label="Enable Ban Celebrations" />
+
+        @if (_config.Enabled)
+        {
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.subtitle1" GutterBottom="true">Triggers</MudText>
+            <MudStack Spacing="2">
+                <MudCheckBox @bind-Value="_config.TriggerOnAutoBan"
+                            Color="Color.Primary"
+                            Label="Trigger on auto-ban (spam detection)" />
+
+                <MudCheckBox @bind-Value="_config.TriggerOnManualBan"
+                            Color="Color.Primary"
+                            Label="Trigger on manual ban (admin /ban command)" />
+            </MudStack>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.subtitle1" GutterBottom="true">DM to Banned User</MudText>
+            <MudSwitch @bind-Value="_config.SendToBannedUser"
+                      Color="Color.Secondary"
+                      Label="Send celebration to banned user via DM" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Maximum impact! Send the ban celebration directly to the spammer's DM.
+                Only works if this chat uses DM-based welcome mode.
+            </MudText>
+        }
+    </MudPaper>
+
+    @if (ShowLibraryHint)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">
+            GIFs and captions are selected randomly from the global library.
+            Manage the library in <strong>Settings &rarr; Moderation &rarr; Ban Celebration</strong>.
+        </MudAlert>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public long ChatId { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public bool ShowLibraryHint { get; set; } = true;
+
+    private BanCelebrationConfig _config = BanCelebrationConfig.Default;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigAsync();
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        try
+        {
+            var config = await ConfigService.GetAsync<BanCelebrationConfig>(ConfigType.BanCelebration, ChatId);
+            _config = config ?? BanCelebrationConfig.Default;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load ban celebration config: {ex.Message}", Severity.Error);
+        }
+    }
+
+    public async Task SaveConfiguration()
+    {
+        try
+        {
+            await ConfigService.SaveAsync(ConfigType.BanCelebration, ChatId, _config);
+            Snackbar.Add("Ban celebration configuration saved", Severity.Success);
+            await OnSaved.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save ban celebration config: {ex.Message}", Severity.Error);
+            throw;
+        }
+    }
+}

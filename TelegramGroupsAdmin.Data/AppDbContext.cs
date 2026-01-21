@@ -59,6 +59,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Configuration table
     public DbSet<ConfigRecordDto> Configs => Set<ConfigRecordDto>();
 
+    // Ban celebration tables
+    public DbSet<BanCelebrationGifDto> BanCelebrationGifs => Set<BanCelebrationGifDto>();
+    public DbSet<BanCelebrationCaptionDto> BanCelebrationCaptions => Set<BanCelebrationCaptionDto>();
+
     // Welcome system (Phase 4.4)
     public DbSet<WelcomeResponseDto> WelcomeResponses => Set<WelcomeResponseDto>();
     public DbSet<ExamSessionDto> ExamSessions => Set<ExamSessionDto>();
@@ -715,6 +719,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ReportCallbackContextDto>()
             .HasIndex(rcc => rcc.CreatedAt)
             .HasDatabaseName("ix_report_callback_contexts_created_at");  // Expiry cleanup job
+
+        // BanCelebrationGifs indexes
+        modelBuilder.Entity<BanCelebrationGifDto>()
+            .HasIndex(g => g.CreatedAt)
+            .HasDatabaseName("ix_ban_celebration_gifs_created_at");
+
+        // BanCelebrationCaptions indexes
+        modelBuilder.Entity<BanCelebrationCaptionDto>()
+            .HasIndex(c => c.CreatedAt)
+            .HasDatabaseName("ix_ban_celebration_captions_created_at");
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

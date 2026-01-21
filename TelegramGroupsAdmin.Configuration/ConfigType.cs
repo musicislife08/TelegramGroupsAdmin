@@ -55,5 +55,13 @@ public enum ConfigType
     /// Controls which service messages (join/leave, photo changes, etc.) are auto-deleted
     /// Supports per-chat overrides
     /// </summary>
-    ServiceMessageDeletion
+    ServiceMessageDeletion,
+
+    /// <summary>
+    /// Ban celebration configuration (ban_celebration_config column)
+    /// Contains: BanCelebrationConfig model
+    /// Controls whether celebratory GIFs are posted when users are banned
+    /// Supports per-chat overrides
+    /// </summary>
+    BanCelebration
 }

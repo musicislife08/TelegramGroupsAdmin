@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
@@ -41,6 +42,10 @@ public class ModerationOrchestrator : IModerationOrchestrator
 
     // Repositories for logging
     private readonly ITelegramUserRepository _userRepository;
+    private readonly IManagedChatsRepository _managedChatsRepository;
+
+    // Services
+    private readonly IBanCelebrationService _banCelebrationService;
 
     // Configuration
     private readonly IConfigService _configService;
@@ -56,6 +61,8 @@ public class ModerationOrchestrator : IModerationOrchestrator
         INotificationHandler notificationHandler,
         ITrainingHandler trainingHandler,
         ITelegramUserRepository userRepository,
+        IManagedChatsRepository managedChatsRepository,
+        IBanCelebrationService banCelebrationService,
         IConfigService configService,
         ILogger<ModerationOrchestrator> logger)
     {
@@ -68,6 +75,8 @@ public class ModerationOrchestrator : IModerationOrchestrator
         _notificationHandler = notificationHandler;
         _trainingHandler = trainingHandler;
         _userRepository = userRepository;
+        _managedChatsRepository = managedChatsRepository;
+        _banCelebrationService = banCelebrationService;
         _configService = configService;
         _logger = logger;
     }
@@ -112,6 +121,25 @@ public class ModerationOrchestrator : IModerationOrchestrator
         await SafeExecuteAsync(
             () => _trainingHandler.CreateSpamSampleAsync(messageId, executor, cancellationToken),
             $"Create training data for message {messageId}");
+
+        // Step 5: Send ban celebration (non-critical - failure doesn't affect ban success)
+        await SafeExecuteAsync(
+            async () =>
+            {
+                // Get chat name for celebration
+                var chat = await _managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+                var chatName = chat?.ChatName ?? chatId.ToString();
+
+                // Get user display name
+                var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+                var userName = user != null
+                    ? TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, userId)
+                    : userId.ToString();
+
+                await _banCelebrationService.SendBanCelebrationAsync(
+                    chatId, chatName, userId, userName, isAutoBan: false, cancellationToken);
+            },
+            $"Send ban celebration for user {userId} in chat {chatId}");
 
         return new ModerationResult
         {

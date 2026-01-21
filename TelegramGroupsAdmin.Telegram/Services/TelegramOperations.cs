@@ -122,6 +122,19 @@ public class TelegramOperations : ITelegramOperations
             parseMode: parseMode ?? default,
             cancellationToken: cancellationToken);
 
+    public Task<Message> SendAnimationAsync(
+        long chatId,
+        InputFile animation,
+        string? caption = null,
+        ParseMode? parseMode = null,
+        CancellationToken cancellationToken = default)
+        => _botClient.SendAnimation(
+            chatId,
+            animation,
+            caption: caption,
+            parseMode: parseMode ?? default,
+            cancellationToken: cancellationToken);
+
     // ─── Chat Info ────────────────────────────────────────────────────────────
 
     public Task<ChatFullInfo> GetChatAsync(long chatId, CancellationToken cancellationToken = default)

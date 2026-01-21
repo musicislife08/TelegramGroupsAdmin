@@ -152,6 +152,15 @@ public class DetectionActionService(
                     "Deleted hard block message {MessageId} and banned {User} (policy violation)",
                     message.MessageId,
                     LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0));
+
+                // Send ban celebration GIF for hard block (if enabled for this chat)
+                SendBanCelebrationAsync(
+                    message.Chat.Id,
+                    message.Chat.Title ?? message.Chat.Id.ToString(),
+                    message.From!.Id,
+                    TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                    isAutoBan: true,
+                    cancellationToken);
                 return;
             }
 
@@ -284,6 +293,15 @@ public class DetectionActionService(
                     openAIResult,
                     banResult,
                     messageDeleted,
+                    cancellationToken);
+
+                // Send ban celebration GIF (if enabled for this chat)
+                SendBanCelebrationAsync(
+                    message.Chat.Id,
+                    message.Chat.Title ?? message.Chat.Id.ToString(),
+                    message.From!.Id,
+                    TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                    isAutoBan: true,
                     cancellationToken);
             }
             else if (spamResult.NetConfidence > config.ReviewQueueThreshold)
@@ -811,6 +829,34 @@ public class DetectionActionService(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to send notification for event {EventType} in {Chat}", eventType, chat.ToLogDebug());
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Helper method to send ban celebration GIF with proper scope management
+    /// Fire-and-forget pattern - does not await the celebration task
+    /// </summary>
+    private void SendBanCelebrationAsync(
+        long chatId,
+        string chatName,
+        long bannedUserId,
+        string bannedUserName,
+        bool isAutoBan,
+        CancellationToken cancellationToken)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = serviceProvider.CreateScope();
+                var banCelebrationService = scope.ServiceProvider.GetRequiredService<IBanCelebrationService>();
+                await banCelebrationService.SendBanCelebrationAsync(
+                    chatId, chatName, bannedUserId, bannedUserName, isAutoBan, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Failed to send ban celebration for chat {ChatId}", chatId);
             }
         }, cancellationToken);
     }

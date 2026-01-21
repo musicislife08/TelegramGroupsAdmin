@@ -88,6 +88,16 @@ public interface ITelegramOperations
         ParseMode? parseMode = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Send an animation (GIF or MP4 without sound) to a chat.
+    /// </summary>
+    Task<Message> SendAnimationAsync(
+        long chatId,
+        InputFile animation,
+        string? caption = null,
+        ParseMode? parseMode = null,
+        CancellationToken cancellationToken = default);
+
     // ─── Chat Info ────────────────────────────────────────────────────────────
 
     /// <summary>
