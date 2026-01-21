@@ -155,33 +155,47 @@ public class BanCelebrationService : IBanCelebrationService
 
         try
         {
-            InputFile inputFile;
-
-            // Use cached file_id if available (instant send)
+            // Try cached file_id first (instant send)
             if (!string.IsNullOrEmpty(gif.FileId))
             {
-                inputFile = InputFile.FromFileId(gif.FileId);
-                _logger.LogDebug("Using cached file_id for GIF {GifId}", gif.Id);
-            }
-            else
-            {
-                // Upload from local file
-                var fullPath = _gifRepository.GetFullPath(gif.FilePath);
-                if (!System.IO.File.Exists(fullPath))
+                try
                 {
-                    _logger.LogWarning("GIF file not found on disk: {Path}, GIF={GifId}", fullPath, gif.Id);
-                    return null;
-                }
+                    var inputFile = InputFile.FromFileId(gif.FileId);
+                    _logger.LogDebug("Using cached file_id for GIF {GifId}", gif.Id);
 
-                await using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
-                var fileName = Path.GetFileName(gif.FilePath);
-                inputFile = InputFile.FromStream(fileStream, fileName);
-                _logger.LogDebug("Uploading GIF from disk: {Path}", fullPath);
+                    return await telegramOps.SendAnimationAsync(
+                        chatId,
+                        inputFile,
+                        caption,
+                        ParseMode.Markdown,
+                        cancellationToken);
+                }
+                catch (Exception ex) when (IsInvalidFileIdError(ex))
+                {
+                    // Cached file_id is stale - clear it and fall back to local upload
+                    _logger.LogWarning(
+                        "Cached file_id for GIF {GifId} is invalid, clearing cache and retrying with local file",
+                        gif.Id);
+                    await _gifRepository.ClearFileIdAsync(gif.Id, cancellationToken);
+                }
             }
+
+            // Upload from local file (either no cache, or cache was invalid)
+            var fullPath = _gifRepository.GetFullPath(gif.FilePath);
+            if (!System.IO.File.Exists(fullPath))
+            {
+                _logger.LogWarning("GIF file not found on disk: {Path}, GIF={GifId}", fullPath, gif.Id);
+                return null;
+            }
+
+            await using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
+            var fileName = Path.GetFileName(gif.FilePath);
+            var localInputFile = InputFile.FromStream(fileStream, fileName);
+            _logger.LogDebug("Uploading GIF from disk: {Path}", fullPath);
 
             return await telegramOps.SendAnimationAsync(
                 chatId,
-                inputFile,
+                localInputFile,
                 caption,
                 ParseMode.Markdown,
                 cancellationToken);
@@ -302,5 +316,17 @@ public class BanCelebrationService : IBanCelebrationService
             .Replace("{username}", username, StringComparison.OrdinalIgnoreCase)
             .Replace("{chatname}", chatName, StringComparison.OrdinalIgnoreCase)
             .Replace("{bancount}", banCount.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Checks if the exception indicates an invalid/expired file_id.
+    /// Telegram returns errors like "Bad Request: wrong file identifier" when file_ids become stale.
+    /// </summary>
+    private static bool IsInvalidFileIdError(Exception ex)
+    {
+        var message = ex.Message.ToLowerInvariant();
+        return message.Contains("wrong file identifier") ||
+               message.Contains("file_id") ||
+               message.Contains("invalid file");
     }
 }

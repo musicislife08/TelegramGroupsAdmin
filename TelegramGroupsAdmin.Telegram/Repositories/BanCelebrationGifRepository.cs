@@ -212,6 +212,16 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         _logger.LogDebug("Cached Telegram file_id for GIF {Id}: {FileId}", id, fileId);
     }
 
+    public async Task ClearFileIdAsync(int id, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await context.BanCelebrationGifs
+            .Where(g => g.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(g => g.FileId, (string?)null), ct);
+
+        _logger.LogInformation("Cleared stale Telegram file_id for GIF {Id}", id);
+    }
+
     public async Task UpdateThumbnailPathAsync(int id, string thumbnailPath, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(thumbnailPath);

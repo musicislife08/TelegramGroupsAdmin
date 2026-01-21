@@ -412,6 +412,60 @@ public class BanCelebrationGifRepositoryTests
 
     #endregion
 
+    #region ClearFileIdAsync Tests
+
+    [Test]
+    public async Task ClearFileIdAsync_ExistingGifWithFileId_ClearsFileId()
+    {
+        // Arrange
+        using var stream = CreateTestGifStream();
+        var gif = await _repository!.AddFromFileAsync(stream, "toclear.gif", "To Clear");
+
+        // First set a file_id
+        await _repository.UpdateFileIdAsync(gif.Id, "AgACAgIAAxkBAAI_cached_file_id_456");
+
+        // Verify it's set
+        var withFileId = await _repository.GetByIdAsync(gif.Id);
+        Assert.That(withFileId!.FileId, Is.EqualTo("AgACAgIAAxkBAAI_cached_file_id_456"));
+
+        // Act
+        await _repository.ClearFileIdAsync(gif.Id);
+
+        // Assert
+        var cleared = await _repository.GetByIdAsync(gif.Id);
+        Assert.That(cleared!.FileId, Is.Null, "FileId should be cleared to null");
+    }
+
+    [Test]
+    public async Task ClearFileIdAsync_NonExistentId_DoesNotThrow()
+    {
+        // Act & Assert - Should not throw (ExecuteUpdateAsync returns 0 rows affected)
+        Assert.DoesNotThrowAsync(async () =>
+            await _repository!.ClearFileIdAsync(99999));
+    }
+
+    [Test]
+    public async Task ClearFileIdAsync_AlreadyNullFileId_DoesNotThrow()
+    {
+        // Arrange
+        using var stream = CreateTestGifStream();
+        var gif = await _repository!.AddFromFileAsync(stream, "alreadynull.gif", "Already Null");
+
+        // Verify FileId is already null (never set)
+        var existing = await _repository.GetByIdAsync(gif.Id);
+        Assert.That(existing!.FileId, Is.Null);
+
+        // Act & Assert - Should not throw
+        Assert.DoesNotThrowAsync(async () =>
+            await _repository.ClearFileIdAsync(gif.Id));
+
+        // Verify still null
+        var after = await _repository.GetByIdAsync(gif.Id);
+        Assert.That(after!.FileId, Is.Null);
+    }
+
+    #endregion
+
     #region UpdateThumbnailPathAsync Tests
 
     [Test]

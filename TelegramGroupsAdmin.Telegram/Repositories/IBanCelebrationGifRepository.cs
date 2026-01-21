@@ -44,6 +44,11 @@ public interface IBanCelebrationGifRepository
     Task UpdateFileIdAsync(int id, string fileId, CancellationToken ct = default);
 
     /// <summary>
+    /// Clears the cached Telegram file_id (used when the cached ID becomes invalid/stale)
+    /// </summary>
+    Task ClearFileIdAsync(int id, CancellationToken ct = default);
+
+    /// <summary>
     /// Updates the thumbnail path for a GIF
     /// </summary>
     Task UpdateThumbnailPathAsync(int id, string thumbnailPath, CancellationToken ct = default);
