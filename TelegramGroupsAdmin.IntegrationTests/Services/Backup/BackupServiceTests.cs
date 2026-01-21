@@ -779,6 +779,7 @@ public class BackupServiceTests
             long? reportId = null,
             string? photoPath = null,
             long? reportedUserId = null,
+            ReportType? reportType = null,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests

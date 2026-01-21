@@ -11,7 +11,7 @@ public interface INotificationService
 {
     /// <summary>
     /// Send a chat-specific notification to all admins who manage the specified chat
-    /// Used for: SpamDetected, SpamAutoDeleted, UserBanned, MessageReported, MalwareDetected
+    /// Used for: SpamDetected, SpamAutoDeleted, UserBanned, MessageReported, MalwareDetected, ExamFailed
     /// </summary>
     /// <param name="chatId">Chat ID where the event occurred</param>
     /// <param name="eventType">Type of event triggering the notification</param>
@@ -20,6 +20,7 @@ public interface INotificationService
     /// <param name="reportId">Optional report ID for moderation action buttons</param>
     /// <param name="photoPath">Optional absolute path to photo for DM with image</param>
     /// <param name="reportedUserId">Optional reported user's Telegram ID for moderation actions</param>
+    /// <param name="reportType">Optional report type for building correct action buttons</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Dictionary mapping userId to delivery success</returns>
     Task<Dictionary<string, bool>> SendChatNotificationAsync(
@@ -30,6 +31,7 @@ public interface INotificationService
         long? reportId = null,
         string? photoPath = null,
         long? reportedUserId = null,
+        ReportType? reportType = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

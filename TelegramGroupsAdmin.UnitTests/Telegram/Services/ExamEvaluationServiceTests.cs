@@ -586,6 +586,7 @@ public class ExamEvaluationServiceTests
         Assert.That(capturedOptions!.JsonMode, Is.True);
         Assert.That(capturedOptions.Temperature, Is.Null, "Temperature should come from feature config, not hardcoded");
         Assert.That(capturedOptions.MaxTokens, Is.Null, "MaxTokens should come from feature config, not hardcoded");
+
     }
 
     #endregion

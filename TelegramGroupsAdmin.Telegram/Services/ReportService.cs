@@ -95,7 +95,8 @@ public class ReportService(
             Message: notificationMessage,
             ReportId: reportId,
             PhotoPath: photoPath,
-            ReportedUserId: reportedUserId);
+            ReportedUserId: reportedUserId,
+            ReportType: ReportType.ContentReport);
 
         await jobTriggerService.TriggerNowAsync(
             "SendChatNotificationJob",

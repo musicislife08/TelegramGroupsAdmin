@@ -6,6 +6,7 @@
 @using TelegramGroupsAdmin.Data.Models
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Reports
@@ -18,6 +19,7 @@
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ILogger<Reports> Logger
+@inject IExamFlowService ExamFlowService
 @attribute [Authorize]
 
 <PageTitle>Reports Queue - TelegramGroupsAdmin</PageTitle>
@@ -482,22 +484,16 @@
             switch (args.Action)
             {
                 case "approve":
-                    Logger.LogInformation("Calling RestoreUserPermissionsAsync for user {UserId} in chat {ChatId}",
-                        args.ExamFailure.UserId, args.ExamFailure.ChatId);
-
-                    // Restore user permissions (they passed admin review)
-                    var restoreResult = await ModerationOrchestrator.RestoreUserPermissionsAsync(
+                    // Approve via service (restores permissions, deletes teaser, updates welcome response)
+                    var approveResult = await ExamFlowService.ApproveExamFailureAsync(
                         userId: args.ExamFailure.UserId,
                         chatId: args.ExamFailure.ChatId,
-                        executor: executor,
-                        reason: $"Exam failure #{args.ExamFailure.Id} - manually approved after review");
+                        examFailureId: args.ExamFailure.Id,
+                        executor: executor);
 
-                    Logger.LogInformation("RestoreUserPermissionsAsync returned: Success={Success}, Error={Error}",
-                        restoreResult.Success, restoreResult.ErrorMessage);
-
-                    if (!restoreResult.Success)
+                    if (!approveResult.Success)
                     {
-                        Snackbar.Add($"Failed to restore permissions: {restoreResult.ErrorMessage}", Severity.Error);
+                        Snackbar.Add($"Failed to approve: {approveResult.ErrorMessage}", Severity.Error);
                         return;
                     }
 

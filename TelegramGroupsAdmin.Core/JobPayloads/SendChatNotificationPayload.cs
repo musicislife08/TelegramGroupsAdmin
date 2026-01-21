@@ -16,5 +16,7 @@ public record SendChatNotificationPayload(
     /// <summary>Absolute path to photo file for DM with image (optional)</summary>
     string? PhotoPath = null,
     /// <summary>Reported user's Telegram ID for moderation actions (optional)</summary>
-    long? ReportedUserId = null
+    long? ReportedUserId = null,
+    /// <summary>Report type for building correct action buttons (optional)</summary>
+    ReportType? ReportType = null
 );
