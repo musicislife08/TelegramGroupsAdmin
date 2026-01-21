@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -49,21 +50,21 @@ public class WelcomeService : IWelcomeService
     /// </summary>
     private async Task<T> WithExamFlowServiceAsync<T>(Func<IExamFlowService, Task<T>> action)
     {
-        using var scope = _serviceProvider.CreateScope();
+        await using var scope = _serviceProvider.CreateAsyncScope();
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
         return await action(examFlowService);
     }
 
     private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
     {
-        using var scope = _serviceProvider.CreateScope();
+        await using var scope = _serviceProvider.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         return await action(repository, cancellationToken);
     }
 
     private async Task WithRepositoryAsync(Func<IWelcomeResponsesRepository, CancellationToken, Task> action, CancellationToken cancellationToken = default)
     {
-        using var scope = _serviceProvider.CreateScope();
+        await using var scope = _serviceProvider.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         await action(repository, cancellationToken);
     }
@@ -124,7 +125,7 @@ public class WelcomeService : IWelcomeService
 
         // Load welcome config from database (chat-specific or global fallback)
         // Must create scope because WelcomeService is singleton but IConfigService is scoped
-        using var scope = _serviceProvider.CreateScope();
+        await using var scope = _serviceProvider.CreateAsyncScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatMemberUpdate.Chat.Id)
                      ?? WelcomeConfig.Default;
@@ -156,7 +157,7 @@ public class WelcomeService : IWelcomeService
 
             // Create user record if not exists (IsActive: false - not engaged yet)
             // Must happen for ALL joining users, not just those checked for impersonation
-            using var impersonationScope = _serviceProvider.CreateScope();
+            await using var impersonationScope = _serviceProvider.CreateAsyncScope();
             var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
 
@@ -411,7 +412,7 @@ public class WelcomeService : IWelcomeService
                 case WelcomeCallbackType.Accept:
                 case WelcomeCallbackType.Deny:
                     // Load welcome config for chat-based callbacks
-                    using (var scope = _serviceProvider.CreateScope())
+                    await using (var scope = _serviceProvider.CreateAsyncScope())
                     {
                         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
                         var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
@@ -491,7 +492,7 @@ public class WelcomeService : IWelcomeService
         try
         {
             // Parse callback and handle via ExamFlowService
-            using var scope = _serviceProvider.CreateScope();
+            await using var scope = _serviceProvider.CreateAsyncScope();
             var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
             var parsed = examFlowService.ParseExamCallback(data);
@@ -644,58 +645,6 @@ public class WelcomeService : IWelcomeService
         }
     }
 
-    private async Task RestoreUserPermissionsAsync(
-        ITelegramOperations operations,
-        Chat chat,
-        User user,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            // Check if user is admin/owner - can't modify their permissions
-            var chatMember = await operations.GetChatMemberAsync(chat.Id, user.Id, cancellationToken);
-            if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
-            {
-                _logger.LogDebug(
-                    "Skipping permission restore for admin/owner: {User} in {Chat}",
-                    user.ToLogDebug(),
-                    chat.ToLogDebug());
-                return;
-            }
-
-            // Get chat's default permissions to restore user to group defaults
-            var chatDetails = await operations.GetChatAsync(chat.Id, cancellationToken);
-            var defaultPermissions = chatDetails.Permissions ?? WelcomeChatPermissions.Default;
-
-            _logger.LogDebug(
-                "Restoring {User} to {Chat} default permissions: Messages={CanSendMessages}, Media={CanSendPhotos}",
-                user.ToLogDebug(),
-                chat.ToLogDebug(),
-                defaultPermissions.CanSendMessages,
-                defaultPermissions.CanSendPhotos);
-
-            await operations.RestrictChatMemberAsync(
-                chatId: chat.Id,
-                userId: user.Id,
-                permissions: defaultPermissions,
-                cancellationToken: cancellationToken);
-
-            _logger.LogInformation(
-                "Restored permissions for {User} in {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to restore permissions for {User} in {Chat}",
-                user.ToLogDebug(),
-                chat.ToLogDebug());
-            throw;
-        }
-    }
-
     private async Task KickUserAsync(
         ITelegramOperations operations,
         Chat chat,
@@ -760,12 +709,27 @@ public class WelcomeService : IWelcomeService
             dmSent,
             dmFallback);
 
-        // Step 4: Restore user permissions
-        await RestoreUserPermissionsAsync(operations, chat, user, cancellationToken);
-
-        // Step 4b: Mark user as active (completed welcome flow)
-        using (var scope = _serviceProvider.CreateScope())
+        // Step 4: Restore user permissions via orchestrator (audit trail)
+        await using (var scope = _serviceProvider.CreateAsyncScope())
         {
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+            var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
+                userId: user.Id,
+                chatId: chat.Id,
+                executor: Actor.WelcomeFlow,
+                reason: "Completed welcome/rules flow",
+                cancellationToken: cancellationToken);
+
+            if (!restoreResult.Success)
+            {
+                _logger.LogWarning(
+                    "Failed to restore permissions for {User} in {Chat}: {Error}",
+                    user.ToLogInfo(),
+                    chat.ToLogInfo(),
+                    restoreResult.ErrorMessage);
+            }
+
+            // Step 4b: Mark user as active (completed welcome flow)
             var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
         }
@@ -930,30 +894,34 @@ public class WelcomeService : IWelcomeService
             }
         }
 
-        // Step 4: Restore user permissions in group
-        try
+        // Step 4: Restore user permissions in group via orchestrator (audit trail)
+        await using (var scope = _serviceProvider.CreateAsyncScope())
         {
-            await RestoreUserPermissionsAsync(operations, groupChat, user, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to restore permissions for {User} in {Chat}",
-                user.ToLogDebug(),
-                groupChat.ToLogDebug());
-
-            // Send error to user in DM
-            await operations.SendMessageAsync(
-                chatId: user.Id,
-                text: "❌ Failed to restore your permissions. Please contact an admin.",
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+            var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
+                userId: user.Id,
+                chatId: groupChat.Id,
+                executor: Actor.WelcomeFlow,
+                reason: "Completed welcome flow via DM",
                 cancellationToken: cancellationToken);
-            return;
-        }
 
-        // Step 4b: Mark user as active (completed welcome flow via DM)
-        using (var scope = _serviceProvider.CreateScope())
-        {
+            if (!restoreResult.Success)
+            {
+                _logger.LogError(
+                    "Failed to restore permissions for {User} in {Chat}: {Error}",
+                    user.ToLogInfo(),
+                    groupChat.ToLogInfo(),
+                    restoreResult.ErrorMessage);
+
+                // Send error to user in DM
+                await operations.SendMessageAsync(
+                    chatId: user.Id,
+                    text: "❌ Failed to restore your permissions. Please contact an admin.",
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            // Step 4b: Mark user as active (completed welcome flow via DM)
             var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
         }
@@ -995,7 +963,7 @@ public class WelcomeService : IWelcomeService
             // For private chats (no username), try to get invite link
             if (chatDeepLink == null)
             {
-                using var inviteLinkScope = _serviceProvider.CreateScope();
+                await using var inviteLinkScope = _serviceProvider.CreateAsyncScope();
                 var inviteLinkService = inviteLinkScope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
                 chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChat, cancellationToken);
 
@@ -1081,7 +1049,7 @@ public class WelcomeService : IWelcomeService
         try
         {
             // Cancel any active exam session
-            using var examScope = _serviceProvider.CreateScope();
+            await using var examScope = _serviceProvider.CreateAsyncScope();
             var examFlowService = examScope.ServiceProvider.GetRequiredService<IExamFlowService>();
             if (await examFlowService.HasActiveSessionAsync(chat.Id, user.Id, cancellationToken))
             {

@@ -52,6 +52,7 @@ public class ReportCallbackHandlerTests
     private IReportsRepository _mockReportsRepo = null!;
     private ITelegramUserRepository _mockUserRepo = null!;
     private IModerationOrchestrator _mockModerationService = null!;
+    private IExamFlowService _mockExamFlowService = null!;
 
     private ReportCallbackHandler _handler = null!;
 
@@ -70,6 +71,7 @@ public class ReportCallbackHandlerTests
         _mockReportsRepo = Substitute.For<IReportsRepository>();
         _mockUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockModerationService = Substitute.For<IModerationOrchestrator>();
+        _mockExamFlowService = Substitute.For<IExamFlowService>();
 
         // Wire up scope factory → scope → service provider
         _mockScopeFactory.CreateScope().Returns(_mockScope);
@@ -84,6 +86,8 @@ public class ReportCallbackHandlerTests
             .Returns(_mockUserRepo);
         _mockServiceProvider.GetService(typeof(IModerationOrchestrator))
             .Returns(_mockModerationService);
+        _mockServiceProvider.GetService(typeof(IExamFlowService))
+            .Returns(_mockExamFlowService);
 
         // Bot client factory returns operations
         _mockBotClientFactory.GetOperationsAsync().Returns(_mockOperations);

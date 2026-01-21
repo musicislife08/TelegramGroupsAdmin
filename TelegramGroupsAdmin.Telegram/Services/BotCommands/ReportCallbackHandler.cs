@@ -88,6 +88,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
         var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var moderationService = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+        var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
         // Look up callback context from database
         var context = await callbackContextRepo.GetByIdAsync(contextId, cancellationToken);
@@ -148,7 +149,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
                 ReportType.ImpersonationAlert => await HandleImpersonationActionAsync(
                     moderationService, reportsRepo, report, userId, actionInt, executor, targetUser, cancellationToken),
                 ReportType.ExamFailure => await HandleExamActionAsync(
-                    moderationService, reportsRepo, report, chatId, userId, actionInt, executor, targetUser, cancellationToken),
+                    moderationService, examFlowService, reportsRepo, report, chatId, userId, actionInt, executor, targetUser, cancellationToken),
                 _ => new ReviewActionResult(Success: false, Message: $"Unknown review type: {reportType}")
             };
         }
@@ -433,6 +434,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
 
     private async Task<ReviewActionResult> HandleExamActionAsync(
         IModerationOrchestrator moderationService,
+        IExamFlowService examFlowService,
         IReportsRepository reportsRepo,
         ReportBase report,
         long chatId,
@@ -454,7 +456,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
         return action switch
         {
             ExamAction.Approve => await HandleExamApproveAsync(
-                report, chatId, userId, executor, cancellationToken),
+                examFlowService, report, chatId, userId, executor, cancellationToken),
             ExamAction.Deny => await HandleExamDenyAsync(
                 report, chatId, userId, executor, cancellationToken),
             ExamAction.DenyAndBan => await HandleExamDenyAndBanAsync(
@@ -464,53 +466,37 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleExamApproveAsync(
+        IExamFlowService examFlowService,
         ReportBase report,
         long chatId,
         long userId,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
-        // Restore user permissions
-        var operations = await _botClientFactory.GetOperationsAsync();
+        // Use exam flow service which handles:
+        // - Permission restoration
+        // - Teaser message deletion
+        // - Welcome response update to "Accepted"
+        var result = await examFlowService.ApproveExamFailureAsync(
+            userId,
+            chatId,
+            report.Id,
+            executor,
+            cancellationToken);
 
-        try
+        if (result.Success)
         {
-            await operations.RestrictChatMemberAsync(
-                chatId,
-                userId,
-                new ChatPermissions
-                {
-                    CanSendMessages = true,
-                    CanSendAudios = true,
-                    CanSendDocuments = true,
-                    CanSendPhotos = true,
-                    CanSendVideos = true,
-                    CanSendVideoNotes = true,
-                    CanSendVoiceNotes = true,
-                    CanSendPolls = true,
-                    CanSendOtherMessages = true,
-                    CanAddWebPagePreviews = true,
-                    CanChangeInfo = false,
-                    CanInviteUsers = true,
-                    CanPinMessages = false,
-                    CanManageTopics = false
-                },
-                cancellationToken: cancellationToken);
-
             _logger.LogInformation(
                 "Exam review {ReviewId}: User {UserId} approved by {Executor}, permissions restored",
                 report.Id, userId, executor.DisplayName);
 
             return new ReviewActionResult(
                 Success: true,
-                Message: "User approved - permissions restored",
+                Message: "User approved - permissions restored, teaser deleted",
                 ActionName: "Approve");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to restore permissions for user {UserId} in chat {ChatId}", userId, chatId);
-            return new ReviewActionResult(Success: false, Message: $"Failed to restore permissions: {ex.Message}");
-        }
+
+        return new ReviewActionResult(Success: false, Message: result.ErrorMessage ?? "Approval failed");
     }
 
     private async Task<ReviewActionResult> HandleExamDenyAsync(

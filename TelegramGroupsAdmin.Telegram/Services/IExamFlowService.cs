@@ -1,5 +1,7 @@
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -124,4 +126,21 @@ public interface IExamFlowService
     /// </summary>
     /// <returns>Tuple of (sessionId, questionIndex, answerIndex) or null if invalid</returns>
     (long SessionId, int QuestionIndex, int AnswerIndex)? ParseExamCallback(string callbackData);
+
+    /// <summary>
+    /// Approve an exam failure after admin review.
+    /// Restores user permissions, deletes teaser message, updates welcome response.
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="examFailureId">ID of the exam failure record</param>
+    /// <param name="executor">Actor performing the approval</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result indicating success or failure</returns>
+    Task<ModerationResult> ApproveExamFailureAsync(
+        long userId,
+        long chatId,
+        long examFailureId,
+        Actor executor,
+        CancellationToken cancellationToken = default);
 }
