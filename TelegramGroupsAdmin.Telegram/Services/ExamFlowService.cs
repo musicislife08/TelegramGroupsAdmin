@@ -481,6 +481,19 @@ public class ExamFlowService : IExamFlowService
 
         if (passed)
         {
+            // Get group chat info first (needed for logging and deeplink)
+            ChatFullInfo? groupChat = null;
+            try
+            {
+                groupChat = await operations.GetChatAsync(session.ChatId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get chat info for {ChatId}", session.ChatId);
+            }
+
+            var chatName = groupChat?.Title ?? "the chat";
+
             // Restore permissions in GROUP (not DM)
             await RestoreUserPermissionsAsync(operations, session.ChatId, user, cancellationToken);
 
@@ -488,14 +501,87 @@ public class ExamFlowService : IExamFlowService
             var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
 
-            // Send success message to DM
+            // Delete teaser message in group (same as DM welcome flow)
+            var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+            var welcomeResponse = await welcomeResponsesRepo.GetByUserAndChatAsync(user.Id, session.ChatId, cancellationToken);
+            if (welcomeResponse != null)
+            {
+                // Delete the teaser message
+                try
+                {
+                    await operations.DeleteMessageAsync(
+                        chatId: session.ChatId,
+                        messageId: welcomeResponse.WelcomeMessageId,
+                        cancellationToken: cancellationToken);
+
+                    _logger.LogInformation(
+                        "Deleted exam teaser message {MessageId} in {Chat}",
+                        welcomeResponse.WelcomeMessageId,
+                        groupChat?.ToLogInfo() ?? session.ChatId.ToString());
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to delete exam teaser message {MessageId} in {Chat}",
+                        welcomeResponse.WelcomeMessageId,
+                        groupChat?.ToLogDebug() ?? session.ChatId.ToString());
+                    // Non-fatal - continue
+                }
+
+                // Update welcome response to accepted
+                await welcomeResponsesRepo.UpdateResponseAsync(
+                    welcomeResponse.Id,
+                    WelcomeResponseType.Accepted,
+                    dmSent: true,
+                    dmFallback: false,
+                    cancellationToken);
+            }
+
+            // Build deeplink to return to chat (same pattern as DM welcome flow)
+            string? chatDeepLink = null;
+            if (groupChat != null)
+            {
+                chatDeepLink = WelcomeDeepLinkBuilder.BuildPublicChatLink(groupChat.Username);
+
+                if (chatDeepLink != null)
+                {
+                    _logger.LogDebug("Using public chat link for exam completion in {Chat}: {Link}",
+                        groupChat.ToLogDebug(), chatDeepLink);
+                }
+                else
+                {
+                    // For private chats (no username), try to get invite link
+                    var inviteLinkService = scope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
+                    chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChat, cancellationToken);
+
+                    if (chatDeepLink != null)
+                    {
+                        _logger.LogDebug("Using invite link for exam completion in {Chat}: {Link}",
+                            groupChat.ToLogDebug(), chatDeepLink);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("No chat link available for exam completion in {Chat}",
+                            groupChat.ToLogDebug());
+                    }
+                }
+            }
+
+            // Send success message with return button
+            InlineKeyboardMarkup? keyboard = null;
+            if (chatDeepLink != null)
+            {
+                keyboard = WelcomeKeyboardBuilder.BuildReturnToChatKeyboard(chatName, chatDeepLink);
+            }
+
             await operations.SendMessageAsync(
                 chatId: messageChatId,
-                text: "✅ Welcome! You've passed the entrance exam. You can now participate in the chat.",
+                text: $"✅ Welcome! You've passed the entrance exam and can now participate in {chatName}.",
+                replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation("User {User} passed entrance exam in chat {ChatId}",
-                user.ToLogInfo(), session.ChatId);
+            _logger.LogInformation("User {User} passed entrance exam in {Chat}",
+                user.ToLogInfo(), groupChat?.ToLogInfo() ?? session.ChatId.ToString());
 
             return new ExamAnswerResult(ExamComplete: true, Passed: true, SentToReview: false, GroupChatId: session.ChatId);
         }
