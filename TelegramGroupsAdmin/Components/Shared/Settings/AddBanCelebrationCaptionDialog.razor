@@ -1,0 +1,176 @@
+@using Markdig
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@inject IBanCelebrationCaptionRepository CaptionRepository
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.TextFields" Class="mr-2" />
+            @(IsEditMode ? "Edit" : "Add") Ban Celebration Caption
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_name"
+                         Label="Name (optional)"
+                         Variant="Variant.Outlined"
+                         HelperText="E.g., 'Mortal Kombat - Fatality'" />
+
+            <MudTextField @bind-Value="_chatText"
+                         Label="Chat Caption"
+                         Variant="Variant.Outlined"
+                         Lines="2"
+                         HelperText="Posted to chat. Use {username} for banned user's name."
+                         Placeholder="Example: {username} has been finished!" />
+
+            <MudTextField @bind-Value="_dmText"
+                         Label="DM Caption"
+                         Variant="Variant.Outlined"
+                         Lines="2"
+                         HelperText="Sent to banned user. Uses 'You' grammar instead of {username}."
+                         Placeholder="Example: You have been finished!" />
+
+            <MudExpansionPanels>
+                <MudExpansionPanel Text="Available Placeholders" Dense="true">
+                    <MudSimpleTable Dense="true" Hover="true" Class="mt-2">
+                        <tbody>
+                            <tr>
+                                <td><code>{"{username}"}</code></td>
+                                <td>The banned user's display name</td>
+                            </tr>
+                            <tr>
+                                <td><code>{"{chatname}"}</code></td>
+                                <td>The chat where the ban occurred</td>
+                            </tr>
+                            <tr>
+                                <td><code>{"{bancount}"}</code></td>
+                                <td>Today's ban count (resets at midnight)</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+            @if (!string.IsNullOrWhiteSpace(_chatText))
+            {
+                <MudPaper Class="pa-3" Outlined="true">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Preview (Chat):</MudText>
+                    <MudText Typo="Typo.body1">@((MarkupString)RenderMarkdown(PreviewChatCaption))</MudText>
+                </MudPaper>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_dmText))
+            {
+                <MudPaper Class="pa-3" Outlined="true">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Preview (DM):</MudText>
+                    <MudText Typo="Typo.body1">@((MarkupString)RenderMarkdown(PreviewDmCaption))</MudText>
+                </MudPaper>
+            }
+        </MudStack>
+
+        @if (_isProcessing)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">@_errorMessage</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_isProcessing">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                  Variant="Variant.Filled"
+                  OnClick="Submit"
+                  Disabled="@(!CanSubmit || _isProcessing)">
+            @if (_isProcessing)
+            {
+                @(IsEditMode ? "Saving..." : "Adding...")
+            }
+            else
+            {
+                @(IsEditMode ? "Save Changes" : "Add Caption")
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// Caption to edit. If null, dialog is in "Add" mode.
+    /// </summary>
+    [Parameter] public BanCelebrationCaption? CaptionToEdit { get; set; }
+
+    private string _name = string.Empty;
+    private string _chatText = string.Empty;
+    private string _dmText = string.Empty;
+    private bool _isProcessing;
+    private string? _errorMessage;
+
+    private bool IsEditMode => CaptionToEdit != null;
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(_chatText) && !string.IsNullOrWhiteSpace(_dmText);
+
+    private string PreviewChatCaption => _chatText
+        .Replace("{username}", "SpammerX", StringComparison.OrdinalIgnoreCase)
+        .Replace("{chatname}", "Test Chat", StringComparison.OrdinalIgnoreCase)
+        .Replace("{bancount}", "42", StringComparison.OrdinalIgnoreCase);
+
+    private string PreviewDmCaption => _dmText
+        .Replace("{username}", "You", StringComparison.OrdinalIgnoreCase)
+        .Replace("{chatname}", "Test Chat", StringComparison.OrdinalIgnoreCase)
+        .Replace("{bancount}", "42", StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        if (CaptionToEdit != null)
+        {
+            _name = CaptionToEdit.Name ?? string.Empty;
+            _chatText = CaptionToEdit.Text;
+            _dmText = CaptionToEdit.DmText;
+        }
+    }
+
+    private async Task Submit()
+    {
+        _isProcessing = true;
+        _errorMessage = null;
+
+        try
+        {
+            if (IsEditMode)
+            {
+                await CaptionRepository.UpdateAsync(
+                    CaptionToEdit!.Id,
+                    _chatText,
+                    _dmText,
+                    string.IsNullOrWhiteSpace(_name) ? null : _name);
+            }
+            else
+            {
+                await CaptionRepository.AddAsync(
+                    _chatText,
+                    _dmText,
+                    string.IsNullOrWhiteSpace(_name) ? null : _name);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+            Snackbar.Add($"Error {(IsEditMode ? "updating" : "adding")} caption: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private static string RenderMarkdown(string text) => Markdown.ToHtml(text);
+}

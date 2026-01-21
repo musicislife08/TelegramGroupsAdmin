@@ -177,6 +177,14 @@ public class ConfigRecordDto
     public string? ServiceMessageDeletionConfig { get; set; }
 
     /// <summary>
+    /// Ban celebration configuration (JSONB)
+    /// Controls whether and how celebratory GIFs are posted when users are banned
+    /// Supports per-chat overrides (chat_id > 0)
+    /// </summary>
+    [Column("ban_celebration_config", TypeName = "jsonb")]
+    public string? BanCelebrationConfig { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]

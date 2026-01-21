@@ -39,6 +39,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             // OpenAIConfig removed - superseded by AIProviderConfig
             existing.SendGridConfig = config.SendGridConfig;
             existing.ServiceMessageDeletionConfig = config.ServiceMessageDeletionConfig;
+            existing.BanCelebrationConfig = config.BanCelebrationConfig;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
             // Immutable properties NOT copied: Id (primary key), ChatId (natural key used for query), CreatedAt (database default)
         }

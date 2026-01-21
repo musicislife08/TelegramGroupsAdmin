@@ -343,6 +343,9 @@ public class ConfigService(
             case ConfigType.ServiceMessageDeletion:
                 record.ServiceMessageDeletionConfig = json;
                 break;
+            case ConfigType.BanCelebration:
+                record.BanCelebrationConfig = json;
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type");
         }
@@ -361,6 +364,7 @@ public class ConfigService(
             ConfigType.UrlFilter => record.BotProtectionConfig,
             ConfigType.TelegramBot => record.TelegramBotConfig,
             ConfigType.ServiceMessageDeletion => record.ServiceMessageDeletionConfig,
+            ConfigType.BanCelebration => record.BanCelebrationConfig,
             _ => throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type")
         };
     }

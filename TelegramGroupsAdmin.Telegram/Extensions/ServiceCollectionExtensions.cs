@@ -44,6 +44,8 @@ public static class ServiceCollectionExtensions
             // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
             services.AddScoped<IExamSessionRepository, ExamSessionRepository>(); // Phase 2: Entrance exam state tracking
+            services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>(); // Ban celebration GIF library
+            services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>(); // Ban celebration caption library
             // REFACTOR-3: Extracted services from MessageHistoryRepository
             services.AddScoped<IMessageQueryService, MessageQueryService>();
             services.AddScoped<IMessageStatsService, MessageStatsService>();
@@ -114,6 +116,8 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
+            services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Ban celebration GIF posting
+            services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs
 
             // Training data quality services
             services.AddSingleton<TextSimilarityService>();

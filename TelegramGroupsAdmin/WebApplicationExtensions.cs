@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Endpoints;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin;
 
@@ -148,6 +149,17 @@ public static class WebApplicationExtensions
             catch (Exception ex)
             {
                 app.Logger.LogWarning(ex, "Failed to backfill similarity hashes (non-fatal)");
+            }
+
+            // Seed default ban celebration captions if empty
+            try
+            {
+                var captionRepository = scope.ServiceProvider.GetRequiredService<IBanCelebrationCaptionRepository>();
+                await captionRepository.SeedDefaultsIfEmptyAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to seed default ban celebration captions (non-fatal)");
             }
         }
     }

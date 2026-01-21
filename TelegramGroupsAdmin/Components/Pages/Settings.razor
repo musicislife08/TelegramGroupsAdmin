@@ -51,6 +51,11 @@
                     <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.ServiceMessages)" Icon="@Icons.Material.Filled.CleaningServices" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.ServiceMessagesTitle</MudNavLink>
                 </MudNavGroup>
 
+                <!-- Moderation Group -->
+                <MudNavGroup Title="Moderation" Icon="@Icons.Material.Filled.Gavel" Expanded="@_moderationExpanded" ExpandedChanged="@((bool expanded) => _moderationExpanded = expanded)">
+                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Moderation.Section, SettingsRoutes.Moderation.BanCelebration)" Icon="@Icons.Material.Filled.Celebration" Match="NavLinkMatch.All">@SettingsRoutes.Moderation.BanCelebrationTitle</MudNavLink>
+                </MudNavGroup>
+
                 <!-- Notifications Group -->
                 <MudNavGroup Title="Notifications" Icon="@Icons.Material.Filled.Notifications" Expanded="@_notificationsExpanded" ExpandedChanged="@((bool expanded) => _notificationsExpanded = expanded)">
                     @if (_canEditInfrastructure)
@@ -245,6 +250,19 @@
                     }
                     break;
 
+                // Moderation subsections
+                case SettingsRoutes.Moderation.Section:
+                    @switch (_currentSubSection)
+                    {
+                        case SettingsRoutes.Moderation.BanCelebration:
+                            <BanCelebrationSettings />
+                            break;
+                        default:
+                            <BanCelebrationSettings />
+                            break;
+                    }
+                    break;
+
                 // Content Detection subsections
                 case SettingsRoutes.ContentDetection.Section:
                     @switch (_currentSubSection)
@@ -302,6 +320,7 @@
 
     private bool _systemExpanded;
     private bool _telegramExpanded;
+    private bool _moderationExpanded;
     private bool _notificationsExpanded;
     private bool _contentDetectionExpanded;
     private bool _trainingDataExpanded;
@@ -339,6 +358,7 @@
         // Auto-expand the appropriate group based on current section
         _systemExpanded = _currentSection == SettingsRoutes.System.Section;
         _telegramExpanded = _currentSection == SettingsRoutes.Telegram.Section;
+        _moderationExpanded = _currentSection == SettingsRoutes.Moderation.Section;
         _notificationsExpanded = _currentSection == SettingsRoutes.Notifications.Section;
         _contentDetectionExpanded = _currentSection == SettingsRoutes.ContentDetection.Section;
         _trainingDataExpanded = _currentSection == SettingsRoutes.TrainingData.Section;
@@ -364,6 +384,9 @@
 
             // Notifications
             (SettingsRoutes.Notifications.Section, SettingsRoutes.Notifications.WebPush) => SettingsRoutes.Notifications.WebPushTitle,
+
+            // Moderation
+            (SettingsRoutes.Moderation.Section, SettingsRoutes.Moderation.BanCelebration) => SettingsRoutes.Moderation.BanCelebrationTitle,
 
             // Content Detection
             (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Algorithms) => SettingsRoutes.ContentDetection.AlgorithmsTitle,

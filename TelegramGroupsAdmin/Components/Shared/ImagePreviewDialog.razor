@@ -1,0 +1,26 @@
+@using TelegramGroupsAdmin.Core.Utilities
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Title</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="display: flex; justify-content: center; align-items: center; min-height: 200px;">
+            <img src="@MediaPathUtilities.GetPhotoWebPath(ImagePath)"
+                 alt="@Title"
+                 style="max-width: 100%; max-height: 70vh; border-radius: 8px;" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string ImagePath { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = "Image Preview";
+
+    private void Close() => MudDialog.Close();
+}

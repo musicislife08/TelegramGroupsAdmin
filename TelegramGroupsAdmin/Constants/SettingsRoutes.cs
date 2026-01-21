@@ -54,6 +54,14 @@ public static class SettingsRoutes
         public const string ServiceMessagesTitle = "Service Messages";
     }
 
+    public static class Moderation
+    {
+        public const string Section = "moderation";
+
+        public const string BanCelebration = "ban-celebration";
+        public const string BanCelebrationTitle = "Ban Celebration";
+    }
+
     public static class Notifications
     {
         public const string Section = "notifications";
