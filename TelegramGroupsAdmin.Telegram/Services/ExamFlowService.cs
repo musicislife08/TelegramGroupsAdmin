@@ -481,6 +481,19 @@ public class ExamFlowService : IExamFlowService
 
         if (passed)
         {
+            // Get group chat info first (needed for logging and deeplink)
+            ChatFullInfo? groupChat = null;
+            try
+            {
+                groupChat = await operations.GetChatAsync(session.ChatId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get chat info for {ChatId}", session.ChatId);
+            }
+
+            var chatName = groupChat?.Title ?? "the chat";
+
             // Restore permissions in GROUP (not DM)
             await RestoreUserPermissionsAsync(operations, session.ChatId, user, cancellationToken);
 
@@ -502,16 +515,16 @@ public class ExamFlowService : IExamFlowService
                         cancellationToken: cancellationToken);
 
                     _logger.LogInformation(
-                        "Deleted exam teaser message {MessageId} in chat {ChatId}",
+                        "Deleted exam teaser message {MessageId} in {Chat}",
                         welcomeResponse.WelcomeMessageId,
-                        session.ChatId);
+                        groupChat?.ToLogInfo() ?? session.ChatId.ToString());
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex,
-                        "Failed to delete exam teaser message {MessageId} in chat {ChatId}",
+                        "Failed to delete exam teaser message {MessageId} in {Chat}",
                         welcomeResponse.WelcomeMessageId,
-                        session.ChatId);
+                        groupChat?.ToLogDebug() ?? session.ChatId.ToString());
                     // Non-fatal - continue
                 }
 
@@ -524,30 +537,33 @@ public class ExamFlowService : IExamFlowService
                     cancellationToken);
             }
 
-            // Get group chat info for deeplink
-            ChatFullInfo? groupChat = null;
-            try
-            {
-                groupChat = await operations.GetChatAsync(session.ChatId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to get chat info for deeplink");
-            }
-
             // Build deeplink to return to chat (same pattern as DM welcome flow)
             string? chatDeepLink = null;
-            string chatName = "the chat";
             if (groupChat != null)
             {
-                chatName = groupChat.Title ?? "the chat";
                 chatDeepLink = WelcomeDeepLinkBuilder.BuildPublicChatLink(groupChat.Username);
 
-                // For private chats (no username), try to get invite link
-                if (chatDeepLink == null)
+                if (chatDeepLink != null)
                 {
+                    _logger.LogDebug("Using public chat link for exam completion in {Chat}: {Link}",
+                        groupChat.ToLogDebug(), chatDeepLink);
+                }
+                else
+                {
+                    // For private chats (no username), try to get invite link
                     var inviteLinkService = scope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
                     chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChat, cancellationToken);
+
+                    if (chatDeepLink != null)
+                    {
+                        _logger.LogDebug("Using invite link for exam completion in {Chat}: {Link}",
+                            groupChat.ToLogDebug(), chatDeepLink);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("No chat link available for exam completion in {Chat}",
+                            groupChat.ToLogDebug());
+                    }
                 }
             }
 
@@ -564,8 +580,8 @@ public class ExamFlowService : IExamFlowService
                 replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation("User {User} passed entrance exam in chat {ChatId}",
-                user.ToLogInfo(), session.ChatId);
+            _logger.LogInformation("User {User} passed entrance exam in {Chat}",
+                user.ToLogInfo(), groupChat?.ToLogInfo() ?? session.ChatId.ToString());
 
             return new ExamAnswerResult(ExamComplete: true, Passed: true, SentToReview: false, GroupChatId: session.ChatId);
         }
