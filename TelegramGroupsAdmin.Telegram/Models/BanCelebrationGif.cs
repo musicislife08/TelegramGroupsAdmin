@@ -27,5 +27,10 @@ public class BanCelebrationGif
     /// </summary>
     public string? ThumbnailPath { get; set; }
 
+    /// <summary>
+    /// Perceptual hash (aHash) for duplicate detection - 64-bit hash stored as 8 bytes
+    /// </summary>
+    public byte[]? PhotoHash { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

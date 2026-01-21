@@ -345,7 +345,13 @@
 
     private async Task AddGif()
     {
-        var dialog = await DialogService.ShowAsync<AddBanCelebrationGifDialog>("Add GIF");
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            BackdropClick = false  // Prevent accidental close during upload
+        };
+
+        var dialog = await DialogService.ShowAsync<AddBanCelebrationGifDialog>("Add GIF", options);
         var result = await dialog.Result;
 
         if (result is not null && result is { Canceled: false })
@@ -398,7 +404,13 @@
 
     private async Task AddCaption()
     {
-        var dialog = await DialogService.ShowAsync<AddBanCelebrationCaptionDialog>("Add Caption");
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            BackdropClick = false
+        };
+
+        var dialog = await DialogService.ShowAsync<AddBanCelebrationCaptionDialog>("Add Caption", options);
         var result = await dialog.Result;
 
         if (result is not null && result is { Canceled: false })
@@ -415,7 +427,13 @@
             { x => x.CaptionToEdit, caption }
         };
 
-        var dialog = await DialogService.ShowAsync<AddBanCelebrationCaptionDialog>("Edit Caption", parameters);
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            BackdropClick = false
+        };
+
+        var dialog = await DialogService.ShowAsync<AddBanCelebrationCaptionDialog>("Edit Caption", parameters, options);
         var result = await dialog.Result;
 
         if (result is not null && result is { Canceled: false })

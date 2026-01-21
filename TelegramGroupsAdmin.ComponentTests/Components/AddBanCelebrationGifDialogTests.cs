@@ -4,6 +4,7 @@ using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.Settings;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -18,6 +19,7 @@ public class AddBanCelebrationGifDialogTestContext : BunitContext
 {
     protected IBanCelebrationGifRepository GifRepository { get; }
     protected IThumbnailService ThumbnailService { get; }
+    protected IPhotoHashService PhotoHashService { get; }
     protected IDialogService DialogService { get; private set; } = null!;
     protected ISnackbar Snackbar { get; }
 
@@ -26,6 +28,7 @@ public class AddBanCelebrationGifDialogTestContext : BunitContext
         // Create mocks
         GifRepository = Substitute.For<IBanCelebrationGifRepository>();
         ThumbnailService = Substitute.For<IThumbnailService>();
+        PhotoHashService = Substitute.For<IPhotoHashService>();
         Snackbar = Substitute.For<ISnackbar>();
 
         // Configure default behavior
@@ -36,9 +39,14 @@ public class AddBanCelebrationGifDialogTestContext : BunitContext
             Arg.Any<int>(),
             Arg.Any<CancellationToken>()).Returns(true);
 
+        // Configure photo hash service - returns a dummy hash by default
+        PhotoHashService.ComputePhotoHashAsync(Arg.Any<string>())
+            .Returns(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 });
+
         // Register mocks
         Services.AddSingleton(GifRepository);
         Services.AddSingleton(ThumbnailService);
+        Services.AddSingleton(PhotoHashService);
         Services.AddSingleton(Snackbar);
 
         // Add MudBlazor services
@@ -80,6 +88,7 @@ public class AddBanCelebrationGifDialogTests : AddBanCelebrationGifDialogTestCon
     {
         GifRepository.ClearReceivedCalls();
         ThumbnailService.ClearReceivedCalls();
+        PhotoHashService.ClearReceivedCalls();
         Snackbar.ClearReceivedCalls();
     }
 
@@ -385,6 +394,183 @@ public class AddBanCelebrationGifDialogTests : AddBanCelebrationGifDialogTestCon
         {
             Assert.That(provider.Markup, Does.Contain("A friendly name for this GIF"));
         });
+    }
+
+    #endregion
+
+    #region Duplicate Detection & Cleanup Tests
+
+    /// <summary>
+    /// Configures mocks to simulate a duplicate being detected during upload.
+    /// Returns the pending GIF that should be deleted on cancel.
+    /// </summary>
+    private BanCelebrationGif ConfigureDuplicateScenario()
+    {
+        var pendingGif = new BanCelebrationGif { Id = 99, Name = "Pending", FilePath = "ban-gifs/pending.gif" };
+        var existingGif = new BanCelebrationGif { Id = 1, Name = "Existing", FilePath = "ban-gifs/existing.gif" };
+
+        // When AddFromUrlAsync is called, return the pending GIF
+        GifRepository.AddFromUrlAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(pendingGif);
+
+        // When FindSimilarAsync is called, return the existing GIF (simulating duplicate found)
+        GifRepository.FindSimilarAsync(Arg.Any<byte[]>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(existingGif);
+
+        return pendingGif;
+    }
+
+    [Test]
+    public async Task DuplicateWarning_CancelUploadButton_DeletesPendingGif()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        var pendingGif = ConfigureDuplicateScenario();
+
+        var dialogRef = await OpenDialogAsync();
+
+        // Wait for dialog and switch to URL tab
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("From URL"));
+        });
+
+        var urlTab = provider.FindAll(".mud-tab").First(t => t.TextContent.Contains("From URL"));
+        urlTab.Click();
+
+        // Enter a URL
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("GIF URL"));
+        });
+
+        var urlInput = provider.Find("input[placeholder='https://example.com/animation.gif']");
+        urlInput.Change("https://example.com/test.gif");
+
+        // Click Add GIF button to trigger submission
+        var addButton = provider.FindAll("button").First(b => b.TextContent.Contains("Add GIF"));
+        addButton.Click();
+
+        // Wait for duplicate warning to appear
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Similar GIF already exists"));
+        });
+
+        // Act - Click "Cancel Upload" button in warning
+        var cancelUploadButton = provider.FindAll("button").First(b => b.TextContent.Contains("Cancel Upload"));
+        cancelUploadButton.Click();
+
+        // Assert - DeleteAsync should have been called with the pending GIF's ID
+        await GifRepository.Received(1).DeleteAsync(pendingGif.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DuplicateWarning_MainCancelButton_DeletesPendingGif()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        var pendingGif = ConfigureDuplicateScenario();
+
+        var dialogRef = await OpenDialogAsync();
+
+        // Wait for dialog and switch to URL tab
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("From URL"));
+        });
+
+        var urlTab = provider.FindAll(".mud-tab").First(t => t.TextContent.Contains("From URL"));
+        urlTab.Click();
+
+        // Enter a URL
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("GIF URL"));
+        });
+
+        var urlInput = provider.Find("input[placeholder='https://example.com/animation.gif']");
+        urlInput.Change("https://example.com/test.gif");
+
+        // Click Add GIF button to trigger submission
+        var addButton = provider.FindAll("button").First(b => b.TextContent.Contains("Add GIF"));
+        addButton.Click();
+
+        // Wait for duplicate warning to appear
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Similar GIF already exists"));
+        });
+
+        // Act - Click the main "Cancel" button (not "Cancel Upload")
+        // The main Cancel button is in the dialog actions, not in the warning
+        var cancelButtons = provider.FindAll("button").Where(b => b.TextContent.Trim() == "Cancel").ToList();
+        var mainCancelButton = cancelButtons.First(); // The main cancel button in dialog actions
+        mainCancelButton.Click();
+
+        // Assert - DeleteAsync should have been called with the pending GIF's ID
+        await GifRepository.Received(1).DeleteAsync(pendingGif.Id, Arg.Any<CancellationToken>());
+    }
+
+    // NOTE: Testing Escape key / backdrop click cleanup is better suited for E2E Playwright tests
+    // since those are browser-level interactions that bUnit cannot properly simulate.
+    // The IAsyncDisposable implementation provides a safety net for those scenarios.
+
+    [Test]
+    public async Task DuplicateWarning_KeepBothButton_DoesNotDeleteGif()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+        var pendingGif = ConfigureDuplicateScenario();
+
+        var dialogRef = await OpenDialogAsync();
+
+        // Wait for dialog and switch to URL tab
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("From URL"));
+        });
+
+        var urlTab = provider.FindAll(".mud-tab").First(t => t.TextContent.Contains("From URL"));
+        urlTab.Click();
+
+        // Enter a URL
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("GIF URL"));
+        });
+
+        var urlInput = provider.Find("input[placeholder='https://example.com/animation.gif']");
+        urlInput.Change("https://example.com/test.gif");
+
+        // Click Add GIF button to trigger submission
+        var addButton = provider.FindAll("button").First(b => b.TextContent.Contains("Add GIF"));
+        addButton.Click();
+
+        // Wait for duplicate warning to appear
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Similar GIF already exists"));
+        });
+
+        // Clear any previous calls before clicking Keep Both
+        GifRepository.ClearReceivedCalls();
+
+        // Act - Click "Keep Both" to confirm keeping the duplicate
+        var keepBothButton = provider.FindAll("button").First(b => b.TextContent.Contains("Keep Both"));
+        keepBothButton.Click();
+
+        // Wait for dialog to close
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Not.Contain("Similar GIF already exists"));
+        });
+
+        // Assert - UpdatePhotoHashAsync SHOULD have been called to save the hash
+        await GifRepository.Received(1).UpdatePhotoHashAsync(pendingGif.Id, Arg.Any<byte[]>(), Arg.Any<CancellationToken>());
+
+        // Assert - DeleteAsync should NOT have been called after clicking Keep Both
+        await GifRepository.DidNotReceive().DeleteAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -108,6 +109,11 @@ public class BanCelebrationServiceTests
 
         // Add HttpClientFactory for URL downloads
         services.AddHttpClient();
+
+        // Mock IVideoFrameExtractionService (not needed for these tests)
+        var mockVideoService = Substitute.For<IVideoFrameExtractionService>();
+        mockVideoService.IsAvailable.Returns(false);
+        services.AddSingleton(mockVideoService);
 
         // Register repositories (real implementations)
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();

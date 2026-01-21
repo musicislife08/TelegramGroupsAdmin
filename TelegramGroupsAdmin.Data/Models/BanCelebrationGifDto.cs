@@ -43,6 +43,13 @@ public class BanCelebrationGifDto
     [MaxLength(255)]
     public string? ThumbnailPath { get; set; }
 
+    /// <summary>
+    /// Perceptual hash (aHash) for duplicate detection - 64-bit hash stored as 8 bytes
+    /// </summary>
+    [Column("photo_hash")]
+    [MaxLength(8)]
+    public byte[]? PhotoHash { get; set; }
+
     [Column("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
 }
