@@ -5,22 +5,25 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
+using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
 /// <summary>
-/// Unit tests for ThumbnailService - generates static thumbnails from images and GIFs.
+/// Unit tests for ThumbnailService - generates static thumbnails from images, GIFs, and videos.
 ///
 /// Architecture:
-/// - ThumbnailService uses ImageSharp to extract first frame and resize
+/// - ThumbnailService uses ImageSharp for images/GIFs, FFmpeg for videos
 /// - For animated GIFs, only the first frame is extracted (prevents APNG animation)
-/// - Output is always a static PNG thumbnail
+/// - For videos (MP4, etc.), delegates to IVideoFrameExtractionService
+/// - Output is always a static thumbnail (PNG for images, GIF for videos)
 /// - Maintains aspect ratio using ResizeMode.Max
 ///
 /// Test Strategy:
 /// - Uses temporary files for input/output (real file I/O, but isolated)
 /// - Creates test images programmatically using ImageSharp
+/// - Mocks IVideoFrameExtractionService for video thumbnail tests
 /// - Validates output dimensions and format
 /// - Tests error handling for missing/invalid files
 /// </summary>
@@ -28,14 +31,16 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 public class ThumbnailServiceTests
 {
     private ThumbnailService _service = null!;
+    private IVideoFrameExtractionService _mockVideoService = null!;
     private ILogger<ThumbnailService> _mockLogger = null!;
     private string _tempDir = null!;
 
     [SetUp]
     public void SetUp()
     {
+        _mockVideoService = Substitute.For<IVideoFrameExtractionService>();
         _mockLogger = Substitute.For<ILogger<ThumbnailService>>();
-        _service = new ThumbnailService(_mockLogger);
+        _service = new ThumbnailService(_mockVideoService, _mockLogger);
 
         // Create a unique temp directory for each test
         _tempDir = Path.Combine(Path.GetTempPath(), $"ThumbnailServiceTests_{Guid.NewGuid():N}");
@@ -341,6 +346,97 @@ public class ThumbnailServiceTests
 
         Assert.That(bytes.Length, Is.GreaterThan(8));
         Assert.That(bytes.Take(8).ToArray(), Is.EqualTo(pngSignature), "Output should be PNG format");
+    }
+
+    #endregion
+
+    #region Video Thumbnail Tests
+
+    [Test]
+    public async Task GenerateThumbnailAsync_Mp4File_DelegatesToVideoService()
+    {
+        // Arrange
+        var sourcePath = Path.Combine(_tempDir, "video.mp4");
+        var destPath = Path.Combine(_tempDir, "thumb.gif");
+
+        // Create a dummy MP4 file (content doesn't matter, we're mocking the service)
+        await File.WriteAllTextAsync(sourcePath, "fake mp4 content");
+
+        _mockVideoService.IsAvailable.Returns(true);
+        _mockVideoService.ExtractThumbnailAsync(sourcePath, destPath, 100, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
+
+        // Assert
+        Assert.That(result, Is.True);
+        await _mockVideoService.Received(1).ExtractThumbnailAsync(
+            sourcePath, destPath, 100, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task GenerateThumbnailAsync_Mp4File_WhenFfmpegNotAvailable_ReturnsFalse()
+    {
+        // Arrange
+        var sourcePath = Path.Combine(_tempDir, "video.mp4");
+        var destPath = Path.Combine(_tempDir, "thumb.gif");
+
+        await File.WriteAllTextAsync(sourcePath, "fake mp4 content");
+
+        _mockVideoService.IsAvailable.Returns(false);
+
+        // Act
+        var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
+
+        // Assert
+        Assert.That(result, Is.False);
+        await _mockVideoService.DidNotReceive().ExtractThumbnailAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task GenerateThumbnailAsync_WebmFile_DelegatesToVideoService()
+    {
+        // Arrange - WebM is also a video format
+        var sourcePath = Path.Combine(_tempDir, "video.webm");
+        var destPath = Path.Combine(_tempDir, "thumb.gif");
+
+        await File.WriteAllTextAsync(sourcePath, "fake webm content");
+
+        _mockVideoService.IsAvailable.Returns(true);
+        _mockVideoService.ExtractThumbnailAsync(sourcePath, destPath, 100, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
+
+        // Assert
+        Assert.That(result, Is.True);
+        await _mockVideoService.Received(1).ExtractThumbnailAsync(
+            sourcePath, destPath, 100, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task GenerateThumbnailAsync_GifFile_UsesImageSharpNotVideoService()
+    {
+        // Arrange - GIF files should use ImageSharp, not video service
+        var sourcePath = Path.Combine(_tempDir, "animation.gif");
+        var destPath = Path.Combine(_tempDir, "thumb.png");
+
+        using (var image = new Image<Rgba32>(100, 100))
+        {
+            await image.SaveAsGifAsync(sourcePath);
+        }
+
+        // Act
+        var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
+
+        // Assert
+        Assert.That(result, Is.True);
+        // Video service should NOT be called for GIF files
+        await _mockVideoService.DidNotReceive().ExtractThumbnailAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

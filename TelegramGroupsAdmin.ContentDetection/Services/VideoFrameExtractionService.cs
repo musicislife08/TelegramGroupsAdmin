@@ -24,6 +24,37 @@ public interface IVideoFrameExtractionService
     /// If false, ExtractKeyframesAsync will always return empty list.
     /// </summary>
     bool IsAvailable { get; }
+
+    /// <summary>
+    /// Extracts the first non-black frame from a video and saves as image.
+    /// Used for thumbnail generation (ban celebration GIFs, etc.)
+    /// Tries positions 10%, 20%, 30%, 50%, 90% to find a non-black frame.
+    /// </summary>
+    /// <param name="videoPath">Full path to video file</param>
+    /// <param name="outputPath">Full path for output image file (format determined by extension)</param>
+    /// <param name="maxSize">Maximum dimension (width or height) for the output</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if a non-black frame was extracted successfully</returns>
+    Task<bool> ExtractThumbnailAsync(
+        string videoPath,
+        string outputPath,
+        int maxSize = 100,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Converts a video file (MP4, WebM, etc.) to animated GIF format.
+    /// Used for ban celebration GIFs when users upload Telegram "GIFs" (which are MP4s).
+    /// </summary>
+    /// <param name="videoPath">Full path to source video file</param>
+    /// <param name="outputPath">Full path for output GIF file</param>
+    /// <param name="maxSize">Maximum dimension (width or height) for the output</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if conversion was successful</returns>
+    Task<bool> ConvertVideoToGifAsync(
+        string videoPath,
+        string outputPath,
+        int maxSize = 480,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -189,6 +220,193 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
         {
             _logger.LogError(ex, "Frame extraction failed for video: {VideoPath}", videoPath);
             return [];
+        }
+    }
+
+    public async Task<bool> ExtractThumbnailAsync(
+        string videoPath,
+        string outputPath,
+        int maxSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        if (_ffmpegPath == null)
+        {
+            _logger.LogDebug("Skipping thumbnail extraction for {VideoPath} - ffmpeg binary not available",
+                Path.GetFileName(videoPath));
+            return false;
+        }
+
+        try
+        {
+            if (!File.Exists(videoPath))
+            {
+                _logger.LogWarning("Video file not found: {VideoPath}", videoPath);
+                return false;
+            }
+
+            // Ensure destination directory exists
+            var destDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+            {
+                Directory.CreateDirectory(destDir);
+            }
+
+            // Get video duration
+            var duration = await GetVideoDurationAsync(videoPath, cancellationToken);
+            if (duration <= 0)
+            {
+                _logger.LogWarning("Could not determine video duration for {VideoPath}", videoPath);
+                return false;
+            }
+
+            // Positions to try (find first non-black frame)
+            double[] positionsToTry = duration < 1.0
+                ? [0.0] // Very short video - just use first frame
+                : [0.10, 0.20, 0.30, 0.50, 0.90];
+
+            foreach (var position in positionsToTry)
+            {
+                var timestamp = duration * position;
+
+                // Extract frame as PNG with scaling using FFmpeg
+                // -vf scale: scales while maintaining aspect ratio
+                // Output format determined by file extension (usually .png)
+                var scaleFilter = $"scale='min({maxSize},iw)':'min({maxSize},ih)':force_original_aspect_ratio=decrease";
+                var seekArg = position > 0 ? $"-ss {timestamp:F2} " : "";
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = _ffmpegPath,
+                    Arguments = $"{seekArg}-i \"{videoPath}\" -frames:v 1 -vf \"{scaleFilter}\" -y \"{outputPath}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var process = new Process { StartInfo = startInfo };
+                var errorBuilder = new StringBuilder();
+
+                process.ErrorDataReceived += (_, e) =>
+                {
+                    if (e.Data != null) errorBuilder.AppendLine(e.Data);
+                };
+
+                process.Start();
+                process.BeginErrorReadLine();
+                await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+
+                if (process.ExitCode != 0 || !File.Exists(outputPath))
+                {
+                    _logger.LogWarning(
+                        "FFmpeg failed to extract frame at {Position:P0} from {VideoPath} (exit code {ExitCode}): {Error}",
+                        position, Path.GetFileName(videoPath), process.ExitCode, errorBuilder.ToString().Trim());
+                    continue;
+                }
+
+                // Check if frame is black (very small file = likely black/dark frame)
+                var fileInfo = new FileInfo(outputPath);
+                if (fileInfo.Length < 1000) // PNG smaller than 1KB is likely black
+                {
+                    _logger.LogDebug("Skipped black frame at {Position:P0} for {VideoPath}",
+                        position, Path.GetFileName(videoPath));
+                    File.Delete(outputPath);
+                    continue;
+                }
+
+                _logger.LogDebug("Extracted thumbnail GIF at {Position:P0} for {VideoPath}",
+                    position, Path.GetFileName(videoPath));
+                return true;
+            }
+
+            _logger.LogWarning("Could not extract non-black frame from {VideoPath}", videoPath);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Thumbnail extraction failed for video: {VideoPath}", videoPath);
+            return false;
+        }
+    }
+
+    public async Task<bool> ConvertVideoToGifAsync(
+        string videoPath,
+        string outputGifPath,
+        int maxSize = 480,
+        CancellationToken cancellationToken = default)
+    {
+        if (_ffmpegPath == null)
+        {
+            _logger.LogWarning("Cannot convert video to GIF - ffmpeg binary not available");
+            return false;
+        }
+
+        try
+        {
+            if (!File.Exists(videoPath))
+            {
+                _logger.LogWarning("Video file not found for conversion: {VideoPath}", videoPath);
+                return false;
+            }
+
+            // Ensure destination directory exists
+            var destDir = Path.GetDirectoryName(outputGifPath);
+            if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+            {
+                Directory.CreateDirectory(destDir);
+            }
+
+            // FFmpeg command to convert video to GIF with good quality
+            // - scale: resize maintaining aspect ratio
+            // - fps='min(source_fps,30)': keep original framerate, capped at 30fps
+            // - split/palettegen/paletteuse: high-quality GIF with optimized palette
+            var scaleFilter = $"scale='min({maxSize},iw)':'min({maxSize},ih)':force_original_aspect_ratio=decrease";
+            var filterComplex = $"[0:v] {scaleFilter},fps='min(source_fps,30)',split [a][b];[a] palettegen [p];[b][p] paletteuse";
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = _ffmpegPath,
+                Arguments = $"-i \"{videoPath}\" -filter_complex \"{filterComplex}\" -y \"{outputGifPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = new Process { StartInfo = startInfo };
+            var errorBuilder = new StringBuilder();
+
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data != null) errorBuilder.AppendLine(e.Data);
+            };
+
+            process.Start();
+            process.BeginErrorReadLine();
+
+            // Give video conversion more time (up to 60 seconds for longer videos)
+            await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(60), cancellationToken);
+
+            if (process.ExitCode != 0 || !File.Exists(outputGifPath))
+            {
+                _logger.LogWarning(
+                    "FFmpeg failed to convert video to GIF (exit code {ExitCode}): {Error}",
+                    process.ExitCode, errorBuilder.ToString().Trim());
+                return false;
+            }
+
+            var inputSize = new FileInfo(videoPath).Length;
+            var outputSize = new FileInfo(outputGifPath).Length;
+            _logger.LogInformation(
+                "Converted video to GIF: {VideoPath} ({InputSize:N0} bytes) -> {GifPath} ({OutputSize:N0} bytes)",
+                Path.GetFileName(videoPath), inputSize, Path.GetFileName(outputGifPath), outputSize);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Video to GIF conversion failed for: {VideoPath}", videoPath);
+            return false;
         }
     }
 

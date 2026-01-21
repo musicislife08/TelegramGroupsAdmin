@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -11,23 +12,32 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 
 /// <summary>
 /// Repository for managing ban celebration GIFs stored in /data/media/ban-gifs/
+/// Automatically converts video files (MP4, WebM) to GIF format on upload.
 /// </summary>
 public class BanCelebrationGifRepository : IBanCelebrationGifRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IVideoFrameExtractionService _videoService;
     private readonly ILogger<BanCelebrationGifRepository> _logger;
     private readonly string _mediaBasePath;
     private readonly HttpClient _httpClient;
 
     private const string GifSubdirectory = "ban-gifs";
 
+    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".webm", ".mov", ".avi", ".mkv", ".m4v"
+    };
+
     public BanCelebrationGifRepository(
         IDbContextFactory<AppDbContext> contextFactory,
+        IVideoFrameExtractionService videoService,
         IOptions<MessageHistoryOptions> historyOptions,
         IHttpClientFactory httpClientFactory,
         ILogger<BanCelebrationGifRepository> logger)
     {
         _contextFactory = contextFactory;
+        _videoService = videoService;
         _logger = logger;
         _mediaBasePath = Path.Combine(historyOptions.Value.ImageStoragePath, "media");
         _httpClient = httpClientFactory.CreateClient();
@@ -91,24 +101,63 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         context.BanCelebrationGifs.Add(dto);
         await context.SaveChangesAsync(ct);
 
-        // Now save the file using the ID
-        var extension = Path.GetExtension(fileName).ToLowerInvariant();
-        if (string.IsNullOrEmpty(extension))
-            extension = ".gif";
+        var sourceExtension = Path.GetExtension(fileName).ToLowerInvariant();
+        var isVideo = VideoExtensions.Contains(sourceExtension);
 
-        var relativePath = $"{GifSubdirectory}/{dto.Id}{extension}";
+        // Final file is always .gif
+        var relativePath = $"{GifSubdirectory}/{dto.Id}.gif";
         var fullPath = Path.Combine(_mediaBasePath, relativePath);
 
-        await using (var fileStreamWrite = new FileStream(fullPath, FileMode.Create))
+        if (isVideo)
         {
-            await fileStream.CopyToAsync(fileStreamWrite, ct);
+            // Video file: save temporarily, convert to GIF, delete temp
+            var tempPath = Path.Combine(_mediaBasePath, GifSubdirectory, $"{dto.Id}_temp{sourceExtension}");
+
+            try
+            {
+                // Save the uploaded video temporarily
+                await using (var tempStream = new FileStream(tempPath, FileMode.Create))
+                {
+                    await fileStream.CopyToAsync(tempStream, ct);
+                }
+
+                // Convert video to GIF using FFmpeg
+                var success = await _videoService.ConvertVideoToGifAsync(tempPath, fullPath, maxSize: 480, ct);
+
+                if (!success)
+                {
+                    // Conversion failed - clean up and throw
+                    context.BanCelebrationGifs.Remove(dto);
+                    await context.SaveChangesAsync(ct);
+                    throw new InvalidOperationException($"Failed to convert video to GIF. FFmpeg conversion failed for: {fileName}");
+                }
+            }
+            finally
+            {
+                // Clean up temp file
+                if (File.Exists(tempPath))
+                {
+                    try { File.Delete(tempPath); }
+                    catch { /* ignore cleanup errors */ }
+                }
+            }
+        }
+        else
+        {
+            // Regular GIF or image: save directly
+            await using (var fileStreamWrite = new FileStream(fullPath, FileMode.Create))
+            {
+                await fileStream.CopyToAsync(fileStreamWrite, ct);
+            }
         }
 
         // Update the file path
         dto.FilePath = relativePath;
         await context.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Added ban celebration GIF: {Id} ({Name}) at {Path}", dto.Id, name ?? "unnamed", relativePath);
+        _logger.LogInformation("Added ban celebration GIF: {Id} ({Name}) at {Path}{ConvertedFrom}",
+            dto.Id, name ?? "unnamed", relativePath,
+            isVideo ? $" (converted from {sourceExtension})" : "");
 
         return dto.ToModel();
     }
