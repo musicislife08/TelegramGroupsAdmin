@@ -251,6 +251,10 @@ public class BotMessageService : IBotMessageService
                     "Failed to mark message {MessageId} as deleted in database",
                     messageId);
             }
+
+            // Re-throw so callers know the Telegram delete failed
+            // (DB cleanup is done, but caller should log appropriately)
+            throw;
         }
     }
 }

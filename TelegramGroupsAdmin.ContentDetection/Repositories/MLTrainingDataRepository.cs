@@ -32,13 +32,14 @@ public class MLTrainingDataRepository(
     public async Task<List<TrainingSample>> GetSpamSamplesAsync(HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default)
     {
         // Explicit spam labels (admin decisions override auto-detection)
+        // Note: OrderByDescending ensures deterministic results when multiple translations exist
         var explicitSpam = await context.TrainingLabels
             .AsNoTracking()
             .Where(tl => tl.Label == (short)TrainingLabel.Spam)
             .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
                        x => x.m.MessageId, mt => mt.MessageId,
-                       (x, mts) => new { x.tl, x.m, mt = mts.FirstOrDefault() })
+                       (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
@@ -56,7 +57,7 @@ public class MLTrainingDataRepository(
             .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => m)
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
                        m => m.MessageId, mt => mt.MessageId,
-                       (m, mts) => new { m, mt = mts.FirstOrDefault() })
+                       (m, mts) => new { m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
@@ -112,7 +113,7 @@ public class MLTrainingDataRepository(
             .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
                        x => x.m.MessageId, mt => mt.MessageId,
-                       (x, mts) => new { x.tl, x.m, mt = mts.FirstOrDefault() })
+                       (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
