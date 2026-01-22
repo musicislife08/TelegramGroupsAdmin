@@ -24,7 +24,6 @@
         @{
             var activeConfig = (IsGlobalView || !_config.Cas.UseGlobal) ? _config.Cas : _globalConfig.Cas;
             var isReadOnly = !IsGlobalView && _config.Cas.UseGlobal;
-            var activeTimeoutSeconds = (int)activeConfig.Timeout.TotalSeconds;
         }
 
         <MudSwitch T="bool" @bind-Value="activeConfig.Enabled"
@@ -39,11 +38,13 @@
                          Disabled="@isReadOnly"
                          HelperText="@(isReadOnly ? $"Using global value" : "API endpoint for CAS lookups")" />
 
-            <MudNumericField @bind-Value="activeTimeoutSeconds"
+            <MudNumericField T="int"
+                            Value="@((int)activeConfig.Timeout.TotalSeconds)"
+                            ValueChanged="@(v => activeConfig.Timeout = TimeSpan.FromSeconds(v))"
                             Label="Timeout (seconds)"
                             Min="1" Max="30"
                             Disabled="@isReadOnly"
-                            HelperText="@(isReadOnly ? $"Using global value: {activeTimeoutSeconds}s" : "Request timeout for CAS API calls")" />
+                            HelperText="@(isReadOnly ? $"Using global value: {(int)activeConfig.Timeout.TotalSeconds}s" : "Request timeout for CAS API calls")" />
 
             <MudTextField @bind-Value="activeConfig.UserAgent"
                          Label="User Agent (Optional)"
