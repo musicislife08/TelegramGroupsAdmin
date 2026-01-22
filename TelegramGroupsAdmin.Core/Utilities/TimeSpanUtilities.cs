@@ -6,84 +6,69 @@ namespace TelegramGroupsAdmin.Core.Utilities;
 public static class TimeSpanUtilities
 {
     /// <summary>
-    /// Try to parse a duration string into a TimeSpan
-    /// Supports formats: 5m, 1h, 24h, 7d, 1w, 1M, 1y, 5min, 1hr, 1hour, 24hours, 7days, 1week, 1month, 1year
+    /// Try to parse a duration string into a TimeSpan.
+    /// Supports short formats: 5m (minutes), 1h (hours), 7d (days), 2w (weeks), 1M (months), 1y (years)
+    /// Note: 'M' (uppercase) = months, 'm' (lowercase) = minutes
     /// </summary>
-    /// <param name="input">Duration string to parse</param>
+    /// <param name="input">Duration string to parse (e.g., "30m", "24h", "7d", "2w", "1M", "1y")</param>
     /// <param name="duration">Parsed TimeSpan value if successful</param>
     /// <returns>True if parsing succeeded, false otherwise</returns>
     public static bool TryParseDuration(string input, out TimeSpan duration)
     {
         duration = TimeSpan.Zero;
 
-        // Support formats: 5m, 1h, 24h, 7d, 1w, 1M, 1y, 5min, 1hr, 1hour, 24hours, 7days, 1week, 1month, 1year
-        // Note: Keep original case for 'M' (month) vs 'm' (minute) detection
-        var inputTrimmed = input.Trim();
-        var inputLower = inputTrimmed.ToLower();
+        if (string.IsNullOrWhiteSpace(input))
+            return false;
 
-        // Check for month first (case-sensitive 'M' or word 'month')
-        if (inputTrimmed.EndsWith("M") || inputLower.EndsWith("month") || inputLower.EndsWith("months"))
-        {
-            var numberPart = inputTrimmed.EndsWith("M")
-                ? inputTrimmed.TrimEnd('M')
-                : inputLower.TrimEnd('m', 'o', 'n', 't', 'h', 's');
-            if (int.TryParse(numberPart, out var months))
-            {
-                // Approximate: 1 month = 30 days
-                duration = TimeSpan.FromDays(months * 30);
-                return true;
-            }
-        }
-        // Check for year
-        else if (inputLower.EndsWith("y") || inputLower.EndsWith("yr") || inputLower.EndsWith("year") || inputLower.EndsWith("years"))
-        {
-            var numberPart = inputLower.TrimEnd('y', 'r', 'e', 'a', 's');
-            if (int.TryParse(numberPart, out var years))
-            {
-                // Approximate: 1 year = 365 days
-                duration = TimeSpan.FromDays(years * 365);
-                return true;
-            }
-        }
-        // Minutes (lowercase 'm' or word 'min')
-        else if (inputLower.EndsWith("m") || inputLower.EndsWith("min") || inputLower.EndsWith("mins"))
-        {
-            var numberPart = inputLower.TrimEnd('m', 'i', 'n', 's');
-            if (int.TryParse(numberPart, out var minutes))
-            {
-                duration = TimeSpan.FromMinutes(minutes);
-                return true;
-            }
-        }
-        else if (inputLower.EndsWith("h") || inputLower.EndsWith("hr") || inputLower.EndsWith("hrs") || inputLower.EndsWith("hour") || inputLower.EndsWith("hours"))
-        {
-            var numberPart = inputLower.TrimEnd('h', 'r', 's', 'o', 'u');
-            if (int.TryParse(numberPart, out var hours))
-            {
-                duration = TimeSpan.FromHours(hours);
-                return true;
-            }
-        }
-        else if (inputLower.EndsWith("d") || inputLower.EndsWith("day") || inputLower.EndsWith("days"))
-        {
-            var numberPart = inputLower.TrimEnd('d', 'a', 'y', 's');
-            if (int.TryParse(numberPart, out var days))
-            {
-                duration = TimeSpan.FromDays(days);
-                return true;
-            }
-        }
-        else if (inputLower.EndsWith("w") || inputLower.EndsWith("week") || inputLower.EndsWith("weeks"))
-        {
-            var numberPart = inputLower.TrimEnd('w', 'e', 'k', 's');
-            if (int.TryParse(numberPart, out var weeks))
-            {
-                duration = TimeSpan.FromDays(weeks * 7);
-                return true;
-            }
-        }
+        var trimmed = input.Trim();
+        if (trimmed.Length < 2)
+            return false;
 
-        return false;
+        // Extract unit (last character) and number part
+        var unit = trimmed[^1];
+        var numberPart = trimmed[..^1];
+
+        // Reject if number part contains spaces (e.g., "5 m")
+        if (numberPart.Contains(' '))
+            return false;
+
+        if (!int.TryParse(numberPart, out var value) || value < 0)
+            return false;
+
+        // Note: 'M' (uppercase) = months, 'm' (lowercase) = minutes
+        switch (unit)
+        {
+            case 'm': // minutes (lowercase)
+                duration = TimeSpan.FromMinutes(value);
+                return true;
+
+            case 'h':
+            case 'H':
+                duration = TimeSpan.FromHours(value);
+                return true;
+
+            case 'd':
+            case 'D':
+                duration = TimeSpan.FromDays(value);
+                return true;
+
+            case 'w':
+            case 'W':
+                duration = TimeSpan.FromDays(value * 7);
+                return true;
+
+            case 'M': // months (uppercase only)
+                duration = TimeSpan.FromDays(value * 30);
+                return true;
+
+            case 'y':
+            case 'Y':
+                duration = TimeSpan.FromDays(value * 365);
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     /// <summary>
