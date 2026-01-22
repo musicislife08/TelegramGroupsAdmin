@@ -13,6 +13,10 @@ public static class TimeSpanUtilities
     /// <param name="input">Duration string to parse (e.g., "30m", "24h", "7d", "2w", "1M", "1y")</param>
     /// <param name="duration">Parsed TimeSpan value if successful</param>
     /// <returns>True if parsing succeeded, false otherwise</returns>
+    /// <remarks>
+    /// Month and year durations use fixed approximations: 1 month = 30 days, 1 year = 365 days.
+    /// For calendar-accurate calculations, use DateTime arithmetic instead.
+    /// </remarks>
     public static bool TryParseDuration(string input, out TimeSpan duration)
     {
         duration = TimeSpan.Zero;
@@ -77,6 +81,10 @@ public static class TimeSpanUtilities
     /// </summary>
     /// <param name="duration">TimeSpan to format</param>
     /// <returns>Formatted string like "5 minutes", "1 hour", "2 days", "1 week", "1 month", "1 year"</returns>
+    /// <remarks>
+    /// Month and year calculations use fixed approximations: 1 month = 30 days, 1 year = 365 days.
+    /// For calendar-accurate formatting, consider Humanizer or custom logic.
+    /// </remarks>
     public static string FormatDuration(TimeSpan duration)
     {
         if (duration.TotalMinutes < 60)

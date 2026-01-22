@@ -64,13 +64,13 @@ public class PassphraseGeneratorTests
     }
 
     [Test]
-    public void Generate_BelowMinimum_ExceptionMessage_ContainsMinimum()
+    public void Generate_BelowMinimum_ExceptionContainsMinimumAndEntropy()
     {
         var exception = Assert.Throws<ArgumentException>(() =>
             PassphraseGenerator.Generate(wordCount: 3));
 
-        Assert.That(exception!.Message, Does.Contain("5"));
-        Assert.That(exception.Message, Does.Contain("64.6"));
+        Assert.That(exception!.Message, Does.Contain(SecurityConstants.MinimumPassphraseWords.ToString()));
+        Assert.That(exception.Message, Does.Contain(SecurityConstants.MinimumEntropyBits.ToString()));
     }
 
     #endregion
