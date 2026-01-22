@@ -48,8 +48,8 @@ public static class PassphraseGenerator
         if (wordCount < MinimumWords)
         {
             throw new ArgumentException(
-                $"Minimum {MinimumWords} words required for security (64.6 bits entropy). " +
-                $"Recommended: {RecommendedWords} words (77.5 bits).",
+                $"Minimum {MinimumWords} words required for security ({SecurityConstants.MinimumEntropyBits} bits entropy). " +
+                $"Recommended: {RecommendedWords} words ({SecurityConstants.RecommendedEntropyBits} bits).",
                 nameof(wordCount));
         }
 

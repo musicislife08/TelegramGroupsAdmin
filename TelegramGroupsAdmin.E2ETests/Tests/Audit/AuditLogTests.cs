@@ -343,6 +343,10 @@ public class AuditLogTests : SharedAuthenticatedTestBase
 
         // Clear filter and verify we see more entries
         await _auditLogPage.ClearActionTypeFilterAsync();
+
+        // Wait for table to show at least the initial row count (Expect retries until condition met)
+        await Expect(tableRows).ToHaveCountAsync(initialRowCount, new() { Timeout = 5000 });
+
         var clearedRowCount = await _auditLogPage.GetTableRowCountAsync();
         Assert.That(clearedRowCount, Is.GreaterThanOrEqualTo(filteredRowCount),
             "Should show all actions when filter is cleared");

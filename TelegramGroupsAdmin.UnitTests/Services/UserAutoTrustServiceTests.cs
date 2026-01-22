@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -265,7 +266,7 @@ public class UserAutoTrustServiceTests
                 DetectionSource = "test",
                 DetectionMethod = "test",
                 MessageText = "This is a test message that is long enough",
-                AddedBy = Core.Models.Actor.AutoDetection
+                AddedBy = Actor.AutoDetection
             });
         }
         return results;
