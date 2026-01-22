@@ -695,14 +695,14 @@ public class DetectionActionService(
                     : messageContent ?? "[No text]";
 
                 // Escape MarkdownV2 special characters
-                messageTextPreview = EscapeMarkdownV2(messageTextPreview);
-                var chatTitle = EscapeMarkdownV2(message.Chat.Title ?? message.Chat.Id.ToString());
-                userDisplay = EscapeMarkdownV2(userDisplay);
+                messageTextPreview = TelegramTextUtilities.EscapeMarkdownV2(messageTextPreview);
+                var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(message.Chat.Title ?? message.Chat.Id.ToString());
+                userDisplay = TelegramTextUtilities.EscapeMarkdownV2(userDisplay);
 
                 // Build detection details
                 var detectionDetails = new System.Text.StringBuilder();
                 detectionDetails.AppendLine($"• Net Confidence: {spamResult.NetConfidence}%");
-                detectionDetails.AppendLine($"• OpenAI: {openAIResult.Confidence}% \\({EscapeMarkdownV2(openAIResult.Details ?? "Spam detected")}\\)");
+                detectionDetails.AppendLine($"• OpenAI: {openAIResult.Confidence}% \\({TelegramTextUtilities.EscapeMarkdownV2(openAIResult.Details ?? "Spam detected")}\\)");
 
                 // Add triggered checks (top 3 by confidence)
                 var topChecks = spamResult.CheckResults
@@ -712,8 +712,8 @@ public class DetectionActionService(
 
                 foreach (var check in topChecks)
                 {
-                    var checkDetails = EscapeMarkdownV2(check.Details ?? "");
-                    detectionDetails.AppendLine($"• {EscapeMarkdownV2(check.CheckName.ToString())}: {checkDetails}");
+                    var checkDetails = TelegramTextUtilities.EscapeMarkdownV2(check.Details ?? "");
+                    detectionDetails.AppendLine($"• {TelegramTextUtilities.EscapeMarkdownV2(check.CheckName.ToString())}: {checkDetails}");
                 }
 
                 // Build action summary
@@ -794,21 +794,6 @@ public class DetectionActionService(
                     message.MessageId, message.Chat.ToLogDebug());
             }
         }, cancellationToken);
-    }
-
-    /// <summary>
-    /// Escape special characters for MarkdownV2 format
-    /// </summary>
-    private static string EscapeMarkdownV2(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return text;
-
-        var specialChars = new[] { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
-        foreach (var c in specialChars)
-        {
-            text = text.Replace(c.ToString(), "\\" + c);
-        }
-        return text;
     }
 
     /// <summary>

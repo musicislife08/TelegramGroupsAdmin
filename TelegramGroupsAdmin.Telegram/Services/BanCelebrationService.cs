@@ -5,6 +5,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -234,7 +235,9 @@ public class BanCelebrationService : IBanCelebrationService
             }
 
             // Build the DM caption (uses "You" grammar)
-            var dmCaption = ReplacePlaceholders(caption.DmText, "You", chatName, banCount);
+            // Escape for MarkdownV2 since DmDeliveryService uses that parse mode
+            var dmCaption = TelegramTextUtilities.EscapeMarkdownV2(
+                ReplacePlaceholders(caption.DmText, "You", chatName, banCount));
 
             // Get the full path to the GIF
             var fullPath = _gifRepository.GetFullPath(gif.FilePath);

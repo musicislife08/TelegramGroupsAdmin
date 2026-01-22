@@ -288,7 +288,7 @@ public class NotificationService : INotificationService
             }
 
             // Format message with subject
-            var formattedMessage = $"🔔 *{EscapeMarkdown(subject)}*\n\n{EscapeMarkdown(message)}";
+            var formattedMessage = $"🔔 *{TelegramTextUtilities.EscapeMarkdownV2(subject)}*\n\n{TelegramTextUtilities.EscapeMarkdownV2(message)}";
 
             // Build inline keyboard if this is a report notification with action context
             InlineKeyboardMarkup? keyboard = null;
@@ -450,35 +450,5 @@ public class NotificationService : INotificationService
                 user.ToLogDebug());
             return false;
         }
-    }
-
-    /// <summary>
-    /// Escape special Markdown characters for Telegram messages
-    /// </summary>
-    private static string EscapeMarkdown(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-            return text;
-
-        // Escape Markdown special characters for Telegram MarkdownV2
-        return text
-            .Replace("_", "\\_")
-            .Replace("*", "\\*")
-            .Replace("[", "\\[")
-            .Replace("]", "\\]")
-            .Replace("(", "\\(")
-            .Replace(")", "\\)")
-            .Replace("~", "\\~")
-            .Replace("`", "\\`")
-            .Replace(">", "\\>")
-            .Replace("#", "\\#")
-            .Replace("+", "\\+")
-            .Replace("-", "\\-")
-            .Replace("=", "\\=")
-            .Replace("|", "\\|")
-            .Replace("{", "\\{")
-            .Replace("}", "\\}")
-            .Replace(".", "\\.")
-            .Replace("!", "\\!");
     }
 }
