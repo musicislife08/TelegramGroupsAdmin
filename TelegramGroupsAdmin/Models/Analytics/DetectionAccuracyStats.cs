@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Comprehensive accuracy statistics including both false positives and false negatives.

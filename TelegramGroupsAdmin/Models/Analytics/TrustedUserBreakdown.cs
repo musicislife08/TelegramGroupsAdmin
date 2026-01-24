@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Breakdown of messages by user trust level (UX-2.1)

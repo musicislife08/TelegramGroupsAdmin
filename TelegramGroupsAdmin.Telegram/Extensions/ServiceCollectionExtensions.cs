@@ -47,8 +47,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>(); // Ban celebration GIF library
             services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>(); // Ban celebration caption library
             // REFACTOR-3: Extracted services from MessageHistoryRepository
+            // NOTE: IMessageStatsService moved to main app (analytics consolidation)
             services.AddScoped<IMessageQueryService, MessageQueryService>();
-            services.AddScoped<IMessageStatsService, MessageStatsService>();
             services.AddScoped<IMessageTranslationService, MessageTranslationService>();
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();

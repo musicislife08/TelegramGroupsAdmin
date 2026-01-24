@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Summary of content detection activity patterns across different time scales (UX-2.1)

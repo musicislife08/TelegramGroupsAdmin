@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Summary statistics for welcome system performance

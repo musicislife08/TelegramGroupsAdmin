@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Raw query result for algorithm performance stats with integer CheckName enum

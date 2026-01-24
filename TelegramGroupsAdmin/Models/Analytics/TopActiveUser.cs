@@ -1,6 +1,6 @@
 using TelegramGroupsAdmin.Core.Utilities;
 
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Top active user for leaderboard

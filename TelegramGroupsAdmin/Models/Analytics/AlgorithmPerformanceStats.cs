@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Performance timing statistics for a single spam detection algorithm.

@@ -6,8 +6,11 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Models.Analytics
+@using TelegramGroupsAdmin.Repositories
 @inject IAuthService AuthService
 @inject IMessageStatsService MessageStatsService
+@inject IAnalyticsRepository AnalyticsRepository
 @inject IReportsRepository ReportsRepository
 @inject IUserActionsRepository UserActionsRepository
 @inject ITelegramUserRepository TelegramUserRepository
@@ -77,8 +80,32 @@
                 <MudItem xs="12" sm="6" md="3">
                     <MudStack AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
-                        <MudText Typo="Typo.h5">@(_detectionStats?.Last24hSpam ?? 0)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Spam (24h)</MudText>
+                        <MudText Typo="Typo.h5">@(_dailySpamSummary?.TodaySpamCount ?? 0)</MudText>
+                        @if (_dailySpamSummary?.HasYesterdayData == true)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @if (_dailySpamSummary.IsImproving)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Small" Color="Color.Success" />
+                                    <MudText Typo="Typo.caption" Color="Color.Success">
+                                        @Math.Abs(_dailySpamSummary.SpamCountChange!.Value) less
+                                    </MudText>
+                                }
+                                else if (_dailySpamSummary.IsWorsening)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="Color.Error" />
+                                    <MudText Typo="Typo.caption" Color="Color.Error">
+                                        @_dailySpamSummary.SpamCountChange!.Value more
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="Size.Small" Color="Color.Default" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">same</MudText>
+                                }
+                            </MudStack>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Spam Today</MudText>
                     </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
@@ -195,9 +222,11 @@
 
 @code {
     private const int MaxRecentActivityItems = 10;
+    private const string DefaultTimeZoneId = "America/New_York";
 
     private HistoryStats? _stats;
-    private DetectionStats? _detectionStats;
+    private SpamSummaryStats? _detectionStats;
+    private DailySpamSummary? _dailySpamSummary;
     private List<UserActionRecord>? _recentActions;
     private int _pendingReportsCount;
     private int _pendingRecommendationsCount;
@@ -228,6 +257,7 @@
             // Load all dashboard data in parallel for fast loading
             var statsTask = MessageStatsService.GetStatsAsync();
             var detectionStatsTask = MessageStatsService.GetDetectionStatsAsync();
+            var dailySpamTask = AnalyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
             var pendingReportsTask = ReportsRepository.GetPendingCountAsync();
             var recentActionsTask = UserActionsRepository.GetRecentAsync(MaxRecentActivityItems);
             var recommendationsTask = ThresholdRecommendationsRepository.GetPendingCountAsync();
@@ -237,6 +267,7 @@
             await Task.WhenAll(
                 statsTask,
                 detectionStatsTask,
+                dailySpamTask,
                 pendingReportsTask,
                 recentActionsTask,
                 recommendationsTask,
@@ -245,6 +276,7 @@
 
             _stats = await statsTask;
             _detectionStats = await detectionStatsTask;
+            _dailySpamSummary = await dailySpamTask;
             _pendingReportsCount = await pendingReportsTask;
             _recentActions = await recentActionsTask;
             _pendingRecommendationsCount = await recommendationsTask;

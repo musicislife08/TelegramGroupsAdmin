@@ -1,8 +1,11 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Models.Analytics
+@using TelegramGroupsAdmin.Repositories
 @using ApexCharts
 @inject IMessageStatsService MessageStatsService
 @inject IManagedChatsRepository ChatsRepository
+@inject IAnalyticsRepository AnalyticsRepository
 @inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
@@ -244,25 +247,18 @@
             </MudPaper>
         }
 
-        @* Spam vs Ham Trend *@
+        @* Clean Messages Chart (separate from spam for better visibility) *@
         <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.h6" Class="mb-4">Spam vs Clean Messages</MudText>
-            @if (_spamHamChart != null)
+            <MudText Typo="Typo.h6" Class="mb-4">Daily Clean Messages</MudText>
+            @if (_cleanMessagesChart != null)
             {
                 <ApexChart TItem="DailyVolumeData"
                           Title=""
-                          Options="_spamHamChart"
-                          Height="250">
-                    <ApexPointSeries TItem="DailyVolumeData"
-                                    Items="_trendsData.DailySpam"
-                                    Name="Spam"
-                                    SeriesType="SeriesType.Area"
-                                    XValue="@(e => DateToUnixMs(e.Date))"
-                                    YAggregate="@(e => e.Sum(x => x.Count))"
-                                    OrderBy="e => e.X" />
+                          Options="_cleanMessagesChart"
+                          Height="200">
                     <ApexPointSeries TItem="DailyVolumeData"
                                     Items="_trendsData.DailyHam"
-                                    Name="Clean"
+                                    Name="Clean Messages"
                                     SeriesType="SeriesType.Area"
                                     XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => e.Sum(x => x.Count))"
@@ -270,6 +266,149 @@
                 </ApexChart>
             }
         </MudPaper>
+
+        @* Spam Detections Chart (auto-scaled to show variation clearly) *@
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">Daily Spam Detections</MudText>
+            @if (_spamDetectionsChart != null)
+            {
+                <ApexChart TItem="DailyVolumeData"
+                          Title=""
+                          Options="_spamDetectionsChart"
+                          Height="200">
+                    <ApexPointSeries TItem="DailyVolumeData"
+                                    Items="_trendsData.DailySpam"
+                                    Name="Spam Detected"
+                                    SeriesType="SeriesType.Area"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
+                                    YAggregate="@(e => e.Sum(x => x.Count))"
+                                    OrderBy="e => e.X" />
+                </ApexChart>
+            }
+        </MudPaper>
+
+        @* Spam Trend Comparison Cards *@
+        @if (_spamTrendComparison != null)
+        {
+            <MudGrid>
+                @* Week-over-Week *@
+                <MudItem xs="12" md="4">
+                    <MudCard Style="height: 100%">
+                        <MudCardContent>
+                            <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="min-height: 140px" Justify="Justify.Center">
+                                <MudText Typo="Typo.h6" Align="MudBlazor.Align.Center">Week over Week</MudText>
+                                @if (_spamTrendComparison.HasLastWeekData)
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        @if (_spamTrendComparison.IsWeekImproving)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
+                                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Success">@Math.Abs(_spamTrendComparison.WeekOverWeekChange!.Value).ToString("F0")%</MudText>
+                                        }
+                                        else if (_spamTrendComparison.WeekOverWeekChange > 0)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Error" />
+                                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Error">+@_spamTrendComparison.WeekOverWeekChange!.Value.ToString("F0")%</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Default" />
+                                            <MudText Typo="Typo.h4">0%</MudText>
+                                        }
+                                    </MudStack>
+                                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                                        @_spamTrendComparison.LastWeekSpamCount → @_spamTrendComparison.ThisWeekSpamCount spam
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.h4">@_spamTrendComparison.ThisWeekSpamCount</MudText>
+                                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">This week (no previous data)</MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+
+                @* Month-over-Month *@
+                <MudItem xs="12" md="4">
+                    <MudCard Style="height: 100%">
+                        <MudCardContent>
+                            <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="min-height: 140px" Justify="Justify.Center">
+                                <MudText Typo="Typo.h6" Align="MudBlazor.Align.Center">Month over Month</MudText>
+                                @if (_spamTrendComparison.HasLastMonthData)
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        @if (_spamTrendComparison.IsMonthImproving)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
+                                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Success">@Math.Abs(_spamTrendComparison.MonthOverMonthChange!.Value).ToString("F0")%</MudText>
+                                        }
+                                        else if (_spamTrendComparison.MonthOverMonthChange > 0)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Error" />
+                                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Error">+@_spamTrendComparison.MonthOverMonthChange!.Value.ToString("F0")%</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Default" />
+                                            <MudText Typo="Typo.h4">0%</MudText>
+                                        }
+                                    </MudStack>
+                                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                                        @_spamTrendComparison.LastMonthSpamCount → @_spamTrendComparison.ThisMonthSpamCount spam
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.h4">@_spamTrendComparison.ThisMonthSpamCount</MudText>
+                                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">This month (no previous data)</MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+
+                @* Year-over-Year *@
+                <MudItem xs="12" md="4">
+                    <MudCard Style="height: 100%">
+                        <MudCardContent>
+                            <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="min-height: 140px" Justify="Justify.Center">
+                                <MudText Typo="Typo.h6" Align="MudBlazor.Align.Center">Year over Year</MudText>
+                                @if (_spamTrendComparison.HasLastYearData)
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        @if (_spamTrendComparison.IsYearImproving)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
+                                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Success">@Math.Abs(_spamTrendComparison.YearOverYearChange!.Value).ToString("F0")%</MudText>
+                                        }
+                                        else if (_spamTrendComparison.YearOverYearChange > 0)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Error" />
+                                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Error">+@_spamTrendComparison.YearOverYearChange!.Value.ToString("F0")%</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Default" />
+                                            <MudText Typo="Typo.h4">0%</MudText>
+                                        }
+                                    </MudStack>
+                                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                                        @_spamTrendComparison.LastYearSpamCount → @_spamTrendComparison.ThisYearSpamCount spam
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.h4">@_spamTrendComparison.ThisYearSpamCount</MudText>
+                                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">This year (no previous data)</MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        }
 
         @* Top 5 Active Users (UX-2.1) *@
         @if (_trendsData.TopActiveUsers.Any())
@@ -345,8 +484,10 @@
     private long _selectedChatId;
 
     private MessageTrendsData? _trendsData;
+    private SpamTrendComparison? _spamTrendComparison;
     private ApexChartOptions<DailyVolumeData>? _dailyVolumeChart;
-    private ApexChartOptions<DailyVolumeData>? _spamHamChart;
+    private ApexChartOptions<DailyVolumeData>? _cleanMessagesChart;
+    private ApexChartOptions<DailyVolumeData>? _spamDetectionsChart;
     private ApexChartOptions<ChatVolumeData>? _perChatChart;
     private ApexChartOptions<DailyActiveUsersData>? _dailyActiveUsersChart;
 
@@ -453,20 +594,32 @@
 
         // Clear existing data to force chart re-render
         _trendsData = null;
+        _spamTrendComparison = null;
         _dailyVolumeChart = null;
-        _spamHamChart = null;
+        _cleanMessagesChart = null;
+        _spamDetectionsChart = null;
         _perChatChart = null;
         _dailyActiveUsersChart = null;
         StateHasChanged(); // Clear old charts first
 
         try
         {
-            _trendsData = await MessageStatsService.GetMessageTrendsAsync(
+            // Load message trends and spam trend comparison in parallel
+            var trendsTask = MessageStatsService.GetMessageTrendsAsync(
                 GetSelectedChatIds(),
                 _startDate.Value,
                 _endDate.Value,
                 _userTimeZone,
                 CancellationToken.None);
+
+            var spamTrendsTask = AnalyticsRepository.GetSpamTrendComparisonAsync(
+                _userTimeZone,
+                CancellationToken.None);
+
+            await Task.WhenAll(trendsTask, spamTrendsTask);
+
+            _trendsData = await trendsTask;
+            _spamTrendComparison = await spamTrendsTask;
 
             PrepareCharts();
             _dataLoaded = true;
@@ -503,23 +656,41 @@
             Yaxis = [new YAxis { Title = new AxisTitle { Text = "Messages" } }]
         };
 
-        // Spam vs ham chart
-        _spamHamChart = new ApexChartOptions<DailyVolumeData>
+        // Clean messages chart (green, auto-scaled)
+        _cleanMessagesChart = new ApexChartOptions<DailyVolumeData>
         {
             Chart = new Chart
             {
                 Toolbar = new Toolbar { Show = false },
-                Zoom = new Zoom { Enabled = false },
-                Stacked = false
+                Zoom = new Zoom { Enabled = false }
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = 2 },
-            Colors = ["#F44336", "#4CAF50"],
+            Colors = ["#4CAF50"],
             Xaxis = new XAxis
             {
                 Type = XAxisType.Datetime,
                 Labels = new XAxisLabels { Format = "MMM dd" }
             },
-            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Messages" } }],
+            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Clean Messages" } }],
+            Fill = new Fill { Type = [FillType.Gradient] }
+        };
+
+        // Spam detections chart (red, auto-scaled independently for visibility)
+        _spamDetectionsChart = new ApexChartOptions<DailyVolumeData>
+        {
+            Chart = new Chart
+            {
+                Toolbar = new Toolbar { Show = false },
+                Zoom = new Zoom { Enabled = false }
+            },
+            Stroke = new Stroke { Curve = Curve.Smooth, Width = 2 },
+            Colors = ["#F44336"],
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                Labels = new XAxisLabels { Format = "MMM dd" }
+            },
+            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Spam Detected" } }],
             Fill = new Fill { Type = [FillType.Gradient] }
         };
 

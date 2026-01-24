@@ -1,12 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
-using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
+using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Models.Analytics;
+using TelegramGroupsAdmin.Repositories.Mappings;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.ContentDetection.Repositories;
+namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>
 /// Repository for analytics queries across detection results and user actions.
@@ -33,70 +36,57 @@ public class AnalyticsRepository : IAnalyticsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Get false positive and false negative message IDs using helper methods
-        var fpMessageIds = await GetFalsePositiveMessageIdsAsync(context, startDate, endDate, cancellationToken);
-        var fnMessageIds = await GetFalseNegativeMessageIdsAsync(context, startDate, endDate, cancellationToken);
-
-        var totalDetections = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => dr.DetectionSource != "manual") // Exclude manual reviews from total
-            .CountAsync(cancellationToken);
-
-        // Fetch detection results (database does filtering)
-        var detections = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => dr.DetectionSource != "manual")
-            .Select(dr => new { dr.DetectedAt, dr.IsSpam, dr.MessageId })
+        // Use DetectionAccuracyView which pre-computes FP/FN flags
+        // Eliminates expensive correlated sub-queries with .Any() EXISTS clauses
+        var accuracyRecords = await context.DetectionAccuracy
             .AsNoTracking()
+            .Where(v => v.DetectedAt >= startDate && v.DetectedAt <= endDate)
             .ToListAsync(cancellationToken);
 
-        // Group by user's local date (C# server-side grouping)
+        var totalDetections = accuracyRecords.Count;
+        var totalFalsePositives = accuracyRecords.Count(r => r.IsFalsePositive);
+        var totalFalseNegatives = accuracyRecords.Count(r => r.IsFalseNegative);
+
+        // Group by user's local date (C# server-side grouping for timezone support)
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        var dailyBreakdownMapped = detections
-            .GroupBy(dr =>
+        var dailyBreakdown = accuracyRecords
+            .GroupBy(r =>
             {
-                var localTime = TimeZoneInfo.ConvertTimeFromUtc(dr.DetectedAt.UtcDateTime, timeZone);
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(r.DetectedAt.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
-            .Select(g => new DailyAccuracy
+            .Select(g =>
             {
-                Date = g.Key,
-                TotalDetections = g.Count(),
-                FalsePositiveCount = g.Count(dr => fpMessageIds.Contains(dr.MessageId)),
-                FalseNegativeCount = g.Count(dr => fnMessageIds.Contains(dr.MessageId)),
-                FalsePositivePercentage = 0, // Calculate below
-                FalseNegativePercentage = 0, // Calculate below
-                Accuracy = 0 // Calculate below
+                var dayTotal = g.Count();
+                var dayFP = g.Count(r => r.IsFalsePositive);
+                var dayFN = g.Count(r => r.IsFalseNegative);
+                var dayCorrect = dayTotal - dayFP - dayFN;
+
+                return new DailyAccuracy
+                {
+                    Date = g.Key,
+                    TotalDetections = dayTotal,
+                    FalsePositiveCount = dayFP,
+                    FalseNegativeCount = dayFN,
+                    FalsePositivePercentage = dayTotal > 0 ? (dayFP / (double)dayTotal * 100.0) : 0,
+                    FalseNegativePercentage = dayTotal > 0 ? (dayFN / (double)dayTotal * 100.0) : 0,
+                    Accuracy = dayTotal > 0 ? (dayCorrect / (double)dayTotal * 100.0) : 0
+                };
             })
             .OrderBy(d => d.Date)
             .ToList();
 
-        // Calculate percentages
-        foreach (var day in dailyBreakdownMapped)
-        {
-            day.FalsePositivePercentage = day.TotalDetections > 0
-                ? (day.FalsePositiveCount / (double)day.TotalDetections * 100.0)
-                : 0;
-            day.FalseNegativePercentage = day.TotalDetections > 0
-                ? (day.FalseNegativeCount / (double)day.TotalDetections * 100.0)
-                : 0;
-            var correctCount = day.TotalDetections - day.FalsePositiveCount - day.FalseNegativeCount;
-            day.Accuracy = day.TotalDetections > 0
-                ? (correctCount / (double)day.TotalDetections * 100.0)
-                : 0;
-        }
-
         return new DetectionAccuracyStats
         {
-            DailyBreakdown = dailyBreakdownMapped,
-            TotalFalsePositives = fpMessageIds.Count,
-            TotalFalseNegatives = fnMessageIds.Count,
+            DailyBreakdown = dailyBreakdown,
+            TotalFalsePositives = totalFalsePositives,
+            TotalFalseNegatives = totalFalseNegatives,
             TotalDetections = totalDetections,
             FalsePositivePercentage = totalDetections > 0
-                ? (fpMessageIds.Count / (double)totalDetections * 100.0)
+                ? (totalFalsePositives / (double)totalDetections * 100.0)
                 : 0,
             FalseNegativePercentage = totalDetections > 0
-                ? (fnMessageIds.Count / (double)totalDetections * 100.0)
+                ? (totalFalseNegatives / (double)totalDetections * 100.0)
                 : 0
         };
     }
@@ -194,9 +184,13 @@ public class AnalyticsRepository : IAnalyticsRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // Get false positive/negative message IDs using helper methods
-        var fpSet = await GetFalsePositiveMessageIdsAsync(context, startDate, endDate, cancellationToken);
-        var fnSet = await GetFalseNegativeMessageIdsAsync(context, startDate, endDate, cancellationToken);
+        // Use DetectionAccuracyView for FP/FN lookups (eliminates expensive correlated sub-queries)
+        var accuracyLookup = await context.DetectionAccuracy
+            .AsNoTracking()
+            .Where(v => v.DetectedAt >= startDate && v.DetectedAt <= endDate)
+            .Where(v => v.IsFalsePositive || v.IsFalseNegative) // Only need records with corrections
+            .Select(v => new { v.MessageId, v.IsFalsePositive, v.IsFalseNegative })
+            .ToDictionaryAsync(v => v.MessageId, cancellationToken);
 
         // Parse JSON and aggregate per-algorithm stats
         var algorithmStats = new Dictionary<string, AlgorithmStatsAccumulator>();
@@ -204,8 +198,9 @@ public class AnalyticsRepository : IAnalyticsRepository
         foreach (var detection in allDetections)
         {
             var checks = ParseCheckResults(detection.CheckResultsJson);
-            var isFalsePositive = fpSet.Contains(detection.MessageId);
-            var isFalseNegative = fnSet.Contains(detection.MessageId);
+            accuracyLookup.TryGetValue(detection.MessageId, out var accuracy);
+            var isFalsePositive = accuracy?.IsFalsePositive ?? false;
+            var isFalseNegative = accuracy?.IsFalseNegative ?? false;
 
             foreach (var check in checks)
             {
@@ -571,51 +566,156 @@ public class AnalyticsRepository : IAnalyticsRepository
         }
     }
 
-    /// <summary>
-    /// Get message IDs for false positives (system said spam → user corrected to ham)
-    /// </summary>
-    private static async Task<HashSet<long>> GetFalsePositiveMessageIdsAsync(
-        AppDbContext context,
-        DateTimeOffset startDate,
-        DateTimeOffset endDate,
-        CancellationToken cancellationToken)
+    public async Task<DailySpamSummary> GetDailySpamSummaryAsync(
+        string timeZoneId,
+        CancellationToken cancellationToken = default)
     {
-        var messageIds = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => dr.IsSpam && dr.DetectionSource != "manual")
-            .Where(dr => context.DetectionResults.Any(correction =>
-                correction.MessageId == dr.MessageId &&
-                correction.DetectionSource == "manual" &&
-                !correction.IsSpam &&
-                correction.DetectedAt > dr.DetectedAt))
-            .Select(dr => dr.MessageId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        // Calculate today and yesterday boundaries in user's timezone
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var nowInUserTz = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone);
+        var todayLocal = DateOnly.FromDateTime(nowInUserTz);
+        var yesterdayLocal = todayLocal.AddDays(-1);
 
-        return messageIds.ToHashSet();
+        // Convert local dates to UTC boundaries for database query
+        var todayStartUtc = TimeZoneInfo.ConvertTimeToUtc(todayLocal.ToDateTime(TimeOnly.MinValue), timeZone);
+        var yesterdayStartUtc = TimeZoneInfo.ConvertTimeToUtc(yesterdayLocal.ToDateTime(TimeOnly.MinValue), timeZone);
+        var tomorrowStartUtc = TimeZoneInfo.ConvertTimeToUtc(todayLocal.AddDays(1).ToDateTime(TimeOnly.MinValue), timeZone);
+
+        // Fetch 2 days of data and let GetDailyDetectionTrendsAsync handle the grouping
+        var trends = await GetDailyDetectionTrendsAsync(
+            new DateTimeOffset(yesterdayStartUtc),
+            new DateTimeOffset(tomorrowStartUtc),
+            timeZoneId,
+            cancellationToken);
+
+        // Find today's and yesterday's data from the result
+        var todayData = trends.FirstOrDefault(t => t.Date == todayLocal);
+        var yesterdayData = trends.FirstOrDefault(t => t.Date == yesterdayLocal);
+
+        // Build summary
+        var todaySpam = todayData?.SpamCount ?? 0;
+        var todayHam = todayData?.HamCount ?? 0;
+        var todayTotal = todaySpam + todayHam;
+
+        var summary = new DailySpamSummary
+        {
+            TodaySpamCount = todaySpam,
+            TodayHamCount = todayHam,
+            TodayTotalDetections = todayTotal,
+            TodaySpamRate = todayTotal > 0 ? (todaySpam / (double)todayTotal * 100.0) : 0
+        };
+
+        // Add yesterday comparison if data exists
+        if (yesterdayData is not null)
+        {
+            var yesterdaySpam = yesterdayData.SpamCount;
+            var yesterdayHam = yesterdayData.HamCount;
+            var yesterdayTotal = yesterdaySpam + yesterdayHam;
+
+            summary.YesterdaySpamCount = yesterdaySpam;
+            summary.YesterdayHamCount = yesterdayHam;
+            summary.YesterdayTotalDetections = yesterdayTotal;
+            summary.YesterdaySpamRate = yesterdayTotal > 0 ? (yesterdaySpam / (double)yesterdayTotal * 100.0) : 0;
+
+            // Calculate changes
+            summary.SpamCountChange = todaySpam - yesterdaySpam;
+            summary.SpamRateChange = summary.TodaySpamRate - summary.YesterdaySpamRate;
+        }
+
+        return summary;
     }
 
-    /// <summary>
-    /// Get message IDs for false negatives (system said ham → user corrected to spam)
-    /// </summary>
-    private static async Task<HashSet<long>> GetFalseNegativeMessageIdsAsync(
-        AppDbContext context,
-        DateTimeOffset startDate,
-        DateTimeOffset endDate,
-        CancellationToken cancellationToken)
+    public async Task<SpamTrendComparison> GetSpamTrendComparisonAsync(
+        string timeZoneId,
+        CancellationToken cancellationToken = default)
     {
-        var messageIds = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => !dr.IsSpam && dr.DetectionSource != "manual")
-            .Where(dr => context.DetectionResults.Any(correction =>
-                correction.MessageId == dr.MessageId &&
-                correction.DetectionSource == "manual" &&
-                correction.IsSpam &&
-                correction.DetectedAt > dr.DetectedAt))
-            .Select(dr => dr.MessageId)
-            .Distinct()
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var nowInUserTz = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone);
+        var todayLocal = DateOnly.FromDateTime(nowInUserTz);
+
+        // Calculate period boundaries in user's timezone
+        // Week: This week = last 7 days including today, Last week = 7 days before that
+        var thisWeekStart = todayLocal.AddDays(-6);
+        var lastWeekStart = thisWeekStart.AddDays(-7);
+        var lastWeekEnd = thisWeekStart.AddDays(-1);
+
+        // Month: Current calendar month vs previous calendar month
+        var thisMonthStart = new DateOnly(nowInUserTz.Year, nowInUserTz.Month, 1);
+        var lastMonthStart = thisMonthStart.AddMonths(-1);
+        var lastMonthEnd = thisMonthStart.AddDays(-1);
+
+        // Year: Current year vs last year (same date range)
+        var thisYearStart = new DateOnly(nowInUserTz.Year, 1, 1);
+        var lastYearStart = new DateOnly(nowInUserTz.Year - 1, 1, 1);
+        var lastYearEnd = new DateOnly(nowInUserTz.Year - 1, 12, 31);
+
+        // Fetch all spam counts in one query covering max range needed (last year start to today)
+        var minDate = lastYearStart;
+        var maxDate = todayLocal.AddDays(1); // Include today
+
+        var minDateUtc = TimeZoneInfo.ConvertTimeToUtc(minDate.ToDateTime(TimeOnly.MinValue), timeZone);
+        var maxDateUtc = TimeZoneInfo.ConvertTimeToUtc(maxDate.ToDateTime(TimeOnly.MinValue), timeZone);
+
+        // Fetch detection results for the full period
+        // Note: AsNoTracking not needed since we're projecting to value types (DateTimeOffset)
+        var detections = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= minDateUtc && dr.DetectedAt < maxDateUtc)
+            .Where(dr => dr.IsSpam)
+            .Select(dr => dr.DetectedAt)
             .ToListAsync(cancellationToken);
 
-        return messageIds.ToHashSet();
+        // Group by user's local date
+        var spamByDate = detections
+            .GroupBy(detectedAt =>
+            {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(detectedAt.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Helper to sum spam in a date range
+        int SumSpamInRange(DateOnly start, DateOnly end)
+        {
+            return spamByDate
+                .Where(kvp => kvp.Key >= start && kvp.Key <= end)
+                .Sum(kvp => kvp.Value);
+        }
+
+        // Calculate all period sums
+        var thisWeekSpam = SumSpamInRange(thisWeekStart, todayLocal);
+        var lastWeekSpam = SumSpamInRange(lastWeekStart, lastWeekEnd);
+        var thisMonthSpam = SumSpamInRange(thisMonthStart, todayLocal);
+        var lastMonthSpam = SumSpamInRange(lastMonthStart, lastMonthEnd);
+        var thisYearSpam = SumSpamInRange(thisYearStart, todayLocal);
+        var lastYearSpam = SumSpamInRange(lastYearStart, lastYearEnd);
+
+        // Check if we have data for comparison periods
+        var hasLastWeekData = spamByDate.Keys.Any(d => d >= lastWeekStart && d <= lastWeekEnd);
+        var hasLastMonthData = spamByDate.Keys.Any(d => d >= lastMonthStart && d <= lastMonthEnd);
+        var hasLastYearData = spamByDate.Keys.Any(d => d >= lastYearStart && d <= lastYearEnd);
+
+        // Calculate percentage changes
+        double? CalculatePercentChange(int current, int? previous)
+        {
+            if (!previous.HasValue || previous.Value == 0) return null;
+            return ((current - previous.Value) / (double)previous.Value) * 100.0;
+        }
+
+        return new SpamTrendComparison
+        {
+            ThisWeekSpamCount = thisWeekSpam,
+            LastWeekSpamCount = hasLastWeekData ? lastWeekSpam : null,
+            WeekOverWeekChange = hasLastWeekData ? CalculatePercentChange(thisWeekSpam, lastWeekSpam) : null,
+
+            ThisMonthSpamCount = thisMonthSpam,
+            LastMonthSpamCount = hasLastMonthData ? lastMonthSpam : null,
+            MonthOverMonthChange = hasLastMonthData ? CalculatePercentChange(thisMonthSpam, lastMonthSpam) : null,
+
+            ThisYearSpamCount = thisYearSpam,
+            LastYearSpamCount = hasLastYearData ? lastYearSpam : null,
+            YearOverYearChange = hasLastYearData ? CalculatePercentChange(thisYearSpam, lastYearSpam) : null
+        };
     }
 }

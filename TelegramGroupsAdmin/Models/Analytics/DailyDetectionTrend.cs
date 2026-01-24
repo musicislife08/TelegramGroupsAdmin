@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.ContentDetection.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Daily detection counts for trend visualization.

@@ -76,12 +76,6 @@ public class TelegramUserManagementService : ITelegramUserManagementService
     }
 
     /// <inheritdoc/>
-    public Task<List<TopActiveUser>> GetTopActiveUsersAsync(int limit = 3, CancellationToken cancellationToken = default)
-    {
-        return _userRepository.GetTopActiveUsersAsync(limit: limit, cancellationToken: cancellationToken);
-    }
-
-    /// <inheritdoc/>
     public Task<ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetModerationQueueStatsAsync(cancellationToken);

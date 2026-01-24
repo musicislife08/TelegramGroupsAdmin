@@ -658,65 +658,6 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <summary>
-    /// Get top active users by message count
-    /// </summary>
-    /// <param name="limit">Number of users to return (default: 3)</param>
-    /// <param name="startDate">Optional start date filter (default: 30 days ago)</param>
-    /// <param name="endDate">Optional end date filter (default: now)</param>
-    /// <param name="chatIds">Optional chat filter (default: all chats)</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    public async Task<List<UiModels.TopActiveUser>> GetTopActiveUsersAsync(
-        int limit = 3,
-        DateTimeOffset? startDate = null,
-        DateTimeOffset? endDate = null,
-        List<long>? chatIds = null,
-        CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // Default to last 30 days if no date range provided
-        var since = startDate ?? DateTimeOffset.UtcNow.AddDays(-30);
-        var until = endDate ?? DateTimeOffset.UtcNow;
-
-        // Build base query with date filter
-        var query = from u in context.TelegramUsers
-                    join m in context.Messages on u.TelegramUserId equals m.UserId
-                    where m.Timestamp >= since
-                        && m.Timestamp <= until
-                        && !u.IsBot
-                    select new { u, m };
-
-        // Apply optional chat filter
-        if (chatIds != null && chatIds.Count > 0)
-        {
-            query = query.Where(x => chatIds.Contains(x.m.ChatId));
-        }
-
-        // Get total message count for percentage calculation
-        var totalMessages = await query.CountAsync(cancellationToken);
-
-        // Get top users
-        var topUsers = await query
-            .GroupBy(x => new { x.u.TelegramUserId, x.u.Username, x.u.FirstName, x.u.LastName, x.u.UserPhotoPath })
-            .Select(g => new UiModels.TopActiveUser
-            {
-                TelegramUserId = g.Key.TelegramUserId,
-                Username = g.Key.Username,
-                FirstName = g.Key.FirstName,
-                LastName = g.Key.LastName,
-                UserPhotoPath = g.Key.UserPhotoPath,
-                MessageCount = g.Count(),
-                Percentage = totalMessages > 0 ? (g.Count() / (double)totalMessages * 100.0) : 0
-            })
-            .OrderByDescending(u => u.MessageCount)
-            .Take(limit)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        return topUsers;
-    }
-
-    /// <summary>
     /// Get moderation queue statistics
     /// REFACTOR-5: Uses is_banned column and JSONB warnings as source of truth
     /// </summary>

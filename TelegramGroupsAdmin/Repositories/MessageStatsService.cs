@@ -1,13 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
+using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Models.Analytics;
+using TelegramGroupsAdmin.Repositories.Mappings;
 using TelegramGroupsAdmin.Telegram.Constants;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Services;
+namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>
 /// Service for message analytics and statistics
@@ -16,17 +15,13 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class MessageStatsService : IMessageStatsService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
-    private readonly ITelegramUserRepository _userRepository;
 
-    public MessageStatsService(
-        IDbContextFactory<AppDbContext> contextFactory,
-        ITelegramUserRepository userRepository)
+    public MessageStatsService(IDbContextFactory<AppDbContext> contextFactory)
     {
         _contextFactory = contextFactory;
-        _userRepository = userRepository;
     }
 
-    public async Task<UiModels.HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default)
+    public async Task<HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var totalMessages = await context.Messages.CountAsync(cancellationToken);
@@ -42,7 +37,7 @@ public class MessageStatsService : IMessageStatsService
             newestTimestamp = await context.Messages.MaxAsync(m => m.Timestamp, cancellationToken);
         }
 
-        var result = new UiModels.HistoryStats(
+        var result = new HistoryStats(
             TotalMessages: totalMessages,
             UniqueUsers: uniqueUsers,
             PhotoCount: photoCount,
@@ -52,7 +47,7 @@ public class MessageStatsService : IMessageStatsService
         return result;
     }
 
-    public async Task<DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default)
+    public async Task<SpamSummaryStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Overall stats from detection_results
@@ -78,7 +73,7 @@ public class MessageStatsService : IMessageStatsService
         var recentTotal = recentDetections.Count;
         var recentSpam = recentDetections.Count(s => s);
 
-        return new DetectionStats
+        return new SpamSummaryStats
         {
             TotalDetections = total,
             SpamDetected = spam,
@@ -90,51 +85,22 @@ public class MessageStatsService : IMessageStatsService
         };
     }
 
-    public async Task<List<DetectionResultRecord>> GetRecentDetectionsAsync(int limit = AnalyticsConstants.DefaultRecentDetectionsLimit, CancellationToken cancellationToken = default)
+    public async Task<List<RecentDetection>> GetRecentDetectionsAsync(int limit = AnalyticsConstants.DefaultRecentDetectionsLimit, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Join with messages, users, and telegram_users to get actor display names (Phase 4.19)
-        var results = await context.DetectionResults
+
+        // Use EnrichedDetectionView to eliminate complex 4-table JOIN chain
+        // View pre-joins: detection_results → messages → users → telegram_users
+        var results = await context.EnrichedDetections
             .AsNoTracking()
-            .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => new { dr, m })
-            .GroupJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, users) => new { x.dr, x.m, users })
-            .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.dr, x.m, user })
-            .GroupJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.dr, x.m, x.user, tgUsers })
-            .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new
-            {
-                x.dr,
-                x.m,
-                ActorWebEmail = x.user != null ? x.user.Email : null,
-                ActorTelegramUsername = tgUser != null ? tgUser.Username : null,
-                ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null,
-                ActorTelegramLastName = tgUser != null ? tgUser.LastName : null
-            })
-            .OrderByDescending(x => x.dr.DetectedAt)
+            .OrderByDescending(v => v.DetectedAt)
             .Take(limit)
-            .Select(x => new DetectionResultRecord
-            {
-                Id = x.dr.Id,
-                MessageId = x.dr.MessageId,
-                DetectedAt = x.dr.DetectedAt,
-                DetectionSource = x.dr.DetectionSource,
-                DetectionMethod = x.dr.DetectionMethod ?? "Unknown",
-                IsSpam = x.dr.IsSpam,
-                Confidence = x.dr.Confidence,
-                Reason = x.dr.Reason,
-                AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName, x.ActorTelegramLastName),
-                UsedForTraining = x.dr.UsedForTraining,
-                NetConfidence = x.dr.NetConfidence,
-                CheckResultsJson = x.dr.CheckResultsJson,
-                EditVersion = x.dr.EditVersion,
-                UserId = x.m.UserId,
-                MessageText = x.m.MessageText
-            })
             .ToListAsync(cancellationToken);
 
-        return results;
+        return results.Select(v => v.ToModel()).ToList();
     }
 
-    public async Task<UiModels.MessageTrendsData> GetMessageTrendsAsync(
+    public async Task<MessageTrendsData> GetMessageTrendsAsync(
         List<long> chatIds,
         DateTimeOffset startDate,
         DateTimeOffset endDate,
@@ -177,7 +143,7 @@ public class MessageStatsService : IMessageStatsService
             where chatIds.Count == 0 || chatIds.Contains(m.ChatId)
             join c in context.ManagedChats on m.ChatId equals c.ChatId
             group m by new { c.ChatId, c.ChatName } into g
-            select new UiModels.ChatVolumeData
+            select new ChatVolumeData
             {
                 ChatName = g.Key.ChatName ?? g.Key.ChatId.ToString(),
                 Count = g.Count()
@@ -207,7 +173,7 @@ public class MessageStatsService : IMessageStatsService
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
-            .Select(g => new UiModels.DailyVolumeData
+            .Select(g => new DailyVolumeData
             {
                 Date = g.Key,
                 Count = g.Count()
@@ -222,7 +188,7 @@ public class MessageStatsService : IMessageStatsService
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
-            .Select(g => new UiModels.DailyVolumeData
+            .Select(g => new DailyVolumeData
             {
                 Date = g.Key,
                 Count = g.Count() // Already distinct after de-duplication
@@ -238,7 +204,7 @@ public class MessageStatsService : IMessageStatsService
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
-            .Select(g => new UiModels.DailyVolumeData
+            .Select(g => new DailyVolumeData
             {
                 Date = g.Key,
                 Count = g.Count()
@@ -249,7 +215,7 @@ public class MessageStatsService : IMessageStatsService
         // === NEW AGGREGATIONS (UX-2.1) ===
 
         // 1. Peak Activity Summary (all messages, hourly + daily)
-        UiModels.PeakActivitySummary? peakActivity = null;
+        PeakActivitySummary? peakActivity = null;
         if (totalMessages > 0)
         {
             // Hourly activity (always available)
@@ -281,7 +247,7 @@ public class MessageStatsService : IMessageStatsService
                 peakDayRange = DetectDayRange(dailyActivity);
             }
 
-            peakActivity = new UiModels.PeakActivitySummary
+            peakActivity = new PeakActivitySummary
             {
                 PeakHourRange = peakHourRange,
                 PeakDayRange = peakDayRange,
@@ -290,7 +256,7 @@ public class MessageStatsService : IMessageStatsService
         }
 
         // 2. Spam Seasonality Summary (spam only, hourly + daily + monthly)
-        UiModels.ContentSeasonalitySummary? spamSeasonality = null;
+        ContentSeasonalitySummary? spamSeasonality = null;
         if (spamMessages.Count > 0)
         {
             // Hourly spam pattern (always available)
@@ -340,7 +306,7 @@ public class MessageStatsService : IMessageStatsService
                 monthlyPattern = DetectMonthRange(monthlySpamPattern);
             }
 
-            spamSeasonality = new UiModels.ContentSeasonalitySummary
+            spamSeasonality = new ContentSeasonalitySummary
             {
                 HourlyPattern = hourlyPattern,
                 WeeklyPattern = weeklyPattern,
@@ -351,7 +317,7 @@ public class MessageStatsService : IMessageStatsService
         }
 
         // 3. Week-over-Week Growth (only if >= 14 days) - all in-memory calculations
-        UiModels.WeekOverWeekGrowth? weekOverWeekGrowth = null;
+        WeekOverWeekGrowth? weekOverWeekGrowth = null;
         var hasPreviousPeriod = daysDiff >= AnalyticsConstants.MinDaysForWeekOverWeekGrowth;
         if (hasPreviousPeriod)
         {
@@ -391,7 +357,7 @@ public class MessageStatsService : IMessageStatsService
                 ? ((currentWeekSpamPct - previousWeekSpamPct) / previousWeekSpamPct * 100.0)
                 : 0;
 
-            weekOverWeekGrowth = new UiModels.WeekOverWeekGrowth
+            weekOverWeekGrowth = new WeekOverWeekGrowth
             {
                 MessageGrowthPercent = messageGrowth,
                 UserGrowthPercent = userGrowth,
@@ -401,7 +367,8 @@ public class MessageStatsService : IMessageStatsService
         }
 
         // 4. Top Active Users (top 5)
-        var topActiveUsers = await _userRepository.GetTopActiveUsersAsync(
+        var topActiveUsers = await GetTopActiveUsersAsync(
+            context,
             limit: AnalyticsConstants.TopActiveUsersLimit,
             startDate: startDate,
             endDate: endDate,
@@ -409,7 +376,7 @@ public class MessageStatsService : IMessageStatsService
             cancellationToken: cancellationToken);
 
         // 5. Trusted User Breakdown (by content_check_skip_reason) - in-memory grouping
-        UiModels.TrustedUserBreakdown? trustedBreakdown = null;
+        TrustedUserBreakdown? trustedBreakdown = null;
         if (totalMessages > 0)
         {
             var breakdownData = distinctMessages
@@ -427,7 +394,7 @@ public class MessageStatsService : IMessageStatsService
                 .Where(x => x.Reason == Data.Models.ContentCheckSkipReason.NotSkipped)
                 .Sum(x => x.Count);
 
-            trustedBreakdown = new UiModels.TrustedUserBreakdown
+            trustedBreakdown = new TrustedUserBreakdown
             {
                 TrustedMessages = trustedCount,
                 UntrustedMessages = untrustedCount,
@@ -445,7 +412,7 @@ public class MessageStatsService : IMessageStatsService
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
-            .Select(g => new UiModels.DailyActiveUsersData
+            .Select(g => new DailyActiveUsersData
             {
                 Date = g.Key,
                 UniqueUsers = g.Select(x => x.UserId).Distinct().Count()
@@ -453,7 +420,7 @@ public class MessageStatsService : IMessageStatsService
             .OrderBy(d => d.Date)
             .ToList();
 
-        return new UiModels.MessageTrendsData
+        return new MessageTrendsData
         {
             // Existing metrics (UX-2)
             TotalMessages = totalMessages,
@@ -685,6 +652,60 @@ public class MessageStatsService : IMessageStatsService
             // Range - show abbreviated
             return $"{monthNames[start]}-{monthNames[end]}";
         }
+    }
+
+    #endregion
+
+    #region Top Active Users
+
+    /// <summary>
+    /// Get top active users for the specified period.
+    /// Analytics-specific implementation (moved from TelegramUserRepository).
+    /// </summary>
+    private static async Task<List<TopActiveUser>> GetTopActiveUsersAsync(
+        AppDbContext context,
+        int limit,
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        List<long>? chatIds,
+        CancellationToken cancellationToken)
+    {
+        // Build base query with date filter
+        var query = from u in context.TelegramUsers
+                    join m in context.Messages on u.TelegramUserId equals m.UserId
+                    where m.Timestamp >= startDate
+                        && m.Timestamp <= endDate
+                        && !u.IsBot
+                    select new { u, m };
+
+        // Apply optional chat filter
+        if (chatIds != null && chatIds.Count > 0)
+        {
+            query = query.Where(x => chatIds.Contains(x.m.ChatId));
+        }
+
+        // Get total message count for percentage calculation
+        var totalMessages = await query.CountAsync(cancellationToken);
+
+        // Get top users
+        var topUsers = await query
+            .GroupBy(x => new { x.u.TelegramUserId, x.u.Username, x.u.FirstName, x.u.LastName, x.u.UserPhotoPath })
+            .Select(g => new TopActiveUser
+            {
+                TelegramUserId = g.Key.TelegramUserId,
+                Username = g.Key.Username,
+                FirstName = g.Key.FirstName,
+                LastName = g.Key.LastName,
+                UserPhotoPath = g.Key.UserPhotoPath,
+                MessageCount = g.Count(),
+                Percentage = totalMessages > 0 ? (g.Count() / (double)totalMessages * 100.0) : 0
+            })
+            .OrderByDescending(u => u.MessageCount)
+            .Take(limit)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        return topUsers;
     }
 
     #endregion

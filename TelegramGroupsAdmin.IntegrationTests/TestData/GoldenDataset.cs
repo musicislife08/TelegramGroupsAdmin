@@ -331,6 +331,47 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Analytics test data expected values (from 50_analytics_test_data.sql).
+    /// Used for assertions in AnalyticsRepositoryTests.
+    /// </summary>
+    public static class AnalyticsData
+    {
+        // Spam detection counts (net_confidence > 0)
+        public const int TodaySpamCount = 3;           // 3 spam detections today (82617, 82618, 82616)
+        public const int YesterdaySpamCount = 2;       // 2 spam detections yesterday (82615, 82612)
+        public const int LastWeekSpamCount = 2;        // 2 spam detections 8-9 days ago (82606, 82603)
+
+        // Base data has 2 ham detections (from 05_base_detection_results.sql)
+        public const int BaseHamCount = 2;
+
+        // FP/FN test data (references existing message IDs)
+        public const long FalsePositiveMessageId = 82617;  // Spam corrected to ham
+        public const long FalseNegativeMessageId = 82594;  // Ham (from base) corrected to spam
+
+        // Welcome response expected counts (from 50_analytics_test_data.sql)
+        public const int TodayAcceptedCount = 2;       // Users 100001, 100002
+        public const int TodayDeniedCount = 1;         // User 100003
+        public const int YesterdayTimeoutCount = 1;    // User 100004
+        public const int YesterdayLeftCount = 1;       // User 100005
+        public const int LastWeekAcceptedCount = 1;    // User 100006
+
+        // Total welcome responses
+        public const int TotalWelcomeResponses = 6;
+
+        // Algorithm performance data - CheckName enum values in check_results_json
+        public const int CheckNameStopWords = 0;       // StopWords algorithm
+        public const int CheckNameBayes = 3;           // Bayes classifier
+        public const int CheckNameOpenAI = 6;          // OpenAI/LLM check
+
+        // Precalculated expected percentages for welcome response distribution
+        // Based on: 6 total (3 accepted, 1 denied, 1 timeout, 1 left)
+        public const double ExpectedAcceptedPercentage = 50.0;           // 3/6 * 100
+        public const double ExpectedDeniedPercentage = 100.0 / 6.0;      // 1/6 * 100 ≈ 16.67%
+        public const double ExpectedTimeoutPercentage = 100.0 / 6.0;     // 1/6 * 100 ≈ 16.67%
+        public const double ExpectedLeftPercentage = 100.0 / 6.0;        // 1/6 * 100 ≈ 16.67%
+    }
+
+    /// <summary>
     /// Seeds full dataset: base data + GoldenDataset training labels (3 spam + 2 ham) + MLTrainingData.sql (20 spam + 20 ham).
     /// Total: 23 spam + 22 ham training samples.
     /// Use for most tests that need complete training data.
@@ -485,6 +526,16 @@ public static class GoldenDataset
     public static async Task SeedDeduplicationTestDataAsync(AppDbContext context)
     {
         await LoadSqlScriptAsync(context, "SQL.30_dedup_test_data.sql");
+    }
+
+    /// <summary>
+    /// Seeds analytics-specific test data with temporal spans for trend testing.
+    /// Includes spam detection results, manual corrections (FP/FN), and welcome responses.
+    /// Use for testing IAnalyticsRepository methods (DailySpamSummary, SpamTrendComparison, etc.).
+    /// </summary>
+    public static async Task SeedAnalyticsDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.50_analytics_test_data.sql");
     }
 
     /// <summary>

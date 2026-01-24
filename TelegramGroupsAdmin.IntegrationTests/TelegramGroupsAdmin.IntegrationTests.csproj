@@ -60,6 +60,8 @@
     <EmbeddedResource Include="TestData\SQL\30_dedup_test_data.sql" />
     <!-- Pre-migration test data (for testing data migration in critical migrations) -->
     <EmbeddedResource Include="TestData\SQL\40_pre_migration_impersonation_alerts.sql" />
+    <!-- Analytics test data (spam detections, corrections, welcome responses) -->
+    <EmbeddedResource Include="TestData\SQL\50_analytics_test_data.sql" />
     <!-- Legacy (to be removed after migration) -->
     <EmbeddedResource Include="TestData\MLTrainingData.sql" />
   </ItemGroup>

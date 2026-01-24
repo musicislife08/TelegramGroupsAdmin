@@ -29,9 +29,6 @@ public interface ITelegramUserManagementService
     /// <summary>Gets inactive users based on activity threshold.</summary>
     Task<List<TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Gets top active users by message count.</summary>
-    Task<List<TopActiveUser>> GetTopActiveUsersAsync(int limit = 3, CancellationToken cancellationToken = default);
-
     /// <summary>Gets moderation queue statistics (pending reports, reviews).</summary>
     Task<ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default);
 

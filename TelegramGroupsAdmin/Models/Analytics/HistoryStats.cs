@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// History statistics for UI display
