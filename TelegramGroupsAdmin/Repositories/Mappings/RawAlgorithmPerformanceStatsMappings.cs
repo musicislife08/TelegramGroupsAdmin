@@ -1,7 +1,7 @@
-using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Models.Analytics;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
+namespace TelegramGroupsAdmin.Repositories.Mappings;
 
 /// <summary>
 /// Mapping extensions for RawAlgorithmPerformanceStats (Phase 5)

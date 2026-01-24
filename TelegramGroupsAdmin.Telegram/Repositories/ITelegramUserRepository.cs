@@ -30,12 +30,6 @@ public interface ITelegramUserRepository
     Task<List<UiModels.TelegramUserListItem>> GetBannedUsersAsync(CancellationToken cancellationToken = default);
     Task<List<UiModels.BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.TopActiveUser>> GetTopActiveUsersAsync(
-        int limit = 3,
-        DateTimeOffset? startDate = null,
-        DateTimeOffset? endDate = null,
-        List<long>? chatIds = null,
-        CancellationToken cancellationToken = default);
     Task<UiModels.ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default);
     Task<UiModels.TelegramUserDetail?> GetUserDetailAsync(long telegramUserId, CancellationToken cancellationToken = default);
 

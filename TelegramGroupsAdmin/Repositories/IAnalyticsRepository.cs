@@ -1,6 +1,6 @@
-using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Models.Analytics;
 
-namespace TelegramGroupsAdmin.ContentDetection.Repositories;
+namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>
 /// Repository for analytics queries across detection results and user actions.
@@ -91,6 +91,22 @@ public interface IAnalyticsRepository
     Task<List<AlgorithmPerformanceStats>> GetAlgorithmPerformanceStatsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get daily spam summary comparing today vs yesterday for dashboard display.
+    /// Quick snapshot: spam counts, rates, and change indicators.
+    /// </summary>
+    Task<DailySpamSummary> GetDailySpamSummaryAsync(
+        string timeZoneId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get spam trend comparisons across multiple time periods.
+    /// Week-over-week, month-over-month, and year-over-year insights for Analytics page.
+    /// </summary>
+    Task<SpamTrendComparison> GetSpamTrendComparisonAsync(
         string timeZoneId,
         CancellationToken cancellationToken = default);
 }

@@ -19,6 +19,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Views (read-only, query optimization)
     public DbSet<EnrichedMessageView> EnrichedMessages => Set<EnrichedMessageView>();
     public DbSet<EnrichedReportView> EnrichedReports => Set<EnrichedReportView>();
+    public DbSet<EnrichedDetectionView> EnrichedDetections => Set<EnrichedDetectionView>();
+    public DbSet<HourlyDetectionStatsView> HourlyDetectionStats => Set<HourlyDetectionStatsView>();
+    public DbSet<WelcomeResponseSummaryView> WelcomeResponseSummary => Set<WelcomeResponseSummaryView>();
+    public DbSet<DetectionAccuracyView> DetectionAccuracy => Set<DetectionAccuracyView>();
 
     // User and auth tables
     public DbSet<UserRecordDto> Users => Set<UserRecordDto>();
@@ -919,6 +923,30 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<EnrichedReportView>()
             .HasNoKey()
             .ToView("enriched_reports");
+
+        // Configure EnrichedDetectionView as keyless entity mapping to enriched_detections view
+        // Provides detection enrichment (actor, message author) for GetRecentDetectionsAsync
+        modelBuilder.Entity<EnrichedDetectionView>()
+            .HasNoKey()
+            .ToView("enriched_detections");
+
+        // Configure HourlyDetectionStatsView as keyless entity mapping to hourly_detection_stats view
+        // Provides hourly aggregated stats that roll up to daily in C#
+        modelBuilder.Entity<HourlyDetectionStatsView>()
+            .HasNoKey()
+            .ToView("hourly_detection_stats");
+
+        // Configure WelcomeResponseSummaryView as keyless entity mapping to welcome_response_summary view
+        // Provides pre-aggregated welcome response distributions by date and chat
+        modelBuilder.Entity<WelcomeResponseSummaryView>()
+            .HasNoKey()
+            .ToView("welcome_response_summary");
+
+        // Configure DetectionAccuracyView as keyless entity mapping to detection_accuracy view
+        // Provides pre-computed FP/FN flags for accuracy analysis
+        modelBuilder.Entity<DetectionAccuracyView>()
+            .HasNoKey()
+            .ToView("detection_accuracy");
 
         // ============================================================================
         // Content Detection Config JSON Mapping (Issue #252)

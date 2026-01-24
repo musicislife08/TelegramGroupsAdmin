@@ -1,7 +1,6 @@
-using TelegramGroupsAdmin.ContentDetection.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Models.Analytics;
 
-namespace TelegramGroupsAdmin.Telegram.Services;
+namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>
 /// Service for message analytics and statistics
@@ -12,22 +11,22 @@ public interface IMessageStatsService
     /// <summary>
     /// Get overall message history statistics
     /// </summary>
-    Task<UiModels.HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default);
+    Task<HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get spam detection statistics
     /// </summary>
-    Task<DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default);
+    Task<SpamSummaryStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get recent spam detections with actor information
     /// </summary>
-    Task<List<DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<RecentDetection>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get message trends over a date range with timezone conversion
     /// </summary>
-    Task<UiModels.MessageTrendsData> GetMessageTrendsAsync(
+    Task<MessageTrendsData> GetMessageTrendsAsync(
         List<long> chatIds,
         DateTimeOffset startDate,
         DateTimeOffset endDate,
