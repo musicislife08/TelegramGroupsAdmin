@@ -129,8 +129,10 @@ public class CasCheckServiceTests
                 {
                     "ok": true,
                     "result": {
+                        "reasons": [1],
                         "offenses": 3,
-                        "time_added": 1609459200
+                        "messages": ["Spam message content"],
+                        "time_added": "2021-01-01T00:00:00.000Z"
                     }
                 }
                 """));
@@ -165,7 +167,7 @@ public class CasCheckServiceTests
             .RespondWith(Response.Create()
                 .WithStatusCode(200)
                 .WithHeader("Content-Type", "application/json")
-                .WithBody("""{"ok": true, "result": {"offenses": 1, "time_added": 1609459200}}"""));
+                .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 1, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
         var result1 = await _service.CheckUserAsync(userId);
@@ -296,7 +298,7 @@ public class CasCheckServiceTests
             .RespondWith(Response.Create()
                 .WithStatusCode(200)
                 .WithDelay(TimeSpan.FromSeconds(5)) // Response takes 5 seconds
-                .WithBody("""{"ok": true, "result": {"offenses": 1, "time_added": 1609459200}}"""));
+                .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 1, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
         var result = await _service.CheckUserAsync(userId);
@@ -375,7 +377,7 @@ public class CasCheckServiceTests
             .RespondWith(Response.Create()
                 .WithStatusCode(200)
                 .WithHeader("Content-Type", "application/json")
-                .WithBody("""{"ok": true, "result": {"offenses": 0, "time_added": 1609459200}}"""));
+                .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 0, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
         var result = await _service.CheckUserAsync(userId);

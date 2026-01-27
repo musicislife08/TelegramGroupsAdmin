@@ -163,6 +163,6 @@ public class CasCheckService : ICasCheckService
         public int Offenses { get; init; }
 
         [System.Text.Json.Serialization.JsonPropertyName("time_added")]
-        public long TimeAdded { get; init; }
+        public DateTimeOffset? TimeAdded { get; init; }
     }
 }
