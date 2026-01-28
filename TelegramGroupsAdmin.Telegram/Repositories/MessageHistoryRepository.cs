@@ -46,16 +46,16 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     }
 
 
-    public async Task<(int deletedCount, List<string> imagePaths, List<string> mediaPaths)> CleanupExpiredAsync(TimeSpan retention, CancellationToken cancellationToken = default)
+    public async Task<UiModels.MessageCleanupResult> CleanupExpiredAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Retention: Keep messages within retention period OR messages with detection_results (training data)
+        // Retention: Keep messages within retention period OR messages with training data (used_for_training = true)
         var retentionCutoff = DateTimeOffset.UtcNow - retention;
 
         // MH2: Single query optimization - get all expired message data in one query
         var expiredData = await context.Messages
             .Where(m => m.Timestamp < retentionCutoff
-                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId))
+                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.UsedForTraining))
             .GroupJoin(
                 context.MessageEdits,
                 m => m.MessageId,
@@ -71,7 +71,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
         if (expiredData.Count == 0)
         {
-            return (0, [], []);
+            // No messages to delete - query remaining stats and return
+            return await GetCleanupResultAsync(context, 0, [], [], cancellationToken);
         }
 
         // Collect image paths (photo thumbnails)
@@ -107,7 +108,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         if (deleted > 0)
         {
             _logger.LogInformation(
-                "Cleaned up {Count} old messages ({ImageCount} images, {MediaCount} media files, {Edits} edits) - retention: 30 days",
+                "Cleaned up {Count} old messages ({ImageCount} images, {MediaCount} media files, {Edits} edits)",
                 deleted,
                 imagePaths.Count,
                 mediaPaths.Count,
@@ -118,7 +119,40 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             // If needed, VACUUM can be run separately via raw SQL outside a transaction
         }
 
-        return (deleted, imagePaths, mediaPaths);
+        // Return cleanup result with remaining stats (repository owns this data)
+        return await GetCleanupResultAsync(context, deleted, imagePaths, mediaPaths, cancellationToken);
+    }
+
+    /// <summary>
+    /// Build cleanup result with remaining message statistics.
+    /// The repository is the domain expert for message data - simple COUNTs are appropriate here.
+    /// </summary>
+    private static async Task<UiModels.MessageCleanupResult> GetCleanupResultAsync(
+        AppDbContext context,
+        int deletedCount,
+        List<string> imagePaths,
+        List<string> mediaPaths,
+        CancellationToken cancellationToken)
+    {
+        var remainingMessages = await context.Messages.CountAsync(cancellationToken);
+        var remainingUniqueUsers = await context.Messages.Select(m => m.UserId).Distinct().CountAsync(cancellationToken);
+        var remainingPhotos = await context.Messages.CountAsync(m => m.PhotoFileId != null, cancellationToken);
+
+        DateTimeOffset? oldestTimestamp = null;
+        if (remainingMessages > 0)
+        {
+            oldestTimestamp = await context.Messages.MinAsync(m => m.Timestamp, cancellationToken);
+        }
+
+        return new UiModels.MessageCleanupResult(
+            DeletedCount: deletedCount,
+            ImagePaths: imagePaths,
+            MediaPaths: mediaPaths,
+            RemainingMessages: remainingMessages,
+            RemainingUniqueUsers: remainingUniqueUsers,
+            RemainingPhotos: remainingPhotos,
+            OldestTimestamp: oldestTimestamp
+        );
     }
 
 

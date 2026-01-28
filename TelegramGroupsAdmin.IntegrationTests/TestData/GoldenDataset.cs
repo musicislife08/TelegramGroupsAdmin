@@ -372,6 +372,33 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Test data for old messages with various ages.
+    /// Message IDs: 96001-96006 (to avoid conflicts with ML training data 90001-90040 and dedup 95001-95022)
+    /// Useful for testing cleanup/retention logic.
+    /// Training data = detection_results WHERE used_for_training = true
+    /// </summary>
+    public static class OldMessages
+    {
+        // Messages without training data (eligible for cleanup)
+        public const long Msg45DaysOld_Id = 96001;     // 45 days old, no detection results, HAS edit + translation
+        public const long Msg60DaysOld_Id = 96002;     // 60 days old, no detection results, HAS translation
+        public const long Msg35DaysOld_Id = 96004;     // 35 days old (just past 30-day threshold)
+        public const long MsgNonTraining_Id = 96006;   // 50 days old, has detection but used_for_training=false
+
+        // Message WITH training data (should be preserved regardless of age)
+        public const long MsgWithTraining_Id = 96003;  // 90 days old but has training data
+
+        // Boundary case - 29 days old (just inside retention window)
+        public const long Msg29DaysOld_Id = 96005;
+
+        // Related data for cascade delete testing
+        public const long Edit_ForMsg45Days_Id = 960001;  // Edit of Msg45DaysOld - cascades when message deleted
+
+        // Helper: Expected deletion count when using 30-day retention
+        public const int ExpectedDeletionsWith30DayRetention = 4;  // 96001, 96002, 96004, 96006
+    }
+
+    /// <summary>
     /// Seeds full dataset: base data + GoldenDataset training labels (3 spam + 2 ham) + MLTrainingData.sql (20 spam + 20 ham).
     /// Total: 23 spam + 22 ham training samples.
     /// Use for most tests that need complete training data.
@@ -536,6 +563,16 @@ public static class GoldenDataset
     public static async Task SeedAnalyticsDataAsync(AppDbContext context)
     {
         await LoadSqlScriptAsync(context, "SQL.50_analytics_test_data.sql");
+    }
+
+    /// <summary>
+    /// Seeds old messages with various ages for testing retention/cleanup logic.
+    /// Includes messages with and without training data at various ages.
+    /// Use for testing CleanupExpiredAsync and message retention behavior.
+    /// </summary>
+    public static async Task SeedOldMessagesAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.60_old_messages.sql");
     }
 
     /// <summary>

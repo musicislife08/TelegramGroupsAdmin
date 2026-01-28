@@ -497,10 +497,55 @@
         }
     }
 
-    private void BanUser()
+    private async Task BanUser()
     {
-        // TODO: Implement ban functionality
-        Snackbar.Add("Ban functionality - Coming soon", Severity.Info);
+        if (_userDetail == null) return;
+
+        // Show confirmation dialog
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Permanent Ban",
+            $"Are you sure you want to permanently ban {_userDetail.DisplayName}? This will ban them from all managed chats.",
+            yesText: "Ban",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            // Get Actor for audit trail
+            Actor executor;
+            try
+            {
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
+
+            // Call moderation service to ban the user
+            var banResult = await ModerationService.BanUserAsync(
+                _userDetail.TelegramUserId,
+                null, // No specific message ID
+                executor,
+                "Banned from user detail dialog");
+
+            if (banResult.Success)
+            {
+                Snackbar.Add($"Successfully banned {_userDetail.DisplayName} from {banResult.ChatsAffected} chat(s)", Severity.Success);
+                await LoadUserDetailAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to ban user: {banResult.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error banning user: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task UnbanUser()
