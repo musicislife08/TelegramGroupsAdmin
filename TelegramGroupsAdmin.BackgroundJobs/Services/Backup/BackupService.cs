@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Formats.Tar;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
@@ -6,12 +7,16 @@ using System.Text.Json;
 using Dapper;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data.Attributes;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 
@@ -30,7 +35,9 @@ public class BackupService : IBackupService
     private readonly IBackupConfigurationService _configService;
     private readonly DependencyResolutionService _dependencyResolutionService;
     private readonly IBackupRetentionService _retentionService;
-    private const string CurrentVersion = "2.1"; // SCHEMA-3: configs.chat_id NULL → 0 migration
+    private readonly IThumbnailService _thumbnailService;
+    private readonly string _mediaBasePath;
+    private const string CurrentVersion = "3.0"; // Real tar.gz format with media files
 
     public BackupService(
         NpgsqlDataSource dataSource,
@@ -45,7 +52,9 @@ public class BackupService : IBackupService
         IPassphraseManagementService passphraseService,
         IBackupConfigurationService configService,
         DependencyResolutionService dependencyResolutionService,
-        IBackupRetentionService retentionService)
+        IBackupRetentionService retentionService,
+        IThumbnailService thumbnailService,
+        IOptions<MessageHistoryOptions> historyOptions)
     {
         _dataSource = dataSource;
         _logger = logger;
@@ -60,11 +69,13 @@ public class BackupService : IBackupService
         _configService = configService;
         _dependencyResolutionService = dependencyResolutionService;
         _retentionService = retentionService;
+        _thumbnailService = thumbnailService;
+        _mediaBasePath = historyOptions.Value.ImageStoragePath;
     }
 
     public async Task<byte[]> ExportAsync()
     {
-        return await ExportInternalAsync(encryptAfter: true);
+        return await ExportInternalAsync();
     }
 
     /// <summary>
@@ -76,31 +87,16 @@ public class BackupService : IBackupService
             throw new ArgumentException("Passphrase cannot be empty", nameof(passphraseOverride));
 
         _logger.LogInformation("Starting backup export with explicit passphrase");
-
-        // Export backup normally (will be unencrypted initially)
-        var unencryptedBackup = await ExportInternalAsync(encryptAfter: false);
-
-        // Encrypt with provided passphrase
-        var encryptedBackup = _encryptionService.EncryptBackup(unencryptedBackup, passphraseOverride);
-        _logger.LogInformation("Encrypted backup with explicit passphrase: {Original} → {Encrypted} bytes",
-            unencryptedBackup.Length, encryptedBackup.Length);
-
-        // Validate
-        if (!await ValidateBackupAsync(encryptedBackup, passphraseOverride))
-        {
-            throw new InvalidOperationException("Backup validation failed after encryption");
-        }
-
-        _logger.LogInformation("✅ Backup export with explicit passphrase complete: {Size} bytes", encryptedBackup.Length);
-        return encryptedBackup;
+        return await ExportInternalAsync(passphraseOverride: passphraseOverride);
     }
 
     /// <summary>
-    /// Internal export method that can skip encryption for passphrase override scenario
+    /// Internal export method that can skip encryption for passphrase override scenario.
+    /// Creates a real tar.gz archive containing metadata, database, and media files.
     /// </summary>
-    private async Task<byte[]> ExportInternalAsync(bool encryptAfter = true)
+    private async Task<byte[]> ExportInternalAsync(string? passphraseOverride = null)
     {
-        _logger.LogInformation("Starting full system backup export");
+        _logger.LogInformation("Starting full system backup export (tar.gz format)");
 
         var backup = new SystemBackup
         {
@@ -154,54 +150,89 @@ public class BackupService : IBackupService
             }
         }
 
-        // Serialize to JSON (exclude [NotMapped] properties to avoid computed property errors)
+        // JSON serialization options (exclude [NotMapped] properties)
         var jsonOptions = new JsonSerializerOptions
         {
-            WriteIndented = false, // Minimized JSON
+            WriteIndented = false,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             TypeInfoResolver = new NotMappedPropertiesIgnoringResolver()
         };
 
-        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(backup, jsonOptions);
-        _logger.LogInformation("Serialized backup to JSON: {Size} bytes", jsonBytes.Length);
+        // Serialize database content
+        var databaseJson = JsonSerializer.SerializeToUtf8Bytes(backup.Data, jsonOptions);
+        _logger.LogInformation("Serialized database to JSON: {Size} bytes", databaseJson.Length);
 
-        // Compress JSON with gzip
-        using var jsonGzipStream = new MemoryStream();
-        await using (var gzipWriter = new GZipStream(jsonGzipStream, CompressionLevel.Optimal))
+        // Determine passphrase: explicit override takes priority, then DB config
+        string? passphrase = passphraseOverride;
+
+        if (passphrase == null)
         {
-            await gzipWriter.WriteAsync(jsonBytes);
-        }
-        var compressedJson = jsonGzipStream.ToArray();
-        _logger.LogInformation("Compressed database: {OriginalSize} bytes → {CompressedSize} bytes ({Ratio:P1} compression)",
-            jsonBytes.Length, compressedJson.Length, 1 - (double)compressedJson.Length / jsonBytes.Length);
+            var encryptionConfig = await _configService.GetEncryptionConfigAsync();
+            if (encryptionConfig?.Enabled != true)
+            {
+                throw new InvalidOperationException(
+                    "Backup encryption is not configured. Please set up encryption before creating backups. " +
+                    "Navigate to Settings → Backup & Restore to enable encryption.");
+            }
 
-        if (!encryptAfter)
-        {
-            return compressedJson;
-        }
-
-        // Encryption is mandatory - check configuration
-        var encryptionConfig = await _configService.GetEncryptionConfigAsync();
-
-        if (encryptionConfig?.Enabled != true)
-        {
-            throw new InvalidOperationException(
-                "Backup encryption is not configured. Please set up encryption before creating backups. " +
-                "Navigate to Settings → Backup & Restore to enable encryption.");
+            passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
         }
 
-        // Get decrypted passphrase from database (reads from passphrase_encrypted column)
-        var passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
+        // Encrypt database content (entry inside tar, not the whole archive)
+        var databaseContent = _encryptionService.EncryptBackup(databaseJson, passphrase);
+        _logger.LogInformation("Encrypted database: {OriginalSize} bytes → {EncryptedSize} bytes",
+            databaseJson.Length, databaseContent.Length);
 
-        // Encrypt the compressed JSON
-        var finalBackup = _encryptionService.EncryptBackup(compressedJson, passphrase);
-        _logger.LogInformation("Encrypted backup: {CompressedSize} bytes → {EncryptedSize} bytes",
-            compressedJson.Length, finalBackup.Length);
+        // Count media files for metadata
+        var banGifDir = Path.Combine(_mediaBasePath, "media", "ban-gifs");
+        var gifFiles = Directory.Exists(banGifDir)
+            ? Directory.GetFiles(banGifDir, "*.gif")
+            : [];
+        backup.Metadata.MediaFileCount = gifFiles.Length;
 
-        // Validate the encrypted backup
-        if (!await ValidateBackupAsync(finalBackup, passphrase))
+        // Serialize metadata (always unencrypted - readable by backup browser)
+        var metadataJson = JsonSerializer.SerializeToUtf8Bytes(backup.Metadata, jsonOptions);
+
+        // Create real tar.gz archive
+        using var tarStream = new MemoryStream();
+        await using (var gzipStream = new GZipStream(tarStream, CompressionLevel.Optimal, leaveOpen: true))
+        await using (var tarWriter = new TarWriter(gzipStream, leaveOpen: true))
         {
-            throw new InvalidOperationException("Backup validation failed after encryption - backup may be corrupted");
+            // Add metadata.json (unencrypted - readable by backup browser without passphrase)
+            var metadataEntry = new PaxTarEntry(TarEntryType.RegularFile, "metadata.json")
+            {
+                DataStream = new MemoryStream(metadataJson)
+            };
+            await tarWriter.WriteEntryAsync(metadataEntry);
+            _logger.LogDebug("Added metadata.json to archive: {Size} bytes", metadataJson.Length);
+
+            // Add encrypted database entry
+            var databaseEntry = new PaxTarEntry(TarEntryType.RegularFile, "database.json.enc")
+            {
+                DataStream = new MemoryStream(databaseContent)
+            };
+            await tarWriter.WriteEntryAsync(databaseEntry);
+            _logger.LogDebug("Added database.json.enc to archive: {Size} bytes", databaseContent.Length);
+
+            // Add ban celebration GIFs (unencrypted - not sensitive)
+            if (gifFiles.Length > 0)
+            {
+                foreach (var gifPath in gifFiles)
+                {
+                    var entryName = $"media/ban-gifs/{Path.GetFileName(gifPath)}";
+                    await tarWriter.WriteEntryAsync(gifPath, entryName);
+                }
+                _logger.LogInformation("Added {Count} ban celebration GIFs to archive", gifFiles.Length);
+            }
+        }
+
+        var finalBackup = tarStream.ToArray();
+        _logger.LogInformation("Created tar.gz archive: {Size} bytes", finalBackup.Length);
+
+        // Validate the backup
+        if (!await ValidateBackupAsync(finalBackup))
+        {
+            throw new InvalidOperationException("Backup validation failed - archive may be corrupted");
         }
 
         _logger.LogInformation("✅ Backup validated successfully");
@@ -297,20 +328,20 @@ public class BackupService : IBackupService
 
     public async Task RestoreAsync(byte[] backupBytes)
     {
-        // Auto-detect encryption and use passphrase from DB if encrypted
         string? passphrase = null;
 
-        if (_encryptionService.IsEncrypted(backupBytes))
+        // Check if database entry is encrypted by peeking into tar
+        if (await TarContainsEncryptedDatabaseAsync(backupBytes))
         {
             try
             {
                 passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
-                _logger.LogInformation("Detected encrypted backup, using passphrase from database");
+                _logger.LogInformation("Detected encrypted database in tar archive, using passphrase from database");
             }
             catch (InvalidOperationException)
             {
                 throw new InvalidOperationException(
-                    "Backup is encrypted but no passphrase is configured in the database. " +
+                    "Backup contains encrypted database but no passphrase is configured. " +
                     "Use RestoreAsync(backupBytes, passphrase) to provide passphrase explicitly.");
             }
         }
@@ -327,151 +358,320 @@ public class BackupService : IBackupService
         await RestoreInternalAsync(backupBytes, passphrase);
     }
 
+    /// <summary>
+    /// Peeks into tar archive to check if database.json.enc exists (encrypted database)
+    /// </summary>
+    private static async Task<bool> TarContainsEncryptedDatabaseAsync(byte[] backupBytes)
+    {
+        using var stream = new MemoryStream(backupBytes);
+        await using var gzipStream = new GZipStream(stream, CompressionMode.Decompress);
+        using var tarReader = new TarReader(gzipStream);
+
+        while (await tarReader.GetNextEntryAsync() is { } entry)
+        {
+            if (entry.Name == "database.json.enc")
+                return true;
+            if (entry.Name == "database.json")
+                return false;
+        }
+
+        throw new InvalidOperationException("Invalid backup: no database entry found in tar archive");
+    }
+
     private async Task RestoreInternalAsync(byte[] backupBytes, string? passphrase)
     {
         _logger.LogWarning("Starting full system restore - THIS WILL WIPE ALL DATA");
 
-        // Decrypt if encrypted
-        byte[] compressedBytes;
-        if (_encryptionService.IsEncrypted(backupBytes))
-        {
-            if (string.IsNullOrWhiteSpace(passphrase))
-            {
-                throw new InvalidOperationException("Backup is encrypted but no passphrase provided");
-            }
-
-            compressedBytes = _encryptionService.DecryptBackup(backupBytes, passphrase);
-            _logger.LogInformation("Decrypted backup: {EncryptedSize} bytes → {DecryptedSize} bytes",
-                backupBytes.Length, compressedBytes.Length);
-        }
-        else
-        {
-            compressedBytes = backupBytes;
-            _logger.LogInformation("Backup is not encrypted");
-        }
-
-        // Decompress gzip
-        byte[] jsonBytes;
-        using (var inputStream = new MemoryStream(compressedBytes))
-        await using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
-        using (var outputStream = new MemoryStream())
-        {
-            await gzipStream.CopyToAsync(outputStream);
-            jsonBytes = outputStream.ToArray();
-        }
-
-        _logger.LogInformation("Decompressed backup: {Size} bytes", jsonBytes.Length);
-
-        // Deserialize JSON
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-        };
-
-        var backup = JsonSerializer.Deserialize<SystemBackup>(jsonBytes, jsonOptions)
-            ?? throw new InvalidOperationException("Failed to deserialize backup");
-
-        // Version check (allow backwards compatibility for now)
-        if (backup.Metadata.Version != CurrentVersion)
-        {
-            _logger.LogWarning("Backup version mismatch: expected {Expected}, got {Actual}. Attempting restore anyway.",
-                CurrentVersion, backup.Metadata.Version);
-        }
-
-        _logger.LogInformation("Backup metadata: version={Version}, created={CreatedAt}, tables={TableCount}",
-            backup.Metadata.Version, backup.Metadata.CreatedAt, backup.Metadata.TableCount);
-
-        // Apply version-specific migrations to backup data before restore
-        ApplyBackupMigrations(backup);
-
-        await using var connection = await _dataSource.OpenConnectionAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        // Media files are streamed to a temp directory during tar extraction to avoid
+        // buffering potentially hundreds of GIF files in memory. The temp directory is
+        // moved to the final location only after the DB transaction commits successfully.
+        var mediaTempDir = Directory.CreateTempSubdirectory(BackupConstants.MediaTempDirPrefix);
+        var mediaFileCount = 0;
 
         try
         {
-            // Discover current table/DTO mappings
-            var currentTables = await _tableDiscoveryService.DiscoverTablesAsync(connection);
+            // Extract tar.gz archive
+            using var stream = new MemoryStream(backupBytes);
+            await using var gzipStream = new GZipStream(stream, CompressionMode.Decompress);
+            using var tarReader = new TarReader(gzipStream);
 
-            // Validate that all backup tables have DTOs (except known system tables)
-            var knownSystemTables = new HashSet<string> { "VersionInfo" };
-            var missingDtos = backup.Data.Keys
-                .Where(t => !knownSystemTables.Contains(t))
-                .Where(t => !currentTables.ContainsKey(t))
-                .ToList();
+            BackupMetadata? metadata = null;
+            Dictionary<string, List<object>>? databaseData = null;
 
-            if (missingDtos.Any())
+            var jsonOptions = new JsonSerializerOptions
             {
-                throw new InvalidOperationException(
-                    $"Cannot restore: backup contains tables without DTOs: {string.Join(", ", missingDtos)}. " +
-                    "This likely means the backup is from a different schema version or DTOs are missing.");
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            };
+
+            // Read all tar entries — media files stream directly to temp disk
+            while (await tarReader.GetNextEntryAsync() is { } entry)
+            {
+                if (entry.DataStream == null)
+                    continue;
+
+                if (entry.Name == "metadata.json")
+                {
+                    using var ms = new MemoryStream();
+                    await entry.DataStream.CopyToAsync(ms);
+                    metadata = JsonSerializer.Deserialize<BackupMetadata>(ms.ToArray(), jsonOptions);
+                    _logger.LogDebug("Read metadata.json: {Size} bytes", ms.Length);
+                }
+                else if (entry.Name == "database.json.enc")
+                {
+                    if (string.IsNullOrWhiteSpace(passphrase))
+                    {
+                        throw new InvalidOperationException("Database is encrypted but no passphrase provided");
+                    }
+
+                    using var ms = new MemoryStream();
+                    await entry.DataStream.CopyToAsync(ms);
+                    var content = ms.ToArray();
+                    var decryptedContent = _encryptionService.DecryptBackup(content, passphrase);
+                    databaseData = JsonSerializer.Deserialize<Dictionary<string, List<object>>>(decryptedContent, jsonOptions);
+                    _logger.LogInformation("Decrypted database: {EncryptedSize} bytes → {DecryptedSize} bytes",
+                        content.Length, decryptedContent.Length);
+                }
+                else if (entry.Name.StartsWith("media/"))
+                {
+                    // Path.GetFullPath resolves "../" segments to prevent path traversal.
+                    // Extra "../" beyond root are no-ops on Unix, so attackers don't need
+                    // to know the exact directory depth — we must always validate.
+                    var targetPath = Path.GetFullPath(Path.Combine(mediaTempDir.FullName, entry.Name));
+                    if (!targetPath.StartsWith(mediaTempDir.FullName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("Skipping suspicious tar entry path: {EntryPath}", entry.Name);
+                        continue;
+                    }
+
+                    var targetDir = Path.GetDirectoryName(targetPath);
+                    if (targetDir != null && !Directory.Exists(targetDir))
+                        Directory.CreateDirectory(targetDir);
+
+                    // Stream directly to disk — no in-memory buffering
+                    await using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write);
+                    await entry.DataStream.CopyToAsync(fileStream);
+                    mediaFileCount++;
+                    _logger.LogDebug("Streamed media file to temp: {Name}", entry.Name);
+                }
             }
 
-            // Wipe all tables in reverse dependency order
-            _logger.LogWarning("Wiping all tables...");
-            await WipeAllTablesAsync(connection, transaction, currentTables.Keys.ToList());
+            if (metadata == null)
+                throw new InvalidOperationException("Invalid backup: metadata.json not found");
+            if (databaseData == null)
+                throw new InvalidOperationException("Invalid backup: database entry not found");
 
-            // Get foreign key dependencies for proper restore order
-            var fkDeps = await _dependencyResolutionService.GetForeignKeyDependenciesAsync(connection);
+            _logger.LogInformation("Backup metadata: version={Version}, created={CreatedAt}, tables={TableCount}, media={MediaCount}",
+                metadata.Version, metadata.CreatedAt, metadata.TableCount, mediaFileCount);
 
-            // Sort tables in dependency order (parents before children) for restore
-            var tablesToRestore = backup.Data.Keys.Where(t => currentTables.ContainsKey(t)).ToList();
-            _logger.LogInformation("Tables to restore: {Tables}", string.Join(", ", tablesToRestore));
-            var sortedTables = _dependencyResolutionService.TopologicalSort(tablesToRestore, fkDeps);
-            // TopologicalSort already returns in correct order for insertion (handles circular deps)
-            _logger.LogInformation("Restore order after sort: {Tables}", string.Join(", ", sortedTables));
-
-            // Restore each table from backup in dependency order
-            var totalRecordsRestored = 0;
-            var tablesRestored = 0;
-            foreach (var tableName in sortedTables)
+            // Create SystemBackup for compatibility with existing restore logic
+            var backup = new SystemBackup
             {
-                if (!backup.Data.TryGetValue(tableName, out var records))
+                Metadata = metadata,
+                Data = databaseData
+            };
+
+            // Apply version-specific migrations to backup data before restore
+            ApplyBackupMigrations(backup);
+
+            await using var connection = await _dataSource.OpenConnectionAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+
+            try
+            {
+                // Discover current table/DTO mappings
+                var currentTables = await _tableDiscoveryService.DiscoverTablesAsync(connection);
+
+                // Validate that all backup tables have DTOs (except known system tables)
+                var knownSystemTables = new HashSet<string> { "VersionInfo" };
+                var missingDtos = backup.Data.Keys
+                    .Where(t => !knownSystemTables.Contains(t))
+                    .Where(t => !currentTables.ContainsKey(t))
+                    .ToList();
+
+                if (missingDtos.Count != 0)
                 {
-                    continue; // Table not in backup
+                    throw new InvalidOperationException(
+                        $"Cannot restore: backup contains tables without DTOs: {string.Join(", ", missingDtos)}. " +
+                        "This likely means the backup is from a different schema version or DTOs are missing.");
                 }
 
-                if (!currentTables.TryGetValue(tableName, out var dtoType))
+                // Wipe all tables in reverse dependency order
+                _logger.LogWarning("Wiping all tables...");
+                await WipeAllTablesAsync(connection, transaction, currentTables.Keys.ToList());
+
+                // Get foreign key dependencies for proper restore order
+                var fkDeps = await _dependencyResolutionService.GetForeignKeyDependenciesAsync(connection);
+
+                // Sort tables in dependency order (parents before children) for restore
+                var tablesToRestore = backup.Data.Keys.Where(t => currentTables.ContainsKey(t)).ToList();
+                _logger.LogInformation("Tables to restore: {Tables}", string.Join(", ", tablesToRestore));
+                var sortedTables = _dependencyResolutionService.TopologicalSort(tablesToRestore, fkDeps);
+                _logger.LogInformation("Restore order after sort: {Tables}", string.Join(", ", sortedTables));
+
+                // Restore each table from backup in dependency order
+                var totalRecordsRestored = 0;
+                var tablesRestored = 0;
+                foreach (var tableName in sortedTables)
                 {
-                    _logger.LogWarning("Table {TableName} from backup not found in current schema, skipping", tableName);
-                    continue;
+                    if (!backup.Data.TryGetValue(tableName, out var records))
+                    {
+                        continue; // Table not in backup
+                    }
+
+                    if (!currentTables.TryGetValue(tableName, out var dtoType))
+                    {
+                        _logger.LogWarning("Table {TableName} from backup not found in current schema, skipping", tableName);
+                        continue;
+                    }
+
+                    try
+                    {
+                        _logger.LogInformation("Restoring table {Current}/{Total}: {TableName} ({Count} records)",
+                            tablesRestored + 1, sortedTables.Count, tableName, records.Count);
+                        await RestoreTableAsync(connection, transaction, tableName, dtoType, records);
+                        totalRecordsRestored += records.Count;
+                        tablesRestored++;
+
+                        // Reset sequence immediately after restoring data for this table
+                        await ResetSequenceForTableAsync(connection, tableName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to restore table {TableName}", tableName);
+                        throw;
+                    }
                 }
 
+                await transaction.CommitAsync();
+                _logger.LogInformation("✅ Database restore complete: {Tables} tables, {Records} total records restored",
+                    tablesRestored, totalRecordsRestored);
+
+                // Disable bot to prevent dual instances
+                await DisableTelegramBotAsync(connection);
+            }
+            catch (Exception ex)
+            {
+                if (transaction.Connection != null)
+                {
+                    await transaction.RollbackAsync();
+                }
+                _logger.LogError(ex, "System restore failed - rolling back transaction");
+                throw;
+            }
+
+            // Move media files from temp to final location (only after DB commit succeeds)
+            if (mediaFileCount > 0)
+            {
+                await RestoreMediaFilesAsync(mediaTempDir.FullName);
+            }
+        }
+        finally
+        {
+            // Always clean up temp directory regardless of success or failure
+            if (mediaTempDir.Exists)
+            {
                 try
                 {
-                    _logger.LogInformation("Restoring table {Current}/{Total}: {TableName} ({Count} records)",
-                        tablesRestored + 1, sortedTables.Count, tableName, records.Count);
-                    await RestoreTableAsync(connection, transaction, tableName, dtoType, records);
-                    totalRecordsRestored += records.Count;
-                    tablesRestored++;
-
-                    // Reset sequence immediately after restoring data for this table
-                    // This ensures sequence is always in sync with table state, preventing duplicate key errors
-                    await ResetSequenceForTableAsync(connection, tableName);
+                    mediaTempDir.Delete(recursive: true);
+                    _logger.LogDebug("Cleaned up temp media directory");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to restore table {TableName}", tableName);
-                    throw;
+                    _logger.LogWarning(ex, "Failed to clean up temp media directory: {Dir}", mediaTempDir.FullName);
                 }
             }
+        }
+    }
 
-            await transaction.CommitAsync();
-            _logger.LogInformation("✅ System restore complete: {Tables} tables, {Records} total records restored",
-                tablesRestored, totalRecordsRestored);
+    /// <summary>
+    /// Moves media files from temp directory to final location with clean slate approach.
+    /// Deletes existing ban-gifs directory to prevent orphaned files.
+    /// </summary>
+    private async Task RestoreMediaFilesAsync(string tempDir)
+    {
+        // Clean slate: delete existing ban-gifs directory to avoid orphaned files
+        var banGifDir = Path.Combine(_mediaBasePath, "media", "ban-gifs");
+        if (Directory.Exists(banGifDir))
+        {
+            Directory.Delete(banGifDir, recursive: true);
+            _logger.LogInformation("Deleted existing ban-gifs directory for clean restore");
+        }
 
-            // Disable bot to prevent dual instances (Phase 5: Backup/Restore Safety)
-            // After restoring, the bot should be manually re-enabled by the user
-            await DisableTelegramBotAsync(connection);
+        // Move media files from temp directory to final location
+        var restoredCount = 0;
+        var mediaBaseFullPath = Path.GetFullPath(_mediaBasePath);
+        foreach (var tempFile in Directory.EnumerateFiles(tempDir, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(tempDir, tempFile);
+            var targetPath = Path.GetFullPath(Path.Combine(_mediaBasePath, relativePath));
+
+            if (!targetPath.StartsWith(mediaBaseFullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning("Skipping suspicious media path: {Path}", relativePath);
+                continue;
+            }
+
+            var targetDir = Path.GetDirectoryName(targetPath);
+            if (targetDir != null && !Directory.Exists(targetDir))
+            {
+                Directory.CreateDirectory(targetDir);
+            }
+
+            File.Move(tempFile, targetPath, overwrite: true);
+            restoredCount++;
+        }
+
+        _logger.LogInformation("✅ Restored {Count} media files", restoredCount);
+
+        // Regenerate thumbnails for ban celebration GIFs
+        await RegenerateBanCelebrationThumbnailsAsync();
+    }
+
+    /// <summary>
+    /// Regenerates thumbnails for all ban celebration GIFs after restore.
+    /// </summary>
+    private async Task RegenerateBanCelebrationThumbnailsAsync()
+    {
+        try
+        {
+            var banGifDir = Path.Combine(_mediaBasePath, "media", "ban-gifs");
+            if (!Directory.Exists(banGifDir))
+            {
+                _logger.LogDebug("No ban-gifs directory, skipping thumbnail regeneration");
+                return;
+            }
+
+            var gifFiles = Directory.GetFiles(banGifDir, "*.gif");
+            if (gifFiles.Length == 0)
+            {
+                _logger.LogDebug("No GIF files found, skipping thumbnail regeneration");
+                return;
+            }
+
+            var successCount = 0;
+            var failCount = 0;
+
+            foreach (var gifPath in gifFiles)
+            {
+                var thumbnailPath = Path.Combine(
+                    Path.GetDirectoryName(gifPath)!,
+                    Path.GetFileNameWithoutExtension(gifPath) + "_thumb.png");
+
+                var result = await _thumbnailService.GenerateThumbnailAsync(gifPath, thumbnailPath, 100);
+                if (result)
+                    successCount++;
+                else
+                    failCount++;
+            }
+
+            _logger.LogInformation(
+                "Regenerated {Success} ban celebration thumbnails ({Failed} failed)",
+                successCount, failCount);
         }
         catch (Exception ex)
         {
-            // Only rollback if transaction is not already completed
-            if (transaction.Connection != null)
-            {
-                await transaction.RollbackAsync();
-            }
-            _logger.LogError(ex, "System restore failed - rolling back transaction");
-            throw;
+            // Non-fatal - thumbnails can be regenerated later
+            _logger.LogWarning(ex, "Failed to regenerate ban celebration thumbnails");
         }
     }
 
@@ -635,75 +835,70 @@ public class BackupService : IBackupService
 
     public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes)
     {
-        return await GetMetadataInternalAsync(backupBytes, passphrase: null);
+        return await GetMetadataInternalAsync(backupBytes);
     }
 
-    /// <summary>
-    /// Get backup metadata with explicit passphrase (for encrypted backups during first-run)
-    /// </summary>
-    public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes, string passphrase)
+    public async Task<BackupMetadata> GetMetadataAsync(string filepath)
     {
-        if (string.IsNullOrWhiteSpace(passphrase))
-            throw new ArgumentException("Passphrase cannot be empty", nameof(passphrase));
+        await using var fileStream = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
+        using var tarReader = new TarReader(gzipStream);
 
-        return await GetMetadataInternalAsync(backupBytes, passphrase);
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        };
+
+        while (await tarReader.GetNextEntryAsync() is { } entry)
+        {
+            if (entry.Name == "metadata.json" && entry.DataStream != null)
+            {
+                using var ms = new MemoryStream();
+                await entry.DataStream.CopyToAsync(ms);
+                var content = ms.ToArray();
+
+                return JsonSerializer.Deserialize<BackupMetadata>(content, jsonOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize metadata");
+            }
+        }
+
+        throw new InvalidOperationException("Invalid backup: metadata.json not found in tar archive");
     }
 
     /// <summary>
-    /// Check if backup file is encrypted by checking for TGAENC magic header
+    /// Check if backup contains encrypted database by looking for database.json.enc in the tar archive.
     /// </summary>
     public async Task<bool> IsEncryptedAsync(byte[] backupBytes)
     {
-        return await Task.FromResult(_encryptionService.IsEncrypted(backupBytes));
+        return await TarContainsEncryptedDatabaseAsync(backupBytes);
     }
 
-    private async Task<BackupMetadata> GetMetadataInternalAsync(byte[] backupBytes, string? passphrase)
+    /// <summary>
+    /// Stream-based encryption check that reads only tar entry names from disk.
+    /// Avoids loading the entire backup file into memory.
+    /// </summary>
+    public async Task<bool> IsEncryptedAsync(string filepath)
+    {
+        await using var fileStream = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
+        using var tarReader = new TarReader(gzipStream);
+
+        while (await tarReader.GetNextEntryAsync() is { } entry)
+        {
+            if (entry.Name == "database.json.enc")
+                return true;
+            if (entry.Name == "database.json")
+                return false;
+        }
+
+        throw new InvalidOperationException("Invalid backup: no database entry found in tar archive");
+    }
+
+    private async Task<BackupMetadata> GetMetadataInternalAsync(byte[] backupBytes)
     {
         try
         {
-            // Decrypt if encrypted
-            byte[] compressedBytes;
-            if (_encryptionService.IsEncrypted(backupBytes))
-            {
-                if (string.IsNullOrWhiteSpace(passphrase))
-                {
-                    // Try to get passphrase from DB
-                    try
-                    {
-                        passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        throw new InvalidOperationException("Backup is encrypted but no passphrase available");
-                    }
-                }
-
-                compressedBytes = _encryptionService.DecryptBackup(backupBytes, passphrase);
-            }
-            else
-            {
-                compressedBytes = backupBytes;
-            }
-
-            // Decompress gzip
-            using var inputStream = new MemoryStream(compressedBytes);
-            await using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
-            using var outputStream = new MemoryStream();
-            await gzipStream.CopyToAsync(outputStream);
-            var jsonBytes = outputStream.ToArray();
-
-            // Deserialize only metadata (efficient - don't load full backup)
-            var jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-            };
-
-            using var jsonDoc = JsonDocument.Parse(jsonBytes);
-            var metadataElement = jsonDoc.RootElement.GetProperty("metadata");
-            var metadata = JsonSerializer.Deserialize<BackupMetadata>(metadataElement.GetRawText(), jsonOptions)
-                ?? throw new InvalidOperationException("Failed to deserialize metadata");
-
-            return metadata;
+            return await GetMetadataFromTarAsync(backupBytes);
         }
         catch (Exception ex)
         {
@@ -712,16 +907,45 @@ public class BackupService : IBackupService
         }
     }
 
+    /// <summary>
+    /// Extracts metadata.json from a tar.gz archive (no passphrase needed - metadata is unencrypted)
+    /// </summary>
+    private static async Task<BackupMetadata> GetMetadataFromTarAsync(byte[] backupBytes)
+    {
+        using var stream = new MemoryStream(backupBytes);
+        await using var gzipStream = new GZipStream(stream, CompressionMode.Decompress);
+        using var tarReader = new TarReader(gzipStream);
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        };
+
+        while (await tarReader.GetNextEntryAsync() is { } entry)
+        {
+            if (entry.Name == "metadata.json" && entry.DataStream != null)
+            {
+                using var ms = new MemoryStream();
+                await entry.DataStream.CopyToAsync(ms);
+                var content = ms.ToArray();
+
+                return JsonSerializer.Deserialize<BackupMetadata>(content, jsonOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize metadata");
+            }
+        }
+
+        throw new InvalidOperationException("Invalid backup: metadata.json not found in tar archive");
+    }
 
     /// <summary>
-    /// Validates backup by attempting to decompress/decrypt and verify metadata
+    /// Validates backup by attempting to decompress and verify metadata
     /// </summary>
-    private async Task<bool> ValidateBackupAsync(byte[] backupBytes, string? passphrase = null)
+    private async Task<bool> ValidateBackupAsync(byte[] backupBytes)
     {
         try
         {
             // Try to read metadata
-            var metadata = await GetMetadataInternalAsync(backupBytes, passphrase);
+            var metadata = await GetMetadataInternalAsync(backupBytes);
 
             // Basic validation checks
             if (metadata == null)
@@ -743,32 +967,6 @@ public class BackupService : IBackupService
             _logger.LogWarning(ex, "Backup validation failed");
             return false;
         }
-    }
-
-    /// <summary>
-    /// Convert PascalCase property name to snake_case column name
-    /// </summary>
-    private static string ToSnakeCase(string input)
-    {
-        if (string.IsNullOrEmpty(input)) return input;
-
-        var result = new StringBuilder();
-        result.Append(char.ToLowerInvariant(input[0]));
-
-        for (int i = 1; i < input.Length; i++)
-        {
-            if (char.IsUpper(input[i]))
-            {
-                result.Append('_');
-                result.Append(char.ToLowerInvariant(input[i]));
-            }
-            else
-            {
-                result.Append(input[i]);
-            }
-        }
-
-        return result.ToString();
     }
 
     /// <summary>
@@ -835,7 +1033,7 @@ public class BackupService : IBackupService
             .Select(f => new BackupFileInfo
             {
                 FilePath = f,
-                CreatedAt = File.GetCreationTimeUtc(f),
+                CreatedAt = BackupFileInfo.ParseTimestampFromFilename(f),
                 FileSizeBytes = new FileInfo(f).Length
             })
             .ToList();

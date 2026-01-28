@@ -409,6 +409,7 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Log out again
         await Page.Context.ClearCookiesAsync();
+        await Page.GotoAsync("/");
 
         // Act - try to use the same recovery code again
         await _loginPage.NavigateAsync();

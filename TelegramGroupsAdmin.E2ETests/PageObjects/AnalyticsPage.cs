@@ -182,6 +182,113 @@ public class AnalyticsPage
 
     #endregion
 
+    #region Trend Cards (Message Trends Tab)
+
+    /// <summary>
+    /// Gets the trend card value (percentage or difference) for Week over Week.
+    /// </summary>
+    public async Task<string?> GetWeekOverWeekValueAsync()
+    {
+        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Week over Week" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+        return await card.Locator(".mud-typography-h4").TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the trend card average text for Week over Week (e.g., "4.6 → 6.9/day").
+    /// </summary>
+    public async Task<string?> GetWeekOverWeekAverageAsync()
+    {
+        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Week over Week" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+        return await card.Locator(".mud-typography-caption").Last.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the trend card value (percentage or difference) for Month over Month.
+    /// </summary>
+    public async Task<string?> GetMonthOverMonthValueAsync()
+    {
+        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Month over Month" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+        return await card.Locator(".mud-typography-h4").TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the trend card average text for Month over Month (e.g., "22.8 → 33.3/week").
+    /// </summary>
+    public async Task<string?> GetMonthOverMonthAverageAsync()
+    {
+        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Month over Month" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+        return await card.Locator(".mud-typography-caption").Last.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the trend card value (percentage or difference) for Year over Year.
+    /// </summary>
+    public async Task<string?> GetYearOverYearValueAsync()
+    {
+        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Year over Year" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+        return await card.Locator(".mud-typography-h4").TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the trend card average text for Year over Year (e.g., "0 → 5.3/month").
+    /// </summary>
+    public async Task<string?> GetYearOverYearAverageAsync()
+    {
+        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Year over Year" });
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 10000 });
+        return await card.Locator(".mud-typography-caption").Last.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Checks if the Week card average shows "/day" suffix.
+    /// </summary>
+    public async Task<bool> WeekCardShowsPerDayAsync()
+    {
+        var avg = await GetWeekOverWeekAverageAsync();
+        return avg?.Contains("/day") == true;
+    }
+
+    /// <summary>
+    /// Checks if the Month card average shows "/week" suffix.
+    /// </summary>
+    public async Task<bool> MonthCardShowsPerWeekAsync()
+    {
+        var avg = await GetMonthOverMonthAverageAsync();
+        return avg?.Contains("/week") == true;
+    }
+
+    /// <summary>
+    /// Checks if the Year card average shows "/month" suffix.
+    /// </summary>
+    public async Task<bool> YearCardShowsPerMonthAsync()
+    {
+        var avg = await GetYearOverYearAverageAsync();
+        return avg?.Contains("/month") == true;
+    }
+
+    /// <summary>
+    /// Asserts all three trend cards are visible.
+    /// Uses Expect for auto-waiting since cards load via async database call.
+    /// Throws if any card is not visible within the timeout.
+    /// </summary>
+    public async Task AssertTrendCardsVisibleAsync()
+    {
+        var weekCard = _page.Locator(".mud-card").Filter(new() { HasText = "Week over Week" });
+        var monthCard = _page.Locator(".mud-card").Filter(new() { HasText = "Month over Month" });
+        var yearCard = _page.Locator(".mud-card").Filter(new() { HasText = "Year over Year" });
+
+        await Expect(weekCard).ToBeVisibleAsync(new() { Timeout = 10000 });
+        await Expect(monthCard).ToBeVisibleAsync();
+        await Expect(yearCard).ToBeVisibleAsync();
+    }
+
+    #endregion
+
     #region Performance Tab
 
     /// <summary>

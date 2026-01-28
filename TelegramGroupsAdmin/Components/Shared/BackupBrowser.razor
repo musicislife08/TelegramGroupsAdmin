@@ -350,13 +350,12 @@
                 .Select(async filepath =>
                 {
                     var fileInfo = new FileInfo(filepath);
-                    var bytes = await File.ReadAllBytesAsync(filepath);
-                    var isEncrypted = await BackupService.IsEncryptedAsync(bytes);
+                    var isEncrypted = await BackupService.IsEncryptedAsync(filepath);
 
                     return new BackupFileInfo
                     {
                         FilePath = filepath,
-                        CreatedAt = new DateTimeOffset(fileInfo.CreationTimeUtc),
+                        CreatedAt = BackupFileInfo.ParseTimestampFromFilename(filepath),
                         FileSizeBytes = fileInfo.Length,
                         IsEncrypted = isEncrypted
                     };
@@ -401,10 +400,7 @@
     {
         try
         {
-            var bytes = await File.ReadAllBytesAsync(backup.FilePath);
-
-            // GetMetadataAsync will automatically use stored passphrase for encrypted backups
-            _viewingMetadata = await BackupService.GetMetadataAsync(bytes);
+            _viewingMetadata = await BackupService.GetMetadataAsync(backup.FilePath);
             _viewingBackup = backup;
             _showMetadataDialog = true;
         }
