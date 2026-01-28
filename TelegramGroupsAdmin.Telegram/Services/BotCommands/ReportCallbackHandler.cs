@@ -511,9 +511,18 @@ public class ReportCallbackHandler : IReportCallbackHandler
 
         try
         {
+            var chatName = await GetChatNameForNotificationAsync(operations, chatId, cancellationToken);
+
             await operations.BanChatMemberAsync(chatId, userId, cancellationToken: cancellationToken);
             // Immediately unban to allow rejoin (kick behavior)
             await operations.UnbanChatMemberAsync(chatId, userId, onlyIfBanned: true, cancellationToken: cancellationToken);
+
+            // Notify user via DM (non-fatal if fails)
+            await TrySendUserNotificationAsync(
+                operations,
+                userId,
+                $"❌ Your request to join {chatName} has been denied after admin review. You may try joining again later.",
+                cancellationToken);
 
             _logger.LogInformation(
                 "Exam review {ReviewId}: User {UserId} denied (kicked) by {Executor}",
@@ -540,16 +549,29 @@ public class ReportCallbackHandler : IReportCallbackHandler
         TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        // Ban user from this chat (prevents repeat join spam)
+        var operations = await _botClientFactory.GetOperationsAsync();
+
+        // Get chat info for notification message (before ban)
+        var chatName = await GetChatNameForNotificationAsync(operations, chatId, cancellationToken);
+
+        // Ban user globally (chatId: 0) to protect all managed groups from repeat spam attempts
         var result = await moderationService.BanUserAsync(
             userId,
-            0,
+            0, // Global ban - propagates to all managed chats
             executor,
             "Exam failed - banned to prevent repeat join spam",
             cancellationToken);
 
         if (result.Success)
         {
+            // Notify user via DM (non-fatal if fails)
+            // TODO: When appeal system is implemented, include appeal link/instructions here
+            await TrySendUserNotificationAsync(
+                operations,
+                userId,
+                $"❌ Your request to join {chatName} has been denied and you have been banned.",
+                cancellationToken);
+
             _logger.LogInformation(
                 "Exam review {ReviewId}: User {User} denied and banned by {Executor}",
                 report.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
@@ -565,6 +587,58 @@ public class ReportCallbackHandler : IReportCallbackHandler
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Gets the chat name for use in user notifications.
+    /// Checks database first (faster), falls back to Telegram API, then to chat ID.
+    /// </summary>
+    private async Task<string> GetChatNameForNotificationAsync(
+        ITelegramOperations operations,
+        long chatId,
+        CancellationToken cancellationToken)
+    {
+        // Try database first (faster, no API call)
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var chatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+        var cachedChat = await chatsRepo.GetByChatIdAsync(chatId, cancellationToken);
+
+        if (!string.IsNullOrEmpty(cachedChat?.ChatName))
+            return cachedChat.ChatName;
+
+        // Fallback to Telegram API
+        try
+        {
+            var chatInfo = await operations.GetChatAsync(chatId, cancellationToken);
+            return chatInfo.Title ?? chatId.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not retrieve chat name for {ChatId}, using ID as fallback", chatId);
+            return chatId.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Sends a DM notification to a user. Failures are logged but don't block the calling operation.
+    /// </summary>
+    private async Task TrySendUserNotificationAsync(
+        ITelegramOperations operations,
+        long userId,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await operations.SendMessageAsync(
+                chatId: userId,
+                text: message,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send notification DM to user {UserId}", userId);
+        }
+    }
 
     private async Task CleanupAfterReportAsync(
         ReportBase report,

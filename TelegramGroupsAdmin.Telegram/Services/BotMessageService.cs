@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -45,6 +46,7 @@ public class BotMessageService : IBotMessageService
         string text,
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
         var operations = await _botClientFactory.GetOperationsAsync();
@@ -55,6 +57,7 @@ public class BotMessageService : IBotMessageService
             text: text,
             parseMode: parseMode,
             replyParameters: replyParameters,
+            replyMarkup: replyMarkup,
             cancellationToken: cancellationToken);
 
         // Get bot user info (fetch once and cache in memory)

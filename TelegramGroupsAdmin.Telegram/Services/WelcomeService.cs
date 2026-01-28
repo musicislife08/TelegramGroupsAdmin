@@ -606,7 +606,12 @@ public class WelcomeService : IWelcomeService
                 chatInfo.ToLogDebug());
         }
 
-        var message = await operations.SendMessageAsync(
+        // Use BotMessageService to send AND save to database (FK constraint satisfaction)
+        // Get scoped service from provider (WelcomeService is Singleton, BotMessageService is Scoped)
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
+
+        var message = await botMessageService.SendAndSaveMessageAsync(
             chatId: chatId,
             text: messageText,
             replyMarkup: keyboard,

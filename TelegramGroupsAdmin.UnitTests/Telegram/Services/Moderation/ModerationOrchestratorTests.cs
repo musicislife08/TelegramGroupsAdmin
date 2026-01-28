@@ -1122,4 +1122,156 @@ public class ModerationOrchestratorTests
     }
 
     #endregion
+
+    #region SafeAuditAsync Tests - Audit Failures Don't Block Operations
+
+    [Test]
+    public async Task DeleteMessageAsync_AuditFails_StillReturnsSuccess()
+    {
+        // Arrange - Message deletion succeeds but audit logging throws
+        const long messageId = 42L;
+        const long chatId = -100123456789L;
+        const long userId = 12345L;
+        var executor = Actor.FromTelegramUser(999, "Admin");
+
+        _mockMessageHandler.DeleteAsync(chatId, messageId, executor, Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+
+        _mockAuditHandler.LogDeleteAsync(messageId, chatId, userId, executor, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("FK constraint violation")); // Simulates Bug 1
+
+        // Act
+        var result = await _orchestrator.DeleteMessageAsync(
+            messageId, chatId, userId, executor, "Spam");
+
+        // Assert - Primary operation succeeded despite audit failure
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True, "Telegram operation succeeded, so result should be success");
+            Assert.That(result.MessageDeleted, Is.True);
+        });
+
+        // Verify audit was attempted (but failed gracefully)
+        await _mockAuditHandler.Received(1).LogDeleteAsync(
+            messageId, chatId, userId, executor, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task BanUserAsync_AuditFails_StillReturnsSuccess()
+    {
+        // Arrange - Ban succeeds but audit logging throws
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+
+        _mockBanHandler.BanAsync(userId, executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(userId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        _mockAuditHandler.LogBanAsync(userId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Database connection failed"));
+
+        // Act
+        var result = await _orchestrator.BanUserAsync(userId, null, executor, "Spam violation");
+
+        // Assert - Primary operation succeeded despite audit failure
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.ChatsAffected, Is.EqualTo(5));
+        });
+
+        // Verify audit was attempted
+        await _mockAuditHandler.Received(1).LogBanAsync(
+            userId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task WarnUserAsync_AuditFails_StillReturnsSuccess()
+    {
+        // Arrange - Warning succeeds but audit logging throws
+        const long userId = 12345L;
+        var executor = Actor.FromSystem("SpamDetection");
+
+        _mockWarnHandler.WarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(WarnResult.Succeeded(warningCount: 1));
+
+        _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
+                ConfigType.Moderation, Arg.Any<long>())
+            .Returns(WarningSystemConfig.Default);
+
+        _mockAuditHandler.LogWarnAsync(userId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Database timeout"));
+
+        // Act
+        var result = await _orchestrator.WarnUserAsync(userId, null, executor, "Spam detected", TestChatId);
+
+        // Assert - Primary operation succeeded despite audit failure
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.WarningCount, Is.EqualTo(1));
+        });
+
+        // Verify audit was attempted
+        await _mockAuditHandler.Received(1).LogWarnAsync(
+            userId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RestoreUserPermissionsAsync_AuditFails_StillReturnsSuccess()
+    {
+        // Arrange - Permission restore succeeds but audit logging throws
+        const long userId = 12345L;
+        const long chatId = 67890L;
+        var executor = Actor.FromSystem("ExamFlow");
+
+        _mockRestrictHandler.RestorePermissionsAsync(userId, chatId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(RestrictResult.Succeeded(chatsAffected: 1, expiresAt: null, chatsFailed: 0));
+
+        _mockAuditHandler.LogRestorePermissionsAsync(userId, chatId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Audit table locked"));
+
+        // Act
+        var result = await _orchestrator.RestoreUserPermissionsAsync(userId, chatId, executor, "Exam passed");
+
+        // Assert - Primary operation succeeded despite audit failure
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.ChatsAffected, Is.EqualTo(1));
+        });
+
+        // Verify audit was attempted
+        await _mockAuditHandler.Received(1).LogRestorePermissionsAsync(
+            userId, chatId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_AuditFails_StillReturnsSuccess()
+    {
+        // Arrange - Kick succeeds but audit logging throws
+        const long userId = 12345L;
+        const long chatId = -100123456789L;
+        var executor = Actor.FromTelegramUser(999, "Admin");
+
+        _mockBanHandler.KickFromChatAsync(userId, chatId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        _mockAuditHandler.LogKickAsync(userId, chatId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Connection reset"));
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(userId, chatId, executor, "Exam failed");
+
+        // Assert - Primary operation succeeded despite audit failure
+        Assert.That(result.Success, Is.True);
+
+        // Verify audit was attempted
+        await _mockAuditHandler.Received(1).LogKickAsync(
+            userId, chatId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
 }

@@ -216,7 +216,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - Fallback: Env vars used for first-time setup only
 - UI: Settings pages allow live editing without restart
 
-**Background Services**: TelegramBotPollingHost (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
+**Background Services**: TelegramBotPollingHost (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans)
 
 ## Configuration
 

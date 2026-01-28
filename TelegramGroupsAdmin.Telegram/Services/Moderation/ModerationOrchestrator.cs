@@ -101,7 +101,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
         var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, executor, cancellationToken);
         if (deleteResult.MessageDeleted)
         {
-            await _auditHandler.LogDeleteAsync(messageId, chatId, userId, executor, cancellationToken);
+            await SafeAuditAsync(
+                () => _auditHandler.LogDeleteAsync(messageId, chatId, userId, executor, cancellationToken),
+                "message deletion", userId, chatId);
         }
 
         // Step 3: Ban user (self-call - reuses ban logic including trust revocation)
@@ -168,7 +170,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return ModerationResult.Failed(banResult.ErrorMessage ?? "Ban failed");
 
         // Audit successful ban (separate from BanHandler's state tracking record)
-        await _auditHandler.LogBanAsync(userId, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogBanAsync(userId, executor, reason, cancellationToken),
+            "ban", userId);
 
         // Business rule: Bans always revoke trust
         var untrustReason = string.IsNullOrWhiteSpace(reason)
@@ -179,7 +183,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
 
         if (untrustResult.Success)
         {
-            await _auditHandler.LogUntrustAsync(userId, executor, untrustReason, cancellationToken);
+            await SafeAuditAsync(
+                () => _auditHandler.LogUntrustAsync(userId, executor, untrustReason, cancellationToken),
+                "untrust (from ban)", userId);
         }
 
         // Notify admins
@@ -220,7 +226,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return new ModerationResult { Success = false, ErrorMessage = warnResult.ErrorMessage };
 
         // Audit successful warning
-        await _auditHandler.LogWarnAsync(userId, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogWarnAsync(userId, executor, reason, cancellationToken),
+            "warning", userId, chatId);
 
         // Notify user about warning
         await _notificationHandler.NotifyUserWarningAsync(userId, warnResult.WarningCount, reason, cancellationToken);
@@ -282,7 +290,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return new ModerationResult { Success = false, ErrorMessage = trustResult.ErrorMessage };
 
         // Audit successful trust
-        await _auditHandler.LogTrustAsync(userId, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogTrustAsync(userId, executor, reason, cancellationToken),
+            "trust", userId);
 
         return new ModerationResult { Success = true };
     }
@@ -300,7 +310,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return new ModerationResult { Success = false, ErrorMessage = untrustResult.ErrorMessage };
 
         // Audit successful untrust
-        await _auditHandler.LogUntrustAsync(userId, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogUntrustAsync(userId, executor, reason, cancellationToken),
+            "untrust", userId);
 
         return new ModerationResult { Success = true };
     }
@@ -319,7 +331,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return new ModerationResult { Success = false, ErrorMessage = unbanResult.ErrorMessage };
 
         // Audit successful unban
-        await _auditHandler.LogUnbanAsync(userId, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogUnbanAsync(userId, executor, reason, cancellationToken),
+            "unban", userId);
 
         var result = new ModerationResult
         {
@@ -351,7 +365,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
         var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, deletedBy, cancellationToken);
 
         // Audit the deletion attempt (even if message was already deleted)
-        await _auditHandler.LogDeleteAsync(messageId, chatId, userId, deletedBy, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogDeleteAsync(messageId, chatId, userId, deletedBy, cancellationToken),
+            "message deletion", userId, chatId);
 
         return new ModerationResult
         {
@@ -378,7 +394,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return new ModerationResult { Success = false, ErrorMessage = tempBanResult.ErrorMessage };
 
         // Audit successful temp ban (separate from BanHandler's state tracking record)
-        await _auditHandler.LogTempBanAsync(userId, executor, duration, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogTempBanAsync(userId, executor, duration, reason, cancellationToken),
+            "temp ban", userId);
 
         // Notify user about temp ban with rejoin info
         await _notificationHandler.NotifyUserTempBanAsync(userId, duration, tempBanResult.ExpiresAt, reason, cancellationToken);
@@ -410,7 +428,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return new ModerationResult { Success = false, ErrorMessage = restrictResult.ErrorMessage };
 
         // Audit successful restriction
-        await _auditHandler.LogRestrictAsync(userId, chatId ?? 0, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogRestrictAsync(userId, chatId ?? 0, executor, reason, cancellationToken),
+            "restriction", userId, chatId);
 
         return new ModerationResult
         {
@@ -437,7 +457,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return ModerationResult.Failed(banResult.ErrorMessage ?? "Ban sync failed");
 
         // Audit successful ban sync
-        await _auditHandler.LogBanAsync(user.Id, Actor.AutoDetection, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogBanAsync(user.Id, Actor.AutoDetection, reason, cancellationToken),
+            "ban sync", user.Id, chat.Id);
 
         return new ModerationResult
         {
@@ -464,7 +486,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return ModerationResult.Failed(restrictResult.ErrorMessage ?? "Failed to restore permissions");
 
         // Audit successful permission restoration
-        await _auditHandler.LogRestorePermissionsAsync(userId, chatId, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogRestorePermissionsAsync(userId, chatId, executor, reason, cancellationToken),
+            "restore permissions", userId, chatId);
 
         return new ModerationResult
         {
@@ -491,7 +515,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
             return ModerationResult.Failed(kickResult.ErrorMessage ?? "Failed to kick user");
 
         // Audit successful kick
-        await _auditHandler.LogKickAsync(userId, chatId, executor, reason, cancellationToken);
+        await SafeAuditAsync(
+            () => _auditHandler.LogKickAsync(userId, chatId, executor, reason, cancellationToken),
+            "kick", userId, chatId);
 
         return new ModerationResult
         {
@@ -516,6 +542,24 @@ public class ModerationOrchestrator : IModerationOrchestrator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Safely executes an audit operation, logging any failures without blocking the main operation.
+    /// Telegram operations are the primary job; audit/tracking is secondary.
+    /// </summary>
+    private async Task SafeAuditAsync(Func<Task> auditAction, string operationName, long userId, long? chatId = null)
+    {
+        try
+        {
+            await auditAction();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to audit {Operation} (user: {UserId}, chat: {ChatId}) - Telegram operation succeeded",
+                operationName, userId, chatId);
+        }
     }
 
     /// <summary>
