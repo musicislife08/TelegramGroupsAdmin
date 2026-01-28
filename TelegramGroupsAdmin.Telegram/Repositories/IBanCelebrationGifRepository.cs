@@ -13,6 +13,11 @@ public interface IBanCelebrationGifRepository
     Task<List<BanCelebrationGif>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Gets all GIF IDs (lightweight query for shuffle-bag algorithm)
+    /// </summary>
+    Task<List<int>> GetAllIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Gets a random GIF from the library
     /// </summary>
     Task<BanCelebrationGif?> GetRandomAsync(CancellationToken ct = default);

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot.Types;
@@ -15,34 +16,32 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Service for posting celebratory GIFs when users are banned.
-/// Sends random GIF + caption to chat, optionally DMs the banned user.
+/// Sends GIF + caption to chat, optionally DMs the banned user.
+/// Uses shuffle-bag algorithm to ensure all GIFs/captions are shown before any repeats.
 /// </summary>
 public class BanCelebrationService : IBanCelebrationService
 {
     private readonly ITelegramBotClientFactory _botClientFactory;
-    private readonly IConfigService _configService;
-    private readonly IBanCelebrationGifRepository _gifRepository;
-    private readonly IBanCelebrationCaptionRepository _captionRepository;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IDmDeliveryService _dmDeliveryService;
     private readonly ILogger<BanCelebrationService> _logger;
     private readonly string _mediaBasePath;
 
+    // Shuffle-bag state: guarantees all items shown before any repeats
+    private readonly Queue<int> _gifBag = new();
+    private readonly Queue<int> _captionBag = new();
+    private readonly SemaphoreSlim _gifLock = new(1, 1);
+    private readonly SemaphoreSlim _captionLock = new(1, 1);
+
     public BanCelebrationService(
         ITelegramBotClientFactory botClientFactory,
-        IConfigService configService,
-        IBanCelebrationGifRepository gifRepository,
-        IBanCelebrationCaptionRepository captionRepository,
-        IDbContextFactory<AppDbContext> contextFactory,
+        IServiceScopeFactory scopeFactory,
         IDmDeliveryService dmDeliveryService,
         IOptions<MessageHistoryOptions> historyOptions,
         ILogger<BanCelebrationService> logger)
     {
         _botClientFactory = botClientFactory;
-        _configService = configService;
-        _gifRepository = gifRepository;
-        _captionRepository = captionRepository;
-        _contextFactory = contextFactory;
+        _scopeFactory = scopeFactory;
         _dmDeliveryService = dmDeliveryService;
         _logger = logger;
         _mediaBasePath = Path.Combine(historyOptions.Value.ImageStoragePath, "media");
@@ -59,7 +58,9 @@ public class BanCelebrationService : IBanCelebrationService
         try
         {
             // Get the effective config for this chat (merges global + chat-specific)
-            var config = await _configService.GetEffectiveAsync<BanCelebrationConfig>(
+            await using var configScope = _scopeFactory.CreateAsyncScope();
+            var configService = configScope.ServiceProvider.GetRequiredService<IConfigService>();
+            var config = await configService.GetEffectiveAsync<BanCelebrationConfig>(
                 ConfigType.BanCelebration, chatId);
 
             // Use default config if none exists
@@ -85,16 +86,16 @@ public class BanCelebrationService : IBanCelebrationService
                 return false;
             }
 
-            // Get random GIF
-            var gif = await _gifRepository.GetRandomAsync(cancellationToken);
+            // Get next GIF from shuffle bag (guarantees all shown before repeats)
+            var gif = await GetNextGifAsync(cancellationToken);
             if (gif == null)
             {
                 _logger.LogDebug("No ban celebration GIFs available, skipping celebration");
                 return false;
             }
 
-            // Get random caption
-            var caption = await _captionRepository.GetRandomAsync(cancellationToken);
+            // Get next caption from shuffle bag
+            var caption = await GetNextCaptionAsync(cancellationToken);
             if (caption == null)
             {
                 _logger.LogDebug("No ban celebration captions available, skipping celebration");
@@ -117,7 +118,9 @@ public class BanCelebrationService : IBanCelebrationService
             // Cache the file_id if we uploaded a new file
             if (string.IsNullOrEmpty(gif.FileId) && sentMessage.Animation?.FileId != null)
             {
-                await _gifRepository.UpdateFileIdAsync(gif.Id, sentMessage.Animation.FileId, cancellationToken);
+                await using var cacheScope = _scopeFactory.CreateAsyncScope();
+                var gifRepository = cacheScope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+                await gifRepository.UpdateFileIdAsync(gif.Id, sentMessage.Animation.FileId, cancellationToken);
             }
 
             _logger.LogInformation(
@@ -141,9 +144,114 @@ public class BanCelebrationService : IBanCelebrationService
         }
     }
 
+    /// <summary>
+    /// Gets the next GIF from the shuffle bag. When the bag is empty, reloads all GIF IDs
+    /// from the database and shuffles them. This guarantees every GIF is shown once before
+    /// any can repeat (minimum gap = total GIF count).
+    /// </summary>
+    private async Task<BanCelebrationGif?> GetNextGifAsync(CancellationToken cancellationToken)
+    {
+        await _gifLock.WaitAsync(cancellationToken);
+        try
+        {
+            while (true)
+            {
+                if (_gifBag.Count == 0)
+                {
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    var gifRepository = scope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+                    var ids = await gifRepository.GetAllIdsAsync(cancellationToken);
+
+                    if (ids.Count == 0)
+                        return null;
+
+                    // Fisher-Yates shuffle
+                    for (var i = ids.Count - 1; i > 0; i--)
+                    {
+                        var j = Random.Shared.Next(i + 1);
+                        (ids[i], ids[j]) = (ids[j], ids[i]);
+                    }
+
+                    foreach (var id in ids)
+                        _gifBag.Enqueue(id);
+
+                    _logger.LogDebug("Reshuffled GIF bag with {Count} items", ids.Count);
+                }
+
+                var nextId = _gifBag.Dequeue();
+
+                // Fetch the full GIF — may return null if deleted since last shuffle
+                await using var fetchScope = _scopeFactory.CreateAsyncScope();
+                var fetchRepo = fetchScope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+                var gif = await fetchRepo.GetByIdAsync(nextId, cancellationToken);
+
+                if (gif != null)
+                    return gif;
+
+                _logger.LogDebug("GIF {GifId} no longer exists, skipping to next in bag", nextId);
+                // Continue loop — try next item in bag (or reshuffle if empty)
+            }
+        }
+        finally
+        {
+            _gifLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Gets the next caption from the shuffle bag. Same algorithm as GIF bag.
+    /// </summary>
+    private async Task<BanCelebrationCaption?> GetNextCaptionAsync(CancellationToken cancellationToken)
+    {
+        await _captionLock.WaitAsync(cancellationToken);
+        try
+        {
+            while (true)
+            {
+                if (_captionBag.Count == 0)
+                {
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    var captionRepository = scope.ServiceProvider.GetRequiredService<IBanCelebrationCaptionRepository>();
+                    var ids = await captionRepository.GetAllIdsAsync(cancellationToken);
+
+                    if (ids.Count == 0)
+                        return null;
+
+                    // Fisher-Yates shuffle
+                    for (var i = ids.Count - 1; i > 0; i--)
+                    {
+                        var j = Random.Shared.Next(i + 1);
+                        (ids[i], ids[j]) = (ids[j], ids[i]);
+                    }
+
+                    foreach (var id in ids)
+                        _captionBag.Enqueue(id);
+
+                    _logger.LogDebug("Reshuffled caption bag with {Count} items", ids.Count);
+                }
+
+                var nextId = _captionBag.Dequeue();
+
+                // Fetch the full caption — may return null if deleted since last shuffle
+                await using var fetchScope = _scopeFactory.CreateAsyncScope();
+                var fetchRepo = fetchScope.ServiceProvider.GetRequiredService<IBanCelebrationCaptionRepository>();
+                var caption = await fetchRepo.GetByIdAsync(nextId, cancellationToken);
+
+                if (caption != null)
+                    return caption;
+
+                _logger.LogDebug("Caption {CaptionId} no longer exists, skipping to next in bag", nextId);
+            }
+        }
+        finally
+        {
+            _captionLock.Release();
+        }
+    }
+
     private async Task<Message?> SendGifToChatAsync(
         long chatId,
-        Models.BanCelebrationGif gif,
+        BanCelebrationGif gif,
         string caption,
         CancellationToken cancellationToken)
     {
@@ -177,12 +285,16 @@ public class BanCelebrationService : IBanCelebrationService
                     _logger.LogWarning(
                         "Cached file_id for GIF {GifId} is invalid, clearing cache and retrying with local file",
                         gif.Id);
-                    await _gifRepository.ClearFileIdAsync(gif.Id, cancellationToken);
+                    await using var clearScope = _scopeFactory.CreateAsyncScope();
+                    var gifRepository = clearScope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+                    await gifRepository.ClearFileIdAsync(gif.Id, cancellationToken);
                 }
             }
 
             // Upload from local file (either no cache, or cache was invalid)
-            var fullPath = _gifRepository.GetFullPath(gif.FilePath);
+            await using var pathScope = _scopeFactory.CreateAsyncScope();
+            var pathRepo = pathScope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+            var fullPath = pathRepo.GetFullPath(gif.FilePath);
             if (!System.IO.File.Exists(fullPath))
             {
                 _logger.LogWarning("GIF file not found on disk: {Path}, GIF={GifId}", fullPath, gif.Id);
@@ -211,8 +323,8 @@ public class BanCelebrationService : IBanCelebrationService
     private async Task TrySendDmToBannedUserAsync(
         long chatId,
         long bannedUserId,
-        Models.BanCelebrationGif gif,
-        Models.BanCelebrationCaption caption,
+        BanCelebrationGif gif,
+        BanCelebrationCaption caption,
         string chatName,
         int banCount,
         CancellationToken cancellationToken)
@@ -220,7 +332,9 @@ public class BanCelebrationService : IBanCelebrationService
         try
         {
             // Check if the chat has DM-based welcome mode (required for DM delivery)
-            var welcomeConfig = await _configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId);
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+            var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId);
             if (welcomeConfig == null || !welcomeConfig.Enabled)
             {
                 _logger.LogDebug("Skipping DM to banned user: welcome system not enabled for chat {ChatId}", chatId);
@@ -240,7 +354,8 @@ public class BanCelebrationService : IBanCelebrationService
                 ReplacePlaceholders(caption.DmText, "You", chatName, banCount));
 
             // Get the full path to the GIF
-            var fullPath = _gifRepository.GetFullPath(gif.FilePath);
+            var gifRepository = scope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+            var fullPath = gifRepository.GetFullPath(gif.FilePath);
             if (!System.IO.File.Exists(fullPath))
             {
                 _logger.LogWarning("GIF file not found for DM: {Path}", fullPath);
@@ -292,7 +407,9 @@ public class BanCelebrationService : IBanCelebrationService
     {
         try
         {
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+            await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
             // Get today's start in server local time, converted to UTC for PostgreSQL
             // PostgreSQL timestamptz only accepts UTC values via Npgsql
