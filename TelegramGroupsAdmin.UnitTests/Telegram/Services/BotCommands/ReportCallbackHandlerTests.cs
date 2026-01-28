@@ -958,13 +958,16 @@ public class ReportCallbackHandlerTests
     #region Exam Review - Denial Notification Tests
 
     [Test]
-    public async Task HandleCallbackAsync_ExamDeny_SendsDMNotification()
+    public async Task HandleCallbackAsync_ExamDeny_CallsExamFlowService()
     {
         // Arrange - Exam review with Deny action (1)
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1"); // Deny = 1 for ExamAction
         SetupExamReviewContext();
         SetupPendingExamReview();
-        SetupManagedChatWithName("Test Group");
+
+        _mockExamFlowService.DenyExamFailureAsync(
+                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
@@ -974,33 +977,25 @@ public class ReportCallbackHandlerTests
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert - DM notification sent to user
-        await _mockOperations.Received(1).SendMessageAsync(
-            chatId: TestUserId, // DM = user ID
-            text: Arg.Is<string>(s => s.Contains("denied") && s.Contains("Test Group")),
-            parseMode: Arg.Any<ParseMode?>(),
-            replyParameters: Arg.Any<ReplyParameters?>(),
-            replyMarkup: Arg.Any<ReplyMarkup?>(),
-            cancellationToken: Arg.Any<CancellationToken>());
+        // Assert - ExamFlowService.DenyExamFailureAsync called (handles teaser deletion, kick, DM)
+        await _mockExamFlowService.Received(1).DenyExamFailureAsync(
+            TestUserId,
+            TestChatId,
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task HandleCallbackAsync_ExamDenyAndBan_SendsDMNotification()
+    public async Task HandleCallbackAsync_ExamDenyAndBan_CallsExamFlowService()
     {
         // Arrange - Exam review with DenyAndBan action (2)
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2"); // DenyAndBan = 2 for ExamAction
         SetupExamReviewContext();
         SetupPendingExamReview();
-        SetupTargetUser();
-        SetupManagedChatWithName("Test Group");
 
-        _mockModerationService.BanUserAsync(
-                TestUserId,
-                0, // Global ban
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
+        _mockExamFlowService.DenyAndBanExamFailureAsync(
+                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
@@ -1010,34 +1005,26 @@ public class ReportCallbackHandlerTests
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert - DM notification sent with ban message
-        await _mockOperations.Received(1).SendMessageAsync(
-            chatId: TestUserId,
-            text: Arg.Is<string>(s => s.Contains("denied") && s.Contains("banned")),
-            parseMode: Arg.Any<ParseMode?>(),
-            replyParameters: Arg.Any<ReplyParameters?>(),
-            replyMarkup: Arg.Any<ReplyMarkup?>(),
-            cancellationToken: Arg.Any<CancellationToken>());
+        // Assert - ExamFlowService.DenyAndBanExamFailureAsync called (handles teaser deletion, global ban, DM)
+        await _mockExamFlowService.Received(1).DenyAndBanExamFailureAsync(
+            TestUserId,
+            TestChatId,
+            Arg.Any<Actor>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task HandleCallbackAsync_ExamDeny_DMFailure_StillSucceeds()
+    public async Task HandleCallbackAsync_ExamDeny_Success_UpdatesReportStatus()
     {
-        // Arrange - DM notification fails (user blocked bot)
+        // Arrange - Exam denial succeeds
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1"); // Deny
         SetupExamReviewContext();
         SetupPendingExamReview();
-        SetupManagedChatWithName("Test Group");
 
-        // DM send fails
-        _mockOperations.SendMessageAsync(
-                chatId: TestUserId,
-                text: Arg.Any<string>(),
-                parseMode: Arg.Any<ParseMode?>(),
-                replyParameters: Arg.Any<ReplyParameters?>(),
-                replyMarkup: Arg.Any<ReplyMarkup?>(),
-                cancellationToken: Arg.Any<CancellationToken>())
-            .ThrowsAsync(new Exception("Forbidden: bot was blocked by the user"));
+        // ExamFlowService succeeds (handles DM internally, even if it fails)
+        _mockExamFlowService.DenyExamFailureAsync(
+                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
@@ -1047,7 +1034,7 @@ public class ReportCallbackHandlerTests
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert - Operation still completed (report status updated)
+        // Assert - Report status updated to Reviewed
         await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
@@ -1058,13 +1045,16 @@ public class ReportCallbackHandlerTests
     }
 
     [Test]
-    public async Task HandleCallbackAsync_ExamDeny_UsesDatabaseChatName()
+    public async Task HandleCallbackAsync_ExamDeny_PassesCorrectParametersToFlowService()
     {
-        // Arrange - Chat name is in database (no API call needed)
+        // Arrange - Verify correct userId and chatId are passed
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1");
         SetupExamReviewContext();
         SetupPendingExamReview();
-        SetupManagedChatWithName("Cached Group Name");
+
+        _mockExamFlowService.DenyExamFailureAsync(
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
                 Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
@@ -1074,89 +1064,54 @@ public class ReportCallbackHandlerTests
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert - Used database name, not API
-        await _mockOperations.DidNotReceive().GetChatAsync(
-            Arg.Any<long>(), Arg.Any<CancellationToken>());
-
-        // Notification includes cached name
-        await _mockOperations.Received().SendMessageAsync(
-            chatId: TestUserId,
-            text: Arg.Is<string>(s => s.Contains("Cached Group Name")),
-            parseMode: Arg.Any<ParseMode?>(),
-            replyParameters: Arg.Any<ReplyParameters?>(),
-            replyMarkup: Arg.Any<ReplyMarkup?>(),
-            cancellationToken: Arg.Any<CancellationToken>());
+        // Assert - Correct parameters passed (flow service handles chat name lookup internally)
+        await _mockExamFlowService.Received(1).DenyExamFailureAsync(
+            TestUserId,    // User to kick
+            TestChatId,    // Chat they failed exam in
+            Arg.Is<Actor>(a => a.TelegramUserId == 999), // Executor from CreateCallbackQuery
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task HandleCallbackAsync_ExamDeny_FallsBackToApiForChatName()
+    public async Task HandleCallbackAsync_ExamDeny_FlowServiceFailure_ReturnsErrorResult()
     {
-        // Arrange - Chat not in database, fallback to API
+        // Arrange - ExamFlowService fails (e.g., kick failed)
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1");
         SetupExamReviewContext();
         SetupPendingExamReview();
 
-        // Database returns no chat
-        _mockManagedChatsRepo.GetByChatIdAsync(TestChatId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<TelegramGroupsAdmin.Telegram.Models.ManagedChatRecord?>(null));
-
-        // API returns chat info (ChatFullInfo is returned by GetChatAsync)
-        _mockOperations.GetChatAsync(TestChatId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ChatFullInfo { Id = TestChatId, Title = "API Group Name", Type = ChatType.Supergroup }));
-
-        _mockReportsRepo.TryUpdateStatusAsync(
-                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(true);
+        _mockExamFlowService.DenyExamFailureAsync(
+                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = false, ErrorMessage = "Failed to kick user" });
 
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert - API was called as fallback
-        await _mockOperations.Received(1).GetChatAsync(TestChatId, Arg.Any<CancellationToken>());
-
-        // Notification includes API name
-        await _mockOperations.Received().SendMessageAsync(
-            chatId: TestUserId,
-            text: Arg.Is<string>(s => s.Contains("API Group Name")),
-            parseMode: Arg.Any<ParseMode?>(),
-            replyParameters: Arg.Any<ReplyParameters?>(),
-            replyMarkup: Arg.Any<ReplyMarkup?>(),
-            cancellationToken: Arg.Any<CancellationToken>());
+        // Assert - Report status NOT updated (action failed)
+        await _mockReportsRepo.DidNotReceive().TryUpdateStatusAsync(
+            Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task HandleCallbackAsync_ExamDeny_FallsBackToChatIdWhenApiFails()
+    public async Task HandleCallbackAsync_ExamDenyAndBan_FlowServiceFailure_ReturnsErrorResult()
     {
-        // Arrange - Both database and API fail, fallback to chat ID
-        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1");
+        // Arrange - ExamFlowService fails (e.g., ban failed)
+        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2"); // DenyAndBan
         SetupExamReviewContext();
         SetupPendingExamReview();
 
-        // Database returns no chat
-        _mockManagedChatsRepo.GetByChatIdAsync(TestChatId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<TelegramGroupsAdmin.Telegram.Models.ManagedChatRecord?>(null));
-
-        // API throws
-        _mockOperations.GetChatAsync(TestChatId, Arg.Any<CancellationToken>())
-            .ThrowsAsync(new Exception("Chat not found"));
-
-        _mockReportsRepo.TryUpdateStatusAsync(
-                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(true);
+        _mockExamFlowService.DenyAndBanExamFailureAsync(
+                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = false, ErrorMessage = "Failed to ban user" });
 
         // Act
         await _handler.HandleCallbackAsync(callbackQuery);
 
-        // Assert - Notification includes chat ID as fallback
-        await _mockOperations.Received().SendMessageAsync(
-            chatId: TestUserId,
-            text: Arg.Is<string>(s => s.Contains(TestChatId.ToString())),
-            parseMode: Arg.Any<ParseMode?>(),
-            replyParameters: Arg.Any<ReplyParameters?>(),
-            replyMarkup: Arg.Any<ReplyMarkup?>(),
-            cancellationToken: Arg.Any<CancellationToken>());
+        // Assert - Report status NOT updated (action failed)
+        await _mockReportsRepo.DidNotReceive().TryUpdateStatusAsync(
+            Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

@@ -143,4 +143,34 @@ public interface IExamFlowService
         long examFailureId,
         Actor executor,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deny an exam failure after admin review (kick user, allow rejoin).
+    /// Kicks user from chat, deletes teaser message, updates welcome response, sends notification.
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="executor">Actor performing the denial</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result indicating success or failure</returns>
+    Task<ModerationResult> DenyExamFailureAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deny an exam failure after admin review and ban the user globally.
+    /// Bans user from all managed chats, deletes teaser message, updates welcome response, sends notification.
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="executor">Actor performing the denial</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result indicating success or failure</returns>
+    Task<ModerationResult> DenyAndBanExamFailureAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        CancellationToken cancellationToken = default);
 }

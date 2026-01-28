@@ -458,9 +458,9 @@ public class ReportCallbackHandler : IReportCallbackHandler
             ExamAction.Approve => await HandleExamApproveAsync(
                 examFlowService, report, chatId, userId, executor, cancellationToken),
             ExamAction.Deny => await HandleExamDenyAsync(
-                report, chatId, userId, executor, cancellationToken),
+                examFlowService, report, chatId, userId, executor, cancellationToken),
             ExamAction.DenyAndBan => await HandleExamDenyAndBanAsync(
-                moderationService, report, chatId, userId, executor, targetUser, cancellationToken),
+                examFlowService, report, chatId, userId, executor, cancellationToken),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
         };
     }
@@ -500,88 +500,71 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleExamDenyAsync(
+        IExamFlowService examFlowService,
         ReportBase report,
         long chatId,
         long userId,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
-        // Kick user from chat (they can rejoin)
-        var operations = await _botClientFactory.GetOperationsAsync();
+        // Use exam flow service which handles:
+        // - Teaser message deletion
+        // - Welcome response update to "Denied"
+        // - User kick from chat
+        // - DM notification to user
+        var result = await examFlowService.DenyExamFailureAsync(
+            userId,
+            chatId,
+            executor,
+            cancellationToken);
 
-        try
+        if (result.Success)
         {
-            var chatName = await GetChatNameForNotificationAsync(operations, chatId, cancellationToken);
-
-            await operations.BanChatMemberAsync(chatId, userId, cancellationToken: cancellationToken);
-            // Immediately unban to allow rejoin (kick behavior)
-            await operations.UnbanChatMemberAsync(chatId, userId, onlyIfBanned: true, cancellationToken: cancellationToken);
-
-            // Notify user via DM (non-fatal if fails)
-            await TrySendUserNotificationAsync(
-                operations,
-                userId,
-                $"❌ Your request to join {chatName} has been denied after admin review. You may try joining again later.",
-                cancellationToken);
-
             _logger.LogInformation(
                 "Exam review {ReviewId}: User {UserId} denied (kicked) by {Executor}",
                 report.Id, userId, executor.DisplayName);
 
             return new ReviewActionResult(
                 Success: true,
-                Message: "User denied - kicked from chat",
+                Message: "User denied - kicked from chat, teaser deleted",
                 ActionName: "Deny");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to kick user {UserId} from chat {ChatId}", userId, chatId);
-            return new ReviewActionResult(Success: false, Message: $"Failed to kick user: {ex.Message}");
-        }
+
+        return new ReviewActionResult(Success: false, Message: result.ErrorMessage ?? "Denial failed");
     }
 
     private async Task<ReviewActionResult> HandleExamDenyAndBanAsync(
-        IModerationOrchestrator moderationService,
+        IExamFlowService examFlowService,
         ReportBase report,
         long chatId,
         long userId,
         Core.Models.Actor executor,
-        TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        var operations = await _botClientFactory.GetOperationsAsync();
-
-        // Get chat info for notification message (before ban)
-        var chatName = await GetChatNameForNotificationAsync(operations, chatId, cancellationToken);
-
-        // Ban user globally (chatId: 0) to protect all managed groups from repeat spam attempts
-        var result = await moderationService.BanUserAsync(
+        // Use exam flow service which handles:
+        // - Teaser message deletion
+        // - Welcome response update to "Denied"
+        // - Global ban (propagates to all managed chats)
+        // - DM notification to user
+        var result = await examFlowService.DenyAndBanExamFailureAsync(
             userId,
-            0, // Global ban - propagates to all managed chats
+            chatId,
             executor,
-            "Exam failed - banned to prevent repeat join spam",
             cancellationToken);
 
         if (result.Success)
         {
-            // Notify user via DM (non-fatal if fails)
-            // TODO: When appeal system is implemented, include appeal link/instructions here
-            await TrySendUserNotificationAsync(
-                operations,
-                userId,
-                $"❌ Your request to join {chatName} has been denied and you have been banned.",
-                cancellationToken);
-
             _logger.LogInformation(
-                "Exam review {ReviewId}: User {User} denied and banned by {Executor}",
-                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
+                "Exam review {ReviewId}: User {UserId} denied and banned by {Executor}",
+                report.Id, userId, executor.DisplayName);
+
             return new ReviewActionResult(
                 Success: true,
-                Message: $"User denied and banned from {result.ChatsAffected} chat(s)",
+                Message: "User denied and banned, teaser deleted",
                 ActionName: "DenyAndBan");
         }
 
-        return new ReviewActionResult(Success: false, Message: $"Ban failed: {result.ErrorMessage}");
+        return new ReviewActionResult(Success: false, Message: result.ErrorMessage ?? "Ban failed");
     }
 
     #endregion

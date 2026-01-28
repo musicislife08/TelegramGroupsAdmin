@@ -816,4 +816,145 @@ public class ExamFlowService : IExamFlowService
 
         return new ModerationResult { Success = true };
     }
+
+    /// <inheritdoc />
+    public async Task<ModerationResult> DenyExamFailureAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        CancellationToken cancellationToken = default)
+    {
+        return await ExecuteExamDenialAsync(
+            userId,
+            chatId,
+            executor,
+            banGlobally: false,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ModerationResult> DenyAndBanExamFailureAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        CancellationToken cancellationToken = default)
+    {
+        return await ExecuteExamDenialAsync(
+            userId,
+            chatId,
+            executor,
+            banGlobally: true,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Shared method for completing exam denial (both kick and ban flows).
+    /// Handles: delete teaser, update welcome response, kick/ban user, send DM notification.
+    /// </summary>
+    private async Task<ModerationResult> ExecuteExamDenialAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        bool banGlobally,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+        var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+        var operations = await _botClientFactory.GetOperationsAsync();
+
+        // 1. Get chat info from Telegram API (needed for notification message)
+        string chatName = "the chat";
+        try
+        {
+            var groupChat = await operations.GetChatAsync(chatId, cancellationToken);
+            chatName = groupChat.Title ?? chatName;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get chat info for {ChatId}", chatId);
+        }
+
+        // 2. Delete teaser and update welcome response
+        var welcomeResponse = await welcomeResponsesRepo.GetByUserAndChatAsync(userId, chatId, cancellationToken);
+        if (welcomeResponse != null)
+        {
+            // Delete teaser message via orchestrator (audit trail)
+            await orchestrator.DeleteMessageAsync(
+                messageId: welcomeResponse.WelcomeMessageId,
+                chatId: chatId,
+                userId: userId,
+                deletedBy: executor,
+                reason: "Exam teaser cleanup after denial",
+                cancellationToken: cancellationToken);
+
+            // Update welcome response to denied
+            await welcomeResponsesRepo.UpdateResponseAsync(
+                welcomeResponse.Id,
+                WelcomeResponseType.Denied,
+                dmSent: false,
+                dmFallback: false,
+                cancellationToken);
+        }
+
+        // 3. Kick or ban user
+        if (banGlobally)
+        {
+            // Global ban (no specific message triggered it)
+            var banResult = await orchestrator.BanUserAsync(
+                userId: userId,
+                messageId: null, // No triggering message - exam failure
+                executor: executor,
+                reason: "Exam failed - banned to prevent repeat join spam",
+                cancellationToken: cancellationToken);
+
+            if (!banResult.Success)
+            {
+                return banResult;
+            }
+        }
+        else
+        {
+            // Kick from this chat only (user can rejoin)
+            var kickResult = await orchestrator.KickUserFromChatAsync(
+                userId: userId,
+                chatId: chatId,
+                executor: executor,
+                reason: "Exam denied - kicked from chat",
+                cancellationToken: cancellationToken);
+
+            if (!kickResult.Success)
+            {
+                return kickResult;
+            }
+        }
+
+        // 4. Send notification DM to user
+        var notificationText = banGlobally
+            ? $"❌ Your request to join {chatName} has been denied and you have been banned."
+            : $"❌ Your request to join {chatName} has been denied after admin review. You may try joining again later.";
+
+        try
+        {
+            await operations.SendMessageAsync(
+                chatId: userId, // DM chat ID = user ID
+                text: notificationText,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Non-fatal - user may have blocked bot
+            _logger.LogDebug(ex, "Failed to send exam denial DM to user {UserId}", userId);
+        }
+
+        var actionType = banGlobally ? "denied and banned" : "denied (kicked)";
+        _logger.LogInformation(
+            "Exam {ActionType} for {UserId} in chat {ChatId} by {Executor}",
+            actionType,
+            userId,
+            chatId,
+            executor.DisplayName);
+
+        return new ModerationResult { Success = true };
+    }
 }
