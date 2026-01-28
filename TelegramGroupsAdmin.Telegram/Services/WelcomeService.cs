@@ -184,9 +184,9 @@ public class WelcomeService : IWelcomeService
                 );
                 await telegramUserRepo.UpsertAsync(newUser, cancellationToken);
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Created inactive user record for {User} on join",
-                    user.ToLogInfo());
+                    user.ToLogDebug());
             }
 
             // Step 2: Check for impersonation (name + photo similarity vs admins)
@@ -311,10 +311,10 @@ public class WelcomeService : IWelcomeService
             // Store the job ID in the welcome response record
             await WithRepositoryAsync((repo, cancellationToken) => repo.SetTimeoutJobIdAsync(responseId, jobId, cancellationToken), cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Successfully scheduled welcome timeout for {User} in {Chat} (mode: {Mode}, timeout: {Timeout}s, JobId: {JobId})",
-                user.ToLogInfo(),
-                chatMemberUpdate.Chat.ToLogInfo(),
+                user.ToLogDebug(),
+                chatMemberUpdate.Chat.ToLogDebug(),
                 config.Mode,
                 config.TimeoutSeconds,
                 jobId);
@@ -357,11 +357,11 @@ public class WelcomeService : IWelcomeService
             return;
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Callback query received: {Data} from {User} in {Chat}",
             data,
-            user.ToLogInfo(),
-            message.Chat.ToLogInfo());
+            user.ToLogDebug(),
+            message.Chat.ToLogDebug());
 
         // Use extracted parser for callback data
         var parsedCallback = WelcomeCallbackParser.ParseCallbackData(data);
@@ -484,10 +484,10 @@ public class WelcomeService : IWelcomeService
         Message message,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Exam callback received: {Data} from {User}",
             data,
-            user.ToLogInfo());
+            user.ToLogDebug());
 
         try
         {
@@ -581,29 +581,29 @@ public class WelcomeService : IWelcomeService
             var botInfo = await operations.GetMeAsync(cancellationToken);
             keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatId, user.Id, botInfo.Username!);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Sending DM welcome message to {User} in {Chat}",
-                user.ToLogInfo(),
-                chatInfo.ToLogInfo());
+                user.ToLogDebug(),
+                chatInfo.ToLogDebug());
         }
         else if (config.Mode == WelcomeMode.EntranceExam)
         {
             var botInfo = await operations.GetMeAsync(cancellationToken);
             keyboard = WelcomeKeyboardBuilder.BuildExamModeKeyboard(config, chatId, user.Id, botInfo.Username!);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Sending entrance exam teaser to {User} in {Chat}",
-                user.ToLogInfo(),
-                chatInfo.ToLogInfo());
+                user.ToLogDebug(),
+                chatInfo.ToLogDebug());
         }
         else
         {
             keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, user.Id);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Sending chat accept/deny welcome message to {User} in {Chat}",
-                user.ToLogInfo(),
-                chatInfo.ToLogInfo());
+                user.ToLogDebug(),
+                chatInfo.ToLogDebug());
         }
 
         var message = await operations.SendMessageAsync(
@@ -629,10 +629,10 @@ public class WelcomeService : IWelcomeService
                 permissions: WelcomeChatPermissions.Restricted,
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Restricted permissions for {User} in {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+                user.ToLogDebug(),
+                chat.ToLogDebug());
         }
         catch (Exception ex)
         {
@@ -657,10 +657,10 @@ public class WelcomeService : IWelcomeService
             await operations.BanChatMemberAsync(chatId: chat.Id, userId: user.Id, cancellationToken: cancellationToken);
             await operations.UnbanChatMemberAsync(chatId: chat.Id, userId: user.Id, cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Kicked {User} from {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+                user.ToLogDebug(),
+                chat.ToLogDebug());
         }
         catch (Exception ex)
         {
@@ -703,9 +703,9 @@ public class WelcomeService : IWelcomeService
         // Always attempt this - previous DM sent via /start may have been deleted by user
         var (dmSent, dmFallback) = await SendRulesAsync(operations, chat, user, config, cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Rules delivery for {User}: DM sent: {DmSent}, Fallback: {DmFallback}",
-            user.ToLogInfo(),
+            user.ToLogDebug(),
             dmSent,
             dmFallback);
 
@@ -934,10 +934,10 @@ public class WelcomeService : IWelcomeService
                 messageId: welcomeResponse.WelcomeMessageId,
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Deleted welcome message {MessageId} in {Chat}",
                 welcomeResponse.WelcomeMessageId,
-                groupChat.ToLogInfo());
+                groupChat.ToLogDebug());
         }
         catch (Exception ex)
         {
@@ -987,9 +987,9 @@ public class WelcomeService : IWelcomeService
             {
                 keyboard = WelcomeKeyboardBuilder.BuildReturnToChatKeyboard(chatName, chatDeepLink);
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Sent confirmation with chat deep link to {User}: {DeepLink}",
-                    user.ToLogInfo(),
+                    user.ToLogDebug(),
                     chatDeepLink);
             }
 
@@ -1030,9 +1030,9 @@ public class WelcomeService : IWelcomeService
             autoDeleteSeconds: 30,
             cancellationToken: cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Rules sent to {User}: DmSent={DmSent}, FallbackUsed={FallbackUsed}",
-            user.ToLogInfo(),
+            user.ToLogDebug(),
             result.DmSent,
             result.FallbackUsed);
 
@@ -1041,10 +1041,10 @@ public class WelcomeService : IWelcomeService
 
     private async Task HandleUserLeftAsync(Chat chat, User user, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "{User} left {Chat}, recording welcome response if pending",
-            user.ToLogInfo(),
-            chat.ToLogInfo());
+            user.ToLogDebug(),
+            chat.ToLogDebug());
 
         try
         {
@@ -1054,10 +1054,10 @@ public class WelcomeService : IWelcomeService
             if (await examFlowService.HasActiveSessionAsync(chat.Id, user.Id, cancellationToken))
             {
                 await examFlowService.CancelSessionAsync(chat.Id, user.Id, cancellationToken);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Cancelled exam session for {User} who left {Chat}",
-                    user.ToLogInfo(),
-                    chat.ToLogInfo());
+                    user.ToLogDebug(),
+                    chat.ToLogDebug());
             }
 
             // Find any pending welcome response for this user
@@ -1084,10 +1084,10 @@ public class WelcomeService : IWelcomeService
             // Mark as left
             await WithRepositoryAsync((repo, cancellationToken) => repo.UpdateResponseAsync(response.Id, WelcomeResponseType.Left, dmSent: false, dmFallback: false, cancellationToken), cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Recorded welcome response 'left' for {User} in {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+                user.ToLogDebug(),
+                chat.ToLogDebug());
         }
         catch (Exception ex)
         {
