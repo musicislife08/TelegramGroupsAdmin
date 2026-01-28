@@ -51,7 +51,7 @@ public class ContentDetectionOrchestrator
     {
         try
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Starting content detection for message {MessageId} from user {UserId} (@{Username}) in chat {ChatId} (hasText: {HasText}, hasPhoto: {HasPhoto}, edit: {EditVersion})",
                 message.MessageId,
                 message.From?.Id,

@@ -186,11 +186,11 @@ public partial class MessageProcessingService(
 
         if (ServiceMessageHelper.IsServiceMessage(message, deletionConfig, out var shouldDelete))
         {
-            logger.LogInformation(
+            logger.LogDebug(
                 "Detected service message: Type={Type}, MessageId={MessageId}, Chat={Chat}",
                 message.Type,
                 message.MessageId,
-                message.Chat.ToLogInfo());
+                message.Chat.ToLogDebug());
 
             // Store service message for UI consistency with Telegram Desktop
             var serviceMessageText = ServiceMessageHelper.GetServiceMessageText(message);

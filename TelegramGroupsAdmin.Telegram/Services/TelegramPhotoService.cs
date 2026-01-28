@@ -68,8 +68,8 @@ public class TelegramPhotoService
 
             if (chat.Photo == null)
             {
-                _logger.LogInformation("Chat {Chat} has no profile photo - skipping icon cache",
-                    LogDisplayName.ChatInfo(chatName, chatId));
+                _logger.LogDebug("Chat {Chat} has no profile photo - skipping icon cache",
+                    LogDisplayName.ChatDebug(chatName, chatId));
                 return null;
             }
 
@@ -94,8 +94,8 @@ public class TelegramPhotoService
                 // Resize to 64x64 icon
                 await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
 
-                _logger.LogInformation("Cached chat icon for {Chat}",
-                    LogDisplayName.ChatInfo(chatName, chatId));
+                _logger.LogDebug("Cached chat icon for {Chat}",
+                    LogDisplayName.ChatDebug(chatName, chatId));
                 return relativePath;
             }
             finally
@@ -210,7 +210,7 @@ public class TelegramPhotoService
                 // Resize to 64x64 icon
                 await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
 
-                _logger.LogInformation("Cached user photo for {User}: {Path}", user.ToLogInfo(userId), relativePath);
+                _logger.LogDebug("Cached user photo for {User}: {Path}", user.ToLogDebug(userId), relativePath);
                 return new UserPhotoResult(relativePath, currentPhotoId);
             }
             finally
