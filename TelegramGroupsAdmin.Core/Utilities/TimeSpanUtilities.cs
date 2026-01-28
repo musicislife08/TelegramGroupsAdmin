@@ -76,6 +76,15 @@ public static class TimeSpanUtilities
     }
 
     /// <summary>
+    /// Parse a duration string, returning the default value if parsing fails.
+    /// </summary>
+    /// <param name="input">Duration string to parse (e.g., "30d", "2y")</param>
+    /// <param name="defaultValue">Value to return if parsing fails</param>
+    /// <returns>Parsed TimeSpan or defaultValue if parsing fails</returns>
+    public static TimeSpan ParseDurationOrDefault(string input, TimeSpan defaultValue)
+        => TryParseDuration(input, out var duration) ? duration : defaultValue;
+
+    /// <summary>
     /// Format a TimeSpan duration as a human-readable string.
     /// Consider using Humanizer's TimeSpan.Humanize() for more accurate formatting.
     /// </summary>

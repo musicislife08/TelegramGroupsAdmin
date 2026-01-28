@@ -149,7 +149,7 @@
                         <strong>Note:</strong> Backup retention and directory settings are configured in <strong>Settings → System → Backup Configuration</strong>
                     </MudAlert>
                 }
-                else if (_editingJob.JobName == BackgroundJobNames.MessageCleanup)
+                else if (_editingJob.JobName == BackgroundJobNames.DataCleanup)
                 {
                     <MudDivider />
                     <MudText Typo="Typo.subtitle2">Retention Settings</MudText>
@@ -331,7 +331,7 @@
             _editRunVacuum = settings.RunVacuum;
             _editRunAnalyze = settings.RunAnalyze;
         }
-        else if (job.JobName == BackgroundJobNames.MessageCleanup)
+        else if (job.JobName == BackgroundJobNames.DataCleanup)
         {
             var settings = job.DataCleanup ?? new DataCleanupSettings();
             _editMessageRetention = settings.MessageRetention;
@@ -380,7 +380,7 @@
                     RunAnalyze = _editRunAnalyze
                 };
             }
-            else if (_editingJob.JobName == BackgroundJobNames.MessageCleanup)
+            else if (_editingJob.JobName == BackgroundJobNames.DataCleanup)
             {
                 // Validate all retention values before saving
                 if (!ValidateRetention(_editMessageRetention) ||

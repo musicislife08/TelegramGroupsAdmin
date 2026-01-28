@@ -13,10 +13,10 @@ public static class BackgroundJobNames
     public const string ScheduledBackup = "ScheduledBackupJob";
 
     /// <summary>
-    /// Message cleanup (deletes old messages based on retention policy)
-    /// Background Service: CleanupBackgroundService (always running)
+    /// Data cleanup (deletes expired messages, reports, callbacks, notifications based on retention)
+    /// Quartz Job: DataCleanupJob
     /// </summary>
-    public const string MessageCleanup = "MessageCleanup";
+    public const string DataCleanup = "DataCleanup";
 
     /// <summary>
     /// User photo refresh (downloads updated profile photos from Telegram)
@@ -93,4 +93,10 @@ public static class BackgroundJobNames
     /// Quartz Job: WelcomeTimeoutJob
     /// </summary>
     public const string WelcomeTimeout = "WelcomeTimeout";
+
+    /// <summary>
+    /// Send notification to a Telegram chat (admin alerts, system messages)
+    /// Quartz Job: SendChatNotificationJob
+    /// </summary>
+    public const string SendChatNotification = "SendChatNotification";
 }

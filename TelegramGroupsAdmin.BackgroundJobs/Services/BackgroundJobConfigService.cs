@@ -257,10 +257,10 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 // Migrate based on job type
                 switch (jobName)
                 {
-                    case BackgroundJobNames.MessageCleanup when job.DataCleanup == null:
+                    case BackgroundJobNames.DataCleanup when job.DataCleanup == null:
                         job.DataCleanup = new DataCleanupSettings
                         {
-                            MessageRetention = GetSettingString(job.Settings, "MessageRetention", "30d") ?? "30d",
+                            MessageRetention = GetSettingString(job.Settings, "MessageRetention", DataCleanupSettings.DefaultMessageRetentionString) ?? DataCleanupSettings.DefaultMessageRetentionString,
                             ReportRetention = GetSettingString(job.Settings, "ReportRetention", "30d") ?? "30d",
                             CallbackContextRetention = GetSettingString(job.Settings, "CallbackContextRetention", "7d") ?? "7d",
                             WebNotificationRetention = GetSettingString(job.Settings, "WebNotificationRetention", "7d") ?? "7d"
@@ -464,6 +464,46 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 }
             }
         }
+
+        // Remove unknown jobs that aren't in defaults (e.g., renamed/deleted jobs)
+        await RemoveUnknownJobsAsync(existing, defaults, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes job configs that don't correspond to any known job in BackgroundJobNames.
+    /// This handles cleanup after jobs are renamed or removed.
+    /// </summary>
+    private async Task RemoveUnknownJobsAsync(
+        Dictionary<string, BackgroundJobConfig> existing,
+        Dictionary<string, BackgroundJobConfig> defaults,
+        CancellationToken cancellationToken)
+    {
+        var unknownJobs = existing.Keys.Except(defaults.Keys).ToList();
+
+        if (unknownJobs.Count == 0)
+            return;
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var configRecord = await context.Configs
+            .Where(c => c.ChatId == 0)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (configRecord?.BackgroundJobsConfig == null)
+            return;
+
+        var jobsConfig = JsonSerializer.Deserialize<BackgroundJobsConfig>(configRecord.BackgroundJobsConfig, JsonOptions);
+        if (jobsConfig == null)
+            return;
+
+        foreach (var jobName in unknownJobs)
+        {
+            jobsConfig.Jobs.Remove(jobName);
+            _logger.LogInformation("Removed unknown job config {JobName} (job no longer exists)", jobName);
+        }
+
+        configRecord.BackgroundJobsConfig = JsonSerializer.Serialize(jobsConfig, JsonOptions);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static Dictionary<string, BackgroundJobConfig> GetDefaultJobConfigs()
@@ -482,12 +522,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                     BackupDirectory = "/data/backups"
                 }
             },
-            [BackgroundJobNames.MessageCleanup] = new BackgroundJobConfig
+            [BackgroundJobNames.DataCleanup] = new BackgroundJobConfig
             {
-                JobName = BackgroundJobNames.MessageCleanup,
+                JobName = BackgroundJobNames.DataCleanup,
                 DisplayName = "Data Cleanup",
                 Description = "Delete expired messages, reports, callback contexts, and notifications based on retention policies",
-                Enabled = true,
+                Enabled = false,
                 Schedule = "every day",
                 DataCleanup = new DataCleanupSettings()
             },

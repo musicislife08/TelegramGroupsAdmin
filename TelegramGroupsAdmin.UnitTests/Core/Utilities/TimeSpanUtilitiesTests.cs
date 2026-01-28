@@ -603,4 +603,39 @@ public class TimeSpanUtilitiesTests
     }
 
     #endregion
+
+    #region ParseDurationOrDefault
+
+    [Test]
+    public void ParseDurationOrDefault_ValidInput_ReturnsParsedValue()
+    {
+        var result = TimeSpanUtilities.ParseDurationOrDefault("30d", TimeSpan.FromDays(7));
+        Assert.That(result, Is.EqualTo(TimeSpan.FromDays(30)));
+    }
+
+    [Test]
+    public void ParseDurationOrDefault_InvalidInput_ReturnsDefault()
+    {
+        var defaultValue = TimeSpan.FromDays(7);
+        var result = TimeSpanUtilities.ParseDurationOrDefault("invalid", defaultValue);
+        Assert.That(result, Is.EqualTo(defaultValue));
+    }
+
+    [Test]
+    public void ParseDurationOrDefault_EmptyString_ReturnsDefault()
+    {
+        var defaultValue = TimeSpan.FromDays(30);
+        var result = TimeSpanUtilities.ParseDurationOrDefault("", defaultValue);
+        Assert.That(result, Is.EqualTo(defaultValue));
+    }
+
+    [Test]
+    public void ParseDurationOrDefault_NullInput_ReturnsDefault()
+    {
+        var defaultValue = TimeSpan.FromDays(14);
+        var result = TimeSpanUtilities.ParseDurationOrDefault(null!, defaultValue);
+        Assert.That(result, Is.EqualTo(defaultValue));
+    }
+
+    #endregion
 }

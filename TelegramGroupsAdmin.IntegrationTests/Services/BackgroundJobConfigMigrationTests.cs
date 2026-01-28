@@ -77,8 +77,8 @@ public class BackgroundJobConfigMigrationTests
         var oldFormatJson = $$"""
         {
             "Jobs": {
-                "{{BackgroundJobNames.MessageCleanup}}": {
-                    "JobName": "{{BackgroundJobNames.MessageCleanup}}",
+                "{{BackgroundJobNames.DataCleanup}}": {
+                    "JobName": "{{BackgroundJobNames.DataCleanup}}",
                     "DisplayName": "Data Cleanup",
                     "Description": "Delete expired messages",
                     "Enabled": true,
@@ -118,7 +118,7 @@ public class BackgroundJobConfigMigrationTests
         await _configService!.EnsureDefaultConfigsAsync();
 
         // Assert - Verify MessageCleanup was migrated to typed DataCleanup
-        var messageCleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+        var messageCleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(messageCleanupJob, Is.Not.Null, "MessageCleanup job should exist after migration");
         Assert.That(messageCleanupJob!.DataCleanup, Is.Not.Null, "DataCleanup typed settings should be populated");
         Assert.That(messageCleanupJob.DataCleanup!.MessageRetention, Is.EqualTo("14d"));
@@ -145,8 +145,8 @@ public class BackgroundJobConfigMigrationTests
         var newFormatJson = $$"""
         {
             "Jobs": {
-                "{{BackgroundJobNames.MessageCleanup}}": {
-                    "JobName": "{{BackgroundJobNames.MessageCleanup}}",
+                "{{BackgroundJobNames.DataCleanup}}": {
+                    "JobName": "{{BackgroundJobNames.DataCleanup}}",
                     "DisplayName": "Data Cleanup",
                     "Description": "Delete expired messages",
                     "Enabled": true,
@@ -171,7 +171,7 @@ public class BackgroundJobConfigMigrationTests
         await _configService!.EnsureDefaultConfigsAsync();
 
         // Assert - Values should be unchanged (migration didn't corrupt them)
-        var job = await _configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+        var job = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(job, Is.Not.Null);
         Assert.That(job!.DataCleanup, Is.Not.Null);
         Assert.That(job.DataCleanup!.MessageRetention, Is.EqualTo("45d"));
@@ -187,8 +187,8 @@ public class BackgroundJobConfigMigrationTests
         var mixedFormatJson = $$"""
         {
             "Jobs": {
-                "{{BackgroundJobNames.MessageCleanup}}": {
-                    "JobName": "{{BackgroundJobNames.MessageCleanup}}",
+                "{{BackgroundJobNames.DataCleanup}}": {
+                    "JobName": "{{BackgroundJobNames.DataCleanup}}",
                     "DisplayName": "Data Cleanup",
                     "Description": "Delete expired messages",
                     "Enabled": true,
@@ -224,7 +224,7 @@ public class BackgroundJobConfigMigrationTests
         await _configService!.EnsureDefaultConfigsAsync();
 
         // Assert - MessageCleanup should be unchanged (already typed)
-        var cleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+        var cleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(cleanupJob!.DataCleanup!.MessageRetention, Is.EqualTo("30d"));
 
         // Assert - ScheduledBackup should be migrated
@@ -249,10 +249,10 @@ public class BackgroundJobConfigMigrationTests
         Assert.That(allJobs.Count, Is.GreaterThan(0), "Default jobs should be created");
 
         // Verify MessageCleanup has typed settings
-        var cleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+        var cleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(cleanupJob, Is.Not.Null);
         Assert.That(cleanupJob!.DataCleanup, Is.Not.Null);
-        Assert.That(cleanupJob.DataCleanup!.MessageRetention, Is.EqualTo("30d")); // default
+        Assert.That(cleanupJob.DataCleanup!.MessageRetention, Is.EqualTo(DataCleanupSettings.DefaultMessageRetentionString));
 
         // Verify ScheduledBackup has typed settings
         var backupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.ScheduledBackup);
@@ -342,8 +342,8 @@ public class BackgroundJobConfigMigrationTests
         var oldFormatJson = $$"""
         {
             "Jobs": {
-                "{{BackgroundJobNames.MessageCleanup}}": {
-                    "JobName": "{{BackgroundJobNames.MessageCleanup}}",
+                "{{BackgroundJobNames.DataCleanup}}": {
+                    "JobName": "{{BackgroundJobNames.DataCleanup}}",
                     "DisplayName": "Data Cleanup",
                     "Description": "Delete expired messages",
                     "Enabled": true,
@@ -366,7 +366,7 @@ public class BackgroundJobConfigMigrationTests
         await _configService.EnsureDefaultConfigsAsync();
 
         // Assert - Values should still be correct after running twice
-        var job = await _configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+        var job = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(job!.DataCleanup!.MessageRetention, Is.EqualTo("7d"));
     }
 
@@ -381,7 +381,7 @@ public class BackgroundJobConfigMigrationTests
         await _configService!.EnsureDefaultConfigsAsync();
 
         // Update with custom typed settings
-        var config = await _configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+        var config = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         config!.DataCleanup = new DataCleanupSettings
         {
             MessageRetention = "60d",
@@ -391,10 +391,10 @@ public class BackgroundJobConfigMigrationTests
         };
 
         // Act
-        await _configService.UpdateJobConfigAsync(BackgroundJobNames.MessageCleanup, config);
+        await _configService.UpdateJobConfigAsync(BackgroundJobNames.DataCleanup, config);
 
         // Assert - Reload and verify persistence
-        var reloaded = await _configService.GetJobConfigAsync(BackgroundJobNames.MessageCleanup);
+        var reloaded = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(reloaded!.DataCleanup!.MessageRetention, Is.EqualTo("60d"));
         Assert.That(reloaded.DataCleanup.ReportRetention, Is.EqualTo("120d"));
         Assert.That(reloaded.DataCleanup.CallbackContextRetention, Is.EqualTo("14d"));
