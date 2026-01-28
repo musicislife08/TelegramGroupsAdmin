@@ -554,10 +554,10 @@ public class ReportCallbackHandler : IReportCallbackHandler
         // Get chat info for notification message (before ban)
         var chatName = await GetChatNameForNotificationAsync(operations, chatId, cancellationToken);
 
-        // Ban user from this chat (prevents repeat join spam)
+        // Ban user globally (chatId: 0) to protect all managed groups from repeat spam attempts
         var result = await moderationService.BanUserAsync(
             userId,
-            0,
+            0, // Global ban - propagates to all managed chats
             executor,
             "Exam failed - banned to prevent repeat join spam",
             cancellationToken);
