@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -7,8 +6,6 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -103,7 +100,7 @@ public class BanCelebrationService : IBanCelebrationService
             }
 
             // Get today's ban count for this chat
-            var banCount = await GetTodaysBanCountAsync(chatId, cancellationToken);
+            var banCount = await GetTodaysBanCountAsync(cancellationToken);
 
             // Build the chat caption with placeholders replaced
             var chatCaption = ReplacePlaceholders(caption.Text, bannedUserName, chatName, banCount);
@@ -403,25 +400,13 @@ public class BanCelebrationService : IBanCelebrationService
         }
     }
 
-    private async Task<int> GetTodaysBanCountAsync(long chatId, CancellationToken cancellationToken)
+    private async Task<int> GetTodaysBanCountAsync(CancellationToken cancellationToken)
     {
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-            await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-            // Get today's start in server local time, converted to UTC for PostgreSQL
-            // PostgreSQL timestamptz only accepts UTC values via Npgsql
-            var todayStart = new DateTimeOffset(DateTime.Today).ToUniversalTime();
-
-            // Bans are global in this codebase (user_actions doesn't have chat_id)
-            // Count all bans today as the daily counter
-            return await context.UserActions
-                .CountAsync(a =>
-                    a.ActionType == Data.Models.UserActionType.Ban &&
-                    a.IssuedAt >= todayStart,
-                    cancellationToken);
+            var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+            return await userActionsRepository.GetTodaysBanCountAsync(cancellationToken);
         }
         catch (Exception ex)
         {

@@ -79,4 +79,9 @@ public interface IUserActionsRepository
     /// Delete actions older than specified timestamp
     /// </summary>
     Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the count of ban actions issued today (UTC)
+    /// </summary>
+    Task<int> GetTodaysBanCountAsync(CancellationToken cancellationToken = default);
 }
