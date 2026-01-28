@@ -4,6 +4,7 @@ using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
@@ -493,7 +494,8 @@ public class ReportActionsServiceTests
                 TestChatId,
                 Arg.Any<string>(),
                 Arg.Any<ParseMode?>(),
-                Arg.Any<ReplyParameters>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Message deleted"));
 
