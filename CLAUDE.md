@@ -353,6 +353,8 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 **E2E Tests**: Playwright + Testcontainers.PostgreSQL for browser-based UI testing. Uses .NET 10's `WebApplicationFactory.UseKestrel()` for real HTTP server. See [E2E_TESTING.md](E2E_TESTING.md) for full documentation.
 
+**Telegram.Bot Type Mocking**: `Telegram.Bot.Types` classes (`Message`, `Animation`, `User`, etc.) are concrete types with non-virtual properties. **Do NOT use `Substitute.For<Message>()`** — NSubstitute cannot intercept non-virtual members. Instead, use direct object initialization: `new Message { Animation = new Animation { FileId = "test_id" } }`. See `MediaProcessingHandlerTests.cs` and `BanCelebrationServiceTests.cs` for examples.
+
 **Test Execution Best Practices**:
 - **ALWAYS run test commands without pipes initially** - pipes hide failures and require re-running to see errors
 - ❌ Bad: `dotnet test --no-build | tail -20` (hides failures, requires second run to see errors)

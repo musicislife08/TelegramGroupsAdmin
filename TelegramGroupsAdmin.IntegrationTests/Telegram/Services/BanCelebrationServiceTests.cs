@@ -118,6 +118,7 @@ public class BanCelebrationServiceTests
         // Register repositories (real implementations)
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();
         services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>();
+        services.AddScoped<IUserActionsRepository, UserActionsRepository>();
 
         // Register ConfigService and its dependencies (real implementations)
         services.AddScoped<IConfigRepository, ConfigRepository>();
