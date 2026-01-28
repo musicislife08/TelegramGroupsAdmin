@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -172,6 +173,7 @@ public static class WebApplicationExtensions
             {
                 app.Logger.LogWarning(ex, "Failed to backfill ban celebration GIF hashes (non-fatal)");
             }
+
         }
     }
 

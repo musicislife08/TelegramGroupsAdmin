@@ -125,19 +125,13 @@
                 }
             }
 
-            // Get metadata (use passphrase if backup is encrypted)
+            // Get metadata (always unencrypted in tar — no passphrase needed)
             try
             {
-                if (isEncrypted && !string.IsNullOrWhiteSpace(_passphrase))
-                {
-                    _metadata = await BackupService.GetMetadataAsync(_backupBytes, _passphrase);
-                    Snackbar.Add("Encrypted backup file loaded successfully", Severity.Success);
-                }
-                else
-                {
-                    _metadata = await BackupService.GetMetadataAsync(_backupBytes);
-                    Snackbar.Add("Backup file loaded successfully", Severity.Success);
-                }
+                _metadata = await BackupService.GetMetadataAsync(_backupBytes);
+                Snackbar.Add(isEncrypted
+                    ? "Encrypted backup file loaded successfully"
+                    : "Backup file loaded successfully", Severity.Success);
             }
             catch (Exception ex)
             {

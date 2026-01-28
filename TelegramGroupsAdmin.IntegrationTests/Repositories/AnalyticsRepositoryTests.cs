@@ -202,18 +202,17 @@ public class AnalyticsRepositoryTests
     }
 
     [Test]
-    public async Task GetSpamTrendComparison_HasLastWeekData_WhenDataExists()
+    public async Task GetSpamTrendComparison_LastWeekSpamCount_WhenDataExists()
     {
         // Analytics test data includes spam from 8-9 days ago
         // Act
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
         // Assert
-        Assert.That(trends.HasLastWeekData, Is.True,
-            "Should have last week data from 8-9 day old spam detections");
-        Assert.That(trends.LastWeekSpamCount, Is.Not.Null);
-        Assert.That(trends.LastWeekSpamCount!.Value, Is.EqualTo(GoldenDataset.AnalyticsData.LastWeekSpamCount),
+        Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDataset.AnalyticsData.LastWeekSpamCount),
             "Last week should have 2 spam detections from analytics test data");
+        Assert.That(trends.CanShowWeekPercent, Is.True,
+            "Should be able to show percentage since last week has data");
     }
 
     [Test]
@@ -223,7 +222,7 @@ public class AnalyticsRepositoryTests
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
         // Assert - test data guarantees last week data exists
-        Assert.That(trends.HasLastWeekData, Is.True,
+        Assert.That(trends.CanShowWeekPercent, Is.True,
             "Test data should provide last week spam for comparison");
         Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDataset.AnalyticsData.LastWeekSpamCount),
             "Last week should have exactly 2 spam from test data");
@@ -241,14 +240,16 @@ public class AnalyticsRepositoryTests
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
         // Assert - test data has more spam this week (5+) than last week (2)
-        Assert.That(trends.HasLastWeekData, Is.True, "Test data should provide last week data");
+        Assert.That(trends.CanShowWeekPercent, Is.True, "Test data should provide last week data");
         Assert.That(trends.WeekOverWeekChange, Is.Not.Null);
 
         // With more spam this week, IsWeekImproving should be false (worsening)
-        Assert.That(trends.ThisWeekSpamCount, Is.GreaterThan(trends.LastWeekSpamCount!.Value),
+        Assert.That(trends.ThisWeekSpamCount, Is.GreaterThan(trends.LastWeekSpamCount),
             "Test data should have more spam this week than last week");
         Assert.That(trends.IsWeekImproving, Is.False,
             "Should not be improving when spam increased week-over-week");
+        Assert.That(trends.IsWeekWorsening, Is.True,
+            "Should be worsening when spam increased week-over-week");
     }
 
     [Test]
@@ -279,17 +280,91 @@ public class AnalyticsRepositoryTests
     [Test]
     public async Task GetSpamTrendComparison_ZeroLastPeriod_PercentChangeNull()
     {
-        // Test data only spans ~9 days, so last year should have no data
+        // Test data only spans ~9 days, so last year's same period should have no data
         // Act
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
-        // Assert - test data doesn't include last year data
-        Assert.That(trends.HasLastYearData, Is.False,
-            "Test data should not have last year data (only spans ~9 days)");
-        Assert.That(trends.LastYearSpamCount, Is.Null,
-            "LastYearSpamCount should be null when no data exists");
+        // Assert - test data doesn't include last year data (0 instead of null now)
+        Assert.That(trends.LastYearSpamCount, Is.EqualTo(0),
+            "LastYearSpamCount should be 0 when no data exists (not null)");
+        Assert.That(trends.CanShowYearPercent, Is.False,
+            "CanShowYearPercent should be false when last year count is 0");
         Assert.That(trends.YearOverYearChange, Is.Null,
-            "YearOverYearChange should be null when no last year data");
+            "YearOverYearChange should be null when can't divide by zero");
+
+        // But difference should still be calculable
+        Assert.That(trends.YearDifference, Is.EqualTo(trends.ThisYearSpamCount),
+            "YearDifference should equal this year count when last year is 0");
+    }
+
+    [Test]
+    public async Task GetSpamTrendComparison_DaysInPeriod_PopulatedCorrectly()
+    {
+        // Act
+        var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
+
+        // Assert - DaysInX properties should be populated
+        Assert.That(trends.DaysInThisWeek, Is.GreaterThan(0).And.LessThanOrEqualTo(7),
+            "DaysInThisWeek should be between 1 and 7");
+        Assert.That(trends.DaysInLastWeek, Is.EqualTo(7),
+            "DaysInLastWeek should always be 7");
+        Assert.That(trends.DaysInThisMonth, Is.GreaterThan(0).And.LessThanOrEqualTo(31),
+            "DaysInThisMonth should be between 1 and 31");
+        Assert.That(trends.DaysInLastMonth, Is.GreaterThan(27).And.LessThanOrEqualTo(31),
+            "DaysInLastMonth should be between 28 and 31");
+        Assert.That(trends.DaysInThisYear, Is.GreaterThan(0).And.LessThanOrEqualTo(366),
+            "DaysInThisYear should be between 1 and 366");
+        Assert.That(trends.DaysInLastYear, Is.GreaterThan(0).And.LessThanOrEqualTo(366),
+            "DaysInLastYear should be positive (same period comparison)");
+    }
+
+    [Test]
+    public async Task GetSpamTrendComparison_YearOverYear_ComparesSamePeriod()
+    {
+        // Year-over-year should compare Jan 1-today vs Jan 1-today last year
+        // On Feb 29 of a leap year, AddYears(-1) clamps to Feb 28 → 1 day difference
+        // Act
+        var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
+
+        // Assert - DaysInThisYear and DaysInLastYear should be equal (or differ by 1 on leap day)
+        Assert.That(trends.DaysInLastYear,
+            Is.InRange(trends.DaysInThisYear - 1, trends.DaysInThisYear),
+            "Year over Year should compare same periods (equal days, or 1 day less on leap day)");
+    }
+
+    [Test]
+    public async Task GetSpamTrendComparison_Averages_ComputedCorrectly()
+    {
+        // Act
+        var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
+
+        // Assert - averages should be computed based on counts and days
+        // Week: spam per day
+        var expectedThisWeekPerDay = (double)trends.ThisWeekSpamCount / trends.DaysInThisWeek;
+        Assert.That(trends.ThisWeekPerDay, Is.EqualTo(expectedThisWeekPerDay).Within(0.01),
+            "ThisWeekPerDay should equal ThisWeekSpamCount / DaysInThisWeek");
+
+        // Month: spam per week
+        var expectedThisMonthPerWeek = trends.ThisMonthSpamCount / (trends.DaysInThisMonth / 7.0);
+        Assert.That(trends.ThisMonthPerWeek, Is.EqualTo(expectedThisMonthPerWeek).Within(0.01),
+            "ThisMonthPerWeek should equal ThisMonthSpamCount / (DaysInThisMonth / 7)");
+
+        // Year: spam per month
+        var expectedThisYearPerMonth = trends.ThisYearSpamCount / (trends.DaysInThisYear / 30.44);
+        Assert.That(trends.ThisYearPerMonth, Is.EqualTo(expectedThisYearPerMonth).Within(0.01),
+            "ThisYearPerMonth should equal ThisYearSpamCount / (DaysInThisYear / 30.44)");
+    }
+
+    [Test]
+    public async Task GetSpamTrendComparison_WeekDifference_CalculatedCorrectly()
+    {
+        // Act
+        var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
+
+        // Assert
+        var expectedDifference = trends.ThisWeekSpamCount - trends.LastWeekSpamCount;
+        Assert.That(trends.WeekDifference, Is.EqualTo(expectedDifference),
+            "WeekDifference should be ThisWeekSpamCount - LastWeekSpamCount");
     }
 
     #endregion

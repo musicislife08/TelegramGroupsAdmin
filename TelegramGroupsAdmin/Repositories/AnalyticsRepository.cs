@@ -206,12 +206,11 @@ public class AnalyticsRepository : IAnalyticsRepository
             {
                 var checkName = check.CheckName.ToString();
 
-                if (!algorithmStats.ContainsKey(checkName))
+                if (!algorithmStats.TryGetValue(checkName, out var stats))
                 {
-                    algorithmStats[checkName] = new AlgorithmStatsAccumulator();
+                    stats = new AlgorithmStatsAccumulator();
+                    algorithmStats[checkName] = stats;
                 }
-
-                var stats = algorithmStats[checkName];
                 stats.TotalChecks++;
 
                 if (check.Result == CheckResultType.Spam)
@@ -646,10 +645,11 @@ public class AnalyticsRepository : IAnalyticsRepository
         var lastMonthStart = thisMonthStart.AddMonths(-1);
         var lastMonthEnd = thisMonthStart.AddDays(-1);
 
-        // Year: Current year vs last year (same date range)
+        // Year: Year-to-date vs same period last year (apples-to-apples comparison)
+        // e.g., Jan 1-25, 2026 vs Jan 1-25, 2025
         var thisYearStart = new DateOnly(nowInUserTz.Year, 1, 1);
         var lastYearStart = new DateOnly(nowInUserTz.Year - 1, 1, 1);
-        var lastYearEnd = new DateOnly(nowInUserTz.Year - 1, 12, 31);
+        var lastYearEnd = todayLocal.AddYears(-1);
 
         // Fetch all spam counts in one query covering max range needed (last year start to today)
         var minDate = lastYearStart;
@@ -691,31 +691,43 @@ public class AnalyticsRepository : IAnalyticsRepository
         var thisYearSpam = SumSpamInRange(thisYearStart, todayLocal);
         var lastYearSpam = SumSpamInRange(lastYearStart, lastYearEnd);
 
-        // Check if we have data for comparison periods
-        var hasLastWeekData = spamByDate.Keys.Any(d => d >= lastWeekStart && d <= lastWeekEnd);
-        var hasLastMonthData = spamByDate.Keys.Any(d => d >= lastMonthStart && d <= lastMonthEnd);
-        var hasLastYearData = spamByDate.Keys.Any(d => d >= lastYearStart && d <= lastYearEnd);
+        // Calculate days in each period
+        var daysInThisWeek = (todayLocal.DayNumber - thisWeekStart.DayNumber) + 1;
+        var daysInLastWeek = 7;
+        var daysInThisMonth = todayLocal.Day;
+        var daysInLastMonth = DateTime.DaysInMonth(lastMonthStart.Year, lastMonthStart.Month);
+        var daysInThisYear = todayLocal.DayOfYear;
+        var daysInLastYear = (lastYearEnd.DayNumber - lastYearStart.DayNumber) + 1;
 
-        // Calculate percentage changes
-        double? CalculatePercentChange(int current, int? previous)
+        // Calculate percentage changes (only when previous period > 0 to avoid division by zero)
+        double? CalculatePercentChange(int current, int previous)
         {
-            if (!previous.HasValue || previous.Value == 0) return null;
-            return ((current - previous.Value) / (double)previous.Value) * 100.0;
+            if (previous == 0) return null;
+            return ((current - previous) / (double)previous) * 100.0;
         }
 
         return new SpamTrendComparison
         {
+            // Week data (use 0 if no data, not null)
             ThisWeekSpamCount = thisWeekSpam,
-            LastWeekSpamCount = hasLastWeekData ? lastWeekSpam : null,
-            WeekOverWeekChange = hasLastWeekData ? CalculatePercentChange(thisWeekSpam, lastWeekSpam) : null,
+            LastWeekSpamCount = lastWeekSpam,
+            DaysInThisWeek = daysInThisWeek,
+            DaysInLastWeek = daysInLastWeek,
+            WeekOverWeekChange = CalculatePercentChange(thisWeekSpam, lastWeekSpam),
 
+            // Month data
             ThisMonthSpamCount = thisMonthSpam,
-            LastMonthSpamCount = hasLastMonthData ? lastMonthSpam : null,
-            MonthOverMonthChange = hasLastMonthData ? CalculatePercentChange(thisMonthSpam, lastMonthSpam) : null,
+            LastMonthSpamCount = lastMonthSpam,
+            DaysInThisMonth = daysInThisMonth,
+            DaysInLastMonth = daysInLastMonth,
+            MonthOverMonthChange = CalculatePercentChange(thisMonthSpam, lastMonthSpam),
 
+            // Year data (now compares same period, e.g., Jan 1-25 vs Jan 1-25)
             ThisYearSpamCount = thisYearSpam,
-            LastYearSpamCount = hasLastYearData ? lastYearSpam : null,
-            YearOverYearChange = hasLastYearData ? CalculatePercentChange(thisYearSpam, lastYearSpam) : null
+            LastYearSpamCount = lastYearSpam,
+            DaysInThisYear = daysInThisYear,
+            DaysInLastYear = daysInLastYear,
+            YearOverYearChange = CalculatePercentChange(thisYearSpam, lastYearSpam)
         };
     }
 }

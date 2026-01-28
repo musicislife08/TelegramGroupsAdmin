@@ -82,6 +82,7 @@ public class BackupServiceTests
         services.AddSingleton<IDmDeliveryService, MockDmDeliveryService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
         services.AddSingleton<INotificationService, MockNotificationService>();
+        services.AddSingleton(Substitute.For<TelegramGroupsAdmin.Telegram.Services.IThumbnailService>());
 
         // Add IJobScheduler mock (required by PassphraseManagementService)
         var mockJobScheduler = Substitute.For<TelegramGroupsAdmin.Core.BackgroundJobs.IJobScheduler>();
@@ -145,14 +146,14 @@ public class BackupServiceTests
         Assert.That(backupBytes, Is.Not.Null);
         Assert.That(backupBytes.Length, Is.GreaterThan(0));
 
-        // Verify encryption header (TGAENC magic bytes)
+        // Verify backup contains encrypted database entry
         var isEncrypted = await _backupService.IsEncryptedAsync(backupBytes);
         Assert.That(isEncrypted, Is.True, "Backup should be encrypted when passphrase is configured");
 
-        // Verify can extract metadata from encrypted backup
+        // Verify can extract metadata from encrypted backup (metadata is always unencrypted in tar)
         var metadata = await _backupService.GetMetadataAsync(backupBytes);
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.1"));
+        Assert.That(metadata.Version, Is.EqualTo("3.0"));
         Assert.That(metadata.TableCount, Is.GreaterThan(0));
     }
 
@@ -173,13 +174,11 @@ public class BackupServiceTests
         // Act - Export with explicit passphrase
         var backupBytes = await _backupService!.ExportAsync(explicitPassphrase);
 
-        // Assert - Should be encrypted
+        // Assert - Should be encrypted (database.json.enc entry in tar)
         Assert.That(await _backupService.IsEncryptedAsync(backupBytes), Is.True);
 
-        // Verify decryption with explicit passphrase works
-        var decrypted = _encryptionService!.DecryptBackup(backupBytes, explicitPassphrase);
-        Assert.That(decrypted, Is.Not.Null);
-        Assert.That(decrypted.Length, Is.GreaterThan(0));
+        // Verify restore with explicit passphrase works (decrypts database.json.enc inside tar)
+        Assert.DoesNotThrowAsync(() => _backupService.RestoreAsync(backupBytes, explicitPassphrase));
     }
 
     [Test]
@@ -291,15 +290,15 @@ public class BackupServiceTests
     }
 
     [Test]
-    public async Task RestoreAsync_UnencryptedBackup_ShouldRestoreWithoutPassphrase()
+    public async Task RestoreAsync_WithDbPassphrase_ShouldRestoreWithoutExplicitPassphrase()
     {
-        // Arrange - Create unencrypted backup
+        // Arrange - Export uses DB passphrase (configured in SetUp), restore reads it back
         var originalBackup = await _backupService!.ExportAsync();
 
         var originalChatCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM managed_chats");
         Assert.That(originalChatCount, Is.GreaterThan(0));
 
-        // Act - Restore without passphrase
+        // Act - Restore without explicit passphrase (reads DB passphrase automatically)
         await _backupService.RestoreAsync(originalBackup);
 
         // Assert
@@ -466,23 +465,23 @@ public class BackupServiceTests
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.1"));
+        Assert.That(metadata.Version, Is.EqualTo("3.0"));
         Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
         Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
     }
 
     [Test]
-    public async Task GetMetadataAsync_FromUnencryptedBackup_ShouldReturnMetadata()
+    public async Task GetMetadataAsync_FromDbPassphraseBackup_ShouldReturnMetadata()
     {
-        // Arrange
-        var unencryptedBackup = await _backupService!.ExportAsync();
+        // Arrange - ExportAsync() encrypts with DB passphrase; metadata is always readable
+        var backup = await _backupService!.ExportAsync();
 
         // Act
-        var metadata = await _backupService.GetMetadataAsync(unencryptedBackup);
+        var metadata = await _backupService.GetMetadataAsync(backup);
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.1"));
+        Assert.That(metadata.Version, Is.EqualTo("3.0"));
     }
 
     [Test]

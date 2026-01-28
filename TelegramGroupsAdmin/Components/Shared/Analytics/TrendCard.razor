@@ -1,0 +1,112 @@
+@using TelegramGroupsAdmin.Models.Analytics
+
+@* Reusable trend comparison card for week/month/year comparisons *@
+
+<MudItem xs="12" md="4">
+    <MudCard Style="height: 100%">
+        <MudCardContent>
+            <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="min-height: 140px" Justify="Justify.Center">
+                <MudText Typo="Typo.h6" Align="MudBlazor.Align.Center">@_title</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    @if (_canShowPercent)
+                    {
+                        @if (_isImproving)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
+                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Success">@Math.Abs(_percentChange!.Value).ToString("F0")%</MudText>
+                        }
+                        else if (_isWorsening)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Error" />
+                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Error">+@_percentChange!.Value.ToString("F0")%</MudText>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Default" />
+                            <MudText Typo="Typo.h4">0%</MudText>
+                        }
+                    }
+                    else if (_difference != 0)
+                    {
+                        @if (_isImproving)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
+                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Success">@_difference</MudText>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Error" />
+                            <MudText Typo="Typo.h4" Color="MudBlazor.Color.Error">+@_difference</MudText>
+                        }
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingFlat" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Default" />
+                        <MudText Typo="Typo.h4">0</MudText>
+                    }
+                </MudStack>
+                <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                    @_previousAverage.ToString("F1") → @_currentAverage.ToString("F1")/@_averageUnit
+                </MudText>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+</MudItem>
+
+@code {
+    [Parameter, EditorRequired] public SpamTrendComparison Data { get; set; } = null!;
+    [Parameter, EditorRequired] public TrendPeriod Period { get; set; }
+
+    private string _title = "";
+    private bool _canShowPercent;
+    private bool _isImproving;
+    private bool _isWorsening;
+    private double? _percentChange;
+    private int _difference;
+    private double _previousAverage;
+    private double _currentAverage;
+    private string _averageUnit = "";
+
+    protected override void OnParametersSet()
+    {
+        switch (Period)
+        {
+            case TrendPeriod.Week:
+                _title = "Week over Week";
+                _canShowPercent = Data.CanShowWeekPercent;
+                _isImproving = Data.IsWeekImproving;
+                _isWorsening = Data.IsWeekWorsening;
+                _percentChange = Data.WeekOverWeekChange;
+                _difference = Data.WeekDifference;
+                _previousAverage = Data.LastWeekPerDay;
+                _currentAverage = Data.ThisWeekPerDay;
+                _averageUnit = "day";
+                break;
+            case TrendPeriod.Month:
+                _title = "Month over Month";
+                _canShowPercent = Data.CanShowMonthPercent;
+                _isImproving = Data.IsMonthImproving;
+                _isWorsening = Data.IsMonthWorsening;
+                _percentChange = Data.MonthOverMonthChange;
+                _difference = Data.MonthDifference;
+                _previousAverage = Data.LastMonthPerWeek;
+                _currentAverage = Data.ThisMonthPerWeek;
+                _averageUnit = "week";
+                break;
+            case TrendPeriod.Year:
+                _title = "Year over Year";
+                _canShowPercent = Data.CanShowYearPercent;
+                _isImproving = Data.IsYearImproving;
+                _isWorsening = Data.IsYearWorsening;
+                _percentChange = Data.YearOverYearChange;
+                _difference = Data.YearDifference;
+                _previousAverage = Data.LastYearPerMonth;
+                _currentAverage = Data.ThisYearPerMonth;
+                _averageUnit = "month";
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(Period), Period, "Unsupported trend period");
+        }
+    }
+
+}
