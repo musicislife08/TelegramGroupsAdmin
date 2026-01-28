@@ -116,7 +116,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
-            services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Ban celebration GIF posting
+            services.AddSingleton<IBanCelebrationService, BanCelebrationService>(); // Ban celebration GIF posting (Singleton for shuffle-bag state)
             services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs
 
             // Training data quality services

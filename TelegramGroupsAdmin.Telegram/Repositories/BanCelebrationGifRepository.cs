@@ -62,6 +62,14 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         return dtos.Select(d => d.ToModel()).ToList();
     }
 
+    public async Task<List<int>> GetAllIdsAsync(CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        return await context.BanCelebrationGifs
+            .Select(g => g.Id)
+            .ToListAsync(ct);
+    }
+
     public async Task<BanCelebrationGif?> GetRandomAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);

@@ -28,6 +28,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 public class DetectionActionService(
     IServiceProvider serviceProvider,
     IChatManagementService chatManagementService,
+    IBanCelebrationService banCelebrationService,
     IJobScheduler jobScheduler,
     ILogger<DetectionActionService> logger)
 {
@@ -154,7 +155,7 @@ public class DetectionActionService(
                     LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0));
 
                 // Send ban celebration GIF for hard block (if enabled for this chat)
-                SendBanCelebrationAsync(
+                await SendBanCelebrationAsync(
                     message.Chat.Id,
                     message.Chat.Title ?? message.Chat.Id.ToString(),
                     message.From!.Id,
@@ -296,7 +297,7 @@ public class DetectionActionService(
                     cancellationToken);
 
                 // Send ban celebration GIF (if enabled for this chat)
-                SendBanCelebrationAsync(
+                await SendBanCelebrationAsync(
                     message.Chat.Id,
                     message.Chat.Title ?? message.Chat.Id.ToString(),
                     message.From!.Id,
@@ -818,11 +819,7 @@ public class DetectionActionService(
         }, cancellationToken);
     }
 
-    /// <summary>
-    /// Helper method to send ban celebration GIF with proper scope management
-    /// Fire-and-forget pattern - does not await the celebration task
-    /// </summary>
-    private void SendBanCelebrationAsync(
+    private async Task SendBanCelebrationAsync(
         long chatId,
         string chatName,
         long bannedUserId,
@@ -830,20 +827,8 @@ public class DetectionActionService(
         bool isAutoBan,
         CancellationToken cancellationToken)
     {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var scope = serviceProvider.CreateScope();
-                var banCelebrationService = scope.ServiceProvider.GetRequiredService<IBanCelebrationService>();
-                await banCelebrationService.SendBanCelebrationAsync(
-                    chatId, chatName, bannedUserId, bannedUserName, isAutoBan, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "Failed to send ban celebration for chat {ChatId}", chatId);
-            }
-        }, cancellationToken);
+        await banCelebrationService.SendBanCelebrationAsync(
+            chatId, chatName, bannedUserId, bannedUserName, isAutoBan, cancellationToken);
     }
 }
 

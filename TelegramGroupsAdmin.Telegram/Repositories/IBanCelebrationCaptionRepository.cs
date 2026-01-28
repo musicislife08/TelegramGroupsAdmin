@@ -13,6 +13,11 @@ public interface IBanCelebrationCaptionRepository
     Task<List<BanCelebrationCaption>> GetAllAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Gets all caption IDs (lightweight query for shuffle-bag algorithm)
+    /// </summary>
+    Task<List<int>> GetAllIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Gets a random caption from the library
     /// </summary>
     Task<BanCelebrationCaption?> GetRandomAsync(CancellationToken ct = default);
