@@ -400,4 +400,58 @@ public class MessageQueryService : IMessageQueryService
 
         return result.ToModel();
     }
+
+    /// <inheritdoc />
+    public async Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
+        long messageId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Step 1: Load message with detection results
+        var messageWithDetections = await context.Messages
+            .AsNoTracking()
+            .Include(m => m.DetectionResults)
+            .Where(m => m.MessageId == messageId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (messageWithDetections == null)
+            return null;
+
+        // Step 2: Load enriched message data from view
+        var enrichedMessage = await context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.MessageId == messageId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (enrichedMessage == null)
+            return null;
+
+        var messageModel = enrichedMessage.ToModel();
+
+        // Validate media path exists on filesystem
+        var validatedPath = MediaPathUtilities.ValidateMediaPath(
+            messageModel.MediaLocalPath,
+            (int?)messageModel.MediaType,
+            _imageStoragePath,
+            out var fullPath);
+
+        if (validatedPath == null && messageModel.MediaLocalPath != null)
+        {
+            _logger.LogDebug("Media file missing for message {MessageId}: {Path}", messageModel.MessageId, fullPath);
+            messageModel = messageModel with { MediaLocalPath = null };
+        }
+
+        return new UiModels.MessageWithDetectionHistory
+        {
+            Message = messageModel,
+            DetectionResults = messageWithDetections.DetectionResults
+                .Select(dr => dr.ToModel())
+                .OrderByDescending(dr => dr.DetectedAt)
+                .ToList(),
+            // Skip user tags/notes for notification - not needed
+            UserTags = [],
+            UserNotes = []
+        };
+    }
 }

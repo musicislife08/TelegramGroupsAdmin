@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -17,6 +18,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 public class MessageHandler : IMessageHandler
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
+    private readonly IMessageQueryService _messageQueryService;
     private readonly IMessageBackfillService _messageBackfillService;
     private readonly IBotMessageService _botMessageService;
     private readonly IManagedChatsRepository _chatsRepository;
@@ -25,6 +27,7 @@ public class MessageHandler : IMessageHandler
 
     public MessageHandler(
         IMessageHistoryRepository messageHistoryRepository,
+        IMessageQueryService messageQueryService,
         IMessageBackfillService messageBackfillService,
         IBotMessageService botMessageService,
         IManagedChatsRepository chatsRepository,
@@ -32,6 +35,7 @@ public class MessageHandler : IMessageHandler
         ILogger<MessageHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
+        _messageQueryService = messageQueryService;
         _messageBackfillService = messageBackfillService;
         _botMessageService = botMessageService;
         _chatsRepository = chatsRepository;
@@ -137,5 +141,13 @@ public class MessageHandler : IMessageHandler
             cancellationToken);
 
         _logger.LogInformation("Scheduled messages cleanup job for user {UserId}", userId);
+    }
+
+    /// <inheritdoc />
+    public async Task<MessageWithDetectionHistory?> GetEnrichedAsync(
+        long messageId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _messageQueryService.GetMessageWithDetectionHistoryAsync(messageId, cancellationToken);
     }
 }

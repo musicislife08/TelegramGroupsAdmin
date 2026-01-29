@@ -218,4 +218,43 @@ public interface IModerationOrchestrator
         Actor executor,
         string reason,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Handle malware detection: delete message, create admin report, notify admins.
+    /// Does NOT auto-ban (malware upload may be accidental).
+    /// </summary>
+    /// <param name="messageId">The message ID containing malware.</param>
+    /// <param name="chatId">The chat ID where the message was posted.</param>
+    /// <param name="userId">The Telegram user ID of the message author.</param>
+    /// <param name="malwareDetails">Details about the detected malware.</param>
+    /// <param name="telegramMessage">Optional Telegram message object for backfill.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Result indicating success and whether the message was deleted.</returns>
+    Task<ModerationResult> HandleMalwareViolationAsync(
+        long messageId,
+        long chatId,
+        long userId,
+        string malwareDetails,
+        Message? telegramMessage = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Handle critical check violation by trusted/admin user: delete message, notify user.
+    /// Does NOT ban/warn (trusted users get a pass, but message still removed).
+    /// Critical checks (URL filtering, file scanning) bypass trust status.
+    /// </summary>
+    /// <param name="messageId">The message ID that violated critical check.</param>
+    /// <param name="chatId">The chat ID where the message was posted.</param>
+    /// <param name="userId">The Telegram user ID of the message author.</param>
+    /// <param name="violations">List of critical check violations.</param>
+    /// <param name="telegramMessage">Optional Telegram message object for context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Result indicating success and whether the message was deleted.</returns>
+    Task<ModerationResult> HandleCriticalViolationAsync(
+        long messageId,
+        long chatId,
+        long userId,
+        List<string> violations,
+        Message? telegramMessage = null,
+        CancellationToken cancellationToken = default);
 }

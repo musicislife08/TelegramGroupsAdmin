@@ -1,12 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -173,7 +175,7 @@ public class ContentDetectionOrchestrator
         var messageHistoryRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
         var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
-        var isTrainingWorthy = DetectionActionService.DetermineIfTrainingWorthy(spamResult);
+        var isTrainingWorthy = DetermineIfTrainingWorthy(spamResult);
 
         // Phase 4.23 (#168): Auto-deduplicate training samples at insert time using SimHash
         // Only check for auto-detected samples that would be used for training
@@ -228,5 +230,29 @@ public class ContentDetectionOrchestrator
             detectionResult.UsedForTraining);
 
         return detectionResult;
+    }
+
+    /// <summary>
+    /// Determine if detection result should be used for training.
+    /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions.
+    /// Low-confidence auto-detections are NOT training-worthy.
+    /// </summary>
+    private static bool DetermineIfTrainingWorthy(ContentDetectionResult result)
+    {
+        // Manual admin decisions are always training-worthy (will be set when admin uses Mark as Spam/Ham)
+        // For auto-detections, only confident results are training-worthy
+
+        // Check if OpenAI was involved and was confident (85%+ confidence)
+        var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
+        if (openAIResult != null)
+        {
+            // OpenAI confident (85%+) = training-worthy
+            return openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
+        }
+
+        // No OpenAI veto = borderline/uncertain detection
+        // Only use for training if net confidence is very high (>80)
+        // This prevents low-quality auto-detections from polluting training data
+        return result.NetConfidence > SpamDetectionConstants.TrainingConfidenceThreshold;
     }
 }

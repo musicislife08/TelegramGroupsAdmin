@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using Telegram.Bot.Types;
 
@@ -42,5 +43,16 @@ public interface IMessageHandler
     /// <param name="cancellationToken">Cancellation token.</param>
     Task ScheduleUserMessagesCleanupAsync(
         long userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get enriched message with detection history, translation, and media paths.
+    /// Used by orchestrator to build rich notifications after spam ban.
+    /// </summary>
+    /// <param name="messageId">The message ID to fetch.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Enriched message with detection history, or null if not found.</returns>
+    Task<MessageWithDetectionHistory?> GetEnrichedAsync(
+        long messageId,
         CancellationToken cancellationToken = default);
 }

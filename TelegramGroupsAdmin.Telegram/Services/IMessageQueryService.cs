@@ -40,6 +40,14 @@ public interface IMessageQueryService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get a single message with detection history by message ID.
+    /// Used by orchestrator to build rich notifications after spam ban.
+    /// </summary>
+    Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
+        long messageId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get messages within a date range
     /// </summary>
     Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
