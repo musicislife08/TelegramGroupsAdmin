@@ -169,7 +169,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Mock IJobScheduler - returns predictable job IDs and tracks cancellations
         _mockJobScheduler = Substitute.For<IJobScheduler>();
         _mockJobScheduler.ScheduleJobAsync(
-                Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+                Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => Task.FromResult($"job-{Guid.NewGuid():N}"));
         _mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));

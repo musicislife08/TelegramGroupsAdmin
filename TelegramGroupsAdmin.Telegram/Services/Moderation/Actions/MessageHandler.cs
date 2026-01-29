@@ -2,7 +2,9 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -137,7 +139,8 @@ public class MessageHandler : IMessageHandler
         await _jobScheduler.ScheduleJobAsync(
             BackgroundJobNames.DeleteUserMessages,
             new DeleteUserMessagesPayload { TelegramUserId = userId },
-            delaySeconds: 0,
+            delaySeconds: SpamDetectionConstants.CleanupJobDelaySeconds,
+            deduplicationKey: DeleteUserMessages(userId),
             cancellationToken);
 
         _logger.LogInformation("Scheduled messages cleanup job for user {UserId}", userId);

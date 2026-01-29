@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -136,6 +137,7 @@ public class FileScanningHandler
             "FileScan",
             scanPayload,
             delaySeconds: 0,
+            deduplicationKey: None,
             cancellationToken);
 
         return new FileScanSchedulingResult(

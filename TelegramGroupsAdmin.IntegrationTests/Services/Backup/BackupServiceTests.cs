@@ -86,7 +86,7 @@ public class BackupServiceTests
 
         // Add IJobScheduler mock (required by PassphraseManagementService)
         var mockJobScheduler = Substitute.For<TelegramGroupsAdmin.Core.BackgroundJobs.IJobScheduler>();
-        mockJobScheduler.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        mockJobScheduler.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"test_job_{Guid.NewGuid():N}"));
         mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
