@@ -26,12 +26,24 @@ public class QuartzJobScheduler : IJobScheduler
         string jobName,
         TPayload payload,
         int delaySeconds,
+        string? deduplicationKey = null,
         CancellationToken cancellationToken = default)
     {
         var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
 
-        // Generate unique job ID (includes timestamp for uniqueness)
-        var jobId = $"{jobName}_{Guid.NewGuid():N}";
+        // Deduplication: If key provided, check if job already exists
+        if (!string.IsNullOrEmpty(deduplicationKey))
+        {
+            var existingKey = new JobKey(deduplicationKey, "AdHoc");
+            if (await scheduler.CheckExists(existingKey, cancellationToken))
+            {
+                _logger.LogDebug("Job {JobKey} already scheduled, skipping duplicate", deduplicationKey);
+                return deduplicationKey;
+            }
+        }
+
+        // Use deduplication key as job ID if provided, otherwise generate unique ID
+        var jobId = deduplicationKey ?? $"{jobName}_{Guid.NewGuid():N}";
 
         // Serialize payload to JSON
         var payloadJson = JsonSerializer.Serialize(payload);

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -153,6 +154,7 @@ public class BanHandler : IBanHandler
                 "TempbanExpiry",
                 payload,
                 delaySeconds: delaySeconds,
+                deduplicationKey: None,
                 cancellationToken);
 
             _logger.LogInformation(

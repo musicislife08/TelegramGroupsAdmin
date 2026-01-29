@@ -7,36 +7,24 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Core.JobPayloads;
-using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Constants;
-using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
-/// Handles content detection actions: auto-ban and borderline report creation
-/// Phase 5.1: Sends notifications to admins for detection events
+/// Handles content detection actions: routes moderation through ModerationOrchestrator.
+/// Responsible for:
+/// - Loading detection config thresholds
+/// - Routing hard block, malware, spam, and critical violations to orchestrator
+/// - Creating borderline reports for admin review
 /// </summary>
 public class DetectionActionService(
     IServiceProvider serviceProvider,
-    IChatManagementService chatManagementService,
-    IBanCelebrationService banCelebrationService,
-    IJobScheduler jobScheduler,
     ILogger<DetectionActionService> logger)
 {
-
-    // FEATURE-4.23: Track recent cleanup job schedules to prevent duplicate jobs for same user
-    // Key: TelegramUserId, Value: Timestamp when cleanup job was last scheduled
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, DateTimeOffset> _recentCleanupJobs = new();
-
     /// <summary>
     /// Load effective content detection config for a chat (with fallback to defaults).
     /// Resolves ConfigService from scope since this is a Singleton service and services are Scoped.
@@ -58,37 +46,13 @@ public class DetectionActionService(
     }
 
     /// <summary>
-    /// Determine if detection result should be used for training
-    /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions
-    /// Low-confidence auto-detections are NOT training-worthy
-    /// </summary>
-    public static bool DetermineIfTrainingWorthy(TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult result)
-    {
-        // Manual admin decisions are always training-worthy (will be set when admin uses Mark as Spam/Ham)
-        // For auto-detections, only confident results are training-worthy
-
-        // Check if OpenAI was involved and was confident (85%+ confidence)
-        var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-        if (openAIResult != null)
-        {
-            // OpenAI confident (85%+) = training-worthy
-            return openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
-        }
-
-        // No OpenAI veto = borderline/uncertain detection
-        // Only use for training if net confidence is very high (>80)
-        // This prevents low-quality auto-detections from polluting training data
-        return result.NetConfidence > SpamDetectionConstants.TrainingConfidenceThreshold;
-    }
-
-    /// <summary>
-    /// Handle content detection actions based on violation type and confidence levels
-    /// Phase 4.13: Differentiates between Spam, HardBlock, and Malware
-    /// - HardBlock → Instant ban + delete (no OpenAI veto, policy violation)
-    /// - Malware → Delete + alert admin (no auto-ban, might be accidental)
-    /// - Spam (Net > AutoBanThreshold with OpenAI MaxConfidenceVetoThreshold%+) → Auto-ban + delete
+    /// Handle content detection actions based on violation type and confidence levels.
+    /// Routes all moderation actions through ModerationOrchestrator for consistent handling.
+    /// - HardBlock → MarkAsSpamAndBanAsync (instant policy violation)
+    /// - Malware → HandleMalwareViolationAsync (delete + alert, no ban)
+    /// - Spam (high confidence + OpenAI confirmed) → MarkAsSpamAndBanAsync
     /// - Spam (borderline or uncertain) → Create report for admin review
-    /// Thresholds are loaded from database config (ContentDetectionConfig)
+    /// Thresholds are loaded from database config (ContentDetectionConfig).
     /// </summary>
     public async Task HandleSpamDetectionActionsAsync(
         Message message,
@@ -109,14 +73,9 @@ public class DetectionActionService(
 
             using var scope = serviceProvider.CreateScope();
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
-            var moderationActionService = scope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
-            var botFactory = scope.ServiceProvider.GetRequiredService<ITelegramBotClientFactory>();
-            var configLoader = scope.ServiceProvider.GetRequiredService<ITelegramConfigLoader>();
-            var botToken = await configLoader.LoadConfigAsync();
-            var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-            var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
 
-            // Phase 4.13: Check for hard block or malware (different handling than spam)
+            // Check for hard block or malware (different handling than spam)
             var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
             var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == ContentDetection.Models.CheckResultType.Malware);
 
@@ -130,44 +89,21 @@ public class DetectionActionService(
                     LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                     hardBlockResult.Details);
 
-                // Execute instant ban across all chats
-                await ExecuteAutoBanAsync(
-                    userActionsRepo,
-                    managedChatsRepo,
-                    botFactory,
-                    message,
-                    spamResult,
-                    hardBlockResult,
-                    cancellationToken);
-
-                // Delete the message
-                await moderationActionService.DeleteMessageAsync(
+                await moderationOrchestrator.MarkAsSpamAndBanAsync(
                     messageId: message.MessageId,
-                    chatId: message.Chat.Id,
                     userId: message.From!.Id,
-                    deletedBy: Actor.AutoDetection,
-                    reason: "Hard block policy violation (automated spam filter)",
+                    chatId: message.Chat.Id,
+                    executor: Actor.AutoDetection,
+                    reason: $"Hard block policy violation: {hardBlockResult.Details}",
+                    telegramMessage: message,
                     cancellationToken: cancellationToken);
 
-                logger.LogWarning(
-                    "Deleted hard block message {MessageId} and banned {User} (policy violation)",
-                    message.MessageId,
-                    LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0));
-
-                // Send ban celebration GIF for hard block (if enabled for this chat)
-                await SendBanCelebrationAsync(
-                    message.Chat.Id,
-                    message.Chat.Title ?? message.Chat.Id.ToString(),
-                    message.From!.Id,
-                    TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                    isAutoBan: true,
-                    cancellationToken);
                 return;
             }
 
             if (malwareResult != null)
             {
-                // Malware = delete message + alert admin (don't auto-ban, might be accidental upload)
+                // Malware = delete message + alert admin (no ban - might be accidental)
                 logger.LogWarning(
                     "Malware detected in message {MessageId} from {User} in {Chat}: {Details}",
                     message.MessageId,
@@ -175,53 +111,24 @@ public class DetectionActionService(
                     LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                     malwareResult.Details);
 
-                // Delete the malware-containing message
-                await moderationActionService.DeleteMessageAsync(
+                await moderationOrchestrator.HandleMalwareViolationAsync(
                     messageId: message.MessageId,
                     chatId: message.Chat.Id,
                     userId: message.From!.Id,
-                    deletedBy: Actor.FileScanner,
-                    reason: $"Malware detected: {malwareResult.Details}",
+                    malwareDetails: malwareResult.Details ?? "Malware detected",
+                    telegramMessage: message,
                     cancellationToken: cancellationToken);
 
-                // Create critical alert for admin review
-                var malwareReport = BuildAutoDetectionReport(
-                    message,
-                    spamResult,
-                    detectionResult,
-                    $"MALWARE DETECTED: {malwareResult.Details}");
-
-                await reportService.CreateReportAsync(
-                    malwareReport,
-                    message,
-                    isAutomated: true,
-                    cancellationToken);
-
-                // Notify chat admins about malware detection (Phase 5.1)
-                SendNotificationAsync(message.Chat, NotificationEventType.MalwareDetected,
-                    "Malware Detected and Removed",
-                    $"Malware was detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and the message was deleted.\n\n" +
-                    $"User: {TelegramDisplayName.Format(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id)}\n" +
-                    $"Detection: {malwareResult.Details}\n\n" +
-                    $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
-                    cancellationToken);
-
-                logger.LogInformation(
-                    "Deleted malware message {MessageId} and created admin alert (no auto-ban)",
-                    message.MessageId);
                 return;
             }
 
-            // Standard spam detection handling below...
-            // Check if OpenAI was involved and how confident it was
+            // Standard spam detection handling
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
             var openAIConfident = openAIResult != null && openAIResult.Confidence >= config.MaxConfidenceVetoThreshold;
 
-            // Decision logic based on net confidence and OpenAI involvement
-            // Phase 4.5: Skip auto-ban if OpenAI flagged for review
+            // Skip auto-ban if OpenAI flagged for review
             if (openAIResult?.Result == ContentDetection.Models.CheckResultType.Review)
             {
-                // OpenAI uncertain - send to admin review instead of auto-ban
                 var reviewReport = BuildAutoDetectionReport(
                     message,
                     spamResult,
@@ -238,12 +145,12 @@ public class DetectionActionService(
                     "Created admin review report for message {MessageId} in {Chat}: OpenAI flagged for human review",
                     message.MessageId,
                     message.Chat.ToLogInfo());
-                return; // Early return - don't auto-ban
+                return;
             }
 
             if (spamResult.NetConfidence > config.AutoBanThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
             {
-                // High confidence + OpenAI confirmed = auto-ban across all managed chats
+                // High confidence + OpenAI confirmed = auto-ban
                 logger.LogInformation(
                     "Message {MessageId} from {User} in {Chat} triggers auto-ban (net: {NetConfidence}, OpenAI: {OpenAIConf}%)",
                     message.MessageId,
@@ -252,58 +159,14 @@ public class DetectionActionService(
                     spamResult.NetConfidence,
                     openAIResult.Confidence);
 
-                // Execute auto-ban and collect results
-                var banResult = await ExecuteAutoBanAsync(
-                    userActionsRepo,
-                    managedChatsRepo,
-                    botFactory,
-                    message,
-                    spamResult,
-                    openAIResult,
-                    cancellationToken);
-
-                // Delete the spam message from the chat
-                bool messageDeleted = false;
-                try
-                {
-                    await moderationActionService.DeleteMessageAsync(
-                        messageId: message.MessageId,
-                        chatId: message.Chat.Id,
-                        userId: message.From!.Id,
-                        deletedBy: Actor.AutoDetection,
-                        reason: $"Auto-ban triggered (net confidence: {spamResult.NetConfidence}%, OpenAI confirmed)",
-                        cancellationToken: cancellationToken);
-
-                    messageDeleted = true;
-
-                    logger.LogInformation(
-                        "Deleted spam message {MessageId} from {Chat} (auto-ban)",
-                        message.MessageId,
-                        message.Chat.ToLogInfo());
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to delete spam message {MessageId} from {Chat}",
-                        message.MessageId, message.Chat.ToLogDebug());
-                }
-
-                // Send consolidated notification (Phase 5.2: replaces 3 separate notifications)
-                SendConsolidatedSpamNotificationAsync(
-                    message,
-                    spamResult,
-                    openAIResult,
-                    banResult,
-                    messageDeleted,
-                    cancellationToken);
-
-                // Send ban celebration GIF (if enabled for this chat)
-                await SendBanCelebrationAsync(
-                    message.Chat.Id,
-                    message.Chat.Title ?? message.Chat.Id.ToString(),
-                    message.From!.Id,
-                    TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                    isAutoBan: true,
-                    cancellationToken);
+                await moderationOrchestrator.MarkAsSpamAndBanAsync(
+                    messageId: message.MessageId,
+                    userId: message.From!.Id,
+                    chatId: message.Chat.Id,
+                    executor: Actor.AutoDetection,
+                    reason: $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}%, OpenAI: {openAIResult.Confidence}%)",
+                    telegramMessage: message,
+                    cancellationToken: cancellationToken);
             }
             else if (spamResult.NetConfidence > config.ReviewQueueThreshold)
             {
@@ -340,7 +203,7 @@ public class DetectionActionService(
     }
 
     /// <summary>
-    /// Build a Report record for auto-detected content with admin notes containing detection details
+    /// Build a Report record for auto-detected content with admin notes containing detection details.
     /// </summary>
     private static Report BuildAutoDetectionReport(
         Message message,
@@ -374,197 +237,11 @@ public class DetectionActionService(
     }
 
     /// <summary>
-    /// Execute auto-ban for confident spam across all managed chats
+    /// Handle critical check violations for trusted/admin users.
+    /// Policy: Delete message + DM notice, NO ban/warn for trusted/admin users.
+    /// Critical checks (URL filtering, file scanning) bypass trust status.
+    /// Routes through ModerationOrchestrator for consistent handling.
     /// </summary>
-    private async Task<AutoBanResult?> ExecuteAutoBanAsync(
-        IUserActionsRepository userActionsRepo,
-        IManagedChatsRepository managedChatsRepo,
-        ITelegramBotClientFactory botFactory,
-        Message message,
-        TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
-        TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var operations = await botFactory.GetOperationsAsync();
-
-            // Store ban action in database
-            var banAction = new UserActionRecord(
-                Id: 0, // Will be assigned by database
-                UserId: message.From!.Id,
-                ActionType: UserActionType.Ban,
-                MessageId: message.MessageId,
-                IssuedBy: Actor.AutoDetection,
-                IssuedAt: DateTimeOffset.UtcNow,
-                ExpiresAt: null, // Permanent ban
-                Reason: $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}, OpenAI: {openAIResult.Confidence}%)"
-            );
-
-            await userActionsRepo.InsertAsync(banAction, cancellationToken);
-
-            // Get all managed chats for cross-chat enforcement
-            var managedChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken: cancellationToken);
-            var activeChats = managedChats.Where(c => c.IsActive).ToList();
-
-            // ADMIN PROTECTION: Check if user is admin in ANY managed chat
-            // If yes, skip ban entirely (protects admins globally across all chats)
-            using (var scope = serviceProvider.CreateScope())
-            {
-                var chatAdminsRepo = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-                var adminChats = await chatAdminsRepo.GetAdminChatsAsync(message.From.Id, cancellationToken);
-
-                if (adminChats.Count > 0)
-                {
-                    logger.LogInformation(
-                        "Skipping auto-ban for {User} - user is admin in {ChatCount} managed chat(s) (admin protection)",
-                        LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                        adminChats.Count);
-                    return null;
-                }
-            }
-
-            // Health gate: Filter for chats where bot has confirmed permissions
-            var healthyChatIds = chatManagementService.FilterHealthyChats(activeChats.Select(c => c.ChatId)).ToHashSet();
-            var actionableChats = activeChats.Where(c => healthyChatIds.Contains(c.ChatId)).ToList();
-
-            // Log chats skipped due to health issues
-            var skippedChatIds = activeChats.Select(c => c.ChatId).Except(actionableChats.Select(c => c.ChatId)).ToList();
-            if (skippedChatIds.Count > 0)
-            {
-                logger.LogWarning(
-                    "Skipping {Count} unhealthy chats for auto-ban: {ChatIds}. " +
-                    "Bot lacks required permissions (admin + ban members) in these chats.",
-                    skippedChatIds.Count,
-                    string.Join(", ", skippedChatIds));
-            }
-
-            logger.LogInformation(
-                "Executing auto-ban for {User} across {ChatCount} managed chats ({SkippedCount} skipped due to health)",
-                LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                actionableChats.Count,
-                skippedChatIds.Count);
-
-            // Ban user across all actionable managed chats via Telegram API
-            int successCount = 0;
-            int failCount = 0;
-
-            foreach (var chat in actionableChats)
-            {
-                try
-                {
-                    await operations.BanChatMemberAsync(
-                        chatId: chat.ChatId,
-                        userId: message.From.Id,
-                        untilDate: null, // Permanent ban
-                        cancellationToken: cancellationToken);
-
-                    successCount++;
-
-                    logger.LogInformation(
-                        "Banned {User} from {Chat}",
-                        LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                        LogDisplayName.ChatInfo(chat.ChatName, chat.ChatId));
-                }
-                catch (Exception ex)
-                {
-                    failCount++;
-                    logger.LogError(ex,
-                        "Failed to ban {User} from {Chat}",
-                        LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                        LogDisplayName.ChatDebug(chat.ChatName, chat.ChatId));
-                }
-            }
-
-            logger.LogInformation(
-                "Auto-ban complete for {User}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
-                LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                successCount,
-                actionableChats.Count,
-                failCount);
-
-            // FEATURE-4.23: Schedule cross-chat message cleanup job
-            // Note: BanChatMember with revokeMessages=true only deletes messages in the chat where the ban occurred
-            // This job deletes all messages from the banned user across ALL managed chats
-            // Race condition mitigation: Spambots often post same message in multiple chats rapidly
-            // Use deduplication to ensure only one cleanup job runs per user within 30-second window
-            try
-            {
-                var now = DateTimeOffset.UtcNow;
-                var userId = message.From.Id;
-
-                // Check if we already scheduled a cleanup job for this user recently
-                if (_recentCleanupJobs.TryGetValue(userId, out var lastScheduled))
-                {
-                    var timeSinceLastSchedule = now - lastScheduled;
-                    if (timeSinceLastSchedule < SpamDetectionConstants.CleanupJobDeduplicationWindow)
-                    {
-                        logger.LogDebug(
-                            "Skipping duplicate cleanup job for {User} (already scheduled {Seconds}s ago)",
-                            message.From.ToLogDebug(),
-                            timeSinceLastSchedule.TotalSeconds);
-                        // Don't schedule another job - the existing one will handle all messages
-                        goto skipCleanupJob;
-                    }
-                }
-
-                var deleteMessagesPayload = new DeleteUserMessagesPayload
-                {
-                    TelegramUserId = userId
-                };
-
-                await jobScheduler.ScheduleJobAsync(
-                    "DeleteUserMessages",
-                    deleteMessagesPayload,
-                    delaySeconds: SpamDetectionConstants.CleanupJobDelaySeconds); // 15-second delay allows spambot to post across all chats before cleanup
-
-                // Track this scheduling to prevent duplicates
-                _recentCleanupJobs[userId] = now;
-
-                // Cleanup old entries to prevent memory leak (remove entries older than window)
-                var expiredEntries = _recentCleanupJobs
-                    .Where(kvp => now - kvp.Value > SpamDetectionConstants.CleanupJobDeduplicationWindow)
-                    .Select(kvp => kvp.Key)
-                    .ToList();
-
-                foreach (var expiredUserId in expiredEntries)
-                {
-                    _recentCleanupJobs.TryRemove(expiredUserId, out _);
-                }
-
-                logger.LogInformation(
-                    "Scheduled cross-chat message cleanup job for {User} (will execute in 15s)",
-                    message.From.ToLogInfo());
-
-            skipCleanupJob:; // Label for early exit from deduplication check
-            }
-            catch (Exception jobEx)
-            {
-                logger.LogWarning(jobEx,
-                    "Failed to schedule message cleanup job for {User} (ban still successful)",
-                    message.From.ToLogDebug());
-            }
-
-            // Return ban results for consolidated notification (Phase 5.2)
-            return new AutoBanResult(successCount, activeChats.Count, banAction.Reason ?? "Auto-ban triggered");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to execute auto-ban for {User}",
-                message.From.ToLogDebug());
-            return null; // Ban failed
-        }
-    }
-
-    /// <summary>
-    /// Handle critical check violations for trusted/admin users (Phase 4.14)
-    /// Policy: Delete message + DM notice, NO ban/warn for trusted/admin users
-    /// Critical checks (URL filtering, file scanning) bypass trust status
-    /// </summary>
-    /// <param name="message">Original message that violated critical check</param>
-    /// <param name="violations">List of critical check violations with details</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     public async Task HandleCriticalCheckViolationAsync(
         Message message,
         List<string> violations,
@@ -579,75 +256,15 @@ public class DetectionActionService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var userMessagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
+            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
 
-            var userId = message.From.Id;
-            var chatId = message.Chat.Id;
-            var userName = TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, userId);
-
-            logger.LogWarning(
-                "Critical check violation by {User} in {Chat}: {Violations}",
-                LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, userId),
-                LogDisplayName.ChatDebug(message.Chat.Title, chatId),
-                string.Join("; ", violations));
-
-            // Step 1: Delete the violating message with tracked deletion
-            try
-            {
-                using var deleteScope = serviceProvider.CreateScope();
-                var botMessageService = deleteScope.ServiceProvider.GetRequiredService<IBotMessageService>();
-                await botMessageService.DeleteAndMarkMessageAsync(
-                    chatId,
-                    message.MessageId,
-                    deletionSource: "critical_violation",
-                    cancellationToken);
-                logger.LogInformation(
-                    "Deleted message {MessageId} from {Chat} due to critical check violations",
-                    message.MessageId,
-                    message.Chat.ToLogInfo());
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex,
-                    "Failed to delete message {MessageId} from {Chat}",
-                    message.MessageId,
-                    message.Chat.ToLogDebug());
-            }
-
-            // Step 2: Notify user about violation (DM preferred, public reply fallback)
-            var violationList = string.Join("\n", violations.Select((v, i) => $"{i + 1}. {v}"));
-            var notificationMessage = $"⚠️ Your message was deleted due to security policy violations:\n\n{violationList}\n\n" +
-                                     $"These checks apply to all users regardless of trust status.";
-
-            var sendResult = await userMessagingService.SendToUserAsync(
-                userId,
-                message.Chat,
-                notificationMessage,
-                replyToMessageId: null,  // Original message already deleted
+            await moderationOrchestrator.HandleCriticalViolationAsync(
+                messageId: message.MessageId,
+                chatId: message.Chat.Id,
+                userId: message.From.Id,
+                violations: violations,
+                telegramMessage: message,
                 cancellationToken: cancellationToken);
-
-            if (sendResult.Success)
-            {
-                logger.LogInformation(
-                    "Sent critical check violation notice to {User} via {DeliveryMethod}",
-                    message.From.ToLogInfo(),
-                    sendResult.DeliveryMethod);
-            }
-            else
-            {
-                logger.LogWarning(
-                    "Failed to send critical check violation notice to {User}: {Error}",
-                    message.From.ToLogDebug(),
-                    sendResult.ErrorMessage);
-            }
-
-            // Step 3: Log audit event (for transparency)
-            logger.LogInformation(
-                "Critical check violation handling complete for {User} in {Chat}. " +
-                "Message deleted, user notified via {DeliveryMethod}. NO ban/warning applied.",
-                message.From.ToLogInfo(),
-                message.Chat.ToLogInfo(),
-                sendResult.DeliveryMethod);
         }
         catch (Exception ex)
         {
@@ -657,182 +274,4 @@ public class DetectionActionService(
                 message.Chat.ToLogDebug());
         }
     }
-
-    /// <summary>
-    /// Send consolidated spam notification with media support (Phase 5.2)
-    /// Replaces 3 separate notifications with 1 comprehensive message
-    /// </summary>
-    private void SendConsolidatedSpamNotificationAsync(
-        Message message,
-        TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
-        TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
-        AutoBanResult? banResult,
-        bool messageDeleted,
-        CancellationToken cancellationToken)
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                // Extract user info - using FormatMention since this is sent to Telegram
-                var userDisplay = TelegramDisplayName.FormatMention(
-                    message.From?.FirstName,
-                    message.From?.LastName,
-                    message.From?.Username,
-                    message.From?.Id);
-
-                // Create scope early to query for translated text
-                using var scope = serviceProvider.CreateScope();
-
-                // Query for translated text (prefer over original for non-English spam)
-                var translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
-                var translation = await translationService.GetTranslationForMessageAsync(message.MessageId, cancellationToken);
-
-                // Build message text preview - use translated text if available, fallback to original
-                // Note: Photos/videos use .Caption, plain messages use .Text
-                var messageContent = translation?.TranslatedText ?? message.Text ?? message.Caption;
-                var messageTextPreview = messageContent != null && messageContent.Length > NotificationConstants.MessagePreviewMaxLength
-                    ? messageContent[..(NotificationConstants.MessagePreviewMaxLength - NotificationConstants.PreviewTruncationOffset)] + "..."
-                    : messageContent ?? "[No text]";
-
-                // Escape MarkdownV2 special characters
-                messageTextPreview = TelegramTextUtilities.EscapeMarkdownV2(messageTextPreview);
-                var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(message.Chat.Title ?? message.Chat.Id.ToString());
-                userDisplay = TelegramTextUtilities.EscapeMarkdownV2(userDisplay);
-
-                // Build detection details
-                var detectionDetails = new System.Text.StringBuilder();
-                detectionDetails.AppendLine($"• Net Confidence: {spamResult.NetConfidence}%");
-                detectionDetails.AppendLine($"• OpenAI: {openAIResult.Confidence}% \\({TelegramTextUtilities.EscapeMarkdownV2(openAIResult.Details ?? "Spam detected")}\\)");
-
-                // Add triggered checks (top 3 by confidence)
-                var topChecks = spamResult.CheckResults
-                    .Where(c => c.Result == ContentDetection.Models.CheckResultType.Spam)
-                    .OrderByDescending(c => c.Confidence)
-                    .Take(NotificationConstants.MaxDetectionChecksInNotification);
-
-                foreach (var check in topChecks)
-                {
-                    var checkDetails = TelegramTextUtilities.EscapeMarkdownV2(check.Details ?? "");
-                    detectionDetails.AppendLine($"• {TelegramTextUtilities.EscapeMarkdownV2(check.CheckName.ToString())}: {checkDetails}");
-                }
-
-                // Build action summary
-                var actionSummary = new System.Text.StringBuilder();
-                if (banResult != null)
-                {
-                    actionSummary.AppendLine($"✅ Banned from {banResult.SuccessCount}/{banResult.TotalChats} managed chats");
-                }
-                if (messageDeleted)
-                {
-                    actionSummary.AppendLine($"✅ Message deleted \\(ID: {message.MessageId}\\)");
-                }
-
-                // Build consolidated message
-                var consolidatedMessage =
-                    $"🚫 *Spam Auto\\-Banned*\n\n" +
-                    $"*User:* {userDisplay}\n" +
-                    $"*Chat:* {chatTitle}\n\n" +
-                    $"📝 *Message:*\n{messageTextPreview}\n\n" +
-                    $"🔍 *Detection:*\n{detectionDetails}\n" +
-                    $"⛔ *Action Taken:*\n{actionSummary}";
-
-                // Query database for media local path (if media exists)
-                string? photoPath = null;
-                string? videoPath = null;
-
-                var messagesRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
-
-                // Look up the message to get local file paths if media was downloaded
-                var messageRecord = await messagesRepo.GetMessageAsync(message.MessageId, cancellationToken);
-                if (messageRecord != null)
-                {
-                    // Photos are stored in PhotoLocalPath
-                    if (!string.IsNullOrEmpty(messageRecord.PhotoLocalPath))
-                    {
-                        photoPath = messageRecord.PhotoLocalPath;
-                        logger.LogDebug("Found photo path for spam notification: {PhotoPath}", photoPath);
-                    }
-                    // Videos/Animations are stored in MediaLocalPath
-                    else if (messageRecord.MediaType is MediaType.Video
-                        or MediaType.Animation
-                        && !string.IsNullOrEmpty(messageRecord.MediaLocalPath))
-                    {
-                        videoPath = messageRecord.MediaLocalPath;
-                        logger.LogDebug("Found video/animation path for spam notification: {VideoPath}", videoPath);
-                    }
-                }
-
-                // Send DM notification with media support (Phase 5.2)
-                // Note: Bypasses NotificationService to enable media support
-                var chatAdminsRepo = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-                var telegramMappingRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
-                var dmDeliveryService = scope.ServiceProvider.GetRequiredService<IDmDeliveryService>();
-
-                // Get all active admins for this chat
-                var chatAdmins = await chatAdminsRepo.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
-
-                foreach (var admin in chatAdmins)
-                {
-                    // Map telegram ID to web user ID to verify they're linked
-                    var mapping = await telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
-                    if (mapping == null)
-                        continue;
-
-                    // Send DM with media support (preferences will be checked by NotificationService in future)
-                    await dmDeliveryService.SendDmWithMediaAsync(
-                        admin.TelegramId,
-                        "spam_banned",
-                        consolidatedMessage,
-                        photoPath,
-                        videoPath,
-                        cancellationToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to send consolidated spam notification for message {MessageId} in {Chat}",
-                    message.MessageId, message.Chat.ToLogDebug());
-            }
-        }, cancellationToken);
-    }
-
-    /// <summary>
-    /// Helper method to send notifications with proper scope management (Phase 5.1)
-    /// Creates scope to resolve scoped INotificationService from singleton background service
-    /// Fire-and-forget pattern - does not await the notification task
-    /// </summary>
-    private void SendNotificationAsync(Chat chat, NotificationEventType eventType, string subject, string message, CancellationToken cancellationToken)
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var scope = serviceProvider.CreateScope();
-                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                await notificationService.SendChatNotificationAsync(chat.Id, eventType, subject, message, cancellationToken: cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to send notification for event {EventType} in {Chat}", eventType, chat.ToLogDebug());
-            }
-        }, cancellationToken);
-    }
-
-    private async Task SendBanCelebrationAsync(
-        long chatId,
-        string chatName,
-        long bannedUserId,
-        string bannedUserName,
-        bool isAutoBan,
-        CancellationToken cancellationToken)
-    {
-        await banCelebrationService.SendBanCelebrationAsync(
-            chatId, chatName, bannedUserId, bannedUserName, isAutoBan, cancellationToken);
-    }
 }
-
-/// <summary>
-/// Result of auto-ban execution across managed chats (Phase 5.2)
-/// </summary>
-internal record AutoBanResult(int SuccessCount, int TotalChats, string BanReason);

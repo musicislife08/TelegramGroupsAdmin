@@ -13,12 +13,15 @@ public interface IJobScheduler
     /// <param name="jobName">Unique job name (used for job type identification)</param>
     /// <param name="payload">Job payload data</param>
     /// <param name="delaySeconds">Delay before execution (0 = immediate)</param>
+    /// <param name="deduplicationKey">Optional key for deduplication. If provided and a job with this key
+    /// already exists, the new job will be skipped. Use for idempotent operations like user cleanup.</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Unique job ID for tracking/cancellation</returns>
+    /// <returns>Unique job ID for tracking/cancellation (or existing job ID if deduplicated)</returns>
     Task<string> ScheduleJobAsync<TPayload>(
         string jobName,
         TPayload payload,
         int delaySeconds,
+        string? deduplicationKey = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

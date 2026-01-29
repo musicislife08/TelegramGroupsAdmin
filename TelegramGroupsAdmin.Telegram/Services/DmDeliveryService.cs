@@ -5,6 +5,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -249,6 +250,7 @@ public class DmDeliveryService : IDmDeliveryService
                     "DeleteMessage",
                     deletePayload,
                     delaySeconds: autoDeleteSeconds.Value,
+                    deduplicationKey: None,
                     cancellationToken);
             }
 

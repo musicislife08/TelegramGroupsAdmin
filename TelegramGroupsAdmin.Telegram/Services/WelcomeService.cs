@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -306,6 +307,7 @@ public class WelcomeService : IWelcomeService
                 "WelcomeTimeout",
                 payload,
                 delaySeconds: config.TimeoutSeconds,
+                deduplicationKey: None,
                 cancellationToken);
 
             // Store the job ID in the welcome response record
@@ -469,6 +471,7 @@ public class WelcomeService : IWelcomeService
                 "DeleteMessage",
                 deletePayload,
                 delaySeconds: 10,
+                deduplicationKey: None,
                 cancellationToken);
         }
         catch (Exception ex)

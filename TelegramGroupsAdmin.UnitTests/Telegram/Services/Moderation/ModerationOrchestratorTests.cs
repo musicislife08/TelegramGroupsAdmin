@@ -7,10 +7,11 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -37,6 +38,8 @@ public class ModerationOrchestratorTests
     private ITelegramUserRepository _mockUserRepository = null!;
     private IManagedChatsRepository _mockManagedChatsRepository = null!;
     private IBanCelebrationService _mockBanCelebrationService = null!;
+    private IReportService _mockReportService = null!;
+    private INotificationService _mockNotificationService = null!;
     private IConfigService _mockConfigService = null!;
     private ILogger<ModerationOrchestrator> _mockLogger = null!;
     private ModerationOrchestrator _orchestrator = null!;
@@ -55,6 +58,8 @@ public class ModerationOrchestratorTests
         _mockUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockBanCelebrationService = Substitute.For<IBanCelebrationService>();
+        _mockReportService = Substitute.For<IReportService>();
+        _mockNotificationService = Substitute.For<INotificationService>();
         _mockConfigService = Substitute.For<IConfigService>();
         _mockLogger = Substitute.For<ILogger<ModerationOrchestrator>>();
 
@@ -70,6 +75,8 @@ public class ModerationOrchestratorTests
             _mockUserRepository,
             _mockManagedChatsRepository,
             _mockBanCelebrationService,
+            _mockReportService,
+            _mockNotificationService,
             _mockConfigService,
             _mockLogger);
     }
@@ -1271,6 +1278,348 @@ public class ModerationOrchestratorTests
         // Verify audit was attempted
         await _mockAuditHandler.Received(1).LogKickAsync(
             userId, chatId, executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region HandleMalwareViolationAsync Tests
+
+    [Test]
+    public async Task HandleMalwareViolationAsync_DeletesMessage()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        const string malwareDetails = "Trojan.GenericKD detected";
+
+        _mockMessageHandler.EnsureExistsAsync(messageId, chatId, null, Arg.Any<CancellationToken>())
+            .Returns(BackfillResult.AlreadyExists());
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+
+        // Act
+        var result = await _orchestrator.HandleMalwareViolationAsync(
+            messageId, chatId, userId, malwareDetails);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.MessageDeleted, Is.True);
+
+        // Verify message was deleted with FileScanner actor
+        await _mockMessageHandler.Received(1).DeleteAsync(
+            chatId,
+            messageId,
+            Actor.FileScanner,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleMalwareViolationAsync_EnsuresMessageExists()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        const string malwareDetails = "Trojan detected";
+
+        _mockMessageHandler.EnsureExistsAsync(messageId, chatId, null, Arg.Any<CancellationToken>())
+            .Returns(BackfillResult.Backfilled());
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+
+        // Act
+        await _orchestrator.HandleMalwareViolationAsync(messageId, chatId, userId, malwareDetails);
+
+        // Assert - EnsureExistsAsync was called before delete
+        await _mockMessageHandler.Received(1).EnsureExistsAsync(
+            messageId,
+            chatId,
+            null,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleMalwareViolationAsync_CreatesReport()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        const string malwareDetails = "Ransomware detected";
+
+        _mockMessageHandler.EnsureExistsAsync(messageId, chatId, null, Arg.Any<CancellationToken>())
+            .Returns(BackfillResult.AlreadyExists());
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+
+        // Act
+        await _orchestrator.HandleMalwareViolationAsync(messageId, chatId, userId, malwareDetails);
+
+        // Assert - Report was created with isAutomated=true
+        await _mockReportService.Received(1).CreateReportAsync(
+            Arg.Is<Report>(r => r.MessageId == (int)messageId && r.ChatId == chatId),
+            null,
+            true,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleMalwareViolationAsync_NotifiesAdmins()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        const string malwareDetails = "Virus.Win32.Agent detected";
+
+        _mockMessageHandler.EnsureExistsAsync(messageId, chatId, null, Arg.Any<CancellationToken>())
+            .Returns(BackfillResult.AlreadyExists());
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+
+        // Act
+        await _orchestrator.HandleMalwareViolationAsync(messageId, chatId, userId, malwareDetails);
+
+        // Assert - Admin notification was sent
+        await _mockNotificationService.Received(1).SendSystemNotificationAsync(
+            NotificationEventType.MalwareDetected,
+            Arg.Any<string>(),
+            Arg.Is<string>(msg => msg.Contains(malwareDetails)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleMalwareViolationAsync_DoesNotBan()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        const string malwareDetails = "Trojan detected";
+
+        _mockMessageHandler.EnsureExistsAsync(messageId, chatId, null, Arg.Any<CancellationToken>())
+            .Returns(BackfillResult.AlreadyExists());
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+
+        // Act
+        await _orchestrator.HandleMalwareViolationAsync(messageId, chatId, userId, malwareDetails);
+
+        // Assert - BanAsync was NOT called (malware upload may be accidental)
+        await _mockBanHandler.DidNotReceive().BanAsync(
+            Arg.Any<long>(),
+            Arg.Any<Actor>(),
+            Arg.Any<string>(),
+            Arg.Any<long?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleMalwareViolationAsync_AuditsDelete()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        const string malwareDetails = "Malware detected";
+
+        _mockMessageHandler.EnsureExistsAsync(messageId, chatId, null, Arg.Any<CancellationToken>())
+            .Returns(BackfillResult.AlreadyExists());
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+
+        // Act
+        await _orchestrator.HandleMalwareViolationAsync(messageId, chatId, userId, malwareDetails);
+
+        // Assert - Audit log was created for deletion
+        await _mockAuditHandler.Received(1).LogDeleteAsync(
+            messageId,
+            chatId,
+            userId,
+            Actor.FileScanner,
+            Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region HandleCriticalViolationAsync Tests
+
+    [Test]
+    public async Task HandleCriticalViolationAsync_DeletesMessage()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        var violations = new List<string> { "Blocked URL: malware.com" };
+
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+        _mockNotificationHandler.NotifyUserCriticalViolationAsync(userId, violations, Arg.Any<CancellationToken>())
+            .Returns(NotificationResult.Succeeded());
+
+        // Act
+        var result = await _orchestrator.HandleCriticalViolationAsync(
+            messageId, chatId, userId, violations);
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.MessageDeleted, Is.True);
+
+        // Verify message was deleted with AutoDetection actor
+        await _mockMessageHandler.Received(1).DeleteAsync(
+            chatId,
+            messageId,
+            Actor.AutoDetection,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCriticalViolationAsync_NotifiesUser()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        var violations = new List<string> { "Blocked URL", "Suspicious file" };
+
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+        _mockNotificationHandler.NotifyUserCriticalViolationAsync(userId, violations, Arg.Any<CancellationToken>())
+            .Returns(NotificationResult.Succeeded());
+
+        // Act
+        await _orchestrator.HandleCriticalViolationAsync(messageId, chatId, userId, violations);
+
+        // Assert - User notification was sent with all violations
+        await _mockNotificationHandler.Received(1).NotifyUserCriticalViolationAsync(
+            userId,
+            Arg.Is<List<string>>(v => v.Count == 2 && v.Contains("Blocked URL") && v.Contains("Suspicious file")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCriticalViolationAsync_DoesNotBan()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        var violations = new List<string> { "Blocked URL" };
+
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+        _mockNotificationHandler.NotifyUserCriticalViolationAsync(userId, violations, Arg.Any<CancellationToken>())
+            .Returns(NotificationResult.Succeeded());
+
+        // Act
+        await _orchestrator.HandleCriticalViolationAsync(messageId, chatId, userId, violations);
+
+        // Assert - BanAsync was NOT called (trusted users get a pass)
+        await _mockBanHandler.DidNotReceive().BanAsync(
+            Arg.Any<long>(),
+            Arg.Any<Actor>(),
+            Arg.Any<string>(),
+            Arg.Any<long?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCriticalViolationAsync_DoesNotWarn()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        var violations = new List<string> { "Blocked URL" };
+
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+        _mockNotificationHandler.NotifyUserCriticalViolationAsync(userId, violations, Arg.Any<CancellationToken>())
+            .Returns(NotificationResult.Succeeded());
+
+        // Act
+        await _orchestrator.HandleCriticalViolationAsync(messageId, chatId, userId, violations);
+
+        // Assert - WarnAsync was NOT called (trusted users get a pass)
+        await _mockWarnHandler.DidNotReceive().WarnAsync(
+            Arg.Any<long>(),
+            Arg.Any<Actor>(),
+            Arg.Any<string?>(),
+            Arg.Any<long>(),
+            Arg.Any<long?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleCriticalViolationAsync_AuditsDelete()
+    {
+        // Arrange
+        const long messageId = 1001L;
+        const long chatId = 2002L;
+        const long userId = 3003L;
+        var violations = new List<string> { "Blocked URL" };
+
+        _mockMessageHandler.DeleteAsync(chatId, messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(DeleteResult.Succeeded(messageDeleted: true));
+        _mockUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
+            .Returns((TelegramUser?)null);
+        _mockManagedChatsRepository.GetByChatIdAsync(chatId, Arg.Any<CancellationToken>())
+            .Returns((ManagedChatRecord?)null);
+        _mockNotificationHandler.NotifyUserCriticalViolationAsync(userId, violations, Arg.Any<CancellationToken>())
+            .Returns(NotificationResult.Succeeded());
+
+        // Act
+        await _orchestrator.HandleCriticalViolationAsync(messageId, chatId, userId, violations);
+
+        // Assert - Audit log was created for deletion
+        await _mockAuditHandler.Received(1).LogDeleteAsync(
+            messageId,
+            chatId,
+            userId,
+            Actor.AutoDetection,
+            Arg.Any<CancellationToken>());
     }
 
     #endregion

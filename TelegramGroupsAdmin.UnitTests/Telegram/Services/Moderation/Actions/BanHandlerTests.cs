@@ -199,6 +199,7 @@ public class BanHandlerTests
                 "TempbanExpiry",
                 Arg.Any<TempbanExpiryJobPayload>(),
                 Arg.Any<int>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns("job-123");
 
@@ -218,6 +219,7 @@ public class BanHandlerTests
             "TempbanExpiry",
             Arg.Is<TempbanExpiryJobPayload>(p => p.UserId == userId),
             Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -240,6 +242,7 @@ public class BanHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<TempbanExpiryJobPayload>(),
                 Arg.Any<int>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns("job-123");
 
@@ -275,6 +278,7 @@ public class BanHandlerTests
                 Arg.Any<string>(),
                 Arg.Any<TempbanExpiryJobPayload>(),
                 Arg.Any<int>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns("job-456");
 
@@ -289,6 +293,7 @@ public class BanHandlerTests
             Arg.Any<string>(),
             Arg.Is<TempbanExpiryJobPayload>(p => p.Reason == "Temporary ban"),
             Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 

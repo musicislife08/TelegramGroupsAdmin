@@ -23,6 +23,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 public class MessageHandlerTests
 {
     private IMessageHistoryRepository _mockMessageHistoryRepository = null!;
+    private IMessageQueryService _mockMessageQueryService = null!;
     private IMessageBackfillService _mockMessageBackfillService = null!;
     private IBotMessageService _mockBotMessageService = null!;
     private IManagedChatsRepository _mockChatsRepository = null!;
@@ -34,6 +35,7 @@ public class MessageHandlerTests
     public void SetUp()
     {
         _mockMessageHistoryRepository = Substitute.For<IMessageHistoryRepository>();
+        _mockMessageQueryService = Substitute.For<IMessageQueryService>();
         _mockMessageBackfillService = Substitute.For<IMessageBackfillService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
         _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
@@ -42,6 +44,7 @@ public class MessageHandlerTests
 
         _handler = new MessageHandler(
             _mockMessageHistoryRepository,
+            _mockMessageQueryService,
             _mockMessageBackfillService,
             _mockBotMessageService,
             _mockChatsRepository,
