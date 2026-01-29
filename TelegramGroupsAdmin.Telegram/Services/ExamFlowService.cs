@@ -536,12 +536,14 @@ public class ExamFlowService : IExamFlowService
         messageBuilder.AppendLine();
         messageBuilder.AppendLine($"Answered: {mcCorrectCount}/{mcTotal} correct");
         messageBuilder.AppendLine($"Score: {mcScore}% (Required: {examConfig.McPassingThreshold}%)");
-        if (hasOpenEnded)
+        if (hasOpenEnded && !string.IsNullOrEmpty(session.OpenEndedAnswer))
         {
             messageBuilder.AppendLine();
-            messageBuilder.AppendLine("Open-ended answer submitted for review.");
+            messageBuilder.AppendLine($"Question: {examConfig.OpenEndedQuestion}");
+            messageBuilder.AppendLine($"Answer: {session.OpenEndedAnswer}");
             if (!string.IsNullOrEmpty(aiReasoning))
             {
+                messageBuilder.AppendLine();
                 messageBuilder.AppendLine($"AI: {aiReasoning}");
             }
         }
