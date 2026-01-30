@@ -19,7 +19,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 public class UpdateProcessorTests
 {
     private IMessageProcessingService _mockMessageProcessingService = null!;
-    private IChatManagementService _mockChatManagementService = null!;
+    private IBotChatHealthService _mockChatHealthService = null!;
     private IWelcomeService _mockWelcomeService = null!;
     private IBanCallbackHandler _mockBanCallbackHandler = null!;
     private IReportCallbackHandler _mockReviewCallbackHandler = null!;
@@ -32,7 +32,7 @@ public class UpdateProcessorTests
     public void SetUp()
     {
         _mockMessageProcessingService = Substitute.For<IMessageProcessingService>();
-        _mockChatManagementService = Substitute.For<IChatManagementService>();
+        _mockChatHealthService = Substitute.For<IBotChatHealthService>();
         _mockWelcomeService = Substitute.For<IWelcomeService>();
         _mockBanCallbackHandler = Substitute.For<IBanCallbackHandler>();
         _mockReviewCallbackHandler = Substitute.For<IReportCallbackHandler>();
@@ -49,7 +49,7 @@ public class UpdateProcessorTests
 
         _sut = new UpdateProcessor(
             _mockMessageProcessingService,
-            _mockChatManagementService,
+            _mockChatHealthService,
             _mockWelcomeService,
             _mockBanCallbackHandler,
             _mockReviewCallbackHandler,
@@ -176,7 +176,7 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert
-        await _mockChatManagementService.Received(1)
+        await _mockChatHealthService.Received(1)
             .HandleMyChatMemberUpdateAsync(
                 Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 12345),
                 Arg.Any<CancellationToken>());
@@ -192,7 +192,7 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert - verify other handlers NOT called
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
@@ -212,7 +212,7 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update, token);
 
         // Assert
-        await _mockChatManagementService.Received(1)
+        await _mockChatHealthService.Received(1)
             .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), token);
     }
 
@@ -230,7 +230,7 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert - both handlers called
-        await _mockChatManagementService.Received(1)
+        await _mockChatHealthService.Received(1)
             .HandleAdminStatusChangeAsync(
                 Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 789),
                 Arg.Any<CancellationToken>());
@@ -250,7 +250,7 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
     }
 
@@ -266,7 +266,7 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update, token);
 
         // Assert
-        await _mockChatManagementService.Received(1)
+        await _mockChatHealthService.Received(1)
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), token);
         await _mockWelcomeService.Received(1)
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), token);
@@ -317,9 +317,9 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
@@ -388,9 +388,9 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert - no handlers called
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
@@ -428,11 +428,11 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert - MyChatMember processed (first in priority), ChatMember skipped
-        await _mockChatManagementService.Received(1)
+        await _mockChatHealthService.Received(1)
             .HandleMyChatMemberUpdateAsync(
                 Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 111),
                 Arg.Any<CancellationToken>());
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
     }
 
@@ -466,9 +466,9 @@ public class UpdateProcessorTests
         await _sut.ProcessUpdateAsync(update);
 
         // Assert - verify other handlers NOT called
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
@@ -524,7 +524,7 @@ public class UpdateProcessorTests
         // Assert - verify other handlers NOT called
         await _mockMessageProcessingService.DidNotReceive()
             .HandleNewMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>());
-        await _mockChatManagementService.DidNotReceive()
+        await _mockChatHealthService.DidNotReceive()
             .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
@@ -555,7 +555,7 @@ public class UpdateProcessorTests
     {
         // Arrange
         var update = CreateMyChatMemberUpdate();
-        _mockChatManagementService
+        _mockChatHealthService
             .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Test exception"));
 

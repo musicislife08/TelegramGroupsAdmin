@@ -6,7 +6,6 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -19,21 +18,21 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 /// </summary>
 public class BotRestrictHandler : IBotRestrictHandler
 {
+    private readonly IBotChatService _chatService;
     private readonly ITelegramBotClientFactory _botClientFactory;
-    private readonly ICrossChatExecutor _crossChatExecutor;
     private readonly ITelegramUserRepository _userRepository;
     private readonly IManagedChatsRepository _chatsRepository;
     private readonly ILogger<BotRestrictHandler> _logger;
 
     public BotRestrictHandler(
+        IBotChatService chatService,
         ITelegramBotClientFactory botClientFactory,
-        ICrossChatExecutor crossChatExecutor,
         ITelegramUserRepository userRepository,
         IManagedChatsRepository chatsRepository,
         ILogger<BotRestrictHandler> logger)
     {
+        _chatService = chatService;
         _botClientFactory = botClientFactory;
-        _crossChatExecutor = crossChatExecutor;
         _userRepository = userRepository;
         _chatsRepository = chatsRepository;
         _logger = logger;
@@ -92,21 +91,35 @@ public class BotRestrictHandler : IBotRestrictHandler
         CancellationToken cancellationToken)
     {
         var client = await _botClientFactory.GetBotClientAsync();
-        var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-            async (targetChatId, token) => await client.RestrictChatMember(
-                chatId: targetChatId,
-                userId: userId,
-                permissions: permissions,
-                untilDate: expiresAt.UtcDateTime,
-                cancellationToken: token),
-            "Restrict",
-            cancellationToken);
+        var healthyChatIds = _chatService.GetHealthyChatIds();
+
+        var successCount = 0;
+        var failCount = 0;
+
+        await Parallel.ForEachAsync(healthyChatIds, cancellationToken, async (targetChatId, ct) =>
+        {
+            try
+            {
+                await client.RestrictChatMember(
+                    chatId: targetChatId,
+                    userId: userId,
+                    permissions: permissions,
+                    untilDate: expiresAt.UtcDateTime,
+                    cancellationToken: ct);
+                Interlocked.Increment(ref successCount);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to restrict user {UserId} in chat {ChatId}", userId, targetChatId);
+                Interlocked.Increment(ref failCount);
+            }
+        });
 
         _logger.LogInformation(
             "Global restriction completed for {User}: {Success} succeeded, {Failed} failed. Expires at {ExpiresAt}",
-            user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount, expiresAt);
+            user.ToLogInfo(userId), successCount, failCount, expiresAt);
 
-        return RestrictResult.Succeeded(crossResult.SuccessCount, expiresAt, crossResult.FailCount);
+        return RestrictResult.Succeeded(successCount, expiresAt, failCount);
     }
 
     /// <summary>

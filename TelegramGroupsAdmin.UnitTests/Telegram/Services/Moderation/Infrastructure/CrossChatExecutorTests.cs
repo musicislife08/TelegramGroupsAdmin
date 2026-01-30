@@ -16,35 +16,28 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Infrastruct
 [TestFixture]
 public class CrossChatExecutorTests
 {
-    private ITelegramBotClientFactory _mockBotFactory = null!;
     private IManagedChatsRepository _mockManagedChatsRepository = null!;
-    private IChatManagementService _mockChatManagementService = null!;
+    private IBotChatHealthService _mockChatHealthService = null!;
     private ILogger<CrossChatExecutor> _mockLogger = null!;
-    private ITelegramOperations _mockOperations = null!;
     private CrossChatExecutor _executor = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockBotFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
-        _mockChatManagementService = Substitute.For<IChatManagementService>();
+        _mockChatHealthService = Substitute.For<IBotChatHealthService>();
         _mockLogger = Substitute.For<ILogger<CrossChatExecutor>>();
-        _mockOperations = Substitute.For<ITelegramOperations>();
-
-        _mockBotFactory.GetOperationsAsync().Returns(_mockOperations);
 
         _executor = new CrossChatExecutor(
-            _mockBotFactory,
             _mockManagedChatsRepository,
-            _mockChatManagementService,
+            _mockChatHealthService,
             _mockLogger);
     }
 
     [TearDown]
     public void TearDown()
     {
-        _mockBotFactory?.Dispose();
+        // No disposable resources
     }
 
     #region Success Scenarios
@@ -56,7 +49,7 @@ public class CrossChatExecutorTests
         var chats = CreateManagedChats([-100001, -100002, -100003]);
         _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
-        _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
+        _mockChatHealthService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002, -100003]);
 
         var executedChatIds = new List<long>();
@@ -87,7 +80,7 @@ public class CrossChatExecutorTests
         var chats = CreateManagedChats([-100001, -100002, -100003]);
         _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
-        _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
+        _mockChatHealthService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002]); // Only 2 healthy
 
         var executedChatIds = new List<long>();
@@ -122,7 +115,7 @@ public class CrossChatExecutorTests
         var chats = CreateManagedChats([-100001, -100002, -100003]);
         _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
-        _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
+        _mockChatHealthService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002, -100003]);
 
         // Act
@@ -151,7 +144,7 @@ public class CrossChatExecutorTests
         var chats = CreateManagedChats([-100001, -100002]);
         _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
-        _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
+        _mockChatHealthService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns([-100001, -100002]);
 
         // Act
@@ -182,7 +175,7 @@ public class CrossChatExecutorTests
         };
         _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(chats);
-        _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
+        _mockChatHealthService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns(new List<long>());
 
         // Act
@@ -205,7 +198,7 @@ public class CrossChatExecutorTests
         // Arrange
         _mockManagedChatsRepository.GetAllChatsAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(new List<ManagedChatRecord>());
-        _mockChatManagementService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
+        _mockChatHealthService.FilterHealthyChats(Arg.Any<IEnumerable<long>>())
             .Returns(new List<long>());
 
         // Act

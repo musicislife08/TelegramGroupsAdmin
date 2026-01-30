@@ -87,7 +87,6 @@ public static class ServiceCollectionExtensions
 
             // REFACTOR-5: Manager/Worker moderation architecture
             // Infrastructure
-            services.AddScoped<ICrossChatExecutor, CrossChatExecutor>();
             services.AddScoped<IMessageBackfillService, MessageBackfillService>();
 
             // Domain handlers (workers) - Bot handlers (thin API wrappers)
