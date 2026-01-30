@@ -1,5 +1,4 @@
 @page "/reports"
-@using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.Models
@@ -17,7 +16,6 @@
 @inject IModerationOrchestrator ModerationOrchestrator
 @inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
-@inject AuthenticationStateProvider AuthStateProvider
 @inject ILogger<Reports> Logger
 @inject IExamFlowService ExamFlowService
 @attribute [Authorize]
@@ -153,21 +151,14 @@
     private int _pendingImpersonationCount;
     private int _pendingExamCount;
     private string _currentUserId = string.Empty;
+    private string _currentUserDisplayName = string.Empty;
     private readonly CancellationTokenSource _cts = new();
 
     protected override async Task OnInitializedAsync()
     {
-        // Get current user ID
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            var userIdClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
-            if (userIdClaim != null)
-            {
-                _currentUserId = userIdClaim.Value;
-            }
-        }
+        // Get current user ID and display name using auth helper
+        _currentUserId = await AuthHelper.GetCurrentUserIdAsync() ?? string.Empty;
+        _currentUserDisplayName = await AuthHelper.GetCurrentUserEmailAsync() ?? _currentUserId;
 
         await LoadReportsAsync();
     }
@@ -422,7 +413,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Reviewed,
-                        _currentUserId,
+                        _currentUserDisplayName,
                         "confirm_scam",
                         $"Confirmed impersonation, banned from {banResult.ChatsAffected} chats");
 
@@ -500,7 +491,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserId,
+                        _currentUserDisplayName,
                         "approve",
                         "Manually approved after exam failure");
 
@@ -508,23 +499,22 @@
                     break;
 
                 case "deny":
-                    // Kick user from chat (they can re-join and try again)
-                    var kickResult = await ModerationOrchestrator.KickUserFromChatAsync(
+                    // Deny via service (deletes teaser, updates welcome response, kicks user, sends DM)
+                    var denyResult = await ExamFlowService.DenyExamFailureAsync(
                         userId: args.ExamFailure.UserId,
                         chatId: args.ExamFailure.ChatId,
-                        executor: executor,
-                        reason: $"Exam failure #{args.ExamFailure.Id} - denied after review");
+                        executor: executor);
 
-                    if (!kickResult.Success)
+                    if (!denyResult.Success)
                     {
-                        Snackbar.Add($"Failed to kick user: {kickResult.ErrorMessage}", Severity.Error);
+                        Snackbar.Add($"Failed to deny: {denyResult.ErrorMessage}", Severity.Error);
                         return;
                     }
 
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserId,
+                        _currentUserDisplayName,
                         "deny",
                         "Denied entry after exam review");
 
@@ -532,27 +522,26 @@
                     break;
 
                 case "deny_ban":
-                    // Ban user globally (prevents repeat spam joins across all chats)
-                    var banResult = await ModerationOrchestrator.BanUserAsync(
+                    // Deny and ban via service (deletes teaser, updates welcome response, bans globally, sends DM)
+                    var denyBanResult = await ExamFlowService.DenyAndBanExamFailureAsync(
                         userId: args.ExamFailure.UserId,
-                        messageId: null,
-                        executor: executor,
-                        reason: $"Exam failure #{args.ExamFailure.Id} - denied and banned after review");
+                        chatId: args.ExamFailure.ChatId,
+                        executor: executor);
 
-                    if (!banResult.Success)
+                    if (!denyBanResult.Success)
                     {
-                        Snackbar.Add($"Failed to ban user: {banResult.ErrorMessage}", Severity.Error);
+                        Snackbar.Add($"Failed to deny and ban: {denyBanResult.ErrorMessage}", Severity.Error);
                         return;
                     }
 
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserId,
+                        _currentUserDisplayName,
                         "deny_ban",
-                        $"Denied and banned from {banResult.ChatsAffected} chats");
+                        "Denied and banned after exam review");
 
-                    Snackbar.Add($"User denied and banned from {banResult.ChatsAffected} chats", Severity.Error);
+                    Snackbar.Add("User denied and banned globally", Severity.Error);
                     break;
 
                 default:

@@ -414,15 +414,16 @@ public class ExamFlowService : IExamFlowService
         // Calculate MC score
         bool? mcPassed = null;
         int mcScore = 0;
+        int mcCorrectCount = 0;
         if (examConfig.HasMcQuestions && session.McAnswers?.Count > 0)
         {
-            var correctCount = CountCorrectAnswers(session.McAnswers, session.ShuffleState);
-            mcScore = (int)Math.Round(100.0 * correctCount / session.McAnswers.Count);
+            mcCorrectCount = CountCorrectAnswers(session.McAnswers, session.ShuffleState);
+            mcScore = (int)Math.Round(100.0 * mcCorrectCount / session.McAnswers.Count);
             mcPassed = mcScore >= examConfig.McPassingThreshold;
 
             _logger.LogInformation(
                 "MC score for user {UserId}: {Score}% ({Correct}/{Total}), threshold: {Threshold}%, passed: {Passed}",
-                user.Id, mcScore, correctCount, session.McAnswers.Count, examConfig.McPassingThreshold, mcPassed);
+                user.Id, mcScore, mcCorrectCount, session.McAnswers.Count, examConfig.McPassingThreshold, mcPassed);
         }
 
         // Evaluate open-ended
@@ -533,14 +534,16 @@ public class ExamFlowService : IExamFlowService
         messageBuilder.AppendLine($"User: {userName}");
         messageBuilder.AppendLine($"Chat: {failureChatName}");
         messageBuilder.AppendLine();
-        messageBuilder.AppendLine($"MC Score: {mcScore}/{mcTotal} ({(mcTotal > 0 ? (double)mcScore / mcTotal : 0):P0})");
-        messageBuilder.AppendLine($"Required: {examConfig.McPassingThreshold}/{mcTotal}");
-        if (hasOpenEnded)
+        messageBuilder.AppendLine($"Answered: {mcCorrectCount}/{mcTotal} correct");
+        messageBuilder.AppendLine($"Score: {mcScore}% (Required: {examConfig.McPassingThreshold}%)");
+        if (hasOpenEnded && !string.IsNullOrEmpty(session.OpenEndedAnswer))
         {
             messageBuilder.AppendLine();
-            messageBuilder.AppendLine("Open-ended answer submitted for review.");
+            messageBuilder.AppendLine($"Question: {examConfig.OpenEndedQuestion}");
+            messageBuilder.AppendLine($"Answer: {session.OpenEndedAnswer}");
             if (!string.IsNullOrEmpty(aiReasoning))
             {
+                messageBuilder.AppendLine();
                 messageBuilder.AppendLine($"AI: {aiReasoning}");
             }
         }
