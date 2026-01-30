@@ -1,11 +1,8 @@
-using System.Net;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Services;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -17,6 +14,10 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram;
 /// Integration tests for CasCheckService using WireMock to mock the CAS API.
 /// Tests the full HTTP pipeline including serialization, headers, timeout handling, and fail-open behavior.
 /// </summary>
+/// <remarks>
+/// The service uses the "caller gates" pattern - callers are responsible for checking
+/// if CAS is enabled before calling. Tests pass CasConfig directly to the service.
+/// </remarks>
 [TestFixture]
 public class CasCheckServiceTests
 {
@@ -25,8 +26,6 @@ public class CasCheckServiceTests
     private HybridCache _cache = null!;
     private ServiceProvider _cacheServiceProvider = null!;
     private IHttpClientFactory _httpClientFactory = null!;
-    private IServiceProvider _serviceProvider = null!;
-    private IConfigService _mockConfigService = null!;
     private CasCheckService _service = null!;
 
     [SetUp]
@@ -50,24 +49,9 @@ public class CasCheckServiceTests
         var provider = services.BuildServiceProvider();
         _httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
 
-        // Mock config service
-        _mockConfigService = Substitute.For<IConfigService>();
-
-        // Create service provider that returns mock config service
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        var scope = Substitute.For<IServiceScope>();
-        var scopedServiceProvider = Substitute.For<IServiceProvider>();
-
-        scopedServiceProvider.GetService(typeof(IConfigService)).Returns(_mockConfigService);
-        scope.ServiceProvider.Returns(scopedServiceProvider);
-        scopeFactory.CreateScope().Returns(scope);
-
-        _serviceProvider = Substitute.For<IServiceProvider>();
-        _serviceProvider.GetService(typeof(IServiceScopeFactory)).Returns(scopeFactory);
-
+        // Create service - now only takes logger, httpClientFactory, and cache
         _service = new CasCheckService(
             _mockLogger,
-            _serviceProvider,
             _httpClientFactory,
             _cache);
     }
@@ -87,7 +71,7 @@ public class CasCheckServiceTests
     {
         // Arrange - CAS API returns ok=false when user is NOT in ban database
         const long userId = 123456789;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -100,7 +84,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": false, "description": "Record not found."}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert
         Assert.Multiple(() =>
@@ -115,7 +99,7 @@ public class CasCheckServiceTests
     {
         // Arrange - CAS API returns ok=true when user IS in ban database
         const long userId = 987654321;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -138,7 +122,7 @@ public class CasCheckServiceTests
                 """));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert
         Assert.Multiple(() =>
@@ -157,7 +141,7 @@ public class CasCheckServiceTests
     {
         // Arrange
         const long userId = 111222333;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -170,8 +154,8 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 1, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
-        var result1 = await _service.CheckUserAsync(userId);
-        var result2 = await _service.CheckUserAsync(userId);
+        var result1 = await _service.CheckUserAsync(userId, casConfig);
+        var result2 = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert
         Assert.Multiple(() =>
@@ -186,31 +170,6 @@ public class CasCheckServiceTests
 
     #endregion
 
-    #region Config Disabled Tests
-
-    [Test]
-    public async Task CheckUserAsync_ConfigDisabled_SkipsCheckReturnsNotBanned()
-    {
-        // Arrange
-        const long userId = 123456789;
-        SetupDisabledConfig();
-
-        // Act
-        var result = await _service.CheckUserAsync(userId);
-
-        // Assert
-        Assert.Multiple(() =>
-        {
-            Assert.That(result.IsBanned, Is.False);
-            Assert.That(result.Reason, Is.Null);
-        });
-
-        // Verify no HTTP requests were made
-        Assert.That(_mockServer.LogEntries.Count(), Is.EqualTo(0));
-    }
-
-    #endregion
-
     #region Fail-Open Tests
 
     [Test]
@@ -218,7 +177,7 @@ public class CasCheckServiceTests
     {
         // Arrange
         const long userId = 123456789;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -229,7 +188,7 @@ public class CasCheckServiceTests
                 .WithBody("Internal Server Error"));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - Fail open means return not banned
         Assert.Multiple(() =>
@@ -244,7 +203,7 @@ public class CasCheckServiceTests
     {
         // Arrange
         const long userId = 123456789;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -255,7 +214,7 @@ public class CasCheckServiceTests
                 .WithBody("Not Found"));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - Fail open
         Assert.That(result.IsBanned, Is.False);
@@ -266,7 +225,7 @@ public class CasCheckServiceTests
     {
         // Arrange
         const long userId = 123456789;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -278,7 +237,7 @@ public class CasCheckServiceTests
                 .WithBody("not valid json at all"));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - Fail open on parse error
         Assert.That(result.IsBanned, Is.False);
@@ -289,7 +248,7 @@ public class CasCheckServiceTests
     {
         // Arrange
         const long userId = 123456789;
-        SetupEnabledConfig(timeout: TimeSpan.FromMilliseconds(100)); // Very short timeout
+        var casConfig = CreateCasConfig(timeout: TimeSpan.FromMilliseconds(100)); // Very short timeout
 
         _mockServer
             .Given(Request.Create()
@@ -301,7 +260,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 1, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - Fail open on timeout
         Assert.That(result.IsBanned, Is.False);
@@ -314,22 +273,15 @@ public class CasCheckServiceTests
         const long userId = 123456789;
 
         // Point to non-existent server
-        var badConfig = new ContentDetectionConfig
+        var badConfig = new CasConfig
         {
-            Cas = new CasConfig
-            {
-                Enabled = true,
-                ApiUrl = "http://localhost:99999", // Invalid port
-                Timeout = TimeSpan.FromSeconds(1)
-            }
+            Enabled = true,
+            ApiUrl = "http://localhost:99999", // Invalid port
+            Timeout = TimeSpan.FromSeconds(1)
         };
 
-        _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
-            .Returns(new ValueTask<ContentDetectionConfig?>(badConfig));
-
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, badConfig);
 
         // Assert - Fail open on network error
         Assert.That(result.IsBanned, Is.False);
@@ -345,7 +297,7 @@ public class CasCheckServiceTests
         // Arrange - CAS API returns ok=false when user is NOT in ban database
         // This is the normal "not banned" response
         const long userId = 123456789;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -357,7 +309,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": false, "description": "Record not found."}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - ok=false means user is NOT banned
         Assert.That(result.IsBanned, Is.False);
@@ -368,7 +320,7 @@ public class CasCheckServiceTests
     {
         // Arrange - Edge case: banned but with 0 offenses reported
         const long userId = 123456789;
-        SetupEnabledConfig();
+        var casConfig = CreateCasConfig();
 
         _mockServer
             .Given(Request.Create()
@@ -380,7 +332,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": true, "result": {"reasons": [1], "offenses": 0, "messages": ["Spam"], "time_added": "2021-01-01T00:00:00.000Z"}}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - ok=true means banned, even with 0 offenses
         Assert.Multiple(() =>
@@ -397,20 +349,13 @@ public class CasCheckServiceTests
         const long userId = 123456789;
         const string expectedUserAgent = "TelegramGroupsAdmin/1.0";
 
-        var config = new ContentDetectionConfig
+        var casConfig = new CasConfig
         {
-            Cas = new CasConfig
-            {
-                Enabled = true,
-                ApiUrl = _mockServer.Urls[0],
-                Timeout = TimeSpan.FromSeconds(5),
-                UserAgent = expectedUserAgent
-            }
+            Enabled = true,
+            ApiUrl = _mockServer.Urls[0],
+            Timeout = TimeSpan.FromSeconds(5),
+            UserAgent = expectedUserAgent
         };
-
-        _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
-            .Returns(new ValueTask<ContentDetectionConfig?>(config));
 
         _mockServer
             .Given(Request.Create()
@@ -423,7 +368,7 @@ public class CasCheckServiceTests
                 .WithBody("""{"ok": false, "description": "Record not found."}"""));
 
         // Act
-        var result = await _service.CheckUserAsync(userId);
+        var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - User not banned, but we verified the header was sent
         Assert.That(result.IsBanned, Is.False);
@@ -434,37 +379,14 @@ public class CasCheckServiceTests
 
     #region Helper Methods
 
-    private void SetupEnabledConfig(TimeSpan? timeout = null)
+    private CasConfig CreateCasConfig(TimeSpan? timeout = null)
     {
-        var config = new ContentDetectionConfig
+        return new CasConfig
         {
-            Cas = new CasConfig
-            {
-                Enabled = true,
-                ApiUrl = _mockServer.Urls[0],
-                Timeout = timeout ?? TimeSpan.FromSeconds(5)
-            }
+            Enabled = true,
+            ApiUrl = _mockServer.Urls[0],
+            Timeout = timeout ?? TimeSpan.FromSeconds(5)
         };
-
-        _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
-            .Returns(new ValueTask<ContentDetectionConfig?>(config));
-    }
-
-    private void SetupDisabledConfig()
-    {
-        var config = new ContentDetectionConfig
-        {
-            Cas = new CasConfig
-            {
-                Enabled = false,
-                ApiUrl = _mockServer.Urls[0]
-            }
-        };
-
-        _mockConfigService
-            .GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
-            .Returns(new ValueTask<ContentDetectionConfig?>(config));
     }
 
     #endregion

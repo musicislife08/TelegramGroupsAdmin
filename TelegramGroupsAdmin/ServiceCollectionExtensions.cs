@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -172,9 +171,6 @@ public static class ServiceCollectionExtensions
 
             // Runtime logging configuration service (Phase 4.7)
             services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
-
-            // API key migration service (one-time migration from env vars to encrypted database storage)
-            services.AddScoped<ApiKeyMigrationService>();
 
             // Similarity hash backfill service (one-time migration for SimHash deduplication)
             services.AddScoped<SimilarityHashBackfillService>();

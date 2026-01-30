@@ -12,15 +12,16 @@ public interface ICasCheckService
     /// <remarks>
     /// <para>Results are cached for 1 hour to reduce API calls.</para>
     /// <para>Fails open on API errors (returns not-banned) to avoid blocking legitimate users.</para>
-    /// <para>Respects the CAS enabled/disabled setting in ContentDetectionConfig.</para>
+    /// <para>Caller is responsible for checking if CAS is enabled before calling this method.</para>
     /// </remarks>
     /// <param name="userId">The Telegram user ID to check.</param>
+    /// <param name="casConfig">The CAS configuration containing API URL, timeout, and other settings.</param>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
     /// <returns>
     /// A <see cref="CasCheckResult"/> indicating whether the user is banned and the reason if applicable.
-    /// Returns <c>IsBanned=false</c> if CAS is disabled, the API fails, or the user is not in the database.
+    /// Returns <c>IsBanned=false</c> if the API fails or the user is not in the database.
     /// </returns>
-    Task<CasCheckResult> CheckUserAsync(long userId, CancellationToken cancellationToken = default);
+    Task<CasCheckResult> CheckUserAsync(long userId, CasConfig casConfig, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

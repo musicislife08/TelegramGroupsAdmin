@@ -193,7 +193,6 @@
                 new() { CheckName = "StopWords", DisplayName = "Stop Words", Description = "Pattern matching against banned keywords/phrases", Category = "Spam", Enabled = _config.StopWords.Enabled, AlwaysRun = _config.StopWords.AlwaysRun },
                 new() { CheckName = "ImageSpam", DisplayName = "Image Spam (Vision)", Description = "OpenAI Vision API image content analysis", Category = "Spam", Enabled = _config.ImageSpam.Enabled, AlwaysRun = _config.ImageSpam.AlwaysRun },
                 new() { CheckName = "VideoSpam", DisplayName = "Video Spam", Description = "Video content analysis for spam detection", Category = "Spam", Enabled = _config.VideoSpam.Enabled, AlwaysRun = _config.VideoSpam.AlwaysRun },
-                new() { CheckName = "Cas", DisplayName = "CAS (Combot)", Description = "Check against Combot Anti-Spam database", Category = "Spam", Enabled = _config.Cas.Enabled, AlwaysRun = _config.Cas.AlwaysRun },
                 new() { CheckName = "Similarity", DisplayName = "Similarity (TF-IDF)", Description = "Detect duplicate/similar spam messages", Category = "Spam", Enabled = _config.Similarity.Enabled, AlwaysRun = _config.Similarity.AlwaysRun },
                 new() { CheckName = "Bayes", DisplayName = "Bayesian Filter", Description = "Statistical spam classification", Category = "Spam", Enabled = _config.Bayes.Enabled, AlwaysRun = _config.Bayes.AlwaysRun },
                 new() { CheckName = "Translation", DisplayName = "Multi-Language", Description = "Detect excessive language mixing", Category = "Spam", Enabled = _config.Translation.Enabled, AlwaysRun = _config.Translation.AlwaysRun },
@@ -226,7 +225,6 @@
             case "ImageSpam": _config.ImageSpam.AlwaysRun = newValue; break;
             case "VideoSpam": _config.VideoSpam.AlwaysRun = newValue; break;
             case "StopWords": _config.StopWords.AlwaysRun = newValue; break;
-            case "Cas": _config.Cas.AlwaysRun = newValue; break;
             case "Similarity": _config.Similarity.AlwaysRun = newValue; break;
             case "Bayes": _config.Bayes.AlwaysRun = newValue; break;
             case "Translation": _config.Translation.AlwaysRun = newValue; break;

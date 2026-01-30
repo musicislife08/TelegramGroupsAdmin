@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Configuration.Models.Welcome;
 
 /// <summary>
 /// A multiple-choice question for the entrance exam

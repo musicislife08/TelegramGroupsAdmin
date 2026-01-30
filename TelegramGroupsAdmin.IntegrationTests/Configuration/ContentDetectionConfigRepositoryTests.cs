@@ -74,28 +74,6 @@ public class ContentDetectionConfigRepositoryTests
     #region Round-Trip Tests
 
     [Test]
-    public async Task SaveAndLoad_CasTimeout_PreservesTimeSpan()
-    {
-        // Arrange
-        var config = new ContentDetectionConfig
-        {
-            Cas = new CasConfig
-            {
-                Enabled = true,
-                ApiUrl = "https://api.cas.chat",
-                Timeout = TimeSpan.FromSeconds(10)
-            }
-        };
-
-        // Act
-        await _repository!.UpdateGlobalConfigAsync(config, "test");
-        var loaded = await _repository.GetGlobalConfigAsync();
-
-        // Assert
-        Assert.That(loaded.Cas.Timeout, Is.EqualTo(TimeSpan.FromSeconds(10)));
-    }
-
-    [Test]
     public async Task SaveAndLoad_ThreatIntelTimeout_PreservesTimeSpan()
     {
         // Arrange
@@ -243,7 +221,6 @@ public class ContentDetectionConfigRepositoryTests
         {
             StopWords = new StopWordsConfig { AlwaysRun = true },
             Similarity = new SimilarityConfig { AlwaysRun = true },
-            Cas = new CasConfig { AlwaysRun = true },
             Bayes = new BayesConfig { AlwaysRun = true },
             InvisibleChars = new InvisibleCharsConfig { AlwaysRun = true },
             Translation = new TranslationConfig { AlwaysRun = true },
@@ -266,7 +243,6 @@ public class ContentDetectionConfigRepositoryTests
         {
             Assert.That(loaded.StopWords.AlwaysRun, Is.True, "StopWords.AlwaysRun");
             Assert.That(loaded.Similarity.AlwaysRun, Is.True, "Similarity.AlwaysRun");
-            Assert.That(loaded.Cas.AlwaysRun, Is.True, "Cas.AlwaysRun");
             Assert.That(loaded.Bayes.AlwaysRun, Is.True, "Bayes.AlwaysRun");
             Assert.That(loaded.InvisibleChars.AlwaysRun, Is.True, "InvisibleChars.AlwaysRun");
             Assert.That(loaded.Translation.AlwaysRun, Is.True, "Translation.AlwaysRun");
@@ -291,7 +267,7 @@ public class ContentDetectionConfigRepositoryTests
         // Arrange - Test fractional seconds
         var config = new ContentDetectionConfig
         {
-            Cas = new CasConfig
+            ThreatIntel = new ThreatIntelConfig
             {
                 Timeout = TimeSpan.FromMilliseconds(1500) // 1.5 seconds
             }
@@ -302,7 +278,7 @@ public class ContentDetectionConfigRepositoryTests
         var loaded = await _repository.GetGlobalConfigAsync();
 
         // Assert
-        Assert.That(loaded.Cas.Timeout.TotalSeconds, Is.EqualTo(1.5).Within(0.001));
+        Assert.That(loaded.ThreatIntel.Timeout.TotalSeconds, Is.EqualTo(1.5).Within(0.001));
     }
 
     [Test]
@@ -311,7 +287,7 @@ public class ContentDetectionConfigRepositoryTests
         // Arrange
         var config = new ContentDetectionConfig
         {
-            Cas = new CasConfig
+            ThreatIntel = new ThreatIntelConfig
             {
                 Timeout = TimeSpan.Zero
             }
@@ -322,7 +298,7 @@ public class ContentDetectionConfigRepositoryTests
         var loaded = await _repository.GetGlobalConfigAsync();
 
         // Assert
-        Assert.That(loaded.Cas.Timeout, Is.EqualTo(TimeSpan.Zero));
+        Assert.That(loaded.ThreatIntel.Timeout, Is.EqualTo(TimeSpan.Zero));
     }
 
     [Test]
@@ -351,7 +327,6 @@ public class ContentDetectionConfigRepositoryTests
         // Arrange - Comprehensive test of all timeout properties
         var config = new ContentDetectionConfig
         {
-            Cas = new CasConfig { Timeout = TimeSpan.FromSeconds(5) },
             ThreatIntel = new ThreatIntelConfig { Timeout = TimeSpan.FromSeconds(30) },
             UrlBlocklist = new UrlBlocklistConfig { CacheDuration = TimeSpan.FromHours(24) },
             SeoScraping = new SeoScrapingConfig { Timeout = TimeSpan.FromSeconds(10) },
@@ -366,7 +341,6 @@ public class ContentDetectionConfigRepositoryTests
         // Assert
         Assert.Multiple(() =>
         {
-            Assert.That(loaded.Cas.Timeout, Is.EqualTo(TimeSpan.FromSeconds(5)));
             Assert.That(loaded.ThreatIntel.Timeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
             Assert.That(loaded.UrlBlocklist.CacheDuration, Is.EqualTo(TimeSpan.FromHours(24)));
             Assert.That(loaded.SeoScraping.Timeout, Is.EqualTo(TimeSpan.FromSeconds(10)));

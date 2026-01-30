@@ -23,6 +23,12 @@ public class WelcomeConfigData
     public double TimeoutSeconds { get; set; }
 
     /// <summary>
+    /// Security checks that run when a user joins.
+    /// Includes CAS check and impersonation detection.
+    /// </summary>
+    public JoinSecurityConfigData JoinSecurity { get; set; } = new();
+
+    /// <summary>
     /// Main welcome message shown to users
     /// </summary>
     public string MainWelcomeMessage { get; set; } = string.Empty;
@@ -46,4 +52,9 @@ public class WelcomeConfigData
     /// DM button text
     /// </summary>
     public string DmButtonText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Entrance exam configuration (EntranceExam mode only).
+    /// </summary>
+    public ExamConfigData? ExamConfig { get; set; }
 }

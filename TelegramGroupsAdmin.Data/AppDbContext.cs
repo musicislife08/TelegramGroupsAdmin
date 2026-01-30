@@ -960,7 +960,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 // Map all nested sub-configs
                 config.OwnsOne(x => x.StopWords);
                 config.OwnsOne(x => x.Similarity);
-                config.OwnsOne(x => x.Cas);
                 config.OwnsOne(x => x.Bayes);
                 config.OwnsOne(x => x.InvisibleChars);
                 config.OwnsOne(x => x.Translation);

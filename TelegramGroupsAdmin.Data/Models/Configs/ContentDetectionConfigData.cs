@@ -28,8 +28,6 @@ public class ContentDetectionConfigData
 
     public SimilarityConfigData Similarity { get; set; } = new();
 
-    public CasConfigData Cas { get; set; } = new();
-
     public BayesConfigData Bayes { get; set; } = new();
 
     public InvisibleCharsConfigData InvisibleChars { get; set; } = new();

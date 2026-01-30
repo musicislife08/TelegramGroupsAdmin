@@ -5,6 +5,7 @@ using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;

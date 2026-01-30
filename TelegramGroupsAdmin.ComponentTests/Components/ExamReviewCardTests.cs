@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 

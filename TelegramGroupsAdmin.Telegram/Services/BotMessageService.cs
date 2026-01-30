@@ -260,4 +260,92 @@ public class BotMessageService : IBotMessageService
             throw;
         }
     }
+
+    /// <summary>
+    /// Save a bot message to the database without sending it.
+    /// Used when the message was already sent and then edited (e.g., verifying → welcome message).
+    /// </summary>
+    public async Task SaveBotMessageAsync(
+        long chatId,
+        int messageId,
+        string text,
+        CancellationToken cancellationToken = default)
+    {
+        var operations = await _botClientFactory.GetOperationsAsync();
+
+        // Get bot user info (fetch once and cache in memory)
+        if (_cachedBotInfo == null)
+        {
+            _cachedBotInfo = await operations.GetMeAsync(cancellationToken);
+            _logger.LogDebug("Fetched and cached bot info: {BotId} (@{BotUsername})", _cachedBotInfo.Id, _cachedBotInfo.Username);
+        }
+        var botInfo = _cachedBotInfo;
+
+        // Get chat info for the name
+        var chatInfo = await operations.GetChatAsync(chatId, cancellationToken);
+
+        // Upsert bot to telegram_users table (ensures bot name is available for UI display)
+        var now = DateTimeOffset.UtcNow;
+        var botUser = new TelegramUser(
+            TelegramUserId: botInfo.Id,
+            Username: botInfo.Username,
+            FirstName: botInfo.FirstName,
+            LastName: botInfo.LastName,
+            UserPhotoPath: null,
+            PhotoHash: null,
+            PhotoFileUniqueId: null,
+            IsBot: true,
+            IsTrusted: false,
+            IsBanned: false,
+            BotDmEnabled: false,
+            FirstSeenAt: now,
+            LastSeenAt: now,
+            CreatedAt: now,
+            UpdatedAt: now
+        );
+        await _userRepo.UpsertAsync(botUser, cancellationToken);
+
+        // Save to messages table
+        var messageRecord = new MessageRecord(
+            MessageId: messageId,
+            UserId: botInfo.Id,
+            UserName: botInfo.Username,
+            FirstName: botInfo.FirstName,
+            LastName: botInfo.LastName,
+            ChatId: chatId,
+            Timestamp: DateTimeOffset.UtcNow,
+            MessageText: text,
+            PhotoFileId: null,
+            PhotoFileSize: null,
+            Urls: null,
+            EditDate: null,
+            ContentHash: null,
+            ChatName: chatInfo.Title ?? chatInfo.Username,
+            PhotoLocalPath: null,
+            PhotoThumbnailPath: null,
+            ChatIconPath: null,
+            UserPhotoPath: null,
+            DeletedAt: null,
+            DeletionSource: null,
+            ReplyToMessageId: null,
+            ReplyToUser: null,
+            ReplyToText: null,
+            MediaType: null,
+            MediaFileId: null,
+            MediaFileSize: null,
+            MediaFileName: null,
+            MediaMimeType: null,
+            MediaLocalPath: null,
+            MediaDuration: null,
+            Translation: null,
+            ContentCheckSkipReason: ContentCheckSkipReason.UserAdmin // Bot messages skip content checks
+        );
+
+        await _messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
+
+        _logger.LogDebug(
+            "Saved bot message {MessageId} to history (chat: {ChatId})",
+            messageId,
+            chatId);
+    }
 }

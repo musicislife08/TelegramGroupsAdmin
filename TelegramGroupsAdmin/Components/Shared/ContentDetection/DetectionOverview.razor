@@ -189,36 +189,6 @@
         }
     </MudCard>
 
-    <!-- CAS (Combot Anti-Spam) -->
-    <MudCard Elevation="1">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudSwitch T="bool" @bind-Value="_config.Cas.Enabled" Color="Color.Primary" />
-                    <MudText Typo="Typo.h6">CAS (Combot Anti-Spam)</MudText>
-                    <HelpTooltip Text="Checks users against the CAS public database of known Telegram spammers. External API lookup (~12ms average). High precision for serial spammers. No configuration needed - automatically detects banned users." />
-                    <MudChip T="string" Size="Size.Small" Color="@(_config.Cas.Enabled ? Color.Success : Color.Default)">
-                        @(_config.Cas.Enabled ? "Enabled" : "Disabled")
-                    </MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
-                </MudStack>
-            </CardHeaderContent>
-            <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionCAS>("CAS Configuration"))">
-                    Configure
-                </MudButton>
-            </CardHeaderActions>
-        </MudCardHeader>
-        @if (_config.Cas.Enabled)
-        {
-            <MudCardContent>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    External lookup for known spammers. Click "Configure" for API settings.
-                </MudText>
-            </MudCardContent>
-        }
-    </MudCard>
-
     <!-- Similarity Detection -->
     <MudCard Elevation="1">
         <MudCardHeader>

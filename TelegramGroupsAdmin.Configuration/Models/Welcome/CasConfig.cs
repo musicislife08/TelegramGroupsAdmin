@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+namespace TelegramGroupsAdmin.Configuration.Models.Welcome;
 
 /// <summary>
 /// CAS (Combot Anti-Spam) configuration

@@ -41,9 +41,6 @@ public static class ConfigurationExtensions
             // System configuration repository (API keys, service settings, per-chat config overrides)
             services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
 
-            // Startup migration services (one-time data migrations on first startup)
-            services.AddHostedService<TelegramConfigMigrationService>();
-
             return services;
         }
     }

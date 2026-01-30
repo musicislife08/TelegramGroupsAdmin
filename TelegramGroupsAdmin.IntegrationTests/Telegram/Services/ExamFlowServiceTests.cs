@@ -10,7 +10,7 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 
