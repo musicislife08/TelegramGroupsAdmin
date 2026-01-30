@@ -212,8 +212,6 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 **Database-First Configuration**:
 - Pattern: Settings stored in database (encrypted when sensitive), not env vars
-- Migration: TelegramConfigMigrationService, ApiKeyMigrationService auto-migrate on first startup
-- Fallback: Env vars used for first-time setup only
 - UI: Settings pages allow live editing without restart
 
 **Background Services**: TelegramBotPollingHost (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans)
@@ -227,12 +225,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - **OpenAI API Key**: Settings → System → OpenAI
 - **SendGrid Settings**: Settings → System → Email
 - **VirusTotal API Key**: Settings → Content Detection → File Scanning
-- **CAS API Key**: Settings → Content Detection → Detection Algorithms
-
-**Migration Services** (optional, one-time only):
-- TelegramConfigMigrationService: Migrates `TELEGRAM__BOTTOKEN` env var to database on first startup
-- ApiKeyMigrationService: Migrates OpenAI/SendGrid env vars to database on first startup
-- After migration, remove env vars - all future changes via Settings UI
+- **CAS Settings**: Settings → Welcome → Security on Join
 
 **Runtime Editing**: Settings UI allows live config changes without restart
 

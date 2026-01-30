@@ -42,4 +42,14 @@ public interface IBotMessageService
         int messageId,
         string deletionSource = "bot_cleanup",
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save a bot message to the database without sending it.
+    /// Used when the message was already sent and then edited (e.g., verifying → welcome message).
+    /// </summary>
+    Task SaveBotMessageAsync(
+        long chatId,
+        int messageId,
+        string text,
+        CancellationToken cancellationToken = default);
 }

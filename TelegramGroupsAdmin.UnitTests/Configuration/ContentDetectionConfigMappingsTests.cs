@@ -1,5 +1,6 @@
 using TelegramGroupsAdmin.Configuration.Mappings;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Data.Models.Configs;
 
 namespace TelegramGroupsAdmin.UnitTests.Configuration;
@@ -374,7 +375,6 @@ public class ContentDetectionConfigMappingsTests
         // Arrange
         var originalData = new ContentDetectionConfigData
         {
-            Cas = new CasConfigData { TimeoutSeconds = 5.0, AlwaysRun = true },
             ThreatIntel = new ThreatIntelConfigData { TimeoutSeconds = 30.0 },
             UrlBlocklist = new UrlBlocklistConfigData { CacheDurationSeconds = 3600.0 },
             SeoScraping = new SeoScrapingConfigData { TimeoutSeconds = 10.0 },
@@ -389,8 +389,6 @@ public class ContentDetectionConfigMappingsTests
         // Assert
         Assert.Multiple(() =>
         {
-            Assert.That(roundTripData.Cas.TimeoutSeconds, Is.EqualTo(5.0));
-            Assert.That(roundTripData.Cas.AlwaysRun, Is.True);
             Assert.That(roundTripData.ThreatIntel.TimeoutSeconds, Is.EqualTo(30.0));
             Assert.That(roundTripData.UrlBlocklist.CacheDurationSeconds, Is.EqualTo(3600.0));
             Assert.That(roundTripData.SeoScraping.TimeoutSeconds, Is.EqualTo(10.0));

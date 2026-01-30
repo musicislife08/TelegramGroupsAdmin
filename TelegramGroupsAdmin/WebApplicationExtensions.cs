@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Services;
@@ -129,17 +128,6 @@ public static class WebApplicationExtensions
             await context.Database.MigrateAsync();
 
             app.Logger.LogInformation("PostgreSQL database migration complete");
-
-            // One-time migration: Populate api_keys column from environment variables
-            try
-            {
-                var apiKeyMigration = scope.ServiceProvider.GetRequiredService<ApiKeyMigrationService>();
-                await apiKeyMigration.MigrateApiKeysFromEnvironmentAsync();
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex, "Failed to migrate API keys from environment variables (non-fatal)");
-            }
 
             // One-time backfill: Populate similarity_hash columns for SimHash deduplication
             try

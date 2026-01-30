@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 

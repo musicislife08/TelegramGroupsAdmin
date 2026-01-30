@@ -177,7 +177,6 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
                 // Section-by-section merge based on UseGlobal flags
                 StopWords = chatConfig.StopWords.UseGlobal ? globalConfig.StopWords : chatConfig.StopWords,
                 Similarity = chatConfig.Similarity.UseGlobal ? globalConfig.Similarity : chatConfig.Similarity,
-                Cas = chatConfig.Cas.UseGlobal ? globalConfig.Cas : chatConfig.Cas,
                 Bayes = chatConfig.Bayes.UseGlobal ? globalConfig.Bayes : chatConfig.Bayes,
                 InvisibleChars = chatConfig.InvisibleChars.UseGlobal ? globalConfig.InvisibleChars : chatConfig.InvisibleChars,
                 Translation = chatConfig.Translation.UseGlobal ? globalConfig.Translation : chatConfig.Translation,

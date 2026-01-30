@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Configuration.Models.Welcome;
 
 /// <summary>
 /// Welcome message delivery mode

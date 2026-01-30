@@ -70,27 +70,33 @@ public class FetchUserPhotoJob(
                 return;
             }
 
-            // Get user for logging context
+            // Get user for logging context and smart cache check
             var user = await _telegramUserRepository.GetByTelegramIdAsync(payload.UserId, cancellationToken);
+            var knownPhotoId = user?.PhotoFileUniqueId;
 
             _logger.LogDebug(
-                "Fetching user photo for {User} (message {MessageId})",
+                "Fetching user photo for {User} (message {MessageId}, known photo: {HasKnown})",
                 user.ToLogDebug(payload.UserId),
-                payload.MessageId);
+                payload.MessageId,
+                knownPhotoId != null);
 
             try
             {
-                // Fetch user photo (cached if already downloaded)
-                var userPhotoPath = await _photoService.GetUserPhotoAsync(payload.UserId, user);
+                // Fetch user photo with smart caching (skips download if FileUniqueId unchanged)
+                var photoResult = await _photoService.GetUserPhotoWithMetadataAsync(
+                    payload.UserId,
+                    knownPhotoId,
+                    user,
+                    cancellationToken);
 
-                if (userPhotoPath != null)
+                if (photoResult != null)
                 {
                     // Phase 4.10: Compute perceptual hash for fast impersonation detection lookups
                     string? photoHashBase64 = null;
                     try
                     {
                         // Resolve relative path to absolute for disk operations
-                        var absolutePath = MediaPathUtilities.ToAbsolutePath(userPhotoPath, _historyOptions.ImageStoragePath);
+                        var absolutePath = MediaPathUtilities.ToAbsolutePath(photoResult.RelativePath, _historyOptions.ImageStoragePath);
                         var photoHashBytes = await _photoHashService.ComputePhotoHashAsync(absolutePath);
                         if (photoHashBytes != null)
                         {
@@ -109,18 +115,26 @@ public class FetchUserPhotoJob(
                             user.ToLogDebug(payload.UserId));
                     }
 
-                    // Update telegram_users table with photo path and pHash (centralized storage)
+                    // Update telegram_users table with photo path, pHash, and FileUniqueId for smart caching
                     await _telegramUserRepository.UpdateUserPhotoPathAsync(
                         payload.UserId,
-                        userPhotoPath,
+                        photoResult.RelativePath,
                         photoHashBase64,
                         cancellationToken);
 
+                    // Update FileUniqueId for smart cache invalidation on future fetches
+                    await _telegramUserRepository.UpdatePhotoFileUniqueIdAsync(
+                        payload.UserId,
+                        photoResult.FileUniqueId,
+                        photoResult.RelativePath,
+                        cancellationToken);
+
                     _logger.LogDebug(
-                        "Cached user photo for {User}: {PhotoPath} (pHash: {HasHash})",
+                        "Cached user photo for {User}: {PhotoPath} (pHash: {HasHash}, uniqueId: {UniqueId})",
                         user.ToLogDebug(payload.UserId),
-                        userPhotoPath,
-                        photoHashBase64 != null ? "stored" : "none");
+                        photoResult.RelativePath,
+                        photoHashBase64 != null ? "stored" : "none",
+                        photoResult.FileUniqueId);
                 }
                 else
                 {

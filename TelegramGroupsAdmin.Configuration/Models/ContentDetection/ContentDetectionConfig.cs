@@ -76,11 +76,6 @@ public class ContentDetectionConfig
     public SimilarityConfig Similarity { get; set; } = new();
 
     /// <summary>
-    /// CAS (Combot Anti-Spam) configuration
-    /// </summary>
-    public CasConfig Cas { get; set; } = new();
-
-    /// <summary>
     /// Naive Bayes classifier configuration
     /// </summary>
     public BayesConfig Bayes { get; set; } = new();

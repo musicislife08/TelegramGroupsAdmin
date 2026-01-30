@@ -686,51 +686,8 @@ public partial class MessageProcessingService(
             );
             await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
 
-            // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
-            // Check users on their first N messages
-            var impersonationService = messageScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
-            var shouldCheck = await impersonationService.ShouldCheckUserAsync(message.From!.Id, message.Chat.Id);
-
-            if (shouldCheck)
-            {
-                logger.LogDebug(
-                    "Checking {User} for impersonation on message #{MessageCount}",
-                    message.From.ToLogDebug(),
-                    message.MessageId);
-
-                // Get cached user photo path (may be null if not fetched yet)
-                var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From.Id, cancellationToken);
-                var photoPath = existingUser?.UserPhotoPath;
-
-                // Check for impersonation
-                var impersonationResult = await impersonationService.CheckUserAsync(
-                    message.From,
-                    message.Chat,
-                    photoPath);
-
-                if (impersonationResult != null)
-                {
-                    logger.LogWarning(
-                        "Impersonation detected for {User} in {Chat} (score: {Score}, risk: {Risk})",
-                        message.From.ToLogDebug(),
-                        message.Chat.ToLogDebug(),
-                        impersonationResult.TotalScore,
-                        impersonationResult.RiskLevel);
-
-                    // Execute action (create alert, auto-ban if score >= 100)
-                    await impersonationService.ExecuteActionAsync(impersonationResult);
-
-                    // If auto-banned, message will remain in history for audit trail
-                    // User will be banned from all chats immediately
-                    if (impersonationResult.ShouldAutoBan)
-                    {
-                        logger.LogInformation(
-                            "{User} auto-banned for impersonation (score: {Score})",
-                            message.From.ToLogInfo(),
-                            impersonationResult.TotalScore);
-                    }
-                }
-            }
+            // Note: Impersonation detection moved to WelcomeService (runs on user join with photo fetch)
+            // Users who joined before the bot was added are legacy and not checked on message
 
             // Raise event for real-time UI updates
             OnNewMessage?.Invoke(messageRecord);

@@ -30,7 +30,6 @@ public static class ContentDetectionConfigMappings
             // Use null-coalescing for sub-configs to handle partial JSON from legacy data
             StopWords = (data.StopWords ?? new StopWordsConfigData()).ToModel(),
             Similarity = (data.Similarity ?? new SimilarityConfigData()).ToModel(),
-            Cas = (data.Cas ?? new CasConfigData()).ToModel(),
             Bayes = (data.Bayes ?? new BayesConfigData()).ToModel(),
             InvisibleChars = (data.InvisibleChars ?? new InvisibleCharsConfigData()).ToModel(),
             Translation = (data.Translation ?? new TranslationConfigData()).ToModel(),
@@ -61,7 +60,6 @@ public static class ContentDetectionConfigMappings
 
             StopWords = model.StopWords.ToData(),
             Similarity = model.Similarity.ToData(),
-            Cas = model.Cas.ToData(),
             Bayes = model.Bayes.ToData(),
             InvisibleChars = model.InvisibleChars.ToData(),
             Translation = model.Translation.ToData(),
@@ -124,36 +122,6 @@ public static class ContentDetectionConfigMappings
             UseGlobal = model.UseGlobal,
             Enabled = model.Enabled,
             Threshold = model.Threshold,
-            AlwaysRun = model.AlwaysRun
-        };
-    }
-
-    // ============================================================================
-    // CasConfig mappings
-    // ============================================================================
-
-    extension(CasConfigData data)
-    {
-        public CasConfig ToModel() => new()
-        {
-            UseGlobal = data.UseGlobal,
-            Enabled = data.Enabled,
-            ApiUrl = data.ApiUrl,
-            Timeout = TimeSpan.FromSeconds(data.TimeoutSeconds),
-            UserAgent = data.UserAgent,
-            AlwaysRun = data.AlwaysRun
-        };
-    }
-
-    extension(CasConfig model)
-    {
-        public CasConfigData ToData() => new()
-        {
-            UseGlobal = model.UseGlobal,
-            Enabled = model.Enabled,
-            ApiUrl = model.ApiUrl,
-            TimeoutSeconds = model.Timeout.TotalSeconds,
-            UserAgent = model.UserAgent,
             AlwaysRun = model.AlwaysRun
         };
     }

@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Configuration.Models.Welcome;
 
 /// <summary>
 /// Configuration for welcome message system
@@ -9,6 +9,13 @@ public class WelcomeConfig
     public bool Enabled { get; set; }
     public WelcomeMode Mode { get; set; } = WelcomeMode.ChatAcceptDeny;
     public int TimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// Security checks that run when a user joins.
+    /// Includes CAS check and impersonation detection.
+    /// These run regardless of whether the welcome message is enabled.
+    /// </summary>
+    public JoinSecurityConfig JoinSecurity { get; set; } = new();
 
     /// <summary>
     /// Main welcome message shown to users. Used in all modes.
@@ -48,12 +55,13 @@ public class WelcomeConfig
         Enabled = true,
         Mode = WelcomeMode.ChatAcceptDeny,
         TimeoutSeconds = 60,
+        JoinSecurity = new JoinSecurityConfig(),
         MainWelcomeMessage = """
-            👋 Welcome {username} to {chat_name}!
+            Welcome {username} to {chat_name}!
 
             Please read and accept our community guidelines within {timeout} seconds or you will be temporarily removed.
 
-            📖 Our Guidelines:
+            Our Guidelines:
             1. Be respectful to all members
             2. No spam or self-promotion
             3. Stay on topic
@@ -65,8 +73,8 @@ public class WelcomeConfig
 
             You have {timeout} seconds to respond.
             """,
-        AcceptButtonText = "✅ I Accept",
-        DenyButtonText = "❌ Decline",
-        DmButtonText = "📋 Read Guidelines"
+        AcceptButtonText = "I Accept",
+        DenyButtonText = "Decline",
+        DmButtonText = "Read Guidelines"
     };
 }

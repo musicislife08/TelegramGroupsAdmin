@@ -75,6 +75,17 @@ public static class WelcomeMessageBuilder
     }
 
     /// <summary>
+    /// Formats the verifying message shown while security checks run.
+    /// This message is displayed briefly (~2s) while CAS/impersonation checks execute.
+    /// </summary>
+    /// <param name="username">User's @username or first name</param>
+    /// <returns>Verifying message text</returns>
+    public static string FormatVerifyingMessage(string username)
+    {
+        return $"{username} ⏳ Verifying...";
+    }
+
+    /// <summary>
     /// Formats the exam intro message (MainWelcomeMessage with variable substitution).
     /// Used in EntranceExam mode as the first DM message before questions.
     /// No footer, no buttons - just the rules/guidelines.

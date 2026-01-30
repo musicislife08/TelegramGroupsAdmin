@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -27,6 +28,7 @@ public class WelcomeService : IWelcomeService
     private readonly IJobScheduler _jobScheduler;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly ICasCheckService _casCheckService;
+    private readonly TelegramPhotoService _photoService;
 
     public WelcomeService(
         ILogger<WelcomeService> logger,
@@ -35,7 +37,8 @@ public class WelcomeService : IWelcomeService
         IDmDeliveryService dmDeliveryService,
         IJobScheduler jobScheduler,
         ITelegramBotClientFactory botClientFactory,
-        ICasCheckService casCheckService)
+        ICasCheckService casCheckService,
+        TelegramPhotoService photoService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -44,6 +47,7 @@ public class WelcomeService : IWelcomeService
         _jobScheduler = jobScheduler;
         _botClientFactory = botClientFactory;
         _casCheckService = casCheckService;
+        _photoService = photoService;
     }
 
     /// <summary>
@@ -131,17 +135,14 @@ public class WelcomeService : IWelcomeService
         var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatMemberUpdate.Chat.Id)
                      ?? WelcomeConfig.Default;
 
-        if (!config.Enabled)
-        {
-            _logger.LogDebug("Welcome system disabled for {Chat}", chatMemberUpdate.Chat.ToLogDebug());
-            return;
-        }
+        // Track message ID for cleanup on ban/security failure
+        int? verifyingMessageId = null;
 
         try
         {
             var operations = await _botClientFactory.GetOperationsAsync();
 
-            // Check if user is an admin/owner - skip welcome for admins
+            // Step 1: Check if user is an admin/owner - skip all checks for admins
             var chatMember = await operations.GetChatMemberAsync(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
             {
@@ -152,14 +153,20 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
-            // Step 1: FIRST - Restrict user permissions (mute immediately)
-            // User can't do harm while we run checks
+            // Step 2: Restrict user permissions (mute immediately - no spam window)
             await RestrictUserPermissionsAsync(operations, chatMemberUpdate.Chat, user, cancellationToken);
 
-            // Create user record if not exists (IsActive: false - not engaged yet)
-            // Must happen for ALL joining users, not just those checked for impersonation
-            await using var impersonationScope = _serviceProvider.CreateAsyncScope();
-            var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+            // Step 3: Send verifying message
+            var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+            var verifyingText = WelcomeMessageBuilder.FormatVerifyingMessage(username);
+            var verifyingMessage = await operations.SendMessageAsync(
+                chatId: chatMemberUpdate.Chat.Id,
+                text: verifyingText,
+                cancellationToken: cancellationToken);
+            verifyingMessageId = verifyingMessage.MessageId;
+
+            // Step 4: Create user record if not exists
+            var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
 
             if (existingUser == null)
@@ -184,102 +191,213 @@ public class WelcomeService : IWelcomeService
                     IsActive: false // Inactive until welcome accepted or message sent
                 );
                 await telegramUserRepo.UpsertAsync(newUser, cancellationToken);
+                existingUser = newUser;
 
                 _logger.LogDebug(
                     "Created inactive user record for {User} on join",
                     user.ToLogDebug());
             }
 
-            // Step 2: Check for impersonation (name + photo similarity vs admins)
-            var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
-            var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
+            // ═══════════════════════════════════════════════════════════════════
+            // SECURITY CHECKS (always run regardless of config.Enabled)
+            // Order: CAS (fail fast) → Photo fetch → Impersonation (uses photo)
+            // ═══════════════════════════════════════════════════════════════════
 
-            if (shouldCheck)
+            // Step 5: CAS (Combot Anti-Spam) check - auto-ban known spammers FIRST (fail fast)
+            if (config.JoinSecurity.Cas.Enabled)
             {
-                _logger.LogDebug(
-                    "Checking {User} for impersonation in {Chat}",
-                    user.ToLogDebug(),
-                    chatMemberUpdate.Chat.ToLogDebug());
-
-                // Get user's photo path if available (may be null if not cached yet)
-                var photoPath = existingUser?.UserPhotoPath;
-
-                // Check for impersonation
-                var impersonationResult = await impersonationService.CheckUserAsync(
-                    user,
-                    chatMemberUpdate.Chat,
-                    photoPath);
-
-                if (impersonationResult != null)
+                var casResult = await _casCheckService.CheckUserAsync(user.Id, config.JoinSecurity.Cas, cancellationToken);
+                if (casResult.IsBanned)
                 {
                     _logger.LogWarning(
-                        "Impersonation detected for {User} in {Chat} (score: {Score}, risk: {Risk})",
-                        user.ToLogDebug(),
-                        chatMemberUpdate.Chat.ToLogDebug(),
-                        impersonationResult.TotalScore,
-                        impersonationResult.RiskLevel);
-
-                    // Execute action (create alert, auto-ban if score >= 100)
-                    await impersonationService.ExecuteActionAsync(impersonationResult);
-
-                    // If auto-banned (score 100), skip welcome flow
-                    if (impersonationResult.ShouldAutoBan)
-                    {
-                        _logger.LogInformation(
-                            "{User} auto-banned for impersonation, skipping welcome flow",
-                            user.ToLogInfo());
-                        return;
-                    }
-
-                    // Score 50-99: Continue with welcome flow (alert created for manual review)
-                    _logger.LogInformation(
-                        "{User} flagged for impersonation review (score: {Score}), continuing with welcome flow",
+                        "CAS banned user detected: {User} in {Chat} (reason: {Reason})",
                         user.ToLogInfo(),
-                        impersonationResult.TotalScore);
+                        chatMemberUpdate.Chat.ToLogInfo(),
+                        casResult.Reason ?? "No reason provided");
+
+                    // Delete verifying message before ban
+                    await TryDeleteMessageAsync(operations, chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+
+                    // Ban user using ModerationOrchestrator (triggers ban celebrations)
+                    var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+                    var reason = $"CAS banned: {casResult.Reason ?? "Listed in CAS database"}";
+                    await moderationOrchestrator.BanUserAsync(
+                        userId: user.Id,
+                        messageId: null,
+                        executor: Actor.Cas,
+                        reason: reason,
+                        cancellationToken);
+
+                    _logger.LogInformation(
+                        "{User} auto-banned (CAS), skipping welcome flow",
+                        user.ToLogInfo());
+                    return;
                 }
             }
-
-            // Step 3: CAS (Combot Anti-Spam) check - auto-ban known spammers
-            var casResult = await _casCheckService.CheckUserAsync(user.Id, cancellationToken);
-            if (casResult.IsBanned)
+            else
             {
-                _logger.LogWarning(
-                    "CAS banned user detected: {User} in {Chat} (reason: {Reason})",
-                    user.ToLogInfo(),
-                    chatMemberUpdate.Chat.ToLogInfo(),
-                    casResult.Reason ?? "No reason provided");
+                _logger.LogDebug("CAS check disabled, skipping for {User}", user.ToLogDebug());
+            }
 
-                // Ban user using ModerationOrchestrator
-                var moderationOrchestrator = impersonationScope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
-                var reason = $"CAS banned: {casResult.Reason ?? "Listed in CAS database"}";
-                await moderationOrchestrator.BanUserAsync(
-                    userId: user.Id,
-                    messageId: null,
-                    executor: Core.Models.Actor.Cas,
-                    reason: reason,
+            // Step 6: Photo fetch (sync, ~1.8s) - enables full impersonation detection
+            string? userPhotoPath = existingUser.UserPhotoPath;
+            var photoResult = await _photoService.GetUserPhotoWithMetadataAsync(
+                user.Id,
+                knownPhotoId: existingUser.PhotoFileUniqueId,
+                existingUser,
+                cancellationToken);
+
+            if (photoResult != null)
+            {
+                userPhotoPath = photoResult.RelativePath;
+
+                // Update user record with photo path and FileUniqueId for smart caching
+                await telegramUserRepo.UpdatePhotoFileUniqueIdAsync(
+                    user.Id,
+                    photoResult.FileUniqueId,
+                    photoResult.RelativePath,
                     cancellationToken);
 
+                _logger.LogDebug(
+                    "Fetched profile photo for {User}: {Path}",
+                    user.ToLogDebug(),
+                    photoResult.RelativePath);
+            }
+
+            // Step 7: Impersonation detection (now has photo for full capability)
+            if (config.JoinSecurity.Impersonation.Enabled)
+            {
+                var impersonationService = scope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
+                var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
+
+                if (shouldCheck)
+                {
+                    _logger.LogDebug(
+                        "Checking {User} for impersonation in {Chat}",
+                        user.ToLogDebug(),
+                        chatMemberUpdate.Chat.ToLogDebug());
+
+                    var impersonationResult = await impersonationService.CheckUserAsync(
+                        user,
+                        chatMemberUpdate.Chat,
+                        userPhotoPath);
+
+                    if (impersonationResult != null)
+                    {
+                        _logger.LogWarning(
+                            "Impersonation detected for {User} in {Chat} (score: {Score}, risk: {Risk})",
+                            user.ToLogDebug(),
+                            chatMemberUpdate.Chat.ToLogDebug(),
+                            impersonationResult.TotalScore,
+                            impersonationResult.RiskLevel);
+
+                        // Execute action (create alert, auto-ban if score >= 100)
+                        await impersonationService.ExecuteActionAsync(impersonationResult);
+
+                        // If auto-banned (score 100), clean up and exit
+                        if (impersonationResult.ShouldAutoBan)
+                        {
+                            // Delete verifying message
+                            await TryDeleteMessageAsync(operations, chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+
+                            _logger.LogInformation(
+                                "{User} auto-banned for impersonation, skipping welcome flow",
+                                user.ToLogInfo());
+                            return;
+                        }
+
+                        // Score 50-99: Continue with welcome flow (alert created for manual review)
+                        _logger.LogInformation(
+                            "{User} flagged for impersonation review (score: {Score}), continuing with welcome flow",
+                            user.ToLogInfo(),
+                            impersonationResult.TotalScore);
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogDebug("Impersonation detection disabled, skipping for {User}", user.ToLogDebug());
+            }
+
+            // ═══════════════════════════════════════════════════════════════════
+            // SECURITY CHECKS PASSED - Branch based on welcome config
+            // ═══════════════════════════════════════════════════════════════════
+
+            if (!config.Enabled)
+            {
+                // Welcome DISABLED: Security checks passed, unmute and clean up
+                _logger.LogDebug(
+                    "Welcome system disabled for {Chat}, security passed - unmuting {User}",
+                    chatMemberUpdate.Chat.ToLogDebug(),
+                    user.ToLogDebug());
+
+                // Restore user permissions
+                await operations.RestrictChatMemberAsync(
+                    chatId: chatMemberUpdate.Chat.Id,
+                    userId: user.Id,
+                    permissions: WelcomeChatPermissions.Default,
+                    cancellationToken: cancellationToken);
+
+                // Mark user as active (security passed, no welcome flow)
+                await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
+
+                // Delete verifying message
+                await TryDeleteMessageAsync(operations, chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+
                 _logger.LogInformation(
-                    "{User} auto-banned (CAS), skipping welcome flow",
-                    user.ToLogInfo());
+                    "{User} passed security checks in {Chat} (welcome disabled)",
+                    user.ToLogInfo(),
+                    chatMemberUpdate.Chat.ToLogInfo());
                 return;
             }
 
-            // Step 4: Send welcome/teaser message based on mode
-            // All modes now use SendWelcomeMessageAsync:
-            // - ChatAcceptDeny: Shows full message with Accept/Deny buttons in group
-            // - DmWelcome: Shows teaser with "Read Rules" button (deep link to DM)
-            // - EntranceExam: Shows teaser with "Start Exam" button (deep link to DM)
-            var welcomeMessage = await SendWelcomeMessageAsync(
-                operations,
+            // Welcome ENABLED: Update verifying message to full welcome content
+            var chatInfo = await operations.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
+            var chatName = chatInfo.Title ?? "this chat";
+            var messageText = WelcomeMessageBuilder.FormatWelcomeMessage(config, username, chatName);
+
+            // Build keyboard based on welcome mode
+            InlineKeyboardMarkup keyboard;
+            if (config.Mode == WelcomeMode.DmWelcome)
+            {
+                var botInfo = await operations.GetMeAsync(cancellationToken);
+                keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatMemberUpdate.Chat.Id, user.Id, botInfo.Username!);
+            }
+            else if (config.Mode == WelcomeMode.EntranceExam)
+            {
+                var botInfo = await operations.GetMeAsync(cancellationToken);
+                keyboard = WelcomeKeyboardBuilder.BuildExamModeKeyboard(config, chatMemberUpdate.Chat.Id, user.Id, botInfo.Username!);
+            }
+            else
+            {
+                keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, user.Id);
+            }
+
+            // Update the verifying message to become the welcome message
+            await operations.EditMessageTextAsync(
+                chatId: chatMemberUpdate.Chat.Id,
+                messageId: verifyingMessageId.Value,
+                text: messageText,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken);
+
+            var welcomeMessageId = verifyingMessageId.Value;
+
+            // Save message to database for FK constraint satisfaction
+            var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
+            await botMessageService.SaveBotMessageAsync(
                 chatMemberUpdate.Chat.Id,
-                user,
-                config,
+                welcomeMessageId,
+                messageText,
                 cancellationToken);
 
-            var welcomeMessageId = welcomeMessage.MessageId;
+            _logger.LogDebug(
+                "Updated verifying message to welcome for {User} in {Chat} (mode: {Mode})",
+                user.ToLogDebug(),
+                chatMemberUpdate.Chat.ToLogDebug(),
+                config.Mode);
 
-            // Step 5: Create welcome response record (pending state)
+            // Step 8: Create welcome response record (pending state)
             var welcomeResponse = new WelcomeResponse(
                 Id: 0, // Will be set by database
                 ChatId: chatMemberUpdate.Chat.Id,
@@ -294,9 +412,9 @@ public class WelcomeService : IWelcomeService
                 TimeoutJobId: null // Will be set after scheduling job
             );
 
-            var responseId = await WithRepositoryAsync((repo, cancellationToken) => repo.InsertAsync(welcomeResponse, cancellationToken), cancellationToken);
+            var responseId = await WithRepositoryAsync((repo, ct) => repo.InsertAsync(welcomeResponse, ct), cancellationToken);
 
-            // Step 6: Schedule timeout via Quartz.NET (replaces fire-and-forget Task.Run)
+            // Step 9: Schedule timeout via Quartz.NET
             var payload = new WelcomeTimeoutPayload(
                 chatMemberUpdate.Chat.Id,
                 user.Id,
@@ -311,7 +429,7 @@ public class WelcomeService : IWelcomeService
                 cancellationToken);
 
             // Store the job ID in the welcome response record
-            await WithRepositoryAsync((repo, cancellationToken) => repo.SetTimeoutJobIdAsync(responseId, jobId, cancellationToken), cancellationToken);
+            await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(responseId, jobId, ct), cancellationToken);
 
             _logger.LogDebug(
                 "Successfully scheduled welcome timeout for {User} in {Chat} (mode: {Mode}, timeout: {Timeout}s, JobId: {JobId})",
@@ -328,6 +446,36 @@ public class WelcomeService : IWelcomeService
                 "Failed to process welcome for {User} in {Chat}",
                 user.ToLogDebug(),
                 chatMemberUpdate.Chat.ToLogDebug());
+
+            // Try to clean up verifying message on error
+            if (verifyingMessageId.HasValue)
+            {
+                try
+                {
+                    var operations = await _botClientFactory.GetOperationsAsync();
+                    await operations.DeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+                }
+                catch
+                {
+                    // Best effort cleanup
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Helper to delete a message without throwing on failure.
+    /// Used for cleanup during security check failures.
+    /// </summary>
+    private async Task TryDeleteMessageAsync(ITelegramOperations operations, long chatId, int messageId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await operations.DeleteMessageAsync(chatId, messageId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to delete message {MessageId} (non-fatal)", messageId);
         }
     }
 
@@ -558,69 +706,6 @@ public class WelcomeService : IWelcomeService
         {
             _logger.LogError(ex, "Failed to handle exam callback {Data}", data);
         }
-    }
-
-    private async Task<Message> SendWelcomeMessageAsync(
-        ITelegramOperations operations,
-        long chatId,
-        User user,
-        WelcomeConfig config,
-        CancellationToken cancellationToken = default)
-    {
-        var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
-
-        // Get chat name for variable substitution
-        var chatInfo = await operations.GetChatAsync(chatId, cancellationToken);
-        var chatName = chatInfo.Title ?? "this chat";
-
-        // Use extracted builder for message formatting
-        var messageText = WelcomeMessageBuilder.FormatWelcomeMessage(config, username, chatName);
-
-        // Build keyboard based on welcome mode using extracted builders
-        InlineKeyboardMarkup keyboard;
-
-        if (config.Mode == WelcomeMode.DmWelcome)
-        {
-            var botInfo = await operations.GetMeAsync(cancellationToken);
-            keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatId, user.Id, botInfo.Username!);
-
-            _logger.LogDebug(
-                "Sending DM welcome message to {User} in {Chat}",
-                user.ToLogDebug(),
-                chatInfo.ToLogDebug());
-        }
-        else if (config.Mode == WelcomeMode.EntranceExam)
-        {
-            var botInfo = await operations.GetMeAsync(cancellationToken);
-            keyboard = WelcomeKeyboardBuilder.BuildExamModeKeyboard(config, chatId, user.Id, botInfo.Username!);
-
-            _logger.LogDebug(
-                "Sending entrance exam teaser to {User} in {Chat}",
-                user.ToLogDebug(),
-                chatInfo.ToLogDebug());
-        }
-        else
-        {
-            keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, user.Id);
-
-            _logger.LogDebug(
-                "Sending chat accept/deny welcome message to {User} in {Chat}",
-                user.ToLogDebug(),
-                chatInfo.ToLogDebug());
-        }
-
-        // Use BotMessageService to send AND save to database (FK constraint satisfaction)
-        // Get scoped service from provider (WelcomeService is Singleton, BotMessageService is Scoped)
-        await using var scope = _serviceProvider.CreateAsyncScope();
-        var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
-
-        var message = await botMessageService.SendAndSaveMessageAsync(
-            chatId: chatId,
-            text: messageText,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken);
-
-        return message;
     }
 
     private async Task RestrictUserPermissionsAsync(

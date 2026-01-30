@@ -1,10 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Hybrid;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -16,7 +12,6 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class CasCheckService : ICasCheckService
 {
     private readonly ILogger<CasCheckService> _logger;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly HybridCache _cache;
 
@@ -26,30 +21,17 @@ public class CasCheckService : ICasCheckService
 
     public CasCheckService(
         ILogger<CasCheckService> logger,
-        IServiceProvider serviceProvider,
         IHttpClientFactory httpClientFactory,
         HybridCache cache)
     {
         _logger = logger;
-        _serviceProvider = serviceProvider;
         _httpClientFactory = httpClientFactory;
         _cache = cache;
     }
 
-    public async Task<CasCheckResult> CheckUserAsync(long userId, CancellationToken cancellationToken = default)
+    public async Task<CasCheckResult> CheckUserAsync(long userId, CasConfig casConfig, CancellationToken cancellationToken = default)
     {
-        // Load CAS config (global config with chat_id=0)
-        using var scope = _serviceProvider.CreateScope();
-        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var detectionConfig = await configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0);
-        var casConfig = detectionConfig?.Cas ?? new CasConfig();
-
-        if (!casConfig.Enabled)
-        {
-            _logger.LogDebug("CAS check disabled, skipping user {UserId}", userId);
-            return new CasCheckResult(false, null);
-        }
-
+        // Caller is responsible for checking casConfig.Enabled before calling this method
         // Use GetOrCreateAsync for cache-aside with stampede protection
         // Factory throws on API failure to prevent caching transient errors
         var cacheKey = $"cas_user_{userId}";

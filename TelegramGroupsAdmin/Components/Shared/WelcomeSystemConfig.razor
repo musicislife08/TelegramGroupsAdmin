@@ -1,5 +1,6 @@
 @using Humanizer
 @using TelegramGroupsAdmin.Configuration
+@using TelegramGroupsAdmin.Configuration.Models.Welcome
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Models
@@ -30,6 +31,86 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
                         When enabled, new members will be restricted until they accept the rules
                     </MudText>
+                </MudItem>
+
+                @* Security on Join Section - These run REGARDLESS of welcome system enabled state *@
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Small" Class="mr-1" />
+                        Security on Join
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                        Security checks run for ALL new members, regardless of welcome system state. Users are muted during verification.
+                    </MudText>
+                </MudItem>
+
+                @* CAS Check Configuration *@
+                <MudItem xs="12">
+                    <MudExpansionPanels>
+                        <MudExpansionPanel Text="CAS (Combot Anti-Spam)" Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.JoinSecurity.Cas.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>CAS (Combot Anti-Spam)</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(_config.JoinSecurity.Cas.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.JoinSecurity.Cas.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                                    Automatically bans users listed in the Combot Anti-Spam database (known spammers).
+                                </MudText>
+                                <MudGrid>
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField @bind-Value="_config.JoinSecurity.Cas.ApiUrl"
+                                                      Label="API URL"
+                                                      HelperText="CAS API endpoint (default: https://api.cas.chat)"
+                                                      Disabled="!_config.JoinSecurity.Cas.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="3">
+                                        <MudNumericField T="int"
+                                                         Value="@((int)_config.JoinSecurity.Cas.Timeout.TotalSeconds)"
+                                                         ValueChanged="@(v => _config.JoinSecurity.Cas.Timeout = TimeSpan.FromSeconds(v))"
+                                                         Label="Timeout (seconds)"
+                                                         Min="1"
+                                                         Max="30"
+                                                         HelperText="API request timeout"
+                                                         Disabled="!_config.JoinSecurity.Cas.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="3">
+                                        <MudTextField @bind-Value="_config.JoinSecurity.Cas.UserAgent"
+                                                      Label="User Agent"
+                                                      HelperText="Optional UA header"
+                                                      Disabled="!_config.JoinSecurity.Cas.Enabled" />
+                                    </MudItem>
+                                </MudGrid>
+                            </ChildContent>
+                        </MudExpansionPanel>
+
+                        <MudExpansionPanel Text="Impersonation Detection" Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.JoinSecurity.Impersonation.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>Impersonation Detection</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(_config.JoinSecurity.Impersonation.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.JoinSecurity.Impersonation.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Detects users trying to impersonate chat admins by comparing names and profile photos.
+                                    Auto-bans high-confidence matches (score 100+), flags medium-confidence for review (score 50-99).
+                                </MudText>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
                 </MudItem>
 
                 <MudItem xs="12">
@@ -301,6 +382,7 @@
     private bool _loading = true;
     private bool _saving;
     private string? _lastFocusedInputId;
+
 
     protected override async Task OnInitializedAsync()
     {

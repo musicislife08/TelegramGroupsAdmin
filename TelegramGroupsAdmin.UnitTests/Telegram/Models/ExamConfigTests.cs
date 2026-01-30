@@ -1,4 +1,4 @@
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Models;
 
