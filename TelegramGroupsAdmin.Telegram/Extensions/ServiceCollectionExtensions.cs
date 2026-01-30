@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -88,12 +89,18 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ICrossChatExecutor, CrossChatExecutor>();
             services.AddScoped<IMessageBackfillService, MessageBackfillService>();
 
-            // Domain handlers (workers)
-            services.AddScoped<IBanHandler, BanHandler>();
+            // Domain handlers (workers) - Bot handlers (thin API wrappers)
+            services.AddScoped<IBotMessageHandler, BotMessageHandler>();
+            services.AddScoped<IBotChatHandler, BotChatHandler>();
+            services.AddScoped<IBotUserHandler, BotUserHandler>();
+            services.AddScoped<IBotMediaHandler, BotMediaHandler>();
+            services.AddScoped<IBotBanHandler, BotBanHandler>();
+            services.AddScoped<IBotRestrictHandler, BotRestrictHandler>();
+            services.AddScoped<IBotModerationMessageHandler, BotModerationMessageHandler>();
+
+            // Moderation domain handlers (non-bot operations)
             services.AddScoped<ITrustHandler, TrustHandler>();
             services.AddScoped<IWarnHandler, WarnHandler>();
-            services.AddScoped<IMessageHandler, MessageHandler>();
-            services.AddScoped<IRestrictHandler, RestrictHandler>();
 
             // Support handlers
             services.AddScoped<IAuditHandler, AuditHandler>();

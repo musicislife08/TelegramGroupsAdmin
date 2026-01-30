@@ -1,14 +1,15 @@
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 /// <summary>
-/// Domain handler for restriction/mute operations.
+/// Low-level handler for restriction/mute operations.
 /// Used by welcome flow and future restriction features.
 /// Supports both single-chat and global restrictions.
+/// This is the ONLY layer that should touch ITelegramBotClientFactory for restrict operations.
 /// </summary>
-public interface IRestrictHandler
+public interface IBotRestrictHandler
 {
     /// <summary>
     /// Restrict user (mute) in a specific chat or globally.

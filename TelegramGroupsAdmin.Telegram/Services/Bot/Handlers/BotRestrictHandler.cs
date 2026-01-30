@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -8,27 +9,28 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Constants;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 /// <summary>
-/// Domain handler for restriction/mute operations.
+/// Low-level handler for restriction/mute operations.
 /// Used by welcome flow and future restriction features.
 /// Supports both single-chat (chatId > 0) and global (chatId = 0) restrictions.
+/// This is the ONLY layer that should touch ITelegramBotClientFactory for restrict operations.
 /// </summary>
-public class RestrictHandler : IRestrictHandler
+public class BotRestrictHandler : IBotRestrictHandler
 {
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly ICrossChatExecutor _crossChatExecutor;
     private readonly ITelegramUserRepository _userRepository;
     private readonly IManagedChatsRepository _chatsRepository;
-    private readonly ILogger<RestrictHandler> _logger;
+    private readonly ILogger<BotRestrictHandler> _logger;
 
-    public RestrictHandler(
+    public BotRestrictHandler(
         ITelegramBotClientFactory botClientFactory,
         ICrossChatExecutor crossChatExecutor,
         ITelegramUserRepository userRepository,
         IManagedChatsRepository chatsRepository,
-        ILogger<RestrictHandler> logger)
+        ILogger<BotRestrictHandler> logger)
     {
         _botClientFactory = botClientFactory;
         _crossChatExecutor = crossChatExecutor;
@@ -118,9 +120,9 @@ public class RestrictHandler : IRestrictHandler
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken)
     {
-        var operations = await _botClientFactory.GetOperationsAsync();
+        var client = await _botClientFactory.GetBotClientAsync();
 
-        await operations.RestrictChatMemberAsync(
+        await client.RestrictChatMember(
             chatId: chatId,
             userId: userId,
             permissions: permissions,
@@ -152,10 +154,10 @@ public class RestrictHandler : IRestrictHandler
 
         try
         {
-            var operations = await _botClientFactory.GetOperationsAsync();
+            var client = await _botClientFactory.GetBotClientAsync();
 
             // Get the chat's default permissions
-            var chatDetails = await operations.GetChatAsync(chatId, cancellationToken);
+            var chatDetails = await client.GetChat(chatId, cancellationToken);
             var defaultPermissions = chatDetails.Permissions ?? CreateDefaultPermissions();
 
             _logger.LogDebug(
@@ -163,7 +165,7 @@ public class RestrictHandler : IRestrictHandler
                 user.ToLogDebug(userId), chat.ToLogDebug(chatId),
                 defaultPermissions.CanSendMessages, defaultPermissions.CanSendPhotos);
 
-            await operations.RestrictChatMemberAsync(
+            await client.RestrictChatMember(
                 chatId: chatId,
                 userId: userId,
                 permissions: defaultPermissions,

@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
@@ -30,11 +31,11 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
 public class ModerationOrchestrator : IModerationOrchestrator
 {
     // Domain handlers (workers)
-    private readonly IBanHandler _banHandler;
+    private readonly IBotBanHandler _banHandler;
     private readonly ITrustHandler _trustHandler;
     private readonly IWarnHandler _warnHandler;
-    private readonly IMessageHandler _messageHandler;
-    private readonly IRestrictHandler _restrictHandler;
+    private readonly IBotModerationMessageHandler _messageHandler;
+    private readonly IBotRestrictHandler _restrictHandler;
 
     // Support handlers
     private readonly IAuditHandler _auditHandler;
@@ -55,11 +56,11 @@ public class ModerationOrchestrator : IModerationOrchestrator
     private readonly ILogger<ModerationOrchestrator> _logger;
 
     public ModerationOrchestrator(
-        IBanHandler banHandler,
+        IBotBanHandler banHandler,
         ITrustHandler trustHandler,
         IWarnHandler warnHandler,
-        IMessageHandler messageHandler,
-        IRestrictHandler restrictHandler,
+        IBotModerationMessageHandler messageHandler,
+        IBotRestrictHandler restrictHandler,
         IAuditHandler auditHandler,
         INotificationHandler notificationHandler,
         ITrainingHandler trainingHandler,

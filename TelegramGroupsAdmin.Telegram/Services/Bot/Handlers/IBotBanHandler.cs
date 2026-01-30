@@ -2,14 +2,15 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 /// <summary>
-/// Domain handler for ban operations (ban, temp-ban, unban).
+/// Low-level handler for ban operations (ban, temp-ban, unban, kick).
 /// Handles Telegram API calls and database updates.
 /// Does NOT know about trust, warnings, or notifications (orchestrator composes those).
+/// This is the ONLY layer that should touch ITelegramBotClientFactory for ban operations.
 /// </summary>
-public interface IBanHandler
+public interface IBotBanHandler
 {
     /// <summary>
     /// Ban user globally across all managed chats.

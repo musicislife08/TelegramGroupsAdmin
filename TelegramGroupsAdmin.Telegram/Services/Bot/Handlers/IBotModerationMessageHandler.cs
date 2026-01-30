@@ -3,13 +3,15 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using Telegram.Bot.Types;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 /// <summary>
-/// Domain handler for message operations.
+/// Low-level handler for moderation message operations.
 /// Owns backfill (ensuring messages exist in DB) and deletion.
+/// Named IBotModerationMessageHandler to avoid conflict with IBotMessageHandler (send/edit).
+/// This is the ONLY layer that should touch ITelegramBotClientFactory for moderation message operations.
 /// </summary>
-public interface IMessageHandler
+public interface IBotModerationMessageHandler
 {
     /// <summary>
     /// Ensure message exists in database, backfilling from Telegram if needed.

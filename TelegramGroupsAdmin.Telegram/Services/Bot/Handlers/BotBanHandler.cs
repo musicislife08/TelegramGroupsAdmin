@@ -1,38 +1,38 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 /// <summary>
-/// Domain handler for ban operations (ban, temp-ban, unban).
+/// Low-level handler for ban operations (ban, temp-ban, unban, kick).
 /// Handles Telegram API calls across all managed chats and database updates.
 /// Does NOT know about trust, warnings, or notifications (orchestrator composes those).
-/// REFACTOR-5: Updates is_banned column on telegram_users table (source of truth).
+/// This is the ONLY layer that should touch ITelegramBotClientFactory for ban operations.
 /// </summary>
-public class BanHandler : IBanHandler
+public class BotBanHandler : IBotBanHandler
 {
     private readonly ICrossChatExecutor _crossChatExecutor;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IJobScheduler _jobScheduler;
     private readonly ITelegramUserRepository _userRepository;
-    private readonly ILogger<BanHandler> _logger;
+    private readonly ILogger<BotBanHandler> _logger;
 
-    public BanHandler(
+    public BotBanHandler(
         ICrossChatExecutor crossChatExecutor,
         ITelegramBotClientFactory botClientFactory,
         IJobScheduler jobScheduler,
         ITelegramUserRepository userRepository,
-        ILogger<BanHandler> logger)
+        ILogger<BotBanHandler> logger)
     {
         _crossChatExecutor = crossChatExecutor;
         _botClientFactory = botClientFactory;
@@ -94,8 +94,8 @@ public class BanHandler : IBanHandler
 
         try
         {
-            var operations = await _botClientFactory.GetOperationsAsync();
-            await operations.BanChatMemberAsync(chat.Id, user.Id, cancellationToken: cancellationToken);
+            var client = await _botClientFactory.GetBotClientAsync();
+            await client.BanChatMember(chat.Id, user.Id, cancellationToken: cancellationToken);
 
             // Ensure global ban status is set (idempotent if already banned)
             await _userRepository.SetBanStatusAsync(user.Id, isBanned: true, expiresAt: null, cancellationToken);
@@ -226,11 +226,11 @@ public class BanHandler : IBanHandler
 
         try
         {
-            var operations = await _botClientFactory.GetOperationsAsync();
+            var client = await _botClientFactory.GetBotClientAsync();
 
             // Ban then immediately unban (removes user from chat without permanent ban)
-            await operations.BanChatMemberAsync(chatId, userId, cancellationToken: cancellationToken);
-            await operations.UnbanChatMemberAsync(chatId, userId, cancellationToken: cancellationToken);
+            await client.BanChatMember(chatId, userId, cancellationToken: cancellationToken);
+            await client.UnbanChatMember(chatId, userId, onlyIfBanned: true, cancellationToken: cancellationToken);
 
             _logger.LogInformation(
                 "Kicked {User} from chat {ChatId}",

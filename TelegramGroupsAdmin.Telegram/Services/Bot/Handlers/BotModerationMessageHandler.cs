@@ -11,13 +11,14 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 /// <summary>
-/// Domain handler for message operations.
+/// Low-level handler for moderation message operations.
 /// Owns backfill (ensuring messages exist in DB) and deletion.
+/// Named BotModerationMessageHandler to avoid conflict with BotMessageHandler (send/edit).
 /// </summary>
-public class MessageHandler : IMessageHandler
+public class BotModerationMessageHandler : IBotModerationMessageHandler
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IMessageQueryService _messageQueryService;
@@ -25,16 +26,16 @@ public class MessageHandler : IMessageHandler
     private readonly IBotMessageService _botMessageService;
     private readonly IManagedChatsRepository _chatsRepository;
     private readonly IJobScheduler _jobScheduler;
-    private readonly ILogger<MessageHandler> _logger;
+    private readonly ILogger<BotModerationMessageHandler> _logger;
 
-    public MessageHandler(
+    public BotModerationMessageHandler(
         IMessageHistoryRepository messageHistoryRepository,
         IMessageQueryService messageQueryService,
         IMessageBackfillService messageBackfillService,
         IBotMessageService botMessageService,
         IManagedChatsRepository chatsRepository,
         IJobScheduler jobScheduler,
-        ILogger<MessageHandler> logger)
+        ILogger<BotModerationMessageHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
         _messageQueryService = messageQueryService;
