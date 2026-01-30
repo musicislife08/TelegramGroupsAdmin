@@ -29,10 +29,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task Login_WithTotpSetupRequired_RedirectsToSetupPage()
     {
         // Arrange - create user requiring TOTP setup (enabled but no secret)
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp-setup"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup() // TotpEnabled=true, no secret
             .AsOwner()
@@ -40,7 +39,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Act - login with password
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should redirect to TOTP setup page
         await _setupPage.WaitForPageAsync();
@@ -51,10 +50,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_DisplaysQrCode()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("qr-display"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -62,7 +60,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Act - navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Assert - QR code should be visible
@@ -79,10 +77,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_DisplaysManualEntryKey()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("manual-key"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -90,7 +87,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Act - navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Assert - manual key should be visible
@@ -109,10 +106,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_WithValidCode_ShowsRecoveryCodes()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("valid-setup"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -120,7 +116,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Get the manual key and generate a valid TOTP code
@@ -157,10 +153,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_RecoveryCodesConfirmation_RequiredToComplete()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("confirm-required"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -168,7 +163,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Get the manual key and generate a valid TOTP code
@@ -191,10 +186,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_CompleteFlow_RedirectsToHomeAfterConfirmation()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("complete-flow"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -202,7 +196,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Get the manual key and generate a valid TOTP code
@@ -226,10 +220,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_WithInvalidCode_ShowsError()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("invalid-setup"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -237,7 +230,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Act - verify with invalid code (all zeros)
@@ -253,10 +246,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_PageTitle_ShowsCorrectHeading()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("page-title"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -264,7 +256,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Act - navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Assert - page should have correct title
@@ -277,10 +269,9 @@ public class TotpSetupTests : SharedE2ETestBase
     public async Task TotpSetup_SetupStepsVisible()
     {
         // Arrange - create user requiring TOTP setup
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("steps-visible"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .RequiresTotpSetup()
             .AsOwner()
@@ -288,7 +279,7 @@ public class TotpSetupTests : SharedE2ETestBase
 
         // Act - navigate through login to setup page
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _setupPage.WaitForPageAsync();
 
         // Assert - all setup steps should be visible

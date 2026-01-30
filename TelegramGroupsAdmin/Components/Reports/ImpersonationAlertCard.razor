@@ -1,5 +1,13 @@
 @using TelegramGroupsAdmin.Data.Models
 @using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Core
+@using TelegramGroupsAdmin.Core.Utilities
+
+@inject ITelegramUserRepository TelegramUserRepository
+@inject IMessageHistoryRepository MessageRepository
+@inject IManagedChatsRepository ManagedChatsRepository
 
 <MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
     <MudCardHeader>
@@ -8,10 +16,6 @@
                 <MudIcon Icon="@Icons.Material.Filled.Warning" Color="@GetIconColor()" Size="Size.Small" />
                 <MudText Typo="Typo.h6">Impersonation Alert</MudText>
                 <MudSpacer />
-                @if (Alert.AutoBanned)
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Error">AUTO-BANNED</MudChip>
-                }
                 <MudChip T="string" Size="Size.Small" Color="@GetRiskColor()">
                     @Alert.RiskLevel.ToString()
                 </MudChip>
@@ -25,28 +29,22 @@
         <MudStack Spacing="3">
             @* Score Summary *@
             <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
-                <MudStack Row="true" Spacing="4" Justify="Justify.SpaceBetween">
+                <MudStack Row="true" Spacing="4" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                     <MudStack Spacing="1">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Score</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Score</MudText>
                         <MudText Typo="Typo.h5" Color="@GetScoreColor()"><b>@Alert.TotalScore/100</b></MudText>
                     </MudStack>
                     @if (Alert.NameMatch)
                     {
-                        <MudStack Spacing="1">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Name Match</MudText>
-                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Check">
-                                50 points
-                            </MudChip>
-                        </MudStack>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Check">
+                            Name Match
+                        </MudChip>
                     }
                     @if (Alert.PhotoMatch)
                     {
-                        <MudStack Spacing="1">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Photo Match</MudText>
-                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Check">
-                                50 points (@Alert.PhotoSimilarityScore?.ToString("P0"))
-                            </MudChip>
-                        </MudStack>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Check">
+                            Photo @Alert.PhotoSimilarityScore?.ToString("P0")
+                        </MudChip>
                     }
                 </MudStack>
             </MudPaper>
@@ -65,18 +63,40 @@
                                           Alt="Suspected user photo"
                                           Elevation="2"
                                           Class="rounded-lg"
-                                          Style="width: 128px; height: 128px; object-fit: cover;" />
+                                          Style="width: 100px; height: 100px; object-fit: cover;" />
                             }
                             else
                             {
-                                <MudIcon Icon="@Icons.Material.Filled.Person"
-                                         Size="Size.Large"
-                                         Style="width: 128px; height: 128px;" />
+                                <MudAvatar Size="Size.Large" Style="width: 100px; height: 100px;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
+                                </MudAvatar>
                             }
 
                             <MudText Typo="Typo.body1"><b>@Alert.SuspectedDisplayName</b></MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.SuspectedUserName ?? "No username")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.SuspectedUserName != null ? $"@{Alert.SuspectedUserName}" : "No username")</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.SuspectedUserId</MudText>
+
+                            <MudDivider Class="my-1" Style="width: 80%;" />
+
+                            @* Suspected user context *@
+                            @if (_suspectedUser != null)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    First seen: @DateTimeUtilities.FormatRelativeTimeVerbose(_suspectedUser.FirstSeenAt)
+                                </MudText>
+                            }
+                            @if (_suspectedMessageCount == 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                                    No messages in chat
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @_suspectedMessageCount message(s) in chat
+                                </MudText>
+                            }
                         </MudStack>
                     </MudPaper>
                 </MudItem>
@@ -85,7 +105,7 @@
                 <MudItem xs="12" sm="6">
                     <MudPaper Elevation="1" Class="pa-3">
                         <MudStack Spacing="2" AlignItems="AlignItems.Center">
-                            <MudText Typo="Typo.subtitle2" Color="Color.Success"><b>Target Admin</b></MudText>
+                            <MudText Typo="Typo.subtitle2" Color="Color.Success"><b>Target Being Copied</b></MudText>
 
                             @if (Alert.TargetPhotoPath != null)
                             {
@@ -93,36 +113,97 @@
                                           Alt="Target admin photo"
                                           Elevation="2"
                                           Class="rounded-lg"
-                                          Style="width: 128px; height: 128px; object-fit: cover;" />
+                                          Style="width: 100px; height: 100px; object-fit: cover;" />
                             }
                             else
                             {
-                                <MudIcon Icon="@Icons.Material.Filled.Person"
-                                         Size="Size.Large"
-                                         Style="width: 128px; height: 128px;" />
+                                <MudAvatar Size="Size.Large" Style="width: 100px; height: 100px;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
+                                </MudAvatar>
                             }
 
                             <MudText Typo="Typo.body1"><b>@Alert.TargetDisplayName</b></MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.TargetUserName ?? "No username")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.TargetUserName != null ? $"@{Alert.TargetUserName}" : "No username")</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.TargetUserId</MudText>
+
+                            <MudDivider Class="my-1" Style="width: 80%;" />
+
+                            @* Target user context *@
+                            @if (_targetUser != null)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    First seen: @DateTimeUtilities.FormatRelativeTimeVerbose(_targetUser.FirstSeenAt)
+                                </MudText>
+                            }
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                Admin
+                            </MudChip>
                         </MudStack>
                     </MudPaper>
                 </MudItem>
             </MudGrid>
 
-            @* Chat context *@
-            @if (Alert.ChatName != null)
-            {
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    <b>Chat:</b> @Alert.ChatName
-                </MudText>
-            }
+            @* Context section *@
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Context</b></MudText>
+                <MudStack Spacing="1">
+                    @* Trust status *@
+                    @if (_suspectedUser?.IsTrusted == true)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Success" />
+                            <MudText Typo="Typo.body2" Color="Color.Success">User is trusted</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Small" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body2">Not trusted</MudText>
+                        </MudStack>
+                    }
+
+                    @* Ban status *@
+                    @if (_suspectedUser?.IsBanned == true)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" />
+                            <MudText Typo="Typo.body2" Color="Color.Error">User is banned</MudText>
+                        </MudStack>
+                    }
+
+                    @* Other managed groups *@
+                    @if (_otherManagedChats.Count > 0)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" Color="Color.Info" />
+                            <MudText Typo="Typo.body2">
+                                Member of: @string.Join(", ", _otherManagedChats.Take(3))@(_otherManagedChats.Count > 3 ? $" +{_otherManagedChats.Count - 3} more" : "")
+                            </MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.GroupOff" Size="Size.Small" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body2">Not in other managed groups</MudText>
+                        </MudStack>
+                    }
+
+                    @* Chat *@
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
+                        <MudText Typo="Typo.body2">Chat: @(Alert.ChatName ?? "Unknown")</MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
 
             @* Review info *@
             @if (Alert.ReviewedAt.HasValue)
             {
                 <MudAlert Severity="Severity.Info" Dense="true">
-                    <b>Reviewed:</b> @Alert.Verdict by @(Alert.ReviewedByUserId ?? "Unknown") on <span class="local-timestamp" data-utc="@Alert.ReviewedAt.Value.ToString("o")">@Alert.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    <b>Reviewed:</b> @Alert.Verdict by @(Alert.ReviewedByEmail ?? Alert.ReviewedByUserId ?? "Unknown")
+                    on <span class="local-timestamp" data-utc="@Alert.ReviewedAt.Value.ToString("o")">@Alert.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                 </MudAlert>
             }
         </MudStack>
@@ -133,28 +214,25 @@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.Block"
-                       OnClick="@OnConfirmBan"
+                       OnClick="@OnConfirmScam"
                        Disabled="@_actionInProgress">
-                Confirm Ban
+                Confirm Scam
             </MudButton>
-
-            @if (Alert.AutoBanned)
-            {
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Success"
-                           StartIcon="@Icons.Material.Filled.CheckCircle"
-                           OnClick="@OnUnban"
-                           Disabled="@_actionInProgress">
-                    Unban (False Positive)
-                </MudButton>
-            }
 
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Default"
                        StartIcon="@Icons.Material.Filled.Close"
-                       OnClick="@OnDismiss"
+                       OnClick="@OnFalsePositive"
                        Disabled="@_actionInProgress">
-                Dismiss
+                False Positive
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.VerifiedUser"
+                       OnClick="@OnTrust"
+                       Disabled="@_actionInProgress">
+                Trust
             </MudButton>
         }
         else
@@ -174,6 +252,50 @@
     public EventCallback<(ImpersonationAlertRecord Alert, string Action)> OnAction { get; set; }
 
     private bool _actionInProgress;
+    private TelegramUser? _suspectedUser;
+    private TelegramUser? _targetUser;
+    private int _suspectedMessageCount;
+    private List<string> _otherManagedChats = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Load user details
+        _suspectedUser = await TelegramUserRepository.GetByTelegramIdAsync(Alert.SuspectedUserId);
+        _targetUser = await TelegramUserRepository.GetByTelegramIdAsync(Alert.TargetUserId);
+
+        // Get message count in this chat
+        _suspectedMessageCount = await MessageRepository.GetMessageCountAsync(Alert.SuspectedUserId, Alert.ChatId);
+
+        // Get other managed chats this user is in (excluding current chat)
+        await LoadOtherManagedChatsAsync();
+    }
+
+    private async Task LoadOtherManagedChatsAsync()
+    {
+        try
+        {
+            var userMessages = await MessageRepository.GetUserMessagesAsync(Alert.SuspectedUserId);
+            var distinctChatIds = userMessages
+                .Select(m => m.ChatId)
+                .Where(chatId => chatId != Alert.ChatId)
+                .Distinct()
+                .ToList();
+
+            if (distinctChatIds.Count > 0)
+            {
+                var allManagedChats = await ManagedChatsRepository.GetActiveChatsAsync();
+                _otherManagedChats = allManagedChats
+                    .Where(c => distinctChatIds.Contains(c.ChatId))
+                    .Select(c => c.ChatName ?? $"Chat {c.ChatId}")
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // Non-critical - leave empty
+            _otherManagedChats = [];
+        }
+    }
 
     private string GetCardStyle()
     {
@@ -208,30 +330,28 @@
 
     private string GetPhotoUrl(string photoPath)
     {
-        // Convert absolute path to URL (served via /data endpoint or similar)
-        // For now, assume photos are accessible via /api/photos/{filename}
         var fileName = Path.GetFileName(photoPath);
         return $"/api/photos/{fileName}";
     }
 
-    private async Task OnConfirmBan()
+    private async Task OnConfirmScam()
     {
         _actionInProgress = true;
         await OnAction.InvokeAsync((Alert, "confirm"));
         _actionInProgress = false;
     }
 
-    private async Task OnUnban()
-    {
-        _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, "unban"));
-        _actionInProgress = false;
-    }
-
-    private async Task OnDismiss()
+    private async Task OnFalsePositive()
     {
         _actionInProgress = true;
         await OnAction.InvokeAsync((Alert, "dismiss"));
+        _actionInProgress = false;
+    }
+
+    private async Task OnTrust()
+    {
+        _actionInProgress = true;
+        await OnAction.InvokeAsync((Alert, "trust"));
         _actionInProgress = false;
     }
 }

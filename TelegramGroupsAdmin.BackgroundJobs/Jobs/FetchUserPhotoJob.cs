@@ -116,9 +116,9 @@ public class FetchUserPhotoJob(
                         photoHashBase64,
                         cancellationToken);
 
-                    _logger.LogInformation(
+                    _logger.LogDebug(
                         "Cached user photo for {User}: {PhotoPath} (pHash: {HasHash})",
-                        user.ToLogInfo(payload.UserId),
+                        user.ToLogDebug(payload.UserId),
                         userPhotoPath,
                         photoHashBase64 != null ? "stored" : "none");
                 }

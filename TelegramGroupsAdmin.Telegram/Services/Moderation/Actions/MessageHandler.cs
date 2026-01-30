@@ -1,7 +1,12 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.JobPayloads;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -15,22 +20,28 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 public class MessageHandler : IMessageHandler
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
+    private readonly IMessageQueryService _messageQueryService;
     private readonly IMessageBackfillService _messageBackfillService;
     private readonly IBotMessageService _botMessageService;
     private readonly IManagedChatsRepository _chatsRepository;
+    private readonly IJobScheduler _jobScheduler;
     private readonly ILogger<MessageHandler> _logger;
 
     public MessageHandler(
         IMessageHistoryRepository messageHistoryRepository,
+        IMessageQueryService messageQueryService,
         IMessageBackfillService messageBackfillService,
         IBotMessageService botMessageService,
         IManagedChatsRepository chatsRepository,
+        IJobScheduler jobScheduler,
         ILogger<MessageHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
+        _messageQueryService = messageQueryService;
         _messageBackfillService = messageBackfillService;
         _botMessageService = botMessageService;
         _chatsRepository = chatsRepository;
+        _jobScheduler = jobScheduler;
         _logger = logger;
     }
 
@@ -118,5 +129,28 @@ public class MessageHandler : IMessageHandler
 
             return DeleteResult.Failed(ex.Message);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task ScheduleUserMessagesCleanupAsync(
+        long userId,
+        CancellationToken cancellationToken = default)
+    {
+        await _jobScheduler.ScheduleJobAsync(
+            BackgroundJobNames.DeleteUserMessages,
+            new DeleteUserMessagesPayload { TelegramUserId = userId },
+            delaySeconds: SpamDetectionConstants.CleanupJobDelaySeconds,
+            deduplicationKey: DeleteUserMessages(userId),
+            cancellationToken);
+
+        _logger.LogInformation("Scheduled messages cleanup job for user {UserId}", userId);
+    }
+
+    /// <inheritdoc />
+    public async Task<MessageWithDetectionHistory?> GetEnrichedAsync(
+        long messageId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _messageQueryService.GetMessageWithDetectionHistoryAsync(messageId, cancellationToken);
     }
 }

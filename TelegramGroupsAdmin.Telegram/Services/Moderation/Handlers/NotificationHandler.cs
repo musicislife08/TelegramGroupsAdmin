@@ -1,7 +1,9 @@
+using System.Text;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -21,6 +23,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 ///
 /// Admin notifications:
 /// - Bans: Sent to admins subscribed to UserBanned event type
+/// - Spam bans: Rich notification with message preview, detection details, media
 /// </summary>
 public class NotificationHandler : INotificationHandler
 {
@@ -28,6 +31,9 @@ public class NotificationHandler : INotificationHandler
     private readonly INotificationService _notificationService;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly ITelegramUserRepository _telegramUserRepository;
+    private readonly IChatAdminsRepository _chatAdminsRepository;
+    private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
+    private readonly IDmDeliveryService _dmDeliveryService;
     private readonly IChatInviteLinkService _chatInviteLinkService;
     private readonly IChatCache _chatCache;
     private readonly ILogger<NotificationHandler> _logger;
@@ -37,6 +43,9 @@ public class NotificationHandler : INotificationHandler
         INotificationService notificationService,
         IManagedChatsRepository managedChatsRepository,
         ITelegramUserRepository telegramUserRepository,
+        IChatAdminsRepository chatAdminsRepository,
+        ITelegramUserMappingRepository telegramUserMappingRepository,
+        IDmDeliveryService dmDeliveryService,
         IChatInviteLinkService chatInviteLinkService,
         IChatCache chatCache,
         ILogger<NotificationHandler> logger)
@@ -45,6 +54,9 @@ public class NotificationHandler : INotificationHandler
         _notificationService = notificationService;
         _managedChatsRepository = managedChatsRepository;
         _telegramUserRepository = telegramUserRepository;
+        _chatAdminsRepository = chatAdminsRepository;
+        _telegramUserMappingRepository = telegramUserMappingRepository;
+        _dmDeliveryService = dmDeliveryService;
         _chatInviteLinkService = chatInviteLinkService;
         _chatCache = chatCache;
         _logger = logger;
@@ -287,5 +299,165 @@ public class NotificationHandler : INotificationHandler
             .Replace("&", "&amp;")   // Must be first to avoid double-escaping
             .Replace("<", "&lt;")
             .Replace(">", "&gt;");
+    }
+
+    /// <inheritdoc />
+    public async Task<NotificationResult> NotifyAdminsSpamBanAsync(
+        MessageWithDetectionHistory enrichedMessage,
+        int chatsAffected,
+        bool messageDeleted,
+        CancellationToken cancellationToken = default)
+    {
+        var msg = enrichedMessage.Message;
+        var detection = enrichedMessage.LatestDetection;
+
+        try
+        {
+            // Build user display (escaped for MarkdownV2)
+            var userDisplay = TelegramTextUtilities.EscapeMarkdownV2(
+                TelegramDisplayName.FormatMention(msg.FirstName, msg.LastName, msg.UserName, msg.UserId));
+
+            // Build message preview (use translated text if available)
+            var messageContent = msg.Translation?.TranslatedText ?? msg.MessageText;
+            var messageTextPreview = messageContent != null && messageContent.Length > NotificationConstants.MessagePreviewMaxLength
+                ? messageContent[..(NotificationConstants.MessagePreviewMaxLength - NotificationConstants.PreviewTruncationOffset)] + "..."
+                : messageContent ?? "[No text]";
+            messageTextPreview = TelegramTextUtilities.EscapeMarkdownV2(messageTextPreview);
+
+            var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(msg.ChatName ?? msg.ChatId.ToString());
+
+            // Build detection details from DetectionResultRecord
+            var detectionDetails = new StringBuilder();
+            if (detection != null)
+            {
+                detectionDetails.AppendLine($"• Net Confidence: {Math.Abs(detection.NetConfidence)}%");
+                detectionDetails.AppendLine($"• Confidence: {detection.Confidence}%");
+                if (!string.IsNullOrEmpty(detection.Reason))
+                {
+                    var escapedReason = TelegramTextUtilities.EscapeMarkdownV2(
+                        detection.Reason.Length > 100 ? detection.Reason[..97] + "..." : detection.Reason);
+                    detectionDetails.AppendLine($"• Reason: {escapedReason}");
+                }
+            }
+            else
+            {
+                detectionDetails.AppendLine("• Detection details not available");
+            }
+
+            // Build action summary
+            var actionSummary = new StringBuilder();
+            actionSummary.AppendLine($"✅ Banned from {chatsAffected} managed chats");
+            if (messageDeleted)
+            {
+                actionSummary.AppendLine($"✅ Message deleted \\(ID: {msg.MessageId}\\)");
+            }
+
+            // Build consolidated message
+            var consolidatedMessage =
+                $"🚫 *Spam Auto\\-Banned*\n\n" +
+                $"*User:* {userDisplay}\n" +
+                $"*Chat:* {chatTitle}\n\n" +
+                $"📝 *Message:*\n{messageTextPreview}\n\n" +
+                $"🔍 *Detection:*\n{detectionDetails}\n" +
+                $"⛔ *Action Taken:*\n{actionSummary}";
+
+            // Get media paths from enriched message
+            string? photoPath = null;
+            string? videoPath = null;
+
+            if (!string.IsNullOrEmpty(msg.PhotoLocalPath))
+            {
+                photoPath = msg.PhotoLocalPath;
+            }
+            else if (msg.MediaType is MediaType.Video or MediaType.Animation
+                     && !string.IsNullOrEmpty(msg.MediaLocalPath))
+            {
+                videoPath = msg.MediaLocalPath;
+            }
+
+            // Send to all chat admins
+            var chatAdmins = await _chatAdminsRepository.GetChatAdminsAsync(msg.ChatId, cancellationToken);
+            var sentCount = 0;
+
+            foreach (var admin in chatAdmins)
+            {
+                // Check if admin has linked their Telegram account
+                var mapping = await _telegramUserMappingRepository.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
+                if (mapping == null)
+                    continue;
+
+                await _dmDeliveryService.SendDmWithMediaAsync(
+                    admin.TelegramId,
+                    "spam_banned",
+                    consolidatedMessage,
+                    photoPath,
+                    videoPath,
+                    cancellationToken);
+                sentCount++;
+            }
+
+            _logger.LogDebug(
+                "Sent spam ban notification to {Count} admins for message {MessageId}",
+                sentCount, msg.MessageId);
+
+            return NotificationResult.Succeeded();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to send spam ban notification for message {MessageId}",
+                msg.MessageId);
+            return NotificationResult.Failed(ex.Message);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<NotificationResult> NotifyUserCriticalViolationAsync(
+        long userId,
+        List<string> violations,
+        CancellationToken cancellationToken = default)
+    {
+        // User must exist - they sent a message to trigger this violation
+        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken)
+            ?? throw new InvalidOperationException($"User {userId} not found in database. This indicates a bug in the moderation pipeline.");
+
+        try
+        {
+            // Build violation list
+            var violationList = string.Join("\n", violations.Select((v, i) => $"{i + 1}. {EscapeHtml(v)}"));
+
+            var message = $"⚠️ <b>Message Removed</b>\n\n" +
+                          $"Your message was deleted due to security policy violations:\n\n" +
+                          $"{violationList}\n\n" +
+                          $"These checks apply to all users regardless of trust status.\n\n" +
+                          $"💡 If you believe this was a mistake, please contact an admin.";
+
+            var notification = new Notification("critical_violation", message);
+            var result = await _notificationOrchestrator.SendTelegramDmAsync(user.TelegramUserId, notification, cancellationToken);
+
+            if (result.Success)
+            {
+                _logger.LogInformation(
+                    "Sent critical violation notification to {User} ({Count} violations)",
+                    user.ToLogInfo(), violations.Count);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Failed to send critical violation notification to {User}: {Error}",
+                    user.ToLogDebug(), result.ErrorMessage ?? "Unknown error");
+            }
+
+            return result.Success
+                ? NotificationResult.Succeeded()
+                : NotificationResult.Failed(result.ErrorMessage ?? "Notification delivery failed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to send critical violation notification for user {User}",
+                user.ToLogDebug());
+            return NotificationResult.Failed(ex.Message);
+        }
     }
 }

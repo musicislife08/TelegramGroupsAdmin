@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -48,7 +50,7 @@ public class ReportCommand(
         var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
 
         // Check for duplicate report (one pending report per message)
-        var existingReport = await reportsRepository.GetExistingPendingReportAsync(
+        var existingReport = await reportsRepository.GetExistingPendingContentReportAsync(
             reportedMessage.MessageId,
             message.Chat.Id,
             cancellationToken);
@@ -75,7 +77,7 @@ public class ReportCommand(
             ReportedByUserId: reporter.Id,
             ReportedByUserName: reporter.Username ?? reporter.FirstName,
             ReportedAt: DateTimeOffset.UtcNow,
-            Status: DataModels.ReportStatus.Pending,
+            Status: ReportStatus.Pending,
             ReviewedBy: null,
             ReviewedAt: null,
             ActionTaken: null,
@@ -97,21 +99,10 @@ public class ReportCommand(
             reportedUser.Id,
             reportedUser.Username);
 
-        if (result.DmNotificationCount > 0 || result.ChatMentionCount > 0)
-        {
-            return new CommandResult(
-                $"✅ Message reported for admin review (Report #{result.ReportId})\n" +
-                $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n" +
-                $"Notified {result.DmNotificationCount} admin(s) via DM, {result.ChatMentionCount} in chat\n\n" +
-                $"_Admins will review your report shortly._",
-                DeleteCommandMessage,
-                DeleteResponseAfterSeconds);
-        }
-
         return new CommandResult(
             $"✅ Message reported for admin review (Report #{result.ReportId})\n" +
             $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +
-            $"_Admins will review your report shortly._",
+            $"_Admins will be notified shortly._",
             DeleteCommandMessage,
             DeleteResponseAfterSeconds);
     }

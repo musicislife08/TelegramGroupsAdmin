@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -25,6 +26,7 @@ public class HomePage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/");
+        // Dashboard has interactive stats - need Blazor circuit connected
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
@@ -160,11 +162,11 @@ public class HomePage
     #region New Dashboard Stats (#173)
 
     /// <summary>
-    /// Gets the Spam (24h) stat value.
+    /// Gets the Spam Today stat value.
     /// </summary>
-    public async Task<string?> GetSpam24hAsync()
+    public async Task<string?> GetSpamTodayAsync()
     {
-        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Spam (24h)" });
+        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Spam Today" });
         var value = statItem.Locator(".mud-typography-h5");
         return await value.TextContentAsync();
     }

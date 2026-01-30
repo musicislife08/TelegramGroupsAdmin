@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 36; // Updated 2026-01-08: -content_check_configs (merged into content_detection_configs)
+    public const int TotalTableCount = 39; // Updated 2026-01-21: +ban_celebration_gifs, +ban_celebration_captions
 
     /// <summary>
     /// Web application users (ASP.NET Identity)
@@ -331,6 +331,74 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Analytics test data expected values (from 50_analytics_test_data.sql).
+    /// Used for assertions in AnalyticsRepositoryTests.
+    /// </summary>
+    public static class AnalyticsData
+    {
+        // Spam detection counts (net_confidence > 0)
+        public const int TodaySpamCount = 3;           // 3 spam detections today (82617, 82618, 82616)
+        public const int YesterdaySpamCount = 2;       // 2 spam detections yesterday (82615, 82612)
+        public const int LastWeekSpamCount = 2;        // 2 spam detections 8-9 days ago (82606, 82603)
+
+        // Base data has 2 ham detections (from 05_base_detection_results.sql)
+        public const int BaseHamCount = 2;
+
+        // FP/FN test data (references existing message IDs)
+        public const long FalsePositiveMessageId = 82617;  // Spam corrected to ham
+        public const long FalseNegativeMessageId = 82594;  // Ham (from base) corrected to spam
+
+        // Welcome response expected counts (from 50_analytics_test_data.sql)
+        public const int TodayAcceptedCount = 2;       // Users 100001, 100002
+        public const int TodayDeniedCount = 1;         // User 100003
+        public const int YesterdayTimeoutCount = 1;    // User 100004
+        public const int YesterdayLeftCount = 1;       // User 100005
+        public const int LastWeekAcceptedCount = 1;    // User 100006
+
+        // Total welcome responses
+        public const int TotalWelcomeResponses = 6;
+
+        // Algorithm performance data - CheckName enum values in check_results_json
+        public const int CheckNameStopWords = 0;       // StopWords algorithm
+        public const int CheckNameBayes = 3;           // Bayes classifier
+        public const int CheckNameOpenAI = 6;          // OpenAI/LLM check
+
+        // Precalculated expected percentages for welcome response distribution
+        // Based on: 6 total (3 accepted, 1 denied, 1 timeout, 1 left)
+        public const double ExpectedAcceptedPercentage = 50.0;           // 3/6 * 100
+        public const double ExpectedDeniedPercentage = 100.0 / 6.0;      // 1/6 * 100 ≈ 16.67%
+        public const double ExpectedTimeoutPercentage = 100.0 / 6.0;     // 1/6 * 100 ≈ 16.67%
+        public const double ExpectedLeftPercentage = 100.0 / 6.0;        // 1/6 * 100 ≈ 16.67%
+    }
+
+    /// <summary>
+    /// Test data for old messages with various ages.
+    /// Message IDs: 96001-96006 (to avoid conflicts with ML training data 90001-90040 and dedup 95001-95022)
+    /// Useful for testing cleanup/retention logic.
+    /// Training data = detection_results WHERE used_for_training = true
+    /// </summary>
+    public static class OldMessages
+    {
+        // Messages without training data (eligible for cleanup)
+        public const long Msg45DaysOld_Id = 96001;     // 45 days old, no detection results, HAS edit + translation
+        public const long Msg60DaysOld_Id = 96002;     // 60 days old, no detection results, HAS translation
+        public const long Msg35DaysOld_Id = 96004;     // 35 days old (just past 30-day threshold)
+        public const long MsgNonTraining_Id = 96006;   // 50 days old, has detection but used_for_training=false
+
+        // Message WITH training data (should be preserved regardless of age)
+        public const long MsgWithTraining_Id = 96003;  // 90 days old but has training data
+
+        // Boundary case - 29 days old (just inside retention window)
+        public const long Msg29DaysOld_Id = 96005;
+
+        // Related data for cascade delete testing
+        public const long Edit_ForMsg45Days_Id = 960001;  // Edit of Msg45DaysOld - cascades when message deleted
+
+        // Helper: Expected deletion count when using 30-day retention
+        public const int ExpectedDeletionsWith30DayRetention = 4;  // 96001, 96002, 96004, 96006
+    }
+
+    /// <summary>
     /// Seeds full dataset: base data + GoldenDataset training labels (3 spam + 2 ham) + MLTrainingData.sql (20 spam + 20 ham).
     /// Total: 23 spam + 22 ham training samples.
     /// Use for most tests that need complete training data.
@@ -488,11 +556,42 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Seeds analytics-specific test data with temporal spans for trend testing.
+    /// Includes spam detection results, manual corrections (FP/FN), and welcome responses.
+    /// Use for testing IAnalyticsRepository methods (DailySpamSummary, SpamTrendComparison, etc.).
+    /// </summary>
+    public static async Task SeedAnalyticsDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.50_analytics_test_data.sql");
+    }
+
+    /// <summary>
+    /// Seeds old messages with various ages for testing retention/cleanup logic.
+    /// Includes messages with and without training data at various ages.
+    /// Use for testing CleanupExpiredAsync and message retention behavior.
+    /// </summary>
+    public static async Task SeedOldMessagesAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.60_old_messages.sql");
+    }
+
+    /// <summary>
     /// Loads and executes an embedded SQL script from TestData directory.
     /// </summary>
     /// <param name="context">Database context</param>
     /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.11_training_full.sql")</param>
     private static async Task LoadSqlScriptAsync(AppDbContext context, string scriptPath)
+    {
+        await LoadSqlScriptAsync(scriptPath, sql => context.Database.ExecuteSqlRawAsync(sql));
+    }
+
+    /// <summary>
+    /// Loads and executes an embedded SQL script using a custom executor.
+    /// Use this for migration tests where DbContext isn't available (schema mismatch at migration points).
+    /// </summary>
+    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.40_pre_migration_impersonation_alerts.sql")</param>
+    /// <param name="sqlExecutor">Delegate to execute the SQL (e.g., helper.ExecuteSqlAsync)</param>
+    public static async Task LoadSqlScriptAsync(string scriptPath, Func<string, Task> sqlExecutor)
     {
         var assembly = typeof(GoldenDataset).Assembly;
         var resourceName = $"TelegramGroupsAdmin.IntegrationTests.TestData.{scriptPath}";
@@ -504,6 +603,6 @@ public static class GoldenDataset
 
         using var reader = new StreamReader(stream);
         var sqlScript = await reader.ReadToEndAsync();
-        await context.Database.ExecuteSqlRawAsync(sqlScript);
+        await sqlExecutor(sqlScript);
     }
 }

@@ -161,6 +161,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
                 Arg.Any<string>(),
                 Arg.Any<object>(),
                 Arg.Any<int>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns("job-id-123");
 
@@ -176,6 +177,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
             BackgroundJobNames.ChatHealthCheck,
             Arg.Any<object>(),
             0, // delaySeconds
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -189,6 +191,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
                 Arg.Any<string>(),
                 Arg.Any<object>(),
                 Arg.Any<int>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns("job-id-123");
 
@@ -404,6 +407,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
                 Arg.Any<string>(),
                 Arg.Any<object>(),
                 Arg.Any<int>(),
+                Arg.Any<string?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromException<string>(new Exception("Scheduling failed")));
 

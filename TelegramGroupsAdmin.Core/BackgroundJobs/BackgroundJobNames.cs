@@ -13,10 +13,10 @@ public static class BackgroundJobNames
     public const string ScheduledBackup = "ScheduledBackupJob";
 
     /// <summary>
-    /// Message cleanup (deletes old messages based on retention policy)
-    /// Background Service: CleanupBackgroundService (always running)
+    /// Data cleanup (deletes expired messages, reports, callbacks, notifications based on retention)
+    /// Quartz Job: DataCleanupJob
     /// </summary>
-    public const string MessageCleanup = "MessageCleanup";
+    public const string DataCleanup = "DataCleanup";
 
     /// <summary>
     /// User photo refresh (downloads updated profile photos from Telegram)
@@ -93,29 +93,10 @@ public static class BackgroundJobNames
     /// Quartz Job: WelcomeTimeoutJob
     /// </summary>
     public const string WelcomeTimeout = "WelcomeTimeout";
-}
 
-/// <summary>
-/// Centralized constants for background job settings keys
-/// Prevents magic strings in Settings dictionaries
-/// </summary>
-public static class BackgroundJobSettings
-{
-    // Scheduled Backup settings (granular 5-tier retention)
-    public const string RetainHourlyBackups = "RetainHourlyBackups";
-    public const string RetainDailyBackups = "RetainDailyBackups";
-    public const string RetainWeeklyBackups = "RetainWeeklyBackups";
-    public const string RetainMonthlyBackups = "RetainMonthlyBackups";
-    public const string RetainYearlyBackups = "RetainYearlyBackups";
-    public const string BackupDirectory = "BackupDirectory";
-
-    // Message Cleanup settings
-    public const string RetentionHours = "RetentionHours";
-
-    // User Photo Refresh settings
-    public const string DaysBack = "DaysBack";
-
-    // Database Maintenance settings
-    public const string RunVacuum = "RunVacuum";
-    public const string RunAnalyze = "RunAnalyze";
+    /// <summary>
+    /// Send notification to a Telegram chat (admin alerts, system messages)
+    /// Quartz Job: SendChatNotificationJob
+    /// </summary>
+    public const string SendChatNotification = "SendChatNotification";
 }

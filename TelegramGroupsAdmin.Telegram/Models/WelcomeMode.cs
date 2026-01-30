@@ -9,5 +9,8 @@ public enum WelcomeMode
     DmWelcome = 0,
 
     /// <summary>Rules shown in chat with Accept/Deny buttons (faster onboarding)</summary>
-    ChatAcceptDeny = 1
+    ChatAcceptDeny = 1,
+
+    /// <summary>User must pass an entrance exam (MC and/or open-ended questions)</summary>
+    EntranceExam = 2
 }

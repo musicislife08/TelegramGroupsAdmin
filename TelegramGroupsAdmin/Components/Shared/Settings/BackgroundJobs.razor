@@ -4,7 +4,7 @@
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Core.JobPayloads
-@using System.Text.Json
+@using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings
 @using Microsoft.JSInterop
 @using HumanCron.Quartz.Abstractions
 @inject IBackgroundJobConfigService JobConfigService
@@ -102,9 +102,9 @@
                             <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
                                           Size="Size.Small"
                                           Color="Color.Primary"
-                                          Disabled="@(!context.Enabled || context.JobName == BackgroundJobNames.MessageCleanup)"
+                                          Disabled="@(!context.Enabled)"
                                           OnClick="@(() => RunNowAsync(context.JobName))"
-                                          title="@(context.JobName == BackgroundJobNames.MessageCleanup ? "Background Service (always running)" : "Run Now")" />
+                                          title="Run Now" />
                         </MudStack>
                     </MudTd>
                 </RowTemplate>
@@ -149,6 +149,42 @@
                         <strong>Note:</strong> Backup retention and directory settings are configured in <strong>Settings → System → Backup Configuration</strong>
                     </MudAlert>
                 }
+                else if (_editingJob.JobName == BackgroundJobNames.DataCleanup)
+                {
+                    <MudDivider />
+                    <MudText Typo="Typo.subtitle2">Retention Settings</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                        Data older than these thresholds will be deleted. Use formats: 7d, 2w, 1M, 1y
+                    </MudText>
+
+                    <MudTextField @bind-Value="_editMessageRetention"
+                                 Label="Message History"
+                                 Variant="Variant.Outlined"
+                                 HelperText="e.g., 30d, 6M, 1y (spam/ham samples kept permanently)"
+                                 Error="@(!ValidateRetention(_editMessageRetention))"
+                                 ErrorText="Invalid format. Use: 7d, 2w, 1M, 1y" />
+
+                    <MudTextField @bind-Value="_editReportRetention"
+                                 Label="Resolved Reports"
+                                 Variant="Variant.Outlined"
+                                 HelperText="e.g., 30d, 3M, 1y"
+                                 Error="@(!ValidateRetention(_editReportRetention))"
+                                 ErrorText="Invalid format" />
+
+                    <MudTextField @bind-Value="_editContextRetention"
+                                 Label="DM Button Contexts"
+                                 Variant="Variant.Outlined"
+                                 HelperText="e.g., 7d, 2w (expired callback buttons)"
+                                 Error="@(!ValidateRetention(_editContextRetention))"
+                                 ErrorText="Invalid format" />
+
+                    <MudTextField @bind-Value="_editNotificationRetention"
+                                 Label="Read Web Notifications"
+                                 Variant="Variant.Outlined"
+                                 HelperText="e.g., 7d, 2w"
+                                 Error="@(!ValidateRetention(_editNotificationRetention))"
+                                 ErrorText="Invalid format" />
+                }
                 else if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
                 {
                     <MudDivider />
@@ -187,6 +223,12 @@
     // Database maintenance settings
     private bool _editRunVacuum = true;
     private bool _editRunAnalyze = true;
+
+    // Data Cleanup retention settings (duration strings)
+    private string _editMessageRetention = "30d";
+    private string _editReportRetention = "30d";
+    private string _editContextRetention = "7d";
+    private string _editNotificationRetention = "7d";
 
     private readonly DialogOptions _dialogOptions = new()
     {
@@ -256,7 +298,7 @@
 
         try
         {
-            // Build payload based on job type
+            // Build payload based on job type using typed settings
             object payload = jobName switch
             {
                 BackgroundJobNames.ScheduledBackup => BuildBackupPayload(job),
@@ -282,20 +324,27 @@
         _editingJob = job;
         _editScheduleInterval = job.Schedule ?? "1d"; // Default to daily if not set
 
-        // Load job-specific settings
-        if (job.Settings != null)
+        // Load job-specific settings from typed properties
+        if (job.JobName == BackgroundJobNames.DatabaseMaintenance)
         {
-            if (job.JobName == BackgroundJobNames.DatabaseMaintenance)
-            {
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RunVacuum, out var vacuum))
-                    _editRunVacuum = ((JsonElement)vacuum).GetBoolean();
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RunAnalyze, out var analyze))
-                    _editRunAnalyze = ((JsonElement)analyze).GetBoolean();
-            }
+            var settings = job.DatabaseMaintenance ?? new DatabaseMaintenanceSettings();
+            _editRunVacuum = settings.RunVacuum;
+            _editRunAnalyze = settings.RunAnalyze;
+        }
+        else if (job.JobName == BackgroundJobNames.DataCleanup)
+        {
+            var settings = job.DataCleanup ?? new DataCleanupSettings();
+            _editMessageRetention = settings.MessageRetention;
+            _editReportRetention = settings.ReportRetention;
+            _editContextRetention = settings.CallbackContextRetention;
+            _editNotificationRetention = settings.WebNotificationRetention;
         }
 
         _showConfigDialog = true;
     }
+
+    private static bool ValidateRetention(string value)
+        => !string.IsNullOrWhiteSpace(value) && TimeSpanUtilities.TryParseDuration(value, out _);
 
     private void CloseConfigDialog()
     {
@@ -322,13 +371,34 @@
             // Store natural language schedule directly
             _editingJob.Schedule = _editScheduleInterval;
 
-            // Update job-specific settings (retention/directory for backups managed in Backup Configuration page)
-            _editingJob.Settings ??= new Dictionary<string, object>();
-
+            // Update job-specific settings using typed properties
             if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
             {
-                _editingJob.Settings[BackgroundJobSettings.RunVacuum] = _editRunVacuum;
-                _editingJob.Settings[BackgroundJobSettings.RunAnalyze] = _editRunAnalyze;
+                _editingJob.DatabaseMaintenance = new DatabaseMaintenanceSettings
+                {
+                    RunVacuum = _editRunVacuum,
+                    RunAnalyze = _editRunAnalyze
+                };
+            }
+            else if (_editingJob.JobName == BackgroundJobNames.DataCleanup)
+            {
+                // Validate all retention values before saving
+                if (!ValidateRetention(_editMessageRetention) ||
+                    !ValidateRetention(_editReportRetention) ||
+                    !ValidateRetention(_editContextRetention) ||
+                    !ValidateRetention(_editNotificationRetention))
+                {
+                    Snackbar.Add("Invalid retention format. Use formats like: 7d, 2w, 1M, 1y", Severity.Error);
+                    return;
+                }
+
+                _editingJob.DataCleanup = new DataCleanupSettings
+                {
+                    MessageRetention = _editMessageRetention,
+                    ReportRetention = _editReportRetention,
+                    CallbackContextRetention = _editContextRetention,
+                    WebNotificationRetention = _editNotificationRetention
+                };
             }
 
             var jobName = _editingJob.JobName;
@@ -347,81 +417,44 @@
         }
     }
 
-    private object BuildBackupPayload(BackgroundJobConfig job)
+    private static ScheduledBackupPayload BuildBackupPayload(BackgroundJobConfig job)
     {
-        // Granular retention settings (5-tier)
-        var retainHourly = 24;
-        var retainDaily = 7;
-        var retainWeekly = 4;
-        var retainMonthly = 12;
-        var retainYearly = 3;
-        string? backupDir = null;
-
-        if (job.Settings != null)
-        {
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainHourlyBackups, out var hourly))
-                retainHourly = Convert.ToInt32(((JsonElement)hourly).GetInt32());
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainDailyBackups, out var daily))
-                retainDaily = Convert.ToInt32(((JsonElement)daily).GetInt32());
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainWeeklyBackups, out var weekly))
-                retainWeekly = Convert.ToInt32(((JsonElement)weekly).GetInt32());
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainMonthlyBackups, out var monthly))
-                retainMonthly = Convert.ToInt32(((JsonElement)monthly).GetInt32());
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainYearlyBackups, out var yearly))
-                retainYearly = Convert.ToInt32(((JsonElement)yearly).GetInt32());
-            if (job.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
-                backupDir = ((JsonElement)dir).GetString();
-        }
+        var settings = job.ScheduledBackup ?? new ScheduledBackupSettings();
 
         return new ScheduledBackupPayload
         {
-            RetainHourlyBackups = retainHourly,
-            RetainDailyBackups = retainDaily,
-            RetainWeeklyBackups = retainWeekly,
-            RetainMonthlyBackups = retainMonthly,
-            RetainYearlyBackups = retainYearly,
-            BackupDirectory = backupDir
+            RetainHourlyBackups = settings.RetainHourlyBackups,
+            RetainDailyBackups = settings.RetainDailyBackups,
+            RetainWeeklyBackups = settings.RetainWeeklyBackups,
+            RetainMonthlyBackups = settings.RetainMonthlyBackups,
+            RetainYearlyBackups = settings.RetainYearlyBackups,
+            BackupDirectory = settings.BackupDirectory
         };
     }
 
-    private object BuildMaintenancePayload(BackgroundJobConfig job)
+    private static DatabaseMaintenancePayload BuildMaintenancePayload(BackgroundJobConfig job)
     {
-        var runVacuum = true;
-        var runAnalyze = true;
-
-        if (job.Settings != null)
-        {
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RunVacuum, out var vacuum))
-                runVacuum = ((JsonElement)vacuum).GetBoolean();
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RunAnalyze, out var analyze))
-                runAnalyze = ((JsonElement)analyze).GetBoolean();
-        }
+        var settings = job.DatabaseMaintenance ?? new DatabaseMaintenanceSettings();
 
         return new DatabaseMaintenancePayload
         {
-            RunVacuum = runVacuum,
-            RunAnalyze = runAnalyze,
+            RunVacuum = settings.RunVacuum,
+            RunAnalyze = settings.RunAnalyze,
             RunVacuumFull = false
         };
     }
 
-    private object BuildUserPhotoRefreshPayload(BackgroundJobConfig job)
+    private static RefreshUserPhotosPayload BuildUserPhotoRefreshPayload(BackgroundJobConfig job)
     {
-        var daysBack = 7;
-
-        if (job.Settings != null)
-        {
-            if (job.Settings.TryGetValue(BackgroundJobSettings.DaysBack, out var days))
-                daysBack = Convert.ToInt32(((JsonElement)days).GetInt32());
-        }
+        var settings = job.UserPhotoRefresh ?? new UserPhotoRefreshSettings();
 
         return new RefreshUserPhotosPayload
         {
-            DaysBack = daysBack
+            DaysBack = settings.DaysBack
         };
     }
 
-    private object BuildBlocklistSyncPayload()
+    private static BlocklistSyncJobPayload BuildBlocklistSyncPayload()
     {
         return new BlocklistSyncJobPayload(
             SubscriptionId: null, // Sync all

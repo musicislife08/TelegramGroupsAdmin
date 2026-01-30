@@ -53,6 +53,10 @@ public class SendChatNotificationJob(
                 eventType: payload.EventType,
                 subject: payload.Subject,
                 message: payload.Message,
+                reportId: payload.ReportId,
+                photoPath: payload.PhotoPath,
+                reportedUserId: payload.ReportedUserId,
+                reportType: payload.ReportType,
                 cancellationToken: cancellationToken);
 
             var successCount = results.Count(r => r.Value);

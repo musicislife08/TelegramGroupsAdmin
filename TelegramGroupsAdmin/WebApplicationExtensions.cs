@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Endpoints;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin;
 
@@ -95,13 +98,34 @@ public static class WebApplicationExtensions
         /// <summary>
         /// Runs database migrations using EF Core
         /// </summary>
-        public async Task RunDatabaseMigrationsAsync(string connectionString)
+        public async Task RunDatabaseMigrationsAsync()
         {
             app.Logger.LogInformation("Running PostgreSQL database migrations (EF Core)");
 
             using var scope = app.Services.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            // Pre-migration: Check if history compaction is needed
+            var compactionService = scope.ServiceProvider.GetRequiredService<IMigrationHistoryCompactionService>();
+            var compactionResult = await compactionService.CompactIfEligibleAsync();
+
+            switch (compactionResult)
+            {
+                case MigrationCompactionResult.FreshDatabase:
+                    app.Logger.LogInformation("Fresh database - applying all migrations");
+                    break;
+                case MigrationCompactionResult.Compacted:
+                    app.Logger.LogInformation("Migration history compacted to baseline");
+                    break;
+                case MigrationCompactionResult.NoActionNeeded:
+                    app.Logger.LogDebug("Migration history at or past baseline");
+                    break;
+                case MigrationCompactionResult.IncompatibleState:
+                    // Service already logged the error with version guidance
+                    Environment.Exit(1);
+                    return;
+            }
+
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await context.Database.MigrateAsync();
 
             app.Logger.LogInformation("PostgreSQL database migration complete");
@@ -127,6 +151,29 @@ public static class WebApplicationExtensions
             {
                 app.Logger.LogWarning(ex, "Failed to backfill similarity hashes (non-fatal)");
             }
+
+            // Seed default ban celebration captions if empty
+            try
+            {
+                var captionRepository = scope.ServiceProvider.GetRequiredService<IBanCelebrationCaptionRepository>();
+                await captionRepository.SeedDefaultsIfEmptyAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to seed default ban celebration captions (non-fatal)");
+            }
+
+            // One-time backfill: Populate photo_hash columns for ban celebration GIF duplicate detection
+            try
+            {
+                var gifHashBackfill = scope.ServiceProvider.GetRequiredService<BanCelebrationHashBackfillService>();
+                await gifHashBackfill.BackfillAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to backfill ban celebration GIF hashes (non-fatal)");
+            }
+
         }
     }
 

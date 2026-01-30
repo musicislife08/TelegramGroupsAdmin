@@ -44,6 +44,7 @@ public class AuditLogPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync(BasePath);
+        // Audit log has interactive data loading - need Blazor circuit connected
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
@@ -294,7 +295,7 @@ public class AuditLogPage
     /// </summary>
     public async Task<bool> HasLogEntryWithEventTypeAsync(string eventTypeText)
     {
-        var chip = _page.Locator($".mud-tab-panel:not([hidden]) td[data-label='Event Type'] .mud-chip:has-text('{eventTypeText}')");
+        var chip = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Event Type'] .mud-chip").Filter(new() { HasText = eventTypeText });
         return await chip.IsVisibleAsync();
     }
 
@@ -304,7 +305,7 @@ public class AuditLogPage
     /// </summary>
     public async Task<bool> HasLogEntryWithActorAsync(string actorText)
     {
-        var cell = _page.Locator($".mud-tab-panel:not([hidden]) td[data-label='Actor']:has-text('{actorText}')");
+        var cell = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Actor']").Filter(new() { HasText = actorText });
         return await cell.IsVisibleAsync();
     }
 
@@ -401,7 +402,7 @@ public class AuditLogPage
     /// </summary>
     public async Task<bool> HasModerationEntryWithActionTypeAsync(string actionTypeText)
     {
-        var chip = _page.Locator($".mud-tab-panel:not([hidden]) td[data-label='Action Type'] .mud-chip:has-text('{actionTypeText}')");
+        var chip = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Action Type'] .mud-chip").Filter(new() { HasText = actionTypeText });
         return await chip.IsVisibleAsync();
     }
 
@@ -410,7 +411,7 @@ public class AuditLogPage
     /// </summary>
     public async Task<bool> HasModerationEntryWithIssuedByAsync(string issuedByText)
     {
-        var cell = _page.Locator($".mud-tab-panel:not([hidden]) td[data-label='Issued By']:has-text('{issuedByText}')");
+        var cell = _page.Locator(".mud-tab-panel:not([hidden]) td[data-label='Issued By']").Filter(new() { HasText = issuedByText });
         return await cell.IsVisibleAsync();
     }
 

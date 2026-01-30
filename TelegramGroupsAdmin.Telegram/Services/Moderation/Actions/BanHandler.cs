@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -153,6 +154,7 @@ public class BanHandler : IBanHandler
                 "TempbanExpiry",
                 payload,
                 delaySeconds: delaySeconds,
+                deduplicationKey: None,
                 cancellationToken);
 
             _logger.LogInformation(
@@ -204,6 +206,44 @@ public class BanHandler : IBanHandler
         {
             _logger.LogError(ex, "Failed to execute unban for user {User}", user.ToLogDebug(userId));
             return UnbanResult.Failed(ex.Message);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<BanResult> KickFromChatAsync(
+        long userId,
+        long chatId,
+        Actor executor,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        // Fetch once for logging
+        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
+
+        _logger.LogDebug(
+            "Executing kick for user {User} from chat {ChatId} by {Executor}",
+            user.ToLogDebug(userId), chatId, executor.GetDisplayText());
+
+        try
+        {
+            var operations = await _botClientFactory.GetOperationsAsync();
+
+            // Ban then immediately unban (removes user from chat without permanent ban)
+            await operations.BanChatMemberAsync(chatId, userId, cancellationToken: cancellationToken);
+            await operations.UnbanChatMemberAsync(chatId, userId, cancellationToken: cancellationToken);
+
+            _logger.LogInformation(
+                "Kicked {User} from chat {ChatId}",
+                user.ToLogInfo(userId), chatId);
+
+            // NOTE: No database state change - kick is a one-time action, not a persistent ban
+            return BanResult.Succeeded(chatsAffected: 1);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to kick user {User} from chat {ChatId}",
+                user.ToLogDebug(userId), chatId);
+            return BanResult.Failed(ex.Message);
         }
     }
 }

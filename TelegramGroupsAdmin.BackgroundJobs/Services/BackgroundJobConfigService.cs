@@ -2,10 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using HumanCron.Quartz.Abstractions;
-using Quartz;
-using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Data;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services;
@@ -194,8 +193,226 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         await UpdateJobConfigAsync(jobName, config, cancellationToken);
     }
 
+    /// <summary>
+    /// Migrates old Settings dictionary format to new typed properties.
+    /// This handles upgrades from the pre-typed settings format where all job settings
+    /// were stored in a Dictionary&lt;string, object&gt; called "Settings".
+    /// </summary>
+    private async Task MigrateOldSettingsFormatAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var configRecord = await context.Configs
+            .Where(c => c.ChatId == 0)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (string.IsNullOrEmpty(configRecord?.BackgroundJobsConfig))
+            return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configRecord.BackgroundJobsConfig);
+
+            if (!doc.RootElement.TryGetProperty("Jobs", out var jobsElement))
+                return;
+
+            var needsMigration = false;
+
+            // Check if any job has old "Settings" property but no typed settings
+            foreach (var jobProp in jobsElement.EnumerateObject())
+            {
+                var job = jobProp.Value;
+                if (job.TryGetProperty("Settings", out _))
+                {
+                    // Has old format - check if missing new typed properties
+                    var hasTypedSettings = job.TryGetProperty("DataCleanup", out _) ||
+                                          job.TryGetProperty("ScheduledBackup", out _) ||
+                                          job.TryGetProperty("DatabaseMaintenance", out _) ||
+                                          job.TryGetProperty("UserPhotoRefresh", out _);
+
+                    if (!hasTypedSettings)
+                    {
+                        needsMigration = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!needsMigration)
+                return;
+
+            _logger.LogInformation("Migrating background job settings from old Dictionary format to typed properties");
+
+            // Deserialize with a temporary class that has both old and new format
+            var oldConfig = JsonSerializer.Deserialize<OldBackgroundJobsConfig>(configRecord.BackgroundJobsConfig, JsonOptions);
+            if (oldConfig?.Jobs == null)
+                return;
+
+            var migratedCount = 0;
+            foreach (var (jobName, job) in oldConfig.Jobs)
+            {
+                if (job.Settings == null || job.Settings.Count == 0)
+                    continue;
+
+                // Migrate based on job type
+                switch (jobName)
+                {
+                    case BackgroundJobNames.DataCleanup when job.DataCleanup == null:
+                        job.DataCleanup = new DataCleanupSettings
+                        {
+                            MessageRetention = GetSettingString(job.Settings, "MessageRetention", DataCleanupSettings.DefaultMessageRetentionString) ?? DataCleanupSettings.DefaultMessageRetentionString,
+                            ReportRetention = GetSettingString(job.Settings, "ReportRetention", "30d") ?? "30d",
+                            CallbackContextRetention = GetSettingString(job.Settings, "CallbackContextRetention", "7d") ?? "7d",
+                            WebNotificationRetention = GetSettingString(job.Settings, "WebNotificationRetention", "7d") ?? "7d"
+                        };
+                        job.Settings = null;
+                        migratedCount++;
+                        break;
+
+                    case BackgroundJobNames.ScheduledBackup when job.ScheduledBackup == null:
+                        job.ScheduledBackup = new ScheduledBackupSettings
+                        {
+                            RetainHourlyBackups = GetSettingInt(job.Settings, "RetainHourlyBackups", 24),
+                            RetainDailyBackups = GetSettingInt(job.Settings, "RetainDailyBackups", 7),
+                            RetainWeeklyBackups = GetSettingInt(job.Settings, "RetainWeeklyBackups", 4),
+                            RetainMonthlyBackups = GetSettingInt(job.Settings, "RetainMonthlyBackups", 12),
+                            RetainYearlyBackups = GetSettingInt(job.Settings, "RetainYearlyBackups", 3),
+                            BackupDirectory = GetSettingString(job.Settings, "BackupDirectory", null)
+                        };
+                        job.Settings = null;
+                        migratedCount++;
+                        break;
+
+                    case BackgroundJobNames.DatabaseMaintenance when job.DatabaseMaintenance == null:
+                        job.DatabaseMaintenance = new DatabaseMaintenanceSettings
+                        {
+                            RunVacuum = GetSettingBool(job.Settings, "RunVacuum", true),
+                            RunAnalyze = GetSettingBool(job.Settings, "RunAnalyze", true)
+                        };
+                        job.Settings = null;
+                        migratedCount++;
+                        break;
+
+                    case BackgroundJobNames.UserPhotoRefresh when job.UserPhotoRefresh == null:
+                        job.UserPhotoRefresh = new UserPhotoRefreshSettings
+                        {
+                            DaysBack = GetSettingInt(job.Settings, "DaysBack", 7)
+                        };
+                        job.Settings = null;
+                        migratedCount++;
+                        break;
+                }
+            }
+
+            if (migratedCount > 0)
+            {
+                // Save migrated config (serialize without the Settings property since it's null)
+                var newJobsConfig = new BackgroundJobsConfig
+                {
+                    Jobs = oldConfig.Jobs.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => new BackgroundJobConfig
+                        {
+                            JobName = kvp.Value.JobName,
+                            DisplayName = kvp.Value.DisplayName,
+                            Description = kvp.Value.Description,
+                            Enabled = kvp.Value.Enabled,
+                            Schedule = kvp.Value.Schedule,
+                            LastRunAt = kvp.Value.LastRunAt,
+                            NextRunAt = kvp.Value.NextRunAt,
+                            LastError = kvp.Value.LastError,
+                            DataCleanup = kvp.Value.DataCleanup,
+                            ScheduledBackup = kvp.Value.ScheduledBackup,
+                            DatabaseMaintenance = kvp.Value.DatabaseMaintenance,
+                            UserPhotoRefresh = kvp.Value.UserPhotoRefresh
+                        })
+                };
+
+                configRecord.BackgroundJobsConfig = JsonSerializer.Serialize(newJobsConfig, JsonOptions);
+                configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+                await context.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation("Successfully migrated {Count} job(s) from old Settings format to typed properties", migratedCount);
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse background jobs config for migration check - will use defaults");
+        }
+    }
+
+    private static string? GetSettingString(Dictionary<string, object> settings, string key, string? defaultValue)
+    {
+        if (!settings.TryGetValue(key, out var value))
+            return defaultValue;
+
+        return value switch
+        {
+            JsonElement je => je.GetString() ?? defaultValue,
+            string s => s,
+            _ => value?.ToString() ?? defaultValue
+        };
+    }
+
+    private static int GetSettingInt(Dictionary<string, object> settings, string key, int defaultValue)
+    {
+        if (!settings.TryGetValue(key, out var value))
+            return defaultValue;
+
+        return value switch
+        {
+            JsonElement je when je.ValueKind == JsonValueKind.Number => je.GetInt32(),
+            int i => i,
+            _ => int.TryParse(value?.ToString(), out var parsed) ? parsed : defaultValue
+        };
+    }
+
+    private static bool GetSettingBool(Dictionary<string, object> settings, string key, bool defaultValue)
+    {
+        if (!settings.TryGetValue(key, out var value))
+            return defaultValue;
+
+        return value switch
+        {
+            JsonElement je when je.ValueKind == JsonValueKind.True => true,
+            JsonElement je when je.ValueKind == JsonValueKind.False => false,
+            bool b => b,
+            _ => bool.TryParse(value?.ToString(), out var parsed) ? parsed : defaultValue
+        };
+    }
+
+    /// <summary>
+    /// Temporary class for deserializing old format that had Settings dictionary.
+    /// Used only during migration.
+    /// </summary>
+    private class OldBackgroundJobsConfig
+    {
+        public Dictionary<string, OldBackgroundJobConfig> Jobs { get; set; } = new();
+    }
+
+    private class OldBackgroundJobConfig
+    {
+        public required string JobName { get; set; }
+        public required string DisplayName { get; set; }
+        public required string Description { get; set; }
+        public bool Enabled { get; set; }
+        public required string Schedule { get; set; }
+        public DateTimeOffset? LastRunAt { get; set; }
+        public DateTimeOffset? NextRunAt { get; set; }
+        public string? LastError { get; set; }
+        public Dictionary<string, object>? Settings { get; set; }
+        // New typed properties (may be populated if partially migrated)
+        public DataCleanupSettings? DataCleanup { get; set; }
+        public ScheduledBackupSettings? ScheduledBackup { get; set; }
+        public DatabaseMaintenanceSettings? DatabaseMaintenance { get; set; }
+        public UserPhotoRefreshSettings? UserPhotoRefresh { get; set; }
+    }
+
     public async Task EnsureDefaultConfigsAsync(CancellationToken cancellationToken = default)
     {
+        // Migrate old Settings dictionary format to new typed properties
+        await MigrateOldSettingsFormatAsync(cancellationToken);
+
         var existing = await GetAllJobsAsync(cancellationToken);
 
         // Define default job configurations
@@ -224,6 +441,21 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                     needsRepair = true;
                 }
 
+                // Update DisplayName and Description from defaults (allows renaming jobs)
+                if (existingConfig.DisplayName != defaultConfig.DisplayName)
+                {
+                    _logger.LogInformation("Updating DisplayName for {JobName}: {Old} → {New}",
+                        jobName, existingConfig.DisplayName, defaultConfig.DisplayName);
+                    existingConfig.DisplayName = defaultConfig.DisplayName;
+                    needsRepair = true;
+                }
+
+                if (existingConfig.Description != defaultConfig.Description)
+                {
+                    existingConfig.Description = defaultConfig.Description;
+                    needsRepair = true;
+                }
+
                 // Save repaired config
                 if (needsRepair)
                 {
@@ -232,6 +464,46 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 }
             }
         }
+
+        // Remove unknown jobs that aren't in defaults (e.g., renamed/deleted jobs)
+        await RemoveUnknownJobsAsync(existing, defaults, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes job configs that don't correspond to any known job in BackgroundJobNames.
+    /// This handles cleanup after jobs are renamed or removed.
+    /// </summary>
+    private async Task RemoveUnknownJobsAsync(
+        Dictionary<string, BackgroundJobConfig> existing,
+        Dictionary<string, BackgroundJobConfig> defaults,
+        CancellationToken cancellationToken)
+    {
+        var unknownJobs = existing.Keys.Except(defaults.Keys).ToList();
+
+        if (unknownJobs.Count == 0)
+            return;
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var configRecord = await context.Configs
+            .Where(c => c.ChatId == 0)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (configRecord?.BackgroundJobsConfig == null)
+            return;
+
+        var jobsConfig = JsonSerializer.Deserialize<BackgroundJobsConfig>(configRecord.BackgroundJobsConfig, JsonOptions);
+        if (jobsConfig == null)
+            return;
+
+        foreach (var jobName in unknownJobs)
+        {
+            jobsConfig.Jobs.Remove(jobName);
+            _logger.LogInformation("Removed unknown job config {JobName} (job no longer exists)", jobName);
+        }
+
+        configRecord.BackgroundJobsConfig = JsonSerializer.Serialize(jobsConfig, JsonOptions);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static Dictionary<string, BackgroundJobConfig> GetDefaultJobConfigs()
@@ -243,29 +515,21 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 JobName = BackgroundJobNames.ScheduledBackup,
                 DisplayName = "Scheduled Backups",
                 Description = "Automatically backup database on a schedule",
-                Enabled = false, // Disabled by default
-                Schedule = "every day at 2am", // Daily at 2 AM (natural language)
-                Settings = new Dictionary<string, object>
+                Enabled = false,
+                Schedule = "every day at 2am",
+                ScheduledBackup = new ScheduledBackupSettings
                 {
-                    [BackgroundJobSettings.RetainHourlyBackups] = BackupRetentionConstants.DefaultRetainHourlyBackups,
-                    [BackgroundJobSettings.RetainDailyBackups] = BackupRetentionConstants.DefaultRetainDailyBackups,
-                    [BackgroundJobSettings.RetainWeeklyBackups] = BackupRetentionConstants.DefaultRetainWeeklyBackups,
-                    [BackgroundJobSettings.RetainMonthlyBackups] = BackupRetentionConstants.DefaultRetainMonthlyBackups,
-                    [BackgroundJobSettings.RetainYearlyBackups] = BackupRetentionConstants.DefaultRetainYearlyBackups,
-                    [BackgroundJobSettings.BackupDirectory] = "/data/backups"
+                    BackupDirectory = "/data/backups"
                 }
             },
-            [BackgroundJobNames.MessageCleanup] = new BackgroundJobConfig
+            [BackgroundJobNames.DataCleanup] = new BackgroundJobConfig
             {
-                JobName = BackgroundJobNames.MessageCleanup,
-                DisplayName = "Message Cleanup",
-                Description = "Delete old messages and their media files based on retention policy",
-                Enabled = true, // Already exists, just adding config
-                Schedule = "every day", // Daily at midnight (natural language)
-                Settings = new Dictionary<string, object>
-                {
-                    [BackgroundJobSettings.RetentionHours] = 720 // 30 days default
-                }
+                JobName = BackgroundJobNames.DataCleanup,
+                DisplayName = "Data Cleanup",
+                Description = "Delete expired messages, reports, callback contexts, and notifications based on retention policies",
+                Enabled = false,
+                Schedule = "every day",
+                DataCleanup = new DataCleanupSettings()
             },
             [BackgroundJobNames.UserPhotoRefresh] = new BackgroundJobConfig
             {
@@ -273,11 +537,8 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "User Photo Refresh",
                 Description = "Refresh user profile photos from Telegram",
                 Enabled = true,
-                Schedule = "every day at 3am", // Daily at 3 AM (natural language)
-                Settings = new Dictionary<string, object>
-                {
-                    [BackgroundJobSettings.DaysBack] = 7 // Refresh photos for users active in last 7 days
-                }
+                Schedule = "every day at 3am",
+                UserPhotoRefresh = new UserPhotoRefreshSettings()
             },
             [BackgroundJobNames.BlocklistSync] = new BackgroundJobConfig
             {
@@ -285,21 +546,16 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "URL Blocklist Sync",
                 Description = "Sync URL blocklists from upstream sources",
                 Enabled = true,
-                Schedule = "every week on sunday at 3am", // Weekly on Sunday at 3 AM (natural language)
-                Settings = new Dictionary<string, object>()
+                Schedule = "every week on sunday at 3am"
             },
             [BackgroundJobNames.DatabaseMaintenance] = new BackgroundJobConfig
             {
                 JobName = BackgroundJobNames.DatabaseMaintenance,
                 DisplayName = "Database Maintenance",
                 Description = "Run VACUUM and ANALYZE on PostgreSQL database",
-                Enabled = false, // Disabled by default - user must enable
-                Schedule = "every week on sunday at 4am", // Weekly on Sunday at 4 AM (natural language)
-                Settings = new Dictionary<string, object>
-                {
-                    [BackgroundJobSettings.RunVacuum] = true,
-                    [BackgroundJobSettings.RunAnalyze] = true
-                }
+                Enabled = false,
+                Schedule = "every week on sunday at 4am",
+                DatabaseMaintenance = new DatabaseMaintenanceSettings()
             },
             [BackgroundJobNames.ChatHealthCheck] = new BackgroundJobConfig
             {
@@ -307,8 +563,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Chat Health Monitoring",
                 Description = "Monitor chat health, bot permissions, and admin lists",
                 Enabled = true,
-                Schedule = "every 30 minutes", // Every 30 minutes (natural language)
-                Settings = new Dictionary<string, object>()
+                Schedule = "every 30 minutes"
             },
             [BackgroundJobNames.TextClassifierRetraining] = new BackgroundJobConfig
             {
@@ -316,8 +571,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "ML Text Classifier Retraining",
                 Description = "Retrain ML.NET SDCA spam classifier with latest training data",
                 Enabled = true,
-                Schedule = "every 8 hours", // Every 8 hours (natural language)
-                Settings = new Dictionary<string, object>()
+                Schedule = "every 8 hours"
             }
         };
     }

@@ -34,24 +34,32 @@ public interface IBackupService
     Task RestoreAsync(byte[] backupBytes, string passphrase);
 
     /// <summary>
-    /// Get backup metadata without restoring
+    /// Get backup metadata without restoring.
+    /// Metadata is always unencrypted in the tar archive — no passphrase needed.
     /// </summary>
     /// <param name="backupBytes">gzip backup file bytes</param>
     Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes);
 
     /// <summary>
-    /// Get backup metadata with explicit passphrase (for encrypted backups during first-run)
+    /// Get backup metadata by streaming from disk without loading the entire file into memory.
     /// </summary>
-    /// <param name="backupBytes">Backup file bytes</param>
-    /// <param name="passphrase">Passphrase to decrypt (if encrypted)</param>
-    Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes, string passphrase);
+    /// <param name="filepath">Path to the backup .tar.gz file</param>
+    Task<BackupMetadata> GetMetadataAsync(string filepath);
 
     /// <summary>
-    /// Check if backup file is encrypted (checks for TGAENC magic header)
+    /// Check if backup contains an encrypted database by inspecting tar entries.
     /// </summary>
     /// <param name="backupBytes">Backup file bytes</param>
-    /// <returns>True if encrypted, false if plain gzip</returns>
+    /// <returns>True if encrypted, false if plain</returns>
     Task<bool> IsEncryptedAsync(byte[] backupBytes);
+
+    /// <summary>
+    /// Check if backup file on disk contains an encrypted database by streaming only the tar entry names.
+    /// Avoids loading the entire file into memory.
+    /// </summary>
+    /// <param name="filepath">Path to the backup .tar.gz file</param>
+    /// <returns>True if encrypted, false if plain</returns>
+    Task<bool> IsEncryptedAsync(string filepath);
 
     /// <summary>
     /// Create a backup and save to disk with retention cleanup

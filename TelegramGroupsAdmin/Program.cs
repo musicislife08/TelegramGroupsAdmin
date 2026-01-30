@@ -171,7 +171,7 @@ if (!string.IsNullOrEmpty(otlpEndpoint))
 var app = builder.Build();
 
 // Run database migrations
-await app.RunDatabaseMigrationsAsync(connectionString);
+await app.RunDatabaseMigrationsAsync();
 
 // Initialize Serilog configuration from database (now that migrations have run)
 if (serilogConfig != null)
@@ -271,16 +271,24 @@ if (args.Contains("--restore"))
 }
 
 // Train ML.NET spam classifier model on startup (always retrain for fresh data)
-var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IMLTextClassifierService>();
-app.Logger.LogInformation("Training ML spam classifier model with latest data...");
-await mlClassifier.TrainModelAsync();
-var metadata = mlClassifier.GetMetadata();
-app.Logger.LogInformation(
-    "ML classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1}, balanced: {Balanced})",
-    metadata?.SpamSampleCount,
-    metadata?.HamSampleCount,
-    metadata?.SpamRatio,
-    metadata?.IsBalanced);
+// Allow tests to skip this via SKIP_ML_TRAINING=true (saves 3-5s per factory startup)
+if (Environment.GetEnvironmentVariable("SKIP_ML_TRAINING") != "true")
+{
+    var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IMLTextClassifierService>();
+    app.Logger.LogInformation("Training ML spam classifier model with latest data...");
+    await mlClassifier.TrainModelAsync();
+    var metadata = mlClassifier.GetMetadata();
+    app.Logger.LogInformation(
+        "ML classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1}, balanced: {Balanced})",
+        metadata?.SpamSampleCount,
+        metadata?.HamSampleCount,
+        metadata?.SpamRatio,
+        metadata?.IsBalanced);
+}
+else
+{
+    app.Logger.LogInformation("ML classifier training skipped (SKIP_ML_TRAINING=true)");
+}
 
 // Note: Default background job configurations are ensured by QuartzSchedulingSyncService on startup
 

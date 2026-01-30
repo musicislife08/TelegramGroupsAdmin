@@ -31,6 +31,7 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForLoadAsync()
     {
+        // Settings page has complex interactivity - NetworkIdle ensures Blazor SignalR circuit is established
         await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
@@ -106,8 +107,8 @@ public class SettingsPage
     /// </summary>
     public async Task<bool> IsAlgorithmEnabledAsync(string algorithmName)
     {
-        // Find the card containing the algorithm name
-        var card = Page.Locator($".mud-card:has-text('{algorithmName}')");
+        // Use Filter() with HasText instead of string interpolation to avoid selector injection
+        var card = Page.Locator(".mud-card").Filter(new() { HasText = algorithmName });
         var toggle = card.Locator(".mud-switch input");
         return await toggle.IsCheckedAsync();
     }
@@ -117,7 +118,8 @@ public class SettingsPage
     /// </summary>
     public async Task ToggleAlgorithmAsync(string algorithmName)
     {
-        var card = Page.Locator($".mud-card:has-text('{algorithmName}')");
+        // Use Filter() with HasText instead of string interpolation to avoid selector injection
+        var card = Page.Locator(".mud-card").Filter(new() { HasText = algorithmName });
         var toggle = card.Locator(".mud-switch");
         await toggle.ClickAsync();
     }
@@ -184,7 +186,7 @@ public class SettingsPage
     /// </summary>
     public async Task<bool> IsStopWordVisibleAsync(string word)
     {
-        var wordChip = Page.Locator($".mud-table-container .mud-chip:has-text('{word}')");
+        var wordChip = Page.Locator(".mud-table-container .mud-chip").Filter(new() { HasText = word });
         return await wordChip.IsVisibleAsync();
     }
 
@@ -193,7 +195,7 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForStopWordVisibleAsync(string word)
     {
-        var wordChip = Page.Locator($".mud-table-container .mud-chip:has-text('{word}')");
+        var wordChip = Page.Locator(".mud-table-container .mud-chip").Filter(new() { HasText = word });
         await Expect(wordChip).ToBeVisibleAsync();
     }
 
@@ -202,7 +204,7 @@ public class SettingsPage
     /// </summary>
     public async Task WaitForStopWordHiddenAsync(string word)
     {
-        var wordChip = Page.Locator($".mud-table-container .mud-chip:has-text('{word}')");
+        var wordChip = Page.Locator(".mud-table-container .mud-chip").Filter(new() { HasText = word });
         await Expect(wordChip).Not.ToBeVisibleAsync();
     }
 
@@ -212,7 +214,7 @@ public class SettingsPage
     public async Task ClickDeleteStopWordAsync(string word)
     {
         // Find the row containing the word, then click its delete button
-        var row = Page.Locator($".mud-table tbody tr:has-text('{word}')");
+        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = word });
         var deleteButton = row.Locator("button[title='Delete']");
         await deleteButton.ClickAsync();
     }
@@ -256,7 +258,7 @@ public class SettingsPage
     /// </summary>
     public async Task<bool> IsTrainingSampleVisibleAsync(string sampleText)
     {
-        var cell = Page.Locator($".mud-table-container:has-text('{sampleText}')");
+        var cell = Page.Locator(".mud-table-container").Filter(new() { HasText = sampleText });
         return await cell.IsVisibleAsync();
     }
 
@@ -331,7 +333,7 @@ public class SettingsPage
     /// </summary>
     public async Task<bool> IsJobEnabledAsync(string jobDisplayName)
     {
-        var row = Page.Locator($".mud-table tbody tr:has-text('{jobDisplayName}')");
+        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
         var toggle = row.Locator(".mud-switch input");
         return await toggle.IsCheckedAsync();
     }
@@ -341,7 +343,7 @@ public class SettingsPage
     /// </summary>
     public async Task<string> GetJobStatusAsync(string jobDisplayName)
     {
-        var row = Page.Locator($".mud-table tbody tr:has-text('{jobDisplayName}')");
+        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
         var statusChip = row.Locator(".mud-chip");
         return await statusChip.TextContentAsync() ?? string.Empty;
     }
@@ -351,7 +353,7 @@ public class SettingsPage
     /// </summary>
     public async Task<string> GetJobScheduleAsync(string jobDisplayName)
     {
-        var row = Page.Locator($".mud-table tbody tr:has-text('{jobDisplayName}')");
+        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
         // Schedule is in the 3rd column (after Job and Status)
         var scheduleCell = row.Locator("td").Nth(2);
         return await scheduleCell.TextContentAsync() ?? string.Empty;
@@ -362,7 +364,7 @@ public class SettingsPage
     /// </summary>
     public async Task ToggleJobAsync(string jobDisplayName)
     {
-        var row = Page.Locator($".mud-table tbody tr:has-text('{jobDisplayName}')");
+        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
         var toggle = row.Locator(".mud-switch");
         await toggle.ClickAsync();
     }
@@ -372,9 +374,11 @@ public class SettingsPage
     /// </summary>
     public async Task OpenJobConfigDialogAsync(string jobDisplayName)
     {
-        var row = Page.Locator($".mud-table tbody tr:has-text('{jobDisplayName}')");
+        var row = Page.Locator(".mud-table tbody tr").Filter(new() { HasText = jobDisplayName });
         var settingsButton = row.Locator("button[title='Configure']");
         await settingsButton.ClickAsync();
+        // Wait for dialog to appear
+        await Expect(Page.GetByRole(AriaRole.Dialog)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -450,7 +454,7 @@ public class SettingsPage
     public async Task<bool> IsServiceMessageDeletionEnabledAsync(string labelText)
     {
         // Use label.mud-switch to only match actual switch elements
-        var switchContainer = Page.Locator($"label.mud-switch:has-text('{labelText}')");
+        var switchContainer = Page.Locator("label.mud-switch").Filter(new() { HasText = labelText });
         var input = switchContainer.Locator("input[type='checkbox']");
         return await input.IsCheckedAsync();
     }
@@ -461,7 +465,7 @@ public class SettingsPage
     public async Task ToggleServiceMessageDeletionAsync(string labelText)
     {
         // Use label.mud-switch to only match actual switch elements
-        var switchContainer = Page.Locator($"label.mud-switch:has-text('{labelText}')");
+        var switchContainer = Page.Locator("label.mud-switch").Filter(new() { HasText = labelText });
         await switchContainer.ClickAsync();
     }
 
@@ -492,7 +496,7 @@ public class SettingsPage
         foreach (var label in expectedLabels)
         {
             // Use label.mud-switch to only match actual switch elements
-            var toggle = Page.Locator($"label.mud-switch:has-text('{label}')");
+            var toggle = Page.Locator("label.mud-switch").Filter(new() { HasText = label });
             if (!await toggle.IsVisibleAsync())
                 return false;
         }

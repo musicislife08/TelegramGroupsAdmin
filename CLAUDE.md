@@ -2,7 +2,7 @@
 
 ## Stack
 
-.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.15.0, PostgreSQL 17, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
+.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.15.0, PostgreSQL 18, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 ## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
 
@@ -136,6 +136,7 @@ git push origin develop
 - If user asks to commit directly to master/develop, remind them of the protected workflow
 - Always create PRs to `develop` first, never to `master` (validation will block it)
 - **ALWAYS include closing keywords** (`Closes #123`) at the top of PR body to link issues in Development section
+- **ALWAYS prefer new commits over amending** - create a new commit instead of using `git commit --amend`
 
 ## Use Case & Deployment Context
 
@@ -160,7 +161,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 │  └─ Quartz.NET Background Jobs      │
 └─────────────────────────────────────┘
          ↓
-    PostgreSQL 17
+    PostgreSQL 18
          ↓
     /data volume (media, keys)
 ```
@@ -186,7 +187,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - **TelegramGroupsAdmin.Telegram**: Bot services, commands, repos, orchestrators, DM notifications, AddTelegramServices()
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks Telegram → Main circular dep)
 - **TelegramGroupsAdmin.ContentDetection**: 9 content detection algorithms, URL filtering, impersonation detection, file scanning (ClamAV+VirusTotal), self-contained, database-driven
-- **TelegramGroupsAdmin.Tests**: Migration tests (NUnit + Testcontainers.PostgreSQL), validates against real PostgreSQL 17
+- **TelegramGroupsAdmin.Tests**: Migration tests (NUnit + Testcontainers.PostgreSQL), validates against real PostgreSQL 18
 
 ## Architecture Patterns
 
@@ -215,7 +216,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - Fallback: Env vars used for first-time setup only
 - UI: Settings pages allow live editing without restart
 
-**Background Services**: TelegramBotPollingHost (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
+**Background Services**: TelegramBotPollingHost (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans)
 
 ## Configuration
 
@@ -348,9 +349,11 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 ## Testing
 
-**Migration Tests**: NUnit + Testcontainers.PostgreSQL, validates all migrations against real PostgreSQL 17 (tests always passing)
+**Migration Tests**: NUnit + Testcontainers.PostgreSQL, validates all migrations against real PostgreSQL 18 (tests always passing)
 
 **E2E Tests**: Playwright + Testcontainers.PostgreSQL for browser-based UI testing. Uses .NET 10's `WebApplicationFactory.UseKestrel()` for real HTTP server. See [E2E_TESTING.md](E2E_TESTING.md) for full documentation.
+
+**Telegram.Bot Type Mocking**: `Telegram.Bot.Types` classes (`Message`, `Animation`, `User`, etc.) are concrete types with non-virtual properties. **Do NOT use `Substitute.For<Message>()`** — NSubstitute cannot intercept non-virtual members. Instead, use direct object initialization: `new Message { Animation = new Animation { FileId = "test_id" } }`. See `MediaProcessingHandlerTests.cs` and `BanCelebrationServiceTests.cs` for examples.
 
 **Test Execution Best Practices**:
 - **ALWAYS run test commands without pipes initially** - pipes hide failures and require re-running to see errors

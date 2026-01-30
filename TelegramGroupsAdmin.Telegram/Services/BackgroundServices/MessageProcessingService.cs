@@ -74,8 +74,7 @@ public partial class MessageProcessingService(
         // Skip private chats - only process group messages for history/spam detection
         if (message.Chat.Type == ChatType.Private)
         {
-            // Private DMs are only for bot commands (/start, /help, etc)
-            // Execute command if present, but don't save to message history
+            // Private DMs: handle commands first
             if (commandRouter.IsCommand(message))
             {
                 try
@@ -97,7 +96,61 @@ public partial class MessageProcessingService(
                 {
                     logger.LogError(ex, "Error executing command in private chat {Chat}", message.Chat.ToLogDebug());
                 }
+                return;
             }
+
+            // Not a command - check for active exam session awaiting open-ended answer
+            if (!string.IsNullOrWhiteSpace(message.Text) && message.From != null)
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+
+                    var examContext = await examFlowService.GetActiveExamContextAsync(message.From.Id, cancellationToken);
+                    if (examContext?.AwaitingOpenEndedAnswer == true)
+                    {
+                        var result = await examFlowService.HandleOpenEndedAnswerAsync(
+                            examContext.GroupChatId,
+                            message.From,
+                            message.Text,
+                            cancellationToken);
+
+                        logger.LogInformation(
+                            "Processed open-ended exam answer for user {UserId}: Complete={Complete}, Passed={Passed}",
+                            message.From.Id, result.ExamComplete, result.Passed);
+
+                        // Cancel welcome timeout and update response if exam completed
+                        if (result.ExamComplete && result.GroupChatId.HasValue)
+                        {
+                            var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+                            var jobScheduler = scope.ServiceProvider.GetRequiredService<IJobScheduler>();
+
+                            var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(
+                                message.From.Id, result.GroupChatId.Value, cancellationToken);
+
+                            if (welcomeResponse?.TimeoutJobId != null)
+                            {
+                                await jobScheduler.CancelJobAsync(welcomeResponse.TimeoutJobId, cancellationToken);
+                                await welcomeRepo.SetTimeoutJobIdAsync(welcomeResponse.Id, null, cancellationToken);
+                            }
+
+                            if (result.Passed == true && welcomeResponse != null)
+                            {
+                                await welcomeRepo.UpdateResponseAsync(
+                                    welcomeResponse.Id, WelcomeResponseType.Accepted,
+                                    dmSent: true, dmFallback: false, cancellationToken);
+                            }
+                            // SentToReview case: keep as Pending - admin will decide
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error processing open-ended exam answer from user {UserId}", message.From?.Id);
+                }
+            }
+
             return; // Don't process private messages further
         }
 
@@ -133,11 +186,11 @@ public partial class MessageProcessingService(
 
         if (ServiceMessageHelper.IsServiceMessage(message, deletionConfig, out var shouldDelete))
         {
-            logger.LogInformation(
+            logger.LogDebug(
                 "Detected service message: Type={Type}, MessageId={MessageId}, Chat={Chat}",
                 message.Type,
                 message.MessageId,
-                message.Chat.ToLogInfo());
+                message.Chat.ToLogDebug());
 
             // Store service message for UI consistency with Telegram Desktop
             var serviceMessageText = ServiceMessageHelper.GetServiceMessageText(message);
@@ -186,7 +239,7 @@ public partial class MessageProcessingService(
             if (message.NewChatMembers != null)
             {
                 var userRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
 
                 foreach (var joiningUser in message.NewChatMembers)
                 {
@@ -451,8 +504,8 @@ public partial class MessageProcessingService(
             var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "media", "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
-            // REFACTOR-1: Use TranslationHandler for translation detection and processing
-            var translationHandler = messageScope.ServiceProvider.GetRequiredService<Handlers.TranslationHandler>();
+            // REFACTOR-1: Use ITranslationHandler for translation detection and processing
+            var translationHandler = messageScope.ServiceProvider.GetRequiredService<Handlers.ITranslationHandler>();
             var translationForDetection = await translationHandler.GetTextForDetectionAsync(
                 text,
                 message.MessageId,
@@ -560,7 +613,7 @@ public partial class MessageProcessingService(
                     LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                     message.MessageId);
 
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
                 await moderationService.DeleteMessageAsync(
                     messageId: message.MessageId,
                     chatId: message.Chat.Id,

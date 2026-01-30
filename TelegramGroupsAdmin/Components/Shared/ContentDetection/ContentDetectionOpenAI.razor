@@ -1,10 +1,11 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Services
 @inject IConfigService ConfigService
 @inject IPromptVersionRepository PromptVersionRepository
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject BlazorAuthHelper AuthHelper
+@inject IBlazorAuthHelper AuthHelper
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">

@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.BackgroundJobs.Listeners;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Extensions;
@@ -77,22 +78,28 @@ public static class ServiceCollectionExtensions
 
     private static void RegisterJobs(IServiceCollectionQuartzConfigurator q)
     {
-        // Register each job as durable (allows triggers to be added dynamically)
+        // Register each job with identity from BackgroundJobNames constants
         // StoreDurably() tells Quartz to keep the job definition even without triggers
-        q.AddJob<BlocklistSyncJob>(opts => opts.WithIdentity("BlocklistSyncJob").StoreDurably());
-        q.AddJob<ChatHealthCheckJob>(opts => opts.WithIdentity("ChatHealthCheckJob").StoreDurably());
-        q.AddJob<DatabaseMaintenanceJob>(opts => opts.WithIdentity("DatabaseMaintenanceJob").StoreDurably());
-        q.AddJob<DeleteMessageJob>(opts => opts.WithIdentity("DeleteMessageJob").StoreDurably());
-        q.AddJob<DeleteUserMessagesJob>(opts => opts.WithIdentity("DeleteUserMessagesJob").StoreDurably());
-        q.AddJob<FetchUserPhotoJob>(opts => opts.WithIdentity("FetchUserPhotoJob").StoreDurably());
-        q.AddJob<FileScanJob>(opts => opts.WithIdentity("FileScanJob").StoreDurably());
-        q.AddJob<RefreshUserPhotosJob>(opts => opts.WithIdentity("RefreshUserPhotosJob").StoreDurably());
-        q.AddJob<RotateBackupPassphraseJob>(opts => opts.WithIdentity("RotateBackupPassphraseJob").StoreDurably());
-        q.AddJob<ScheduledBackupJob>(opts => opts.WithIdentity("ScheduledBackupJob").StoreDurably());
-        q.AddJob<SendChatNotificationJob>(opts => opts.WithIdentity("SendChatNotificationJob").StoreDurably());
-        q.AddJob<TempbanExpiryJob>(opts => opts.WithIdentity("TempbanExpiryJob").StoreDurably());
-        q.AddJob<TextClassifierRetrainingJob>(opts => opts.WithIdentity("TextClassifierRetrainingJob").StoreDurably());
-        q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity("WelcomeTimeoutJob").StoreDurably());
+
+        // Scheduled jobs (UI-visible with config cards)
+        q.AddJob<BlocklistSyncJob>(opts => opts.WithIdentity(BackgroundJobNames.BlocklistSync).StoreDurably());
+        q.AddJob<ChatHealthCheckJob>(opts => opts.WithIdentity(BackgroundJobNames.ChatHealthCheck).StoreDurably());
+        q.AddJob<DatabaseMaintenanceJob>(opts => opts.WithIdentity(BackgroundJobNames.DatabaseMaintenance).StoreDurably());
+        q.AddJob<DataCleanupJob>(opts => opts.WithIdentity(BackgroundJobNames.DataCleanup).StoreDurably());
+        q.AddJob<RefreshUserPhotosJob>(opts => opts.WithIdentity(BackgroundJobNames.UserPhotoRefresh).StoreDurably());
+        q.AddJob<ScheduledBackupJob>(opts => opts.WithIdentity(BackgroundJobNames.ScheduledBackup).StoreDurably());
+        q.AddJob<TextClassifierRetrainingJob>(opts => opts.WithIdentity(BackgroundJobNames.TextClassifierRetraining).StoreDurably());
+
+        // Ad-hoc jobs (one-time triggered, no UI)
+        q.AddJob<DeleteMessageJob>(opts => opts.WithIdentity(BackgroundJobNames.DeleteMessage).StoreDurably());
+        q.AddJob<DeleteUserMessagesJob>(opts => opts.WithIdentity(BackgroundJobNames.DeleteUserMessages).StoreDurably());
+        q.AddJob<FetchUserPhotoJob>(opts => opts.WithIdentity(BackgroundJobNames.FetchUserPhoto).StoreDurably());
+        q.AddJob<FileScanJob>(opts => opts.WithIdentity(BackgroundJobNames.FileScan).StoreDurably());
+        q.AddJob<RotateBackupPassphraseJob>(opts => opts.WithIdentity(BackgroundJobNames.RotateBackupPassphrase).StoreDurably());
+        q.AddJob<TempbanExpiryJob>(opts => opts.WithIdentity(BackgroundJobNames.TempbanExpiry).StoreDurably());
+        q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity(BackgroundJobNames.WelcomeTimeout).StoreDurably());
+
+        q.AddJob<SendChatNotificationJob>(opts => opts.WithIdentity(BackgroundJobNames.SendChatNotification).StoreDurably());
 
         // Note: Triggers will be created dynamically by QuartzSchedulingSyncService
         // based on database configuration (BackgroundJobConfig.Schedule)
@@ -107,7 +114,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
 
         // Internal handler services (required by BackupService)
-        services.AddScoped<BackupRetentionService>();
+        services.AddScoped<IBackupRetentionService, BackupRetentionService>();
         services.AddScoped<TableDiscoveryService>();
         services.AddScoped<TableExportService>();
         services.AddScoped<DependencyResolutionService>();

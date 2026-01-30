@@ -1,5 +1,6 @@
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -18,6 +19,7 @@ public interface IBotMessageService
         string text,
         ParseMode? parseMode = null,
         ReplyParameters? replyParameters = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

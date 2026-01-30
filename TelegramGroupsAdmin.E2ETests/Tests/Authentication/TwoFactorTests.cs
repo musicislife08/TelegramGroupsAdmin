@@ -26,10 +26,9 @@ public class TwoFactorTests : SharedE2ETestBase
     public async Task Login_WithTotpEnabled_RequiresSecondFactor()
     {
         // Arrange - create user with TOTP enabled
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
@@ -37,7 +36,7 @@ public class TwoFactorTests : SharedE2ETestBase
 
         // Act - login with password
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should redirect to TOTP verification page
         await _verifyPage.WaitForPageAsync();
@@ -48,10 +47,9 @@ public class TwoFactorTests : SharedE2ETestBase
     public async Task Login_WithValidTotpCode_RedirectsToHome()
     {
         // Arrange - create user with TOTP enabled
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp-valid"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
@@ -59,7 +57,7 @@ public class TwoFactorTests : SharedE2ETestBase
 
         // Act - complete full 2FA login flow
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         // Generate valid TOTP code using the same secret
@@ -75,10 +73,9 @@ public class TwoFactorTests : SharedE2ETestBase
     public async Task Login_WithInvalidTotpCode_ShowsError()
     {
         // Arrange - create user with TOTP enabled
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp-invalid"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .WithTotp(enabled: true)
             .AsOwner()
@@ -86,7 +83,7 @@ public class TwoFactorTests : SharedE2ETestBase
 
         // Act - login and submit wrong TOTP code
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
         await _verifyPage.WaitForPageAsync();
 
         // Submit an invalid code (all zeros)
@@ -102,17 +99,16 @@ public class TwoFactorTests : SharedE2ETestBase
     public async Task Login_WithoutTotp_SkipsVerification()
     {
         // Arrange - create user WITHOUT TOTP (regular login)
-        var password = TestCredentials.GeneratePassword();
         var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("no-totp"))
-            .WithPassword(password)
+            .WithStandardPassword()
             .WithEmailVerified()
             .AsOwner()
             .BuildAsync();
 
         // Act - login with password only
         await _loginPage.NavigateAsync();
-        await _loginPage.LoginAsync(user.Email, password);
+        await _loginPage.LoginAsync(user.Email, user.Password);
 
         // Assert - should go directly to home (no 2FA prompt)
         await _loginPage.WaitForRedirectAsync();

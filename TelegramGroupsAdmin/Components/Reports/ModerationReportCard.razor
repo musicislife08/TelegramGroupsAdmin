@@ -3,7 +3,6 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
-@* @using DataModels = TelegramGroupsAdmin.Data.Models *@
 
 @inject IMessageHistoryRepository MessageRepository
 @inject ITelegramUserRepository TelegramUserRepository
@@ -42,10 +41,18 @@
                     @(_message.MessageText ?? "[No text]")
                 </MudText>
 
-                @if (_message.PhotoFileId != null)
+                @if (_message.PhotoLocalPath != null)
+                {
+                    <MudImage Src="@MediaPathUtilities.GetPhotoWebPath(_message.PhotoLocalPath)"
+                              Alt="Reported image"
+                              ObjectFit="ObjectFit.Contain"
+                              Width="300"
+                              Class="mt-2 rounded" />
+                }
+                else if (_message.PhotoFileId != null)
                 {
                     <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Image" Color="Color.Info">
-                        Has Image
+                        Has Image (not downloaded)
                     </MudChip>
                 }
 
@@ -67,7 +74,7 @@
         }
     </MudCardContent>
     <MudCardActions>
-        @if (Report.Status == DataModels.ReportStatus.Pending)
+        @if (Report.Status == ReportStatus.Pending)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
@@ -162,8 +169,8 @@
     {
         return Report.Status switch
         {
-            DataModels.ReportStatus.Pending => Color.Warning,
-            DataModels.ReportStatus.Reviewed => Color.Success,
+            ReportStatus.Pending => Color.Warning,
+            ReportStatus.Reviewed => Color.Success,
             _ => Color.Default
         };
     }

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -43,12 +44,14 @@ public class BackgroundJobScheduler
             "DeleteMessage",
             deletePayload,
             delaySeconds,
+            deduplicationKey: None,
             cancellationToken);
     }
 
     /// <summary>
     /// Schedule user photo fetch via Quartz.NET with 0s delay (instant execution with persistence/retry).
     /// Used to: populate user profile photos for message history UI.
+    /// Deduplicated by userId - multiple messages from same user won't trigger multiple photo fetches.
     /// </summary>
     public async Task ScheduleUserPhotoFetchAsync(
         long messageId,
@@ -64,6 +67,7 @@ public class BackgroundJobScheduler
             "FetchUserPhoto",
             photoPayload,
             delaySeconds: 0,
+            deduplicationKey: FetchUserPhoto(userId),
             cancellationToken);
     }
 }

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Models;
@@ -11,17 +11,18 @@ namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
 /// Service for managing unified configuration storage with automatic global/chat merging
-/// PERF-CFG-1: Uses IMemoryCache for 95% query reduction (200+ queries/hr → 10-15)
+/// PERF-CFG-1: Uses HybridCache for 95% query reduction with stampede protection
 /// Routes ConfigType.ContentDetection to IContentDetectionConfigRepository (separate table)
 /// </summary>
 public class ConfigService(
     IConfigRepository configRepository,
     IContentDetectionConfigRepository contentDetectionConfigRepository,
-    IMemoryCache cache,
+    HybridCache cache,
     IDataProtectionProvider dataProtectionProvider,
     ILogger<ConfigService> logger) : IConfigService
 {
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15); // Sliding expiration
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
+    private static readonly HybridCacheEntryOptions CacheOptions = new() { Expiration = CacheDuration };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -29,9 +30,12 @@ public class ConfigService(
         WriteIndented = false
     };
 
-    public async Task SaveAsync<T>(ConfigType configType, long chatId, T config) where T : class
+    public async Task SaveAsync<T>(ConfigType configType, long chatId, T config, string? displayName = null) where T : class
     {
         ArgumentNullException.ThrowIfNull(config);
+
+        // Build scope string for logging
+        var scope = chatId == 0 ? "global" : (displayName ?? $"chat {chatId}");
 
         // Route ContentDetection to separate repository
         if (configType == ConfigType.ContentDetection)
@@ -44,12 +48,15 @@ public class ConfigService(
             else
                 await contentDetectionConfigRepository.UpdateChatConfigAsync(chatId, cdConfig);
 
-            logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, chatId == 0 ? "global" : $"chat {chatId}");
+            logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, scope);
 
             // Invalidate cache
-            cache.Remove($"cfg_{configType}_{chatId}");
+            await cache.RemoveAsync($"cfg_{configType}_{chatId}");
             if (chatId != 0)
-                cache.Remove($"cfg_effective_{configType}_{chatId}");
+                await cache.RemoveAsync($"cfg_effective_{configType}_{chatId}");
+            else
+                // Global config changed - invalidate all chat-specific effective caches via tag
+                await cache.RemoveByTagAsync($"effective_{configType}");
             return;
         }
 
@@ -70,27 +77,24 @@ public class ConfigService(
 
         await configRepository.UpsertAsync(record);
 
-        var scope = chatId == 0 ? "global" : $"chat {chatId}";
         logger.LogInformation("Configuration saved: {ConfigType} ({Scope})", configType, scope);
 
         // CRITICAL: Invalidate cache immediately for instant UI updates
         var cacheKey = $"cfg_{configType}_{chatId}";
-        cache.Remove(cacheKey);
+        await cache.RemoveAsync(cacheKey);
 
         // Also invalidate effective config cache if chat-specific
         if (chatId != 0)
         {
             var effectiveCacheKey = $"cfg_effective_{configType}_{chatId}";
-            cache.Remove(effectiveCacheKey);
+            await cache.RemoveAsync(effectiveCacheKey);
         }
 
-        // If updating global config, invalidate all chat-specific effective caches
+        // If updating global config, invalidate all chat-specific effective caches via tag
         // (they fall back to global, so need to pick up new global values)
         if (chatId == 0)
         {
-            // Note: We can't easily enumerate all chat IDs here, but the 15-min expiration
-            // ensures eventual consistency. For instant updates, users can refresh the page.
-            // Alternative: Keep a registry of cache keys, but adds complexity.
+            await cache.RemoveByTagAsync($"effective_{configType}");
         }
     }
 
@@ -98,50 +102,39 @@ public class ConfigService(
     {
         var cacheKey = $"cfg_{configType}_{chatId}";
 
-        // Fast path: cache hit (99% of calls after warm-up)
-        if (cache.TryGetValue<T>(cacheKey, out var cachedValue))
-        {
-            return cachedValue;
-        }
-
         // Route ContentDetection to separate repository
         if (configType == ConfigType.ContentDetection)
         {
-            ContentDetectionConfig? cdConfig;
-            if (chatId == 0)
-                cdConfig = await contentDetectionConfigRepository.GetGlobalConfigAsync();
-            else
-                cdConfig = await contentDetectionConfigRepository.GetByChatIdAsync(chatId);
+            // HybridCache provides stampede protection - only one caller fetches on miss
+            var cdConfig = await cache.GetOrCreateAsync(
+                cacheKey,
+                async _ =>
+                {
+                    if (chatId == 0)
+                        return await contentDetectionConfigRepository.GetGlobalConfigAsync();
+                    return await contentDetectionConfigRepository.GetByChatIdAsync(chatId);
+                },
+                CacheOptions);
 
-            if (cdConfig != null)
-            {
-                cache.Set(cacheKey, cdConfig, new MemoryCacheEntryOptions { SlidingExpiration = CacheDuration });
-            }
             return cdConfig as T;
         }
 
-        // Slow path: cache miss - fetch from DB and populate cache
-        var record = await configRepository.GetAsync(chatId);
-        if (record == null)
-        {
-            return null;
-        }
+        // Regular configs - use GetOrCreateAsync for cache-aside with stampede protection
+        return await cache.GetOrCreateAsync(
+            cacheKey,
+            async _ =>
+            {
+                var record = await configRepository.GetAsync(chatId);
+                if (record == null)
+                    return null;
 
-        var json = GetConfigColumn(record, configType);
-        if (string.IsNullOrEmpty(json))
-        {
-            return null;
-        }
+                var json = GetConfigColumn(record, configType);
+                if (string.IsNullOrEmpty(json))
+                    return null;
 
-        var config = JsonSerializer.Deserialize<T>(json, JsonOptions);
-
-        // Cache for 15 minutes (sliding expiration - extends on each access)
-        cache.Set(cacheKey, config, new MemoryCacheEntryOptions
-        {
-            SlidingExpiration = CacheDuration
-        });
-
-        return config;
+                return JsonSerializer.Deserialize<T>(json, JsonOptions);
+            },
+            CacheOptions);
     }
 
     public async ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long chatId) where T : class
@@ -150,12 +143,12 @@ public class ConfigService(
         if (configType == ConfigType.ContentDetection)
         {
             var cdCacheKey = $"cfg_effective_{configType}_{chatId}";
-            if (cache.TryGetValue<T>(cdCacheKey, out var cachedCd))
-                return cachedCd;
+            var cdConfig = await cache.GetOrCreateAsync(
+                cdCacheKey,
+                async _ => await contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId),
+                CacheOptions,
+                tags: [$"effective_{configType}"]);
 
-            // Repository handles global/chat merge with UseGlobal flags per sub-config
-            var cdConfig = await contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId);
-            cache.Set(cdCacheKey, cdConfig, new MemoryCacheEntryOptions { SlidingExpiration = CacheDuration });
             return cdConfig as T;
         }
 
@@ -165,46 +158,30 @@ public class ConfigService(
             return await GetAsync<T>(configType, 0);
         }
 
-        // Cache the effective (merged) config too
+        // Cache the effective (merged) config with stampede protection
         var effectiveCacheKey = $"cfg_effective_{configType}_{chatId}";
 
-        if (cache.TryGetValue<T>(effectiveCacheKey, out var cachedEffective))
-        {
-            return cachedEffective;
-        }
-
-        // Get both global and chat-specific configs (both use cached GetAsync)
-        var globalConfig = await GetAsync<T>(configType, 0);
-        var chatConfig = await GetAsync<T>(configType, chatId);
-
-        T? effectiveConfig;
-
-        // If no chat-specific config, return global
-        if (chatConfig == null)
-        {
-            effectiveConfig = globalConfig;
-        }
-        // If no global config, return chat-specific
-        else if (globalConfig == null)
-        {
-            effectiveConfig = chatConfig;
-        }
-        // Merge: chat-specific overrides global
-        else
-        {
-            effectiveConfig = MergeConfigs(globalConfig, chatConfig);
-        }
-
-        // Cache the effective config (sliding expiration)
-        if (effectiveConfig != null)
-        {
-            cache.Set(effectiveCacheKey, effectiveConfig, new MemoryCacheEntryOptions
+        return await cache.GetOrCreateAsync(
+            effectiveCacheKey,
+            async _ =>
             {
-                SlidingExpiration = CacheDuration
-            });
-        }
+                // Get both global and chat-specific configs (both use cached GetAsync)
+                var globalConfig = await GetAsync<T>(configType, 0);
+                var chatConfig = await GetAsync<T>(configType, chatId);
 
-        return effectiveConfig;
+                // If no chat-specific config, return global
+                if (chatConfig == null)
+                    return globalConfig;
+
+                // If no global config, return chat-specific
+                if (globalConfig == null)
+                    return chatConfig;
+
+                // Merge: chat-specific overrides global
+                return MergeConfigs(globalConfig, chatConfig);
+            },
+            CacheOptions,
+            tags: [$"effective_{configType}"]);
     }
 
     public async Task DeleteAsync(ConfigType configType, long chatId)
@@ -216,8 +193,8 @@ public class ConfigService(
                 await contentDetectionConfigRepository.DeleteChatConfigAsync(chatId);
             // Note: Can't delete global config (chat_id=0), it's the fallback
 
-            cache.Remove($"cfg_{configType}_{chatId}");
-            cache.Remove($"cfg_effective_{configType}_{chatId}");
+            await cache.RemoveAsync($"cfg_{configType}_{chatId}");
+            await cache.RemoveAsync($"cfg_effective_{configType}_{chatId}");
             return;
         }
 
@@ -242,13 +219,18 @@ public class ConfigService(
 
         // Invalidate cache after deletion
         var cacheKey = $"cfg_{configType}_{chatId}";
-        cache.Remove(cacheKey);
+        await cache.RemoveAsync(cacheKey);
 
-        // Also invalidate effective config cache if chat-specific
+        // Also invalidate effective config cache
         if (chatId != 0)
         {
             var effectiveCacheKey = $"cfg_effective_{configType}_{chatId}";
-            cache.Remove(effectiveCacheKey);
+            await cache.RemoveAsync(effectiveCacheKey);
+        }
+        else
+        {
+            // Global config deleted - invalidate all chat-specific effective caches via tag
+            await cache.RemoveByTagAsync($"effective_{configType}");
         }
     }
 
@@ -260,38 +242,28 @@ public class ConfigService(
     {
         const string cacheKey = "cfg_telegram_bot_token";
 
-        // Check cache first
-        if (cache.TryGetValue<string>(cacheKey, out var cachedToken))
-        {
-            return cachedToken;
-        }
-
-        // Load from database (global config, chat_id = 0)
-        var record = await configRepository.GetAsync(0);
-        if (record?.TelegramBotTokenEncrypted == null)
-        {
-            return null;
-        }
-
-        try
-        {
-            // Decrypt using Data Protection
-            var protector = dataProtectionProvider.CreateProtector(DataProtectionPurposes.TelegramBotToken);
-            var decryptedToken = protector.Unprotect(record.TelegramBotTokenEncrypted);
-
-            // Cache for 15 minutes
-            cache.Set(cacheKey, decryptedToken, new MemoryCacheEntryOptions
+        return await cache.GetOrCreateAsync(
+            cacheKey,
+            async _ =>
             {
-                SlidingExpiration = CacheDuration
-            });
+                // Load from database (global config, chat_id = 0)
+                var record = await configRepository.GetAsync(0);
+                if (record?.TelegramBotTokenEncrypted == null)
+                    return null;
 
-            return decryptedToken;
-        }
-        catch (Exception)
-        {
-            // Decryption failed (corrupted data or wrong key)
-            return null;
-        }
+                try
+                {
+                    // Decrypt using Data Protection
+                    var protector = dataProtectionProvider.CreateProtector(DataProtectionPurposes.TelegramBotToken);
+                    return protector.Unprotect(record.TelegramBotTokenEncrypted);
+                }
+                catch (Exception)
+                {
+                    // Decryption failed (corrupted data or wrong key)
+                    return null;
+                }
+            },
+            CacheOptions);
     }
 
     /// <summary>
@@ -323,7 +295,7 @@ public class ConfigService(
 
         // Invalidate cache
         const string cacheKey = "cfg_telegram_bot_token";
-        cache.Remove(cacheKey);
+        await cache.RemoveAsync(cacheKey);
     }
 
     /// <summary>
@@ -371,6 +343,9 @@ public class ConfigService(
             case ConfigType.ServiceMessageDeletion:
                 record.ServiceMessageDeletionConfig = json;
                 break;
+            case ConfigType.BanCelebration:
+                record.BanCelebrationConfig = json;
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type");
         }
@@ -389,6 +364,7 @@ public class ConfigService(
             ConfigType.UrlFilter => record.BotProtectionConfig,
             ConfigType.TelegramBot => record.TelegramBotConfig,
             ConfigType.ServiceMessageDeletion => record.ServiceMessageDeletionConfig,
+            ConfigType.BanCelebration => record.BanCelebrationConfig,
             _ => throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type")
         };
     }

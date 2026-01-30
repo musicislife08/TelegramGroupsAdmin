@@ -1,13 +1,15 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
 /// <summary>
 /// Fluent builder for creating impersonation alerts in the database for E2E testing.
-/// Uses IImpersonationAlertsRepository to create proper impersonation_alerts entries.
+/// Uses IReviewsRepository to create unified review entries with Type=ImpersonationAlert.
 /// </summary>
 /// <remarks>
 /// Usage:
@@ -211,7 +213,7 @@ public class TestImpersonationAlertBuilder
     public async Task<TestImpersonationAlert> BuildAsync(CancellationToken cancellationToken = default)
     {
         using var scope = _services.CreateScope();
-        var alertRepository = scope.ServiceProvider.GetRequiredService<IImpersonationAlertsRepository>();
+        var reviewsRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
 
         var alert = new ImpersonationAlertRecord
         {
@@ -239,10 +241,10 @@ public class TestImpersonationAlertBuilder
             ChatName = _chatName
         };
 
-        var id = await alertRepository.CreateAlertAsync(alert, cancellationToken);
+        var id = await reviewsRepository.InsertImpersonationAlertAsync(alert, cancellationToken);
 
         return new TestImpersonationAlert(
-            Id: id,
+            Id: (int)id,
             SuspectedUserId: _suspectedUserId,
             TargetUserId: _targetUserId,
             ChatId: _chatId,

@@ -5,6 +5,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -249,6 +250,7 @@ public class DmDeliveryService : IDmDeliveryService
                     "DeleteMessage",
                     deletePayload,
                     delaySeconds: autoDeleteSeconds.Value,
+                    deduplicationKey: None,
                     cancellationToken);
             }
 
@@ -393,6 +395,92 @@ public class DmDeliveryService : IDmDeliveryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send DM with media to {User}", user.ToLogDebug(telegramUserId));
+            return new DmDeliveryResult
+            {
+                DmSent = false,
+                FallbackUsed = false,
+                Failed = true,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
+    public async Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
+        long telegramUserId,
+        string notificationType,
+        string messageText,
+        string? photoPath = null,
+        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+        CancellationToken cancellationToken = default)
+    {
+        var operations = await _botClientFactory.GetOperationsAsync();
+
+        // Fetch user once for logging
+        using var scope = _serviceProvider.CreateScope();
+        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var notificationRepo = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
+        var user = await telegramUserRepo.GetByTelegramIdAsync(telegramUserId, cancellationToken);
+
+        try
+        {
+            // Send with photo if available
+            if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
+            {
+                await using var photoStream = File.OpenRead(photoPath);
+                await operations.SendPhotoAsync(
+                    chatId: telegramUserId,
+                    photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
+                    caption: messageText,
+                    parseMode: ParseMode.MarkdownV2,
+                    replyMarkup: keyboard,
+                    cancellationToken: cancellationToken);
+
+                _logger.LogInformation("DM with photo and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+            }
+            else
+            {
+                // Text-only with keyboard
+                await operations.SendMessageAsync(
+                    chatId: telegramUserId,
+                    text: messageText,
+                    parseMode: ParseMode.MarkdownV2,
+                    replyMarkup: keyboard,
+                    cancellationToken: cancellationToken);
+
+                _logger.LogInformation("DM with keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+            }
+
+            // Update bot_dm_enabled flag to true
+            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+
+            return new DmDeliveryResult
+            {
+                DmSent = true,
+                FallbackUsed = false,
+                Failed = false
+            };
+        }
+        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
+        {
+            // User has blocked the bot - update flag and queue notification (without buttons)
+            _logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
+
+            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+
+            // Queue notification for later delivery (text only, no buttons)
+            await notificationRepo.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
+
+            return new DmDeliveryResult
+            {
+                DmSent = false,
+                FallbackUsed = false,
+                Failed = true,
+                ErrorMessage = "User has blocked bot DMs - notification queued for later delivery"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send DM with keyboard to {User}", user.ToLogDebug(telegramUserId));
             return new DmDeliveryResult
             {
                 DmSent = false,

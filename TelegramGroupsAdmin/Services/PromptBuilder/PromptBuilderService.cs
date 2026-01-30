@@ -58,11 +58,7 @@ public class PromptBuilderService : IPromptBuilderService
                 AIFeatureType.PromptBuilder,
                 "You are an expert at creating spam detection rules for online communities.",
                 metaPrompt,
-                new ChatCompletionOptions
-                {
-                    MaxTokens = 1000, // Cap for detailed rules
-                    Temperature = 0.3 // Cap for focused output
-                },
+                options: null,  // Use feature config defaults
                 cancellationToken);
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
@@ -130,11 +126,7 @@ public class PromptBuilderService : IPromptBuilderService
                 AIFeatureType.PromptBuilder,
                 "You are an expert at creating spam detection rules for online communities.",
                 metaPrompt,
-                new ChatCompletionOptions
-                {
-                    MaxTokens = 1000, // Cap for detailed rules
-                    Temperature = 0.3 // Cap for focused output
-                },
+                options: null,  // Use feature config defaults
                 cancellationToken);
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))

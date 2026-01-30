@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -75,6 +76,12 @@ public class StartCommand : IBotCommand
         if (args.Length > 0 && args[0].StartsWith("welcome_"))
         {
             return await HandleWelcomeDeepLinkAsync(operations, message, args[0], cancellationToken);
+        }
+
+        // Check if this is a deep link for entrance exam
+        if (args.Length > 0 && WelcomeDeepLinkBuilder.IsExamPayload(args[0]))
+        {
+            return await HandleExamDeepLinkAsync(operations, message, args[0], cancellationToken);
         }
 
         // Default /start response
@@ -180,6 +187,88 @@ public class StartCommand : IBotCommand
         }
 
         // Don't return a message - the Accept button will trigger the final confirmation
+        return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+    }
+
+    /// <summary>
+    /// Handle exam deep link - starts entrance exam in DM
+    /// </summary>
+    private async Task<CommandResult> HandleExamDeepLinkAsync(
+        ITelegramOperations operations,
+        Message message,
+        string payload,
+        CancellationToken cancellationToken)
+    {
+        // Parse payload: "exam_start_chatId_userId"
+        var examPayload = WelcomeDeepLinkBuilder.ParseExamStartPayload(payload);
+        if (examPayload == null)
+        {
+            return new CommandResult(
+                "❌ Invalid exam link. Please use the button from the welcome message.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
+        }
+
+        // Verify the user clicking is the target user
+        if (message.From?.Id != examPayload.UserId)
+        {
+            return new CommandResult(
+                "❌ This exam link is not for you. Please use the button sent to you when you joined.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
+        }
+
+        // Get chat info to verify bot is still in chat
+        ChatFullInfo chat;
+        try
+        {
+            chat = await operations.GetChatAsync(examPayload.ChatId, cancellationToken);
+        }
+        catch (Exception)
+        {
+            return new CommandResult(
+                "❌ Unable to retrieve chat information. The bot may have been removed from the chat.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
+        }
+
+        // Load welcome config from database (chat-specific or global fallback)
+        using var scope = _serviceProvider.CreateScope();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, examPayload.ChatId)
+                     ?? WelcomeConfig.Default;
+
+        if (config.Mode != WelcomeMode.EntranceExam || config.ExamConfig == null)
+        {
+            return new CommandResult(
+                "❌ Entrance exam is no longer configured for this chat.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
+        }
+
+        // Start exam in DM - questions will be sent to this private chat
+        var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+        var result = await examFlowService.StartExamInDmAsync(
+            groupChatId: examPayload.ChatId,
+            user: message.From,
+            dmChatId: message.Chat.Id,  // User's private chat with bot
+            config: config,
+            cancellationToken: cancellationToken);
+
+        if (!result.Success)
+        {
+            return new CommandResult(
+                "❌ Failed to start exam. Please try again or contact an admin.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
+        }
+
+        _logger.LogInformation(
+            "Started entrance exam in DM for user {UserId} from group {GroupId}",
+            examPayload.UserId,
+            examPayload.ChatId);
+
+        // Empty result - the exam service sends the first question
         return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 

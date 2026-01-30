@@ -68,9 +68,8 @@ public class PasswordResetTests : SharedE2ETestBase
         await _forgotPage.NavigateAsync();
         await _forgotPage.SubmitAsync();
 
-        // Assert - should show error
-        Assert.That(await _forgotPage.HasErrorMessageAsync(), Is.True,
-            "Should show error for empty email");
+        // Assert - should show error (Expect auto-waits for element)
+        await Expect(_forgotPage.ErrorAlertLocator).ToBeVisibleAsync();
     }
 
     [Test]

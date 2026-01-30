@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -34,46 +35,14 @@ public class MessageQueryService : IMessageQueryService
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await (
-            from m in context.Messages
-            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-            from chat in chatGroup.DefaultIfEmpty()
-            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
-            from user in userGroup.DefaultIfEmpty()
-            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
-            from parentMsg in parentGroup.DefaultIfEmpty()
-            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
-            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-            orderby m.Timestamp descending
-            select new
-            {
-                Message = m,
-                ChatName = chat != null ? chat.ChatName : null,
-                ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                UserName = user != null ? user.Username : null,
-                FirstName = user != null ? user.FirstName : null,
-                LastName = user != null ? user.LastName : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
-                ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
-                ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
-                ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
-                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
-            }
-        )
-        .AsNoTracking()
-        .Take(limit)
-        .ToListAsync(cancellationToken);
 
-        return results.Select(x => x.Message.ToModel(
-            chatName: x.ChatName,
-            chatIconPath: x.ChatIconPath,
-            userName: x.UserName,
-            firstName: x.FirstName,
-            lastName: x.LastName,
-            userPhotoPath: x.UserPhotoPath,
-            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
-            replyToText: x.ReplyToText)).ToList();
+        var results = await context.EnrichedMessages
+            .AsNoTracking()
+            .OrderByDescending(m => m.Timestamp)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return results.Select(m => m.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesBeforeAsync(
@@ -82,105 +51,44 @@ public class MessageQueryService : IMessageQueryService
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var query = from m in context.Messages
-                    join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-                    from chat in chatGroup.DefaultIfEmpty()
-                    join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
-                    from user in userGroup.DefaultIfEmpty()
-                    join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
-                    from parentMsg in parentGroup.DefaultIfEmpty()
-                    join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
-                    from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-                    join trans in context.MessageTranslations on m.MessageId equals trans.MessageId into transGroup
-                    from translation in transGroup.DefaultIfEmpty()
-                    where m.ChatId != 0 // Exclude manual training samples (chat_id=0)
-                       && (beforeTimestamp == null || m.Timestamp < beforeTimestamp)
-                       && (translation == null || translation.EditId == null) // Get translation for original message only (not edits)
-                    orderby m.Timestamp descending
-                    select new
-                    {
-                        Message = m,
-                        ChatName = chat != null ? chat.ChatName : null,
-                        ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                        UserName = user != null ? user.Username : null,
-                        FirstName = user != null ? user.FirstName : null,
-                        LastName = user != null ? user.LastName : null,
-                        UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                        ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
-                        ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
-                        ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
-                        ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
-                        ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
-                        Translation = translation
-                    };
+
+        var query = context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.ChatId != 0); // Exclude manual training samples (chat_id=0)
+
+        if (beforeTimestamp.HasValue)
+        {
+            query = query.Where(m => m.Timestamp < beforeTimestamp.Value);
+        }
 
         var results = await query
-            .AsNoTracking()
+            .OrderByDescending(m => m.Timestamp)
             .Take(limit)
             .ToListAsync(cancellationToken);
 
-        return results.Select(x => x.Message.ToModel(
-            chatName: x.ChatName,
-            chatIconPath: x.ChatIconPath,
-            userName: x.UserName,
-            firstName: x.FirstName,
-            lastName: x.LastName,
-            userPhotoPath: x.UserPhotoPath,
-            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
-            replyToText: x.ReplyToText,
-            translation: x.Translation?.ToModel())).ToList();
+        return results.Select(m => m.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var query = from m in context.Messages
-                    where m.ChatId == chatId
-                    join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-                    from chat in chatGroup.DefaultIfEmpty()
-                    join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
-                    from user in userGroup.DefaultIfEmpty()
-                    join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
-                    from parentMsg in parentGroup.DefaultIfEmpty()
-                    join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
-                    from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-                    select new
-                    {
-                        Message = m,
-                        ChatName = chat != null ? chat.ChatName : null,
-                        ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                        UserName = user != null ? user.Username : null,
-                        FirstName = user != null ? user.FirstName : null,
-                        LastName = user != null ? user.LastName : null,
-                        UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                        ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
-                        ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
-                        ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
-                        ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
-                        ReplyToText = parentMsg != null ? parentMsg.MessageText : null
-                    };
+
+        var query = context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.ChatId == chatId);
 
         // Apply timestamp filter for pagination (get messages older than the specified timestamp)
         if (beforeTimestamp.HasValue)
         {
-            query = query.Where(x => x.Message.Timestamp < beforeTimestamp.Value);
+            query = query.Where(m => m.Timestamp < beforeTimestamp.Value);
         }
 
         var results = await query
-            .OrderByDescending(x => x.Message.Timestamp)
-            .AsNoTracking()
+            .OrderByDescending(m => m.Timestamp)
             .Take(limit)
             .ToListAsync(cancellationToken);
 
-        return results.Select(x => x.Message.ToModel(
-            chatName: x.ChatName,
-            chatIconPath: x.ChatIconPath,
-            userName: x.UserName,
-            firstName: x.FirstName,
-            lastName: x.LastName,
-            userPhotoPath: x.UserPhotoPath,
-            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
-            replyToText: x.ReplyToText)).ToList();
+        return results.Select(m => m.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.MessageWithDetectionHistory>> GetMessagesWithDetectionHistoryAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default)
@@ -206,43 +114,16 @@ public class MessageQueryService : IMessageQueryService
         if (!messagesWithDetections.Any())
             return [];
 
-        // Step 2: Load joined data (chat, user, reply info, translations) in single query
+        // Step 2: Load enriched message data from view (replaces 6-way LINQ JOIN)
         var messageIds = messagesWithDetections.Select(m => m.MessageId).ToArray();
         var userIds = messagesWithDetections.Select(m => m.UserId).Distinct().ToArray();
 
-        var joinedData = await (from m in context.Messages
-                                where messageIds.Contains(m.MessageId)
-                                join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-                                from chat in chatGroup.DefaultIfEmpty()
-                                join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
-                                from user in userGroup.DefaultIfEmpty()
-                                join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
-                                from parentMsg in parentGroup.DefaultIfEmpty()
-                                join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
-                                from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-                                join translation in context.MessageTranslations on m.MessageId equals translation.MessageId into translationGroup
-                                from trans in translationGroup.DefaultIfEmpty()
-                                select new
-                                {
-                                    m.MessageId,
-                                    m.UserId,
-                                    ChatName = chat != null ? chat.ChatName : null,
-                                    ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                                    UserName = user != null ? user.Username : null,
-                                    FirstName = user != null ? user.FirstName : null,
-                                    LastName = user != null ? user.LastName : null,
-                                    UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                                    ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
-                                    ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
-                                    ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
-                                    ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
-                                    ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
-                                    Translation = trans
-                                })
+        var enrichedMessages = await context.EnrichedMessages
             .AsNoTracking()
+            .Where(m => messageIds.Contains(m.MessageId))
             .ToListAsync(cancellationToken);
 
-        var joinedDict = joinedData.ToDictionary(x => x.MessageId);
+        var enrichedDict = enrichedMessages.ToDictionary(x => x.MessageId);
 
         // Step 3: Load user tags and notes separately (Phase 4.12: avoid cartesian product)
         var userTags = await (from ut in context.UserTags
@@ -312,20 +193,13 @@ public class MessageQueryService : IMessageQueryService
             .GroupBy(n => n.TelegramUserId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Step 3: Combine data (preserve timestamp ordering from Step 1)
-        return messagesWithDetections.Select(msg =>
+        // Step 4: Combine data (preserve timestamp ordering from Step 1)
+        return messagesWithDetections
+            .Where(msg => enrichedDict.ContainsKey(msg.MessageId))
+            .Select(msg =>
         {
-            var joined = joinedDict[msg.MessageId];
-            var messageModel = msg.ToModel(
-                chatName: joined.ChatName,
-                chatIconPath: joined.ChatIconPath,
-                userName: joined.UserName,
-                firstName: joined.FirstName,
-                lastName: joined.LastName,
-                userPhotoPath: joined.UserPhotoPath,
-                replyToUser: TelegramDisplayName.Format(joined.ParentUserFirstName, joined.ParentUserLastName, joined.ParentUserUsername, joined.ParentUserId),
-                replyToText: joined.ReplyToText,
-                translation: joined.Translation?.ToModel());
+            var enriched = enrichedDict[msg.MessageId];
+            var messageModel = enriched.ToModel();
 
             // Validate media path exists on filesystem (nulls if missing)
             // REFACTOR-3: Now uses shared utility to avoid duplication with MessageHistoryRepository
@@ -386,47 +260,15 @@ public class MessageQueryService : IMessageQueryService
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await (
-            from m in context.Messages
-            where m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp
-            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-            from chat in chatGroup.DefaultIfEmpty()
-            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
-            from user in userGroup.DefaultIfEmpty()
-            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
-            from parentMsg in parentGroup.DefaultIfEmpty()
-            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
-            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-            orderby m.Timestamp descending
-            select new
-            {
-                Message = m,
-                ChatName = chat != null ? chat.ChatName : null,
-                ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                UserName = user != null ? user.Username : null,
-                FirstName = user != null ? user.FirstName : null,
-                LastName = user != null ? user.LastName : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
-                ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
-                ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
-                ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
-                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
-            }
-        )
-        .AsNoTracking()
-        .Take(limit)
-        .ToListAsync(cancellationToken);
 
-        return results.Select(x => x.Message.ToModel(
-            chatName: x.ChatName,
-            chatIconPath: x.ChatIconPath,
-            userName: x.UserName,
-            firstName: x.FirstName,
-            lastName: x.LastName,
-            userPhotoPath: x.UserPhotoPath,
-            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
-            replyToText: x.ReplyToText)).ToList();
+        var results = await context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp)
+            .OrderByDescending(m => m.Timestamp)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return results.Select(m => m.ToModel()).ToList();
     }
 
     public async Task<Dictionary<long, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
@@ -453,6 +295,7 @@ public class MessageQueryService : IMessageQueryService
                     m.ContentHash,
                     dr.IsSpam,
                     dr.Confidence,
+                    dr.NetConfidence,
                     Reason = dr.Reason ?? $"{dr.DetectionMethod}: Spam detected",
                     CheckType = dr.DetectionMethod,
                     MatchedMessageId = dr.MessageId
@@ -465,21 +308,6 @@ public class MessageQueryService : IMessageQueryService
             .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
             .ToList();
 
-        // Get net_confidence values for all these messages (need fresh query to include net_confidence)
-        var latestMessageIds = latestResults.Select(r => r.MessageId).Distinct().ToArray();
-        var netConfidenceResults = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => latestMessageIds.Contains(dr.MessageId))
-            .Select(dr => new { dr.MessageId, dr.NetConfidence, dr.DetectedAt })
-            .ToListAsync(cancellationToken);
-
-        // Group detection results by message and take latest net_confidence
-        var latestNetConfidence = netConfidenceResults
-            .GroupBy(dr => dr.MessageId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderByDescending(dr => dr.DetectedAt).First().NetConfidence);
-
         // Build final result with absolute net_confidence as display confidence
         return latestResults
             .Select(r => new UiModels.ContentCheckRecord(
@@ -488,7 +316,7 @@ public class MessageQueryService : IMessageQueryService
                 UserId: r.UserId,
                 ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: Math.Abs(latestNetConfidence.GetValueOrDefault(r.MessageId, 0)), // Use absolute net_confidence for display
+                Confidence: Math.Abs(r.NetConfidence), // Use absolute net_confidence for display
                 Reason: r.Reason,
                 CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))
@@ -549,5 +377,81 @@ public class MessageQueryService : IMessageQueryService
             FileId: entity.PhotoFileId!,
             MessageText: entity.MessageText,
             Timestamp: entity.Timestamp);
+    }
+
+    public async Task<UiModels.MessageRecord?> GetMessageByIdAsync(
+        UiModels.MessageRecord message,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Fetching enriched message {Message}", message.ToLogDebug());
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var result = await context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.ChatId == message.ChatId && m.MessageId == message.MessageId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (result == null)
+        {
+            _logger.LogWarning("Message not found during enrichment {Message}", message.ToLogDebug());
+            return null;
+        }
+
+        return result.ToModel();
+    }
+
+    /// <inheritdoc />
+    public async Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
+        long messageId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Step 1: Load message with detection results
+        var messageWithDetections = await context.Messages
+            .AsNoTracking()
+            .Include(m => m.DetectionResults)
+            .Where(m => m.MessageId == messageId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (messageWithDetections == null)
+            return null;
+
+        // Step 2: Load enriched message data from view
+        var enrichedMessage = await context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.MessageId == messageId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (enrichedMessage == null)
+            return null;
+
+        var messageModel = enrichedMessage.ToModel();
+
+        // Validate media path exists on filesystem
+        var validatedPath = MediaPathUtilities.ValidateMediaPath(
+            messageModel.MediaLocalPath,
+            (int?)messageModel.MediaType,
+            _imageStoragePath,
+            out var fullPath);
+
+        if (validatedPath == null && messageModel.MediaLocalPath != null)
+        {
+            _logger.LogDebug("Media file missing for message {MessageId}: {Path}", messageModel.MessageId, fullPath);
+            messageModel = messageModel with { MediaLocalPath = null };
+        }
+
+        return new UiModels.MessageWithDetectionHistory
+        {
+            Message = messageModel,
+            DetectionResults = messageWithDetections.DetectionResults
+                .Select(dr => dr.ToModel())
+                .OrderByDescending(dr => dr.DetectedAt)
+                .ToList(),
+            // Skip user tags/notes for notification - not needed
+            UserTags = [],
+            UserNotes = []
+        };
     }
 }

@@ -1,0 +1,516 @@
+@using Markdig
+@using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Services
+@inject IBanCelebrationGifRepository GifRepository
+@inject IBanCelebrationCaptionRepository CaptionRepository
+@inject IThumbnailService ThumbnailService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="4">
+    <!-- Global Configuration Section -->
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudStack>
+                <MudText Typo="Typo.h6">Global Configuration</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Default settings for all chats. Individual chats can override these in Chat Management.
+                </MudText>
+            </MudStack>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Save"
+                      OnClick="@SaveGlobalConfig"
+                      Disabled="@_savingGlobalConfig">
+                @(_savingGlobalConfig ? "Saving..." : "Save Defaults")
+            </MudButton>
+        </MudStack>
+
+        <BanCelebrationChatSettings @ref="_globalConfigComponent" ChatId="0" OnSaved="OnGlobalConfigSaved" ShowLibraryHint="false" />
+    </MudPaper>
+
+    <!-- GIF Library Section -->
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudStack>
+                <MudText Typo="Typo.h6">GIF Library</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Celebratory GIFs sent when spammers are banned. Random selection on each ban.
+                </MudText>
+            </MudStack>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      OnClick="@AddGif">
+                Add GIF
+            </MudButton>
+        </MudStack>
+
+        @if (_loadingGifs)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+        }
+
+        <MudTable Items="@_gifs"
+                 Hover="true"
+                 Dense="true"
+                 Loading="@_loadingGifs"
+                 LoadingProgressColor="Color.Info">
+            <HeaderContent>
+                <MudTh>Preview</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Cached</MudTh>
+                <MudTh>Added</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Preview">
+                    <div class="gif-preview-container" style="width: 100px; height: 60px; position: relative; cursor: pointer;" @onclick="@(() => PreviewGif(context))">
+                        @if (!string.IsNullOrEmpty(context.ThumbnailPath))
+                        {
+                            <img src="@MediaPathUtilities.GetPhotoWebPath(context.ThumbnailPath)" alt="@(context.Name ?? "GIF")" class="gif-thumbnail" style="max-height: 60px; max-width: 100px; border-radius: 4px;" />
+                            <img src="@MediaPathUtilities.GetPhotoWebPath(context.FilePath)" alt="@(context.Name ?? "GIF")" class="gif-animated" style="max-height: 60px; max-width: 100px; border-radius: 4px; position: absolute; top: 0; left: 0;" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Gif" Size="Size.Large" Color="Color.Primary" />
+                        }
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Name">@(context.Name ?? "(unnamed)")</MudTd>
+                <MudTd DataLabel="Cached">
+                    @if (!string.IsNullOrEmpty(context.FileId))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">Yes</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">No</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Added">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                 Color="Color.Error"
+                                 Size="Size.Small"
+                                 OnClick="@(() => DeleteGif(context))"
+                                 title="Delete" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body1" Align="Align.Center" Class="py-8">
+                    No GIFs in library. Add some to enable ban celebrations!
+                </MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+    <!-- Caption Library Section -->
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudStack>
+                <MudText Typo="Typo.h6">Caption Library</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Caption templates with placeholders: {"{username}"}, {"{chatname}"}, {"{bancount}"}
+                </MudText>
+            </MudStack>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      OnClick="@AddCaption">
+                Add Caption
+            </MudButton>
+        </MudStack>
+
+        @if (_loadingCaptions)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+        }
+
+        <MudTable Items="@_captions"
+                 Hover="true"
+                 Dense="true"
+                 Loading="@_loadingCaptions"
+                 LoadingProgressColor="Color.Info">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Chat Caption</MudTh>
+                <MudTh>DM Caption</MudTh>
+                <MudTh>Added</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@(context.Name ?? "(unnamed)")</MudTd>
+                <MudTd DataLabel="Chat Caption">
+                    <MudTooltip Text="@context.Text">
+                        <MudText Typo="Typo.body2" Style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            @context.Text
+                        </MudText>
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="DM Caption">
+                    <MudTooltip Text="@context.DmText">
+                        <MudText Typo="Typo.body2" Style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            @context.DmText
+                        </MudText>
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Added">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                 Color="Color.Primary"
+                                 Size="Size.Small"
+                                 OnClick="@(() => EditCaption(context))"
+                                 title="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                 Color="Color.Error"
+                                 Size="Size.Small"
+                                 OnClick="@(() => DeleteCaption(context))"
+                                 title="Delete" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body1" Align="Align.Center" Class="py-8">
+                    No captions in library. Defaults will be seeded on first use.
+                </MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+    <!-- Test Preview Section -->
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudText Typo="Typo.h6" GutterBottom="true">Test Preview</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+            Preview a random GIF + caption combination
+        </MudText>
+
+        <MudButton Variant="Variant.Outlined"
+                  Color="Color.Primary"
+                  StartIcon="@Icons.Material.Filled.Preview"
+                  OnClick="@TestRandomCombo"
+                  Disabled="@(_gifs.Count == 0 || _captions.Count == 0)">
+            Test Random Combo
+        </MudButton>
+
+        @if (_previewGif != null && _previewCaption != null)
+        {
+            <MudCard Class="mt-4" Outlined="true">
+                <MudCardContent>
+                    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Start">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                            <img src="@MediaPathUtilities.GetPhotoWebPath(_previewGif.FilePath)" alt="@(_previewGif.Name ?? "GIF")" style="max-height: 120px; max-width: 200px; border-radius: 4px;" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(_previewGif.Name ?? "GIF")</MudText>
+                        </MudStack>
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2">Chat Caption:</MudText>
+                            <MudText Typo="Typo.body1">@((MarkupString)Markdown.ToHtml(_previewChatCaption))</MudText>
+                            <MudText Typo="Typo.subtitle2" Class="mt-2">DM Caption:</MudText>
+                            <MudText Typo="Typo.body1">@((MarkupString)Markdown.ToHtml(_previewDmCaption))</MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        }
+    </MudPaper>
+
+    <!-- Info Section -->
+    <MudAlert Severity="Severity.Info" Dense="true">
+        <MudText Typo="Typo.body2">
+            <strong>Per-chat configuration:</strong> Enable or disable ban celebrations for individual chats
+            via the Chat Configuration modal in Chat Management.
+        </MudText>
+    </MudAlert>
+</MudStack>
+
+@code {
+    private List<BanCelebrationGif> _gifs = [];
+    private List<BanCelebrationCaption> _captions = [];
+    private bool _loadingGifs = true;
+    private bool _loadingCaptions = true;
+
+    // Global config
+    private BanCelebrationChatSettings? _globalConfigComponent;
+    private bool _savingGlobalConfig;
+
+    // Preview state
+    private BanCelebrationGif? _previewGif;
+    private BanCelebrationCaption? _previewCaption;
+    private string _previewChatCaption = string.Empty;
+    private string _previewDmCaption = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadGifs(), LoadCaptions());
+    }
+
+    private async Task SaveGlobalConfig()
+    {
+        if (_globalConfigComponent != null)
+        {
+            _savingGlobalConfig = true;
+            try
+            {
+                await _globalConfigComponent.SaveConfiguration();
+            }
+            finally
+            {
+                _savingGlobalConfig = false;
+            }
+        }
+    }
+
+    private void OnGlobalConfigSaved()
+    {
+        // Global config saved successfully
+    }
+
+    private async Task LoadGifs()
+    {
+        _loadingGifs = true;
+        try
+        {
+            _gifs = await GifRepository.GetAllAsync();
+
+            // Generate missing thumbnails in background
+            var gifsWithoutThumbnails = _gifs.Where(g => string.IsNullOrEmpty(g.ThumbnailPath)).ToList();
+            if (gifsWithoutThumbnails.Count > 0)
+            {
+                _ = GenerateMissingThumbnailsAsync(gifsWithoutThumbnails);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading GIFs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingGifs = false;
+        }
+    }
+
+    private async Task GenerateMissingThumbnailsAsync(List<BanCelebrationGif> gifs)
+    {
+        var generated = 0;
+
+        foreach (var gif in gifs)
+        {
+            try
+            {
+                var sourcePath = GifRepository.GetFullPath(gif.FilePath);
+                if (!File.Exists(sourcePath))
+                    continue;
+
+                var thumbnailRelativePath = gif.FilePath.Replace(Path.GetExtension(gif.FilePath), "_thumb.png");
+                var thumbnailFullPath = GifRepository.GetFullPath(thumbnailRelativePath);
+
+                var success = await ThumbnailService.GenerateThumbnailAsync(sourcePath, thumbnailFullPath);
+                if (success)
+                {
+                    await GifRepository.UpdateThumbnailPathAsync(gif.Id, thumbnailRelativePath);
+                    generated++;
+                }
+            }
+            catch
+            {
+                // Silently continue - thumbnail generation is non-critical
+            }
+        }
+
+        if (generated > 0)
+        {
+            // Refresh the list to show newly generated thumbnails
+            _gifs = await GifRepository.GetAllAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadCaptions()
+    {
+        _loadingCaptions = true;
+        try
+        {
+            _captions = await CaptionRepository.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading captions: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingCaptions = false;
+        }
+    }
+
+    private async Task AddGif()
+    {
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            BackdropClick = false  // Prevent accidental close during upload
+        };
+
+        var dialog = await DialogService.ShowAsync<AddBanCelebrationGifDialog>("Add GIF", options);
+        var result = await dialog.Result;
+
+        if (result is not null && result is { Canceled: false })
+        {
+            await LoadGifs();
+            Snackbar.Add("GIF added successfully", Severity.Success);
+        }
+    }
+
+    private async Task DeleteGif(BanCelebrationGif gif)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete GIF",
+            $"Are you sure you want to delete '{gif.Name ?? gif.FilePath}'? This will also remove the file from disk.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            await GifRepository.DeleteAsync(gif.Id);
+            Snackbar.Add("GIF deleted successfully", Severity.Success);
+            await LoadGifs();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting GIF: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PreviewGif(BanCelebrationGif gif)
+    {
+        var parameters = new DialogParameters<ImagePreviewDialog>
+        {
+            { x => x.ImagePath, gif.FilePath },
+            { x => x.Title, gif.Name ?? "GIF Preview" }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<ImagePreviewDialog>(gif.Name ?? "GIF Preview", parameters, options);
+    }
+
+    private async Task AddCaption()
+    {
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            BackdropClick = false
+        };
+
+        var dialog = await DialogService.ShowAsync<AddBanCelebrationCaptionDialog>("Add Caption", options);
+        var result = await dialog.Result;
+
+        if (result is not null && result is { Canceled: false })
+        {
+            await LoadCaptions();
+            Snackbar.Add("Caption added successfully", Severity.Success);
+        }
+    }
+
+    private async Task EditCaption(BanCelebrationCaption caption)
+    {
+        var parameters = new DialogParameters<AddBanCelebrationCaptionDialog>
+        {
+            { x => x.CaptionToEdit, caption }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            BackdropClick = false
+        };
+
+        var dialog = await DialogService.ShowAsync<AddBanCelebrationCaptionDialog>("Edit Caption", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is not null && result is { Canceled: false })
+        {
+            await LoadCaptions();
+            Snackbar.Add("Caption updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task DeleteCaption(BanCelebrationCaption caption)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Caption",
+            $"Are you sure you want to delete '{caption.Name ?? "this caption"}'?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            await CaptionRepository.DeleteAsync(caption.Id);
+            Snackbar.Add("Caption deleted successfully", Severity.Success);
+            await LoadCaptions();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting caption: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task TestRandomCombo()
+    {
+        try
+        {
+            _previewGif = await GifRepository.GetRandomAsync();
+            _previewCaption = await CaptionRepository.GetRandomAsync();
+
+            if (_previewGif != null && _previewCaption != null)
+            {
+                // Replace placeholders with example values
+                _previewChatCaption = _previewCaption.Text
+                    .Replace("{username}", "SpammerX", StringComparison.OrdinalIgnoreCase)
+                    .Replace("{chatname}", "Test Chat", StringComparison.OrdinalIgnoreCase)
+                    .Replace("{bancount}", "42", StringComparison.OrdinalIgnoreCase);
+
+                _previewDmCaption = _previewCaption.DmText
+                    .Replace("{username}", "You", StringComparison.OrdinalIgnoreCase)
+                    .Replace("{chatname}", "Test Chat", StringComparison.OrdinalIgnoreCase)
+                    .Replace("{bancount}", "42", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading preview: {ex.Message}", Severity.Error);
+        }
+    }
+}
+
+<style>
+    /* Animated GIF hidden by default, shows on hover */
+    .gif-preview-container .gif-animated {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+
+    .gif-preview-container:hover .gif-animated {
+        opacity: 1;
+    }
+
+    /* Thumbnail visible by default, hides on hover */
+    .gif-preview-container .gif-thumbnail {
+        transition: opacity 0.2s ease;
+    }
+
+    .gif-preview-container:hover .gif-thumbnail {
+        opacity: 0;
+    }
+</style>

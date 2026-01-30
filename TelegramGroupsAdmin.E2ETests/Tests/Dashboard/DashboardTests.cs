@@ -215,13 +215,13 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - new stat cards have values (even if 0)
-        var spam24h = await _homePage.GetSpam24hAsync();
+        var spamToday = await _homePage.GetSpamTodayAsync();
         var activeBans = await _homePage.GetActiveBansAsync();
         var trustedUsers = await _homePage.GetTrustedUsersAsync();
         var pendingReports = await _homePage.GetPendingReportsCountAsync();
 
-        Assert.That(spam24h, Is.Not.Null.And.Not.Empty,
-            "Spam (24h) stat should have a value");
+        Assert.That(spamToday, Is.Not.Null.And.Not.Empty,
+            "Spam Today stat should have a value");
         Assert.That(activeBans, Is.Not.Null.And.Not.Empty,
             "Active Bans stat should have a value");
         Assert.That(trustedUsers, Is.Not.Null.And.Not.Empty,

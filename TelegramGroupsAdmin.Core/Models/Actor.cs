@@ -48,6 +48,8 @@ public record Actor
     public static Actor Cas => FromSystem("cas"); // CAS (Combot Anti-Spam) user join check
     public static Actor LanguageWarning => FromSystem("language_warning"); // Phase 4.21
     public static Actor SystemSeed => FromSystem("system_seed"); // Initial data seeding
+    public static Actor ExamFlow => FromSystem("exam_flow"); // Entrance exam auto-pass
+    public static Actor WelcomeFlow => FromSystem("welcome_flow"); // Welcome/rules flow completion
     public static Actor Unknown => FromSystem("unknown");
 
     /// <summary>
@@ -90,10 +92,12 @@ public record Actor
             "impersonation" => "Impersonation Detection",
             "auto_ban" => "Auto-Ban",
             "cas" => "CAS Anti-Spam",
-            "language_warning" => "Language Warning", // Phase 4.21
+            "language_warning" => "Language Warning",
             "system_seed" => "System Seed",
             "initial_seed" => "Initial Seed",
             "web_admin" => "Web Admin (Legacy)",
+            "exam_flow" => "Exam Flow",
+            "welcome_flow" => "Welcome Flow",
             "unknown" => "Unknown",
             _ => systemIdentifier
         };

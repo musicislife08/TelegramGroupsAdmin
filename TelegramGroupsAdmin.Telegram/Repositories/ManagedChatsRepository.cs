@@ -75,6 +75,24 @@ public class ManagedChatsRepository : IManagedChatsRepository
         return entity?.ToModel();
     }
 
+    /// <inheritdoc/>
+    public async Task<List<ManagedChatRecord>> GetByChatIdsAsync(
+        IEnumerable<long> chatIds,
+        CancellationToken cancellationToken = default)
+    {
+        var idList = chatIds.ToList();
+        if (idList.Count == 0)
+            return [];
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.ManagedChats
+            .AsNoTracking()
+            .Where(mc => idList.Contains(mc.ChatId))
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(e => e.ToModel()).ToList();
+    }
+
     public async Task<List<ManagedChatRecord>> GetActiveChatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

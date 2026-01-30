@@ -52,7 +52,7 @@ public class UsersPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/users");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -60,12 +60,18 @@ public class UsersPage
     /// </summary>
     public async Task WaitForLoadAsync(int timeoutMs = 15000)
     {
+        // Wait for Blazor SignalR circuit to be established (required for interactivity)
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
         // Wait for loading indicator to disappear
         await _page.Locator(LoadingIndicator).WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = timeoutMs
         });
+
+        // Wait for tabs to be visible
+        await Expect(_page.Locator(TabContainer)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
 
     /// <summary>
@@ -136,17 +142,23 @@ public class UsersPage
         var searchInput = _page.Locator(SearchInput);
         await searchInput.ClearAsync();
         await searchInput.FillAsync(searchText);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(searchInput).ToHaveValueAsync(searchText);
     }
 
     /// <summary>
-    /// Clears the search input.
+    /// Clears the search input by clicking the MudBlazor clear button (X icon).
+    /// This triggers OnClearButtonClick which calls ApplyFilters().
     /// </summary>
     public async Task ClearSearchAsync()
     {
-        var searchInput = _page.Locator(SearchInput);
-        await searchInput.ClearAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // MudBlazor's Clearable button is an icon button inside the input adornment
+        // Use multiple selector strategies for robustness across environments
+        var clearButton = _page.Locator(".mud-input-adornment-end button, .mud-input-control button.mud-icon-button").First;
+
+        // Wait for the clear button to be visible (it only shows when input has text)
+        await Expect(clearButton).ToBeVisibleAsync();
+        await clearButton.ClickAsync();
+        await Expect(_page.Locator(SearchInput)).ToHaveValueAsync("");
     }
 
     /// <summary>
@@ -254,7 +266,7 @@ public class UsersPage
         var row = _page.Locator(TableRow).Filter(new() { HasText = displayName });
         var viewButton = row.Locator($"{ActionsCell} button").First;
         await viewButton.ClickAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(".mud-dialog")).ToBeVisibleAsync();
     }
 
     /// <summary>

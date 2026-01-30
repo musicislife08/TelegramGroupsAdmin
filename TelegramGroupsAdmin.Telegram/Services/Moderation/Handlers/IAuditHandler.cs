@@ -32,4 +32,16 @@ public interface IAuditHandler
     Task LogDeleteAsync(long messageId, long chatId, long userId, Actor executor, CancellationToken cancellationToken = default);
 
     Task LogRestrictAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Log permission restoration to audit trail.
+    /// Called when user permissions are restored to chat defaults (e.g., exam pass, welcome accept).
+    /// </summary>
+    Task LogRestorePermissionsAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Log kick to audit trail.
+    /// Called when user is kicked from a specific chat (ban then immediate unban).
+    /// </summary>
+    Task LogKickAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default);
 }

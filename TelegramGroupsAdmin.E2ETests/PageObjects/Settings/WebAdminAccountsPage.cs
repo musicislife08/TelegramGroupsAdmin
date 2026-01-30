@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
 
@@ -65,6 +66,7 @@ public class WebAdminAccountsPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/settings/system/accounts");
+        // Settings pages need Blazor circuit connected for interactions
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
@@ -335,7 +337,7 @@ public class WebAdminAccountsPage
     public async Task ClickActionMenuItemAsync(string itemText)
     {
         var menuPopover = _page.Locator(".mud-popover-open");
-        var menuItem = _page.Locator($".mud-popover .mud-list-item:has-text('{itemText}'), .mud-menu .mud-menu-item:has-text('{itemText}')");
+        var menuItem = _page.Locator(".mud-popover .mud-list-item, .mud-menu .mud-menu-item").Filter(new() { HasText = itemText });
         await menuItem.ClickAsync();
 
         // Wait for menu to close
@@ -384,7 +386,7 @@ public class WebAdminAccountsPage
     public async Task<bool> UserHasStatusAsync(string email, string status)
     {
         var row = _page.Locator(UserTableRow).Filter(new() { HasText = email });
-        var statusChip = row.Locator($".mud-chip:has-text('{status}')");
+        var statusChip = row.Locator(".mud-chip").Filter(new() { HasText = status });
         return await statusChip.IsVisibleAsync();
     }
 

@@ -130,6 +130,9 @@ public class MigrationWorkflowTests
     ///
     /// **Scope**: Tests the most recent migration (safer to test, less complex dependencies).
     /// Full history rollback testing would be more comprehensive but time-intensive.
+    ///
+    /// NOTE: This test requires at least 2 migrations to be meaningful. With only InitialCreate,
+    /// rolling back drops the entire schema.
     /// </summary>
     [Test]
     public async Task RollbackSafety_ShouldRevertMostRecentMigration()

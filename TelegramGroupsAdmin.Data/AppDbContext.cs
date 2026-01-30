@@ -16,6 +16,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MessageTranslationDto> MessageTranslations => Set<MessageTranslationDto>();
     public DbSet<DetectionResultRecordDto> DetectionResults => Set<DetectionResultRecordDto>();
 
+    // Views (read-only, query optimization)
+    public DbSet<EnrichedMessageView> EnrichedMessages => Set<EnrichedMessageView>();
+    public DbSet<EnrichedReportView> EnrichedReports => Set<EnrichedReportView>();
+    public DbSet<EnrichedDetectionView> EnrichedDetections => Set<EnrichedDetectionView>();
+    public DbSet<HourlyDetectionStatsView> HourlyDetectionStats => Set<HourlyDetectionStatsView>();
+    public DbSet<WelcomeResponseSummaryView> WelcomeResponseSummary => Set<WelcomeResponseSummaryView>();
+    public DbSet<DetectionAccuracyView> DetectionAccuracy => Set<DetectionAccuracyView>();
+
     // User and auth tables
     public DbSet<UserRecordDto> Users => Set<UserRecordDto>();
     public DbSet<InviteRecordDto> Invites => Set<InviteRecordDto>();
@@ -36,7 +44,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
     public DbSet<ReportDto> Reports => Set<ReportDto>();
-    public DbSet<ImpersonationAlertRecordDto> ImpersonationAlerts => Set<ImpersonationAlertRecordDto>();
 
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
@@ -56,8 +63,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Configuration table
     public DbSet<ConfigRecordDto> Configs => Set<ConfigRecordDto>();
 
+    // Ban celebration tables
+    public DbSet<BanCelebrationGifDto> BanCelebrationGifs => Set<BanCelebrationGifDto>();
+    public DbSet<BanCelebrationCaptionDto> BanCelebrationCaptions => Set<BanCelebrationCaptionDto>();
+
     // Welcome system (Phase 4.4)
     public DbSet<WelcomeResponseDto> WelcomeResponses => Set<WelcomeResponseDto>();
+    public DbSet<ExamSessionDto> ExamSessions => Set<ExamSessionDto>();
 
     // User notes and tags (Phase 4.12)
     public DbSet<AdminNoteDto> AdminNotes => Set<AdminNoteDto>();
@@ -71,6 +83,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
+    public DbSet<ReportCallbackContextDto> ReportCallbackContexts => Set<ReportCallbackContextDto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -226,25 +239,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(ut => ut.TelegramUserId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        // Impersonation Alerts relationships
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasOne(ia => ia.SuspectedUser)
-            .WithMany()
-            .HasForeignKey(ia => ia.SuspectedUserId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasOne(ia => ia.TargetUser)
-            .WithMany()
-            .HasForeignKey(ia => ia.TargetUserId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasOne(ia => ia.ReviewedBy)
-            .WithMany()
-            .HasForeignKey(ia => ia.ReviewedByUserId)
-            .OnDelete(DeleteBehavior.SetNull);
 
         // ============================================================================
         // Actor System Foreign Keys (Phase 4.19)
@@ -473,11 +467,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Explicit spam/ham labels for ML training (separate from detection_results)
         // ============================================================================
 
-        // TrainingLabels: label must be 'spam' or 'ham'
+        // TrainingLabels: label must be 0 (Spam) or 1 (Ham)
         modelBuilder.Entity<TrainingLabelDto>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_training_labels_label",
-                "label IN ('spam', 'ham')"));
+                "label IN (0, 1)"));
 
         // TrainingLabels → Messages (CASCADE delete when message is deleted)
         modelBuilder.Entity<TrainingLabelDto>()
@@ -611,15 +605,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TagDefinitionDto>()
             .HasIndex(td => td.UsageCount);
 
-        // ImpersonationAlerts indexes
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasIndex(ia => new { ia.RiskLevel, ia.DetectedAt })
-            .HasFilter("reviewed_at IS NULL");  // Pending alerts only
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasIndex(ia => ia.ChatId);
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .HasIndex(ia => ia.SuspectedUserId);
-
         // URL Filtering indexes (Phase 4.13)
         // BlocklistSubscriptions indexes
         modelBuilder.Entity<BlocklistSubscriptionDto>()
@@ -730,6 +715,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(mt => mt.SimilarityHash)
             .HasFilter("similarity_hash IS NOT NULL")
             .HasDatabaseName("ix_message_translations_similarity_hash");
+
+        // ReportCallbackContexts indexes (DM action button contexts)
+        modelBuilder.Entity<ReportCallbackContextDto>()
+            .HasIndex(rcc => rcc.ReportId)
+            .HasDatabaseName("ix_report_callback_contexts_report_id");  // Cleanup when report is handled
+        modelBuilder.Entity<ReportCallbackContextDto>()
+            .HasIndex(rcc => rcc.CreatedAt)
+            .HasDatabaseName("ix_report_callback_contexts_created_at");  // Expiry cleanup job
+
+        // BanCelebrationGifs indexes
+        modelBuilder.Entity<BanCelebrationGifDto>()
+            .HasIndex(g => g.CreatedAt)
+            .HasDatabaseName("ix_ban_celebration_gifs_created_at");
+
+        modelBuilder.Entity<BanCelebrationGifDto>()
+            .HasIndex(g => g.PhotoHash)
+            .HasDatabaseName("ix_ban_celebration_gifs_photo_hash");
+
+        // BanCelebrationCaptions indexes
+        modelBuilder.Entity<BanCelebrationCaptionDto>()
+            .HasIndex(c => c.CreatedAt)
+            .HasDatabaseName("ix_ban_celebration_captions_created_at");
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)
@@ -764,15 +771,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasConversion<int>();
 
         modelBuilder.Entity<ReportDto>()
-            .Property(r => r.Status)
-            .HasConversion<int>();
+            .Property(r => r.Type)
+            .HasDefaultValue((short)0);
 
-        // Partial unique index: Only ONE pending report per message (prevents duplicate reports)
+        modelBuilder.Entity<ReportDto>()
+            .Property(r => r.Context)
+            .HasColumnType("jsonb");
+
+        // Partial unique index: Only ONE pending ContentReport per message (prevents duplicate reports)
+        // ExamFailures and ImpersonationAlerts don't have message IDs, so exclude them
         modelBuilder.Entity<ReportDto>()
             .HasIndex(r => new { r.MessageId, r.ChatId })
-            .HasFilter("status = 0")
+            .HasFilter("status = 0 AND type = 0")
             .IsUnique()
             .HasDatabaseName("IX_reports_unique_pending_per_message");
+
+        // Index for filtering by report type
+        modelBuilder.Entity<ReportDto>()
+            .HasIndex(r => r.Type)
+            .HasDatabaseName("IX_reports_type");
 
         modelBuilder.Entity<AuditLogRecordDto>()
             .Property(al => al.EventType)
@@ -780,14 +797,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<TagDefinitionDto>()
             .Property(td => td.Color)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .Property(ia => ia.RiskLevel)
-            .HasConversion<int>();
-
-        modelBuilder.Entity<ImpersonationAlertRecordDto>()
-            .Property(ia => ia.Verdict)
             .HasConversion<int>();
 
         modelBuilder.Entity<WelcomeResponseDto>()
@@ -807,12 +816,58 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasPrincipalKey(tu => tu.TelegramUserId)
             .OnDelete(DeleteBehavior.Restrict); // Don't cascade delete users when welcome response deleted
 
+        // ExamSessionDto configuration (entrance exam tracking)
+        modelBuilder.Entity<ExamSessionDto>(entity =>
+        {
+            entity.Property(e => e.CurrentQuestionIndex).HasDefaultValue((short)0);
+            entity.Property(e => e.McAnswers).HasColumnType("jsonb");
+            entity.Property(e => e.ShuffleState).HasColumnType("jsonb");
+            entity.Property(e => e.StartedAt).HasDefaultValueSql("now()");
+
+            // Unique constraint: one active session per user per chat
+            entity.HasIndex(e => new { e.ChatId, e.UserId }).IsUnique();
+
+            // Index for cleanup job to find expired sessions
+            entity.HasIndex(e => e.ExpiresAt);
+        });
+
         // VerificationTokenDto stores token_type as string in DB but exposes as enum
         // The entity already handles this with TokenTypeString property
     }
 
     private static void ConfigureSpecialEntities(ModelBuilder modelBuilder)
     {
+        // Messages: Set database default for content_check_skip_reason (0 = NotSkipped)
+        // Required for raw SQL inserts in tests and data migrations
+        modelBuilder.Entity<MessageRecordDto>()
+            .Property(m => m.ContentCheckSkipReason)
+            .HasDefaultValue(ContentCheckSkipReason.NotSkipped);
+
+        // TelegramUsers: Set database defaults for boolean columns
+        // Required for raw SQL inserts in tests and data migrations
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsBot)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsActive)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsBanned)
+            .HasDefaultValue(false);
+
+        // Users (web users): Set database defaults for columns added in later migrations
+        modelBuilder.Entity<UserRecordDto>()
+            .Property(u => u.IsActive)
+            .HasDefaultValue(true);
+        modelBuilder.Entity<UserRecordDto>()
+            .Property(u => u.FailedLoginAttempts)
+            .HasDefaultValue(0);
+
+        // ManagedChats: Set database defaults for boolean columns
+        modelBuilder.Entity<ManagedChatRecordDto>()
+            .Property(c => c.IsDeleted)
+            .HasDefaultValue(false);
+
         // Configure configs table - id is PK, chat_id = 0 for global config
         modelBuilder.Entity<ConfigRecordDto>()
             .HasKey(c => c.Id);
@@ -856,6 +911,42 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<RawAlgorithmPerformanceStatsDto>()
             .HasNoKey()
             .ToView(null);
+
+        // Configure EnrichedMessageView as keyless entity mapping to enriched_messages view
+        // Provides message enrichment (user, chat, reply, translation) for efficient queries
+        modelBuilder.Entity<EnrichedMessageView>()
+            .HasNoKey()
+            .ToView("enriched_messages");
+
+        // Configure EnrichedReportView as keyless entity mapping to enriched_reports view
+        // Provides report enrichment (users from JSONB, chat, reviewer) for efficient queries
+        modelBuilder.Entity<EnrichedReportView>()
+            .HasNoKey()
+            .ToView("enriched_reports");
+
+        // Configure EnrichedDetectionView as keyless entity mapping to enriched_detections view
+        // Provides detection enrichment (actor, message author) for GetRecentDetectionsAsync
+        modelBuilder.Entity<EnrichedDetectionView>()
+            .HasNoKey()
+            .ToView("enriched_detections");
+
+        // Configure HourlyDetectionStatsView as keyless entity mapping to hourly_detection_stats view
+        // Provides hourly aggregated stats that roll up to daily in C#
+        modelBuilder.Entity<HourlyDetectionStatsView>()
+            .HasNoKey()
+            .ToView("hourly_detection_stats");
+
+        // Configure WelcomeResponseSummaryView as keyless entity mapping to welcome_response_summary view
+        // Provides pre-aggregated welcome response distributions by date and chat
+        modelBuilder.Entity<WelcomeResponseSummaryView>()
+            .HasNoKey()
+            .ToView("welcome_response_summary");
+
+        // Configure DetectionAccuracyView as keyless entity mapping to detection_accuracy view
+        // Provides pre-computed FP/FN flags for accuracy analysis
+        modelBuilder.Entity<DetectionAccuracyView>()
+            .HasNoKey()
+            .ToView("detection_accuracy");
 
         // ============================================================================
         // Content Detection Config JSON Mapping (Issue #252)

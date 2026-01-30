@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
@@ -18,16 +18,17 @@ public class CasCheckService : ICasCheckService
     private readonly ILogger<CasCheckService> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IMemoryCache _cache;
+    private readonly HybridCache _cache;
 
     private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(1);
+    private static readonly HybridCacheEntryOptions CacheOptions = new() { Expiration = CacheDuration };
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public CasCheckService(
         ILogger<CasCheckService> logger,
         IServiceProvider serviceProvider,
         IHttpClientFactory httpClientFactory,
-        IMemoryCache cache)
+        HybridCache cache)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -49,15 +50,34 @@ public class CasCheckService : ICasCheckService
             return new CasCheckResult(false, null);
         }
 
-        // Check cache first
+        // Use GetOrCreateAsync for cache-aside with stampede protection
+        // Factory throws on API failure to prevent caching transient errors
         var cacheKey = $"cas_user_{userId}";
-        if (_cache.TryGetValue(cacheKey, out CasCheckResult? cachedResult) && cachedResult != null)
+        try
         {
-            _logger.LogDebug("CAS check for user {UserId}: Using cached result (banned: {IsBanned})",
-                userId, cachedResult.IsBanned);
-            return cachedResult;
+            return await _cache.GetOrCreateAsync(
+                cacheKey,
+                async ct => await CallCasApiAsync(userId, casConfig, ct),
+                CacheOptions,
+                cancellationToken: cancellationToken);
         }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("CAS API"))
+        {
+            // API failure - fail open (don't cache, retry next time)
+            _logger.LogWarning(ex, "CAS check failed for user {UserId}, failing open", userId);
+            return new CasCheckResult(false, null);
+        }
+    }
 
+    /// <summary>
+    /// Call the CAS API to check if a user is banned.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown on API failure (non-success status, unparseable response, timeout, network error).
+    /// Prevents HybridCache from caching transient errors.
+    /// </exception>
+    private async Task<CasCheckResult> CallCasApiAsync(long userId, CasConfig casConfig, CancellationToken cancellationToken)
+    {
         try
         {
             var httpClient = _httpClientFactory.CreateClient();
@@ -78,9 +98,7 @@ public class CasCheckService : ICasCheckService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("CAS API returned {StatusCode} for user {UserId}, failing open",
-                    response.StatusCode, userId);
-                return new CasCheckResult(false, null); // Fail open
+                throw new InvalidOperationException($"CAS API returned {response.StatusCode}");
             }
 
             var jsonContent = await response.Content.ReadAsStringAsync(timeoutCts.Token);
@@ -88,8 +106,7 @@ public class CasCheckService : ICasCheckService
 
             if (casResponse == null)
             {
-                _logger.LogWarning("Failed to parse CAS API response for user {UserId}, failing open", userId);
-                return new CasCheckResult(false, null);
+                throw new InvalidOperationException("CAS API returned unparseable response");
             }
 
             // CAS API: ok=true means user IS in the ban database (banned)
@@ -100,9 +117,6 @@ public class CasCheckService : ICasCheckService
                 : null;
 
             var result = new CasCheckResult(isBanned, reason);
-
-            // Cache result
-            _cache.Set(cacheKey, result, CacheDuration);
 
             if (isBanned)
             {
@@ -118,13 +132,15 @@ public class CasCheckService : ICasCheckService
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("CAS check for user {UserId} timed out, failing open", userId);
-            return new CasCheckResult(false, null);
+            throw new InvalidOperationException("CAS API timed out");
+        }
+        catch (InvalidOperationException)
+        {
+            throw; // Re-throw our own exceptions
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "CAS check failed for user {UserId}, failing open", userId);
-            return new CasCheckResult(false, null); // Fail open on any error
+            throw new InvalidOperationException($"CAS API error: {ex.Message}", ex);
         }
     }
 
@@ -147,6 +163,6 @@ public class CasCheckService : ICasCheckService
         public int Offenses { get; init; }
 
         [System.Text.Json.Serialization.JsonPropertyName("time_added")]
-        public long TimeAdded { get; init; }
+        public DateTimeOffset? TimeAdded { get; init; }
     }
 }

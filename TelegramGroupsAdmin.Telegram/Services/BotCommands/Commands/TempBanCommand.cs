@@ -16,7 +16,7 @@ public class TempBanCommand : IBotCommand
 {
     private readonly ILogger<TempBanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationOrchestrator _moderationService;
+    private readonly IModerationOrchestrator _moderationService;
 
     public string Name => "tempban";
     public string Description => "Temporarily ban user with auto-unrestriction";
@@ -29,7 +29,7 @@ public class TempBanCommand : IBotCommand
     public TempBanCommand(
         ILogger<TempBanCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationOrchestrator moderationService)
+        IModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

@@ -52,6 +52,17 @@ public interface ITelegramOperations
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Edit caption of an existing media message (photo, video, etc.).
+    /// </summary>
+    Task<Message> EditMessageCaptionAsync(
+        long chatId,
+        int messageId,
+        string caption,
+        ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete a message from a chat.
     /// </summary>
     Task DeleteMessageAsync(long chatId, int messageId, CancellationToken cancellationToken = default);
@@ -73,6 +84,16 @@ public interface ITelegramOperations
     Task<Message> SendVideoAsync(
         long chatId,
         InputFile video,
+        string? caption = null,
+        ParseMode? parseMode = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Send an animation (GIF or MP4 without sound) to a chat.
+    /// </summary>
+    Task<Message> SendAnimationAsync(
+        long chatId,
+        InputFile animation,
         string? caption = null,
         ParseMode? parseMode = null,
         CancellationToken cancellationToken = default);

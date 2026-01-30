@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <!-- Output format for coverage reports -->
+          <Format>cobertura</Format>
+
+          <!-- Exclude assemblies from coverage -->
+          <Exclude>
+            [TelegramGroupsAdmin.UnitTests]*,
+            [TelegramGroupsAdmin.IntegrationTests]*,
+            [TelegramGroupsAdmin.E2ETests]*
+          </Exclude>
+
+          <!-- Exclude files by path pattern -->
+          <ExcludeByFile>
+            **/Migrations/*.cs,
+            **/Models/*Dto.cs,
+            **/*Dto.cs
+          </ExcludeByFile>
+
+          <!-- Exclude by attribute (classes/methods decorated with these) -->
+          <ExcludeByAttribute>
+            Obsolete,
+            GeneratedCodeAttribute,
+            CompilerGeneratedAttribute,
+            ExcludeFromCodeCoverageAttribute
+          </ExcludeByAttribute>
+
+          <!-- Include all assemblies by default (then apply excludes) -->
+          <Include>[TelegramGroupsAdmin*]*</Include>
+
+          <!-- Include test method results for better diagnostics -->
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+
+          <!-- Single hit - faster, sufficient for line coverage -->
+          <SingleHit>false</SingleHit>
+
+          <!-- Use source link for better file mapping -->
+          <UseSourceLink>true</UseSourceLink>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

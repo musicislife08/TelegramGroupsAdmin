@@ -192,4 +192,113 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
     }
 
     #endregion
+
+    #region Message Trends Tab - Spam Trend Cards Tests
+
+    [Test]
+    public async Task Analytics_TrendCards_AreVisible()
+    {
+        // Arrange - login as Owner
+        await LoginAsOwnerAsync();
+
+        // Act - navigate to Message Trends tab (trend cards are here, not Content Detection)
+        await _analyticsPage.NavigateAsync();
+        await _analyticsPage.SelectTabAsync("Message Trends");
+
+        // Assert - all three trend cards should be visible
+        await _analyticsPage.AssertTrendCardsVisibleAsync();
+    }
+
+    [Test]
+    public async Task Analytics_WeekOverWeekCard_ShowsDailyAverage()
+    {
+        // Arrange - login as Owner
+        await LoginAsOwnerAsync();
+
+        // Act - navigate to Message Trends tab
+        await _analyticsPage.NavigateAsync();
+        await _analyticsPage.SelectTabAsync("Message Trends");
+
+        // Assert - Week card should show average with "/day" suffix
+        Assert.That(await _analyticsPage.WeekCardShowsPerDayAsync(), Is.True,
+            "Week over Week card should display daily average with '/day' suffix");
+    }
+
+    [Test]
+    public async Task Analytics_MonthOverMonthCard_ShowsWeeklyAverage()
+    {
+        // Arrange - login as Owner
+        await LoginAsOwnerAsync();
+
+        // Act - navigate to Message Trends tab
+        await _analyticsPage.NavigateAsync();
+        await _analyticsPage.SelectTabAsync("Message Trends");
+
+        // Assert - Month card should show average with "/week" suffix
+        Assert.That(await _analyticsPage.MonthCardShowsPerWeekAsync(), Is.True,
+            "Month over Month card should display weekly average with '/week' suffix");
+    }
+
+    [Test]
+    public async Task Analytics_YearOverYearCard_ShowsMonthlyAverage()
+    {
+        // Arrange - login as Owner
+        await LoginAsOwnerAsync();
+
+        // Act - navigate to Message Trends tab
+        await _analyticsPage.NavigateAsync();
+        await _analyticsPage.SelectTabAsync("Message Trends");
+
+        // Assert - Year card should show average with "/month" suffix
+        Assert.That(await _analyticsPage.YearCardShowsPerMonthAsync(), Is.True,
+            "Year over Year card should display monthly average with '/month' suffix");
+    }
+
+    [Test]
+    public async Task Analytics_TrendCards_HaveValues()
+    {
+        // Arrange - login as Owner
+        await LoginAsOwnerAsync();
+
+        // Act - navigate to Message Trends tab
+        await _analyticsPage.NavigateAsync();
+        await _analyticsPage.SelectTabAsync("Message Trends");
+
+        // Assert - all trend cards should have some value (percentage or difference)
+        var weekValue = await _analyticsPage.GetWeekOverWeekValueAsync();
+        var monthValue = await _analyticsPage.GetMonthOverMonthValueAsync();
+        var yearValue = await _analyticsPage.GetYearOverYearValueAsync();
+
+        Assert.That(weekValue, Is.Not.Null.And.Not.Empty,
+            "Week over Week card should have a value");
+        Assert.That(monthValue, Is.Not.Null.And.Not.Empty,
+            "Month over Month card should have a value");
+        Assert.That(yearValue, Is.Not.Null.And.Not.Empty,
+            "Year over Year card should have a value");
+    }
+
+    [Test]
+    public async Task Analytics_TrendCards_HaveAverages()
+    {
+        // Arrange - login as Owner
+        await LoginAsOwnerAsync();
+
+        // Act - navigate to Message Trends tab
+        await _analyticsPage.NavigateAsync();
+        await _analyticsPage.SelectTabAsync("Message Trends");
+
+        // Assert - all trend cards should have average comparisons displayed
+        var weekAvg = await _analyticsPage.GetWeekOverWeekAverageAsync();
+        var monthAvg = await _analyticsPage.GetMonthOverMonthAverageAsync();
+        var yearAvg = await _analyticsPage.GetYearOverYearAverageAsync();
+
+        Assert.That(weekAvg, Is.Not.Null.And.Not.Empty,
+            "Week over Week card should have an average comparison");
+        Assert.That(monthAvg, Is.Not.Null.And.Not.Empty,
+            "Month over Month card should have an average comparison");
+        Assert.That(yearAvg, Is.Not.Null.And.Not.Empty,
+            "Year over Year card should have an average comparison");
+    }
+
+    #endregion
 }

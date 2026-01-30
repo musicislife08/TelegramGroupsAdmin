@@ -21,4 +21,11 @@ public interface IFileScannerService
     /// <param name="cancellationToken">Cancellation token for timeout handling</param>
     /// <returns>Scan result with threat detection status</returns>
     Task<FileScanResult> ScanFileAsync(string filePath, string? fileName = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the health status of the file scanner service.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Health check result including connectivity and version info.</returns>
+    Task<FileScannerHealthResult> GetHealthAsync(CancellationToken cancellationToken = default);
 }

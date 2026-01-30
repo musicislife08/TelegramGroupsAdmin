@@ -10,6 +10,8 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -32,8 +34,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
-    private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
-    private readonly ModerationOrchestrator _moderationActionService;
+    private readonly IReportsRepository _reportsRepository;
+    private readonly IModerationOrchestrator _moderationActionService;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
@@ -51,8 +53,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IManagedChatsRepository managedChatsRepository,
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
-        IImpersonationAlertsRepository impersonationAlertsRepository,
-        ModerationOrchestrator moderationActionService,
+        IReportsRepository reportsRepository,
+        IModerationOrchestrator moderationActionService,
         ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
@@ -63,7 +65,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         _managedChatsRepository = managedChatsRepository;
         _messageHistoryRepository = messageHistoryRepository;
         _photoHashService = photoHashService;
-        _impersonationAlertsRepository = impersonationAlertsRepository;
+        _reportsRepository = reportsRepository;
         _moderationActionService = moderationActionService;
         _botClientFactory = botClientFactory;
         _configService = configService;
@@ -84,7 +86,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         }
 
         // 2. Check if user has pending alert (avoid duplicate checks)
-        var hasPendingAlert = await _impersonationAlertsRepository.HasPendingAlertAsync(userId);
+        var hasPendingAlert = await _reportsRepository.HasPendingImpersonationAlertAsync(userId);
         if (hasPendingAlert)
         {
             _logger.LogDebug("{User} already has pending impersonation alert", user.ToLogDebug());
@@ -237,7 +239,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 AutoBanned = result.ShouldAutoBan
             };
 
-            var alertId = await _impersonationAlertsRepository.CreateAlertAsync(alert);
+            var alertId = await _reportsRepository.InsertImpersonationAlertAsync(alert);
 
             _logger.LogInformation(
                 "Created impersonation alert #{AlertId}: {SuspectedUser} → Admin ({TargetUserId}) (score: {Score})",

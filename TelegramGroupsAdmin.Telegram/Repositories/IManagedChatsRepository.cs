@@ -20,6 +20,12 @@ public interface IManagedChatsRepository
     Task<ManagedChatRecord?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets multiple managed chats by their chat IDs in a single query.
+    /// Used for batch hydration to avoid N+1 query patterns.
+    /// </summary>
+    Task<List<ManagedChatRecord>> GetByChatIdsAsync(IEnumerable<long> chatIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get all active chats (is_active = true)
     /// </summary>
     Task<List<ManagedChatRecord>> GetActiveChatsAsync(CancellationToken cancellationToken = default);

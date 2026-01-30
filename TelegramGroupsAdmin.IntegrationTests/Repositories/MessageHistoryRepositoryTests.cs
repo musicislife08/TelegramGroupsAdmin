@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
@@ -947,13 +948,14 @@ public class MessageHistoryRepositoryTests
         // Arrange - Get current message count
         var statsBefore = await _statsService!.GetStatsAsync();
 
-        // Act
-        var (deletedCount, imagePaths, mediaPaths) = await _repository!.CleanupExpiredAsync();
+        // Act - Use 30-day retention for test (shorter than production default of 2 years)
+        // because golden dataset contains recent messages that should NOT be deleted
+        var result = await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
         // Assert - Should not delete anything (golden dataset is recent)
-        Assert.That(deletedCount, Is.EqualTo(0), "Should not delete recent messages from golden dataset");
-        Assert.That(imagePaths.Count, Is.EqualTo(0));
-        Assert.That(mediaPaths.Count, Is.EqualTo(0));
+        Assert.That(result.DeletedCount, Is.EqualTo(0), "Should not delete recent messages from golden dataset");
+        Assert.That(result.ImagePaths.Count, Is.EqualTo(0));
+        Assert.That(result.MediaPaths.Count, Is.EqualTo(0));
 
         // Verify message count unchanged
         var statsAfter = await _statsService!.GetStatsAsync();
@@ -966,7 +968,7 @@ public class MessageHistoryRepositoryTests
         // This test validates that old messages WITH detection_results are preserved (training data).
         // BASELINE TEST for REFACTOR-3: Validates current behavior before DRY refactoring.
         //
-        // The retention logic: Delete messages where Timestamp < 30 days AND no detection results.
+        // The retention logic: Delete messages where Timestamp < retention AND no detection results.
         // Messages with detection_results are kept as training data even if > 30 days old.
 
         // Arrange - Golden dataset already has messages with detection results:
@@ -989,8 +991,8 @@ public class MessageHistoryRepositoryTests
         Assert.That(msg1WithHistory!.DetectionResults.Count, Is.GreaterThan(0),
             "Message should have detection results (training data)");
 
-        // Act - Run cleanup
-        var (deletedCount, imagePaths, mediaPaths) = await _repository.CleanupExpiredAsync();
+        // Act - Run cleanup with 30-day retention (golden dataset messages are recent)
+        var result = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
         // Assert - Message with detection result should NOT be deleted
         var messageAfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg1_Id);
@@ -1001,6 +1003,88 @@ public class MessageHistoryRepositoryTests
         var msg11AfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg11_Id);
         Assert.That(msg11AfterCleanup, Is.Not.Null,
             "Another message with detection result should also be preserved");
+    }
+
+    [Test]
+    public async Task CleanupExpiredAsync_WithOldMessages_DeletesExpiredAndPreservesTrainingData()
+    {
+        // Arrange - Seed old messages test data
+        var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            await GoldenDataset.SeedOldMessagesAsync(context);
+        }
+
+        // Verify old messages exist before cleanup
+        var msg45DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id);
+        var msg60DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id);
+        var msgWithTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id);
+        var msg29DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id);
+        var msgNonTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id);
+
+        Assert.That(msg45DaysBefore, Is.Not.Null, "45-day old message should exist before cleanup");
+        Assert.That(msg60DaysBefore, Is.Not.Null, "60-day old message should exist before cleanup");
+        Assert.That(msgWithTrainingBefore, Is.Not.Null, "Message with training data should exist before cleanup");
+        Assert.That(msg29DaysBefore, Is.Not.Null, "29-day old message should exist before cleanup");
+        Assert.That(msgNonTrainingBefore, Is.Not.Null, "Message with non-training detection should exist before cleanup");
+
+        // Verify cascade data exists before cleanup (edits, translations)
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            var editBefore = await context.MessageEdits.FindAsync(GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
+            Assert.That(editBefore, Is.Not.Null, "Edit for 45-day old message should exist before cleanup");
+
+            var translationCountBefore = await context.MessageTranslations
+                .CountAsync(t => t.MessageId == GoldenDataset.OldMessages.Msg60DaysOld_Id
+                    || t.EditId == GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
+            Assert.That(translationCountBefore, Is.EqualTo(2), "Translations should exist before cleanup");
+        }
+
+        // Act - Run cleanup with 30-day retention
+        var result = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
+
+        // Assert - Correct number deleted
+        Assert.That(result.DeletedCount, Is.EqualTo(GoldenDataset.OldMessages.ExpectedDeletionsWith30DayRetention),
+            "Should delete exactly 4 old messages without training data");
+
+        // Assert - Old messages WITHOUT training data are DELETED
+        var msg45DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id);
+        var msg60DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id);
+        var msg35DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg35DaysOld_Id);
+        var msgNonTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id);
+
+        Assert.That(msg45DaysAfter, Is.Null, "45-day old message should be deleted");
+        Assert.That(msg60DaysAfter, Is.Null, "60-day old message should be deleted");
+        Assert.That(msg35DaysAfter, Is.Null, "35-day old message should be deleted");
+        Assert.That(msgNonTrainingAfter, Is.Null,
+            "50-day old message with non-training detection should be deleted (detection cascades)");
+
+        // Assert - Old message WITH training data is PRESERVED
+        var msgWithTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id);
+        Assert.That(msgWithTrainingAfter, Is.Not.Null,
+            "90-day old message WITH training data (used_for_training=true) should be preserved");
+
+        // Assert - Boundary message (29 days) is PRESERVED
+        var msg29DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id);
+        Assert.That(msg29DaysAfter, Is.Not.Null,
+            "Message 29 days old should NOT be deleted (just inside retention window)");
+
+        // Assert - Cascade deletion worked (edits and translations deleted with messages)
+        await using (var context = await contextFactory.CreateDbContextAsync())
+        {
+            var editAfter = await context.MessageEdits.FindAsync(GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
+            Assert.That(editAfter, Is.Null, "Edit should be cascade deleted with message");
+
+            var translationCountAfter = await context.MessageTranslations
+                .CountAsync(t => t.MessageId == GoldenDataset.OldMessages.Msg60DaysOld_Id
+                    || t.EditId == GoldenDataset.OldMessages.Edit_ForMsg45Days_Id);
+            Assert.That(translationCountAfter, Is.EqualTo(0), "Translations should be cascade deleted");
+        }
+
+        // Assert - Result statistics are populated
+        Assert.That(result.RemainingMessages, Is.GreaterThan(0), "Should have remaining messages");
+        Assert.That(result.ImagePaths, Is.Empty, "Test messages have no images");
+        Assert.That(result.MediaPaths, Is.Empty, "Test messages have no media");
     }
 
     #endregion

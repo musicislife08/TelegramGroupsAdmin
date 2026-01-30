@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
@@ -176,7 +178,7 @@ public class TestReportBuilder
             WebUserId: _webUserId
         );
 
-        var id = await reportRepository.InsertAsync(report, cancellationToken);
+        var id = await reportRepository.InsertContentReportAsync(report, cancellationToken);
 
         // Return the report with the assigned ID
         var savedReport = report with { Id = id };

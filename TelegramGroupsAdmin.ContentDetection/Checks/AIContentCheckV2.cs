@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
@@ -21,7 +21,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 public class AIContentCheckV2(
     ILogger<AIContentCheckV2> logger,
     IChatService chatService,
-    IMemoryCache cache,
+    HybridCache cache,
     IMessageContextProvider messageContextProvider) : IContentCheckV2
 {
     public CheckName CheckName => CheckName.OpenAI;
@@ -52,6 +52,11 @@ public class AIContentCheckV2(
         return true;
     }
 
+    private static readonly HybridCacheEntryOptions AICacheOptions = new()
+    {
+        Expiration = TimeSpan.FromHours(AIConstants.CacheDurationHours)
+    };
+
     /// <summary>
     /// Execute AI spam check and return V2 score
     /// </summary>
@@ -62,13 +67,21 @@ public class AIContentCheckV2(
 
         try
         {
-            // Combine caption and OCR text for analysis (handles image-only messages with OCR)
+            // Combine caption, OCR text, and Vision analysis for analysis
             var effectiveText = req.Message;
             if (!string.IsNullOrWhiteSpace(req.OcrExtractedText))
             {
                 effectiveText = string.IsNullOrWhiteSpace(effectiveText)
                     ? req.OcrExtractedText
-                    : $"{effectiveText}\n\n[IMAGE TEXT]\n{req.OcrExtractedText}";
+                    : $"{effectiveText}\n\n<image-text>\n{req.OcrExtractedText}\n</image-text>";
+            }
+
+            // Add Vision analysis text (raw reason/patterns from image spam detection)
+            if (!string.IsNullOrWhiteSpace(req.VisionAnalysisText))
+            {
+                effectiveText = string.IsNullOrWhiteSpace(effectiveText)
+                    ? req.VisionAnalysisText
+                    : $"{effectiveText}\n\n<image-analysis>\n{req.VisionAnalysisText}\n</image-analysis>";
             }
 
             // Skip short messages unless specifically configured to check them
@@ -99,55 +112,25 @@ public class AIContentCheckV2(
                 };
             }
 
-            // Check cache first (cache by content hash to avoid reprocessing identical messages)
-            // Use effectiveText (caption + OCR) to ensure different images with same caption aren't cached together
+            // Use GetOrCreateAsync for cache-aside with stampede protection
+            // Cache by content hash to avoid reprocessing identical messages
             var cacheKey = $"ai_check_{GetMessageHash(effectiveText)}";
-            if (cache.TryGetValue(cacheKey, out ChatCompletionResult? cachedResult) && cachedResult != null)
+            var (result, fromCache) = await GetOrFetchAIResultAsync(cacheKey, req);
+
+            return ParseAIResponse(result, fromCache, startTimestamp);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("AI service"))
+        {
+            // AI service returned null - don't cache, abstain
+            logger.LogWarning("AI API returned null result for user {UserId}, abstaining", req.UserId);
+            return new ContentCheckResponseV2
             {
-                logger.LogDebug("AI V2 check for {User}: Using cached result", req.UserName);
-                return ParseAIResponse(cachedResult, fromCache: true, startTimestamp);
-            }
-
-            // Get message history for context (count from config)
-            var history = await messageContextProvider.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);
-
-            // Build prompts using the prompt builder
-            var prompts = AIPromptBuilder.CreatePrompts(req, history);
-
-            logger.LogDebug("AI V2 check for {User}: Calling AI service (effective text: {EffectiveLength} chars, caption: {CaptionLength}, OCR: {OcrLength})",
-                req.UserName, effectiveText.Length, req.Message?.Length ?? 0, req.OcrExtractedText?.Length ?? 0);
-
-            // Make AI call using the chat service
-            // Temperature and MaxTokens defaults come from feature config if not specified
-            var result = await chatService.GetCompletionAsync(
-                AIFeatureType.SpamDetection,
-                prompts.SystemPrompt,
-                prompts.UserPrompt,
-                new ChatCompletionOptions
-                {
-                    MaxTokens = req.MaxTokens,
-                    // Temperature uses feature config default (set in AI Integration settings)
-                    JsonMode = true // Request JSON format response
-                },
-                req.CancellationToken);
-
-            if (result == null)
-            {
-                logger.LogWarning("AI API returned null result for user {UserId}, abstaining", req.UserId);
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "AI returned no response",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
-            // Cache the result
-            cache.Set(cacheKey, result, TimeSpan.FromHours(AIConstants.CacheDurationHours));
-
-            return ParseAIResponse(result, fromCache: false, startTimestamp);
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = "AI returned no response",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
         }
         catch (TaskCanceledException)
         {
@@ -174,6 +157,60 @@ public class AIContentCheckV2(
                 ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
+    }
+
+    /// <summary>
+    /// Get cached AI result or fetch from API with stampede protection.
+    /// Returns tuple of (result, fromCache) to preserve cache hit logging.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when AI service returns null. Prevents HybridCache from caching transient errors.
+    /// </exception>
+    private async Task<(ChatCompletionResult Result, bool FromCache)> GetOrFetchAIResultAsync(
+        string cacheKey, AIVetoCheckRequest req)
+    {
+        // Track whether this was a cache hit for logging
+        var wasCacheHit = true;
+
+        var result = await cache.GetOrCreateAsync(
+            cacheKey,
+            async ct =>
+            {
+                wasCacheHit = false; // Factory called = cache miss
+
+                // Get message history for context (count from config)
+                var history = await messageContextProvider.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, ct);
+
+                // Build prompts using the prompt builder
+                var prompts = AIPromptBuilder.CreatePrompts(req, history);
+
+                logger.LogDebug("AI V2 check for {User}: Calling AI service (caption: {CaptionLength}, OCR: {OcrLength}, Vision: {VisionLength})",
+                    req.UserName, req.Message?.Length ?? 0, req.OcrExtractedText?.Length ?? 0, req.VisionAnalysisText?.Length ?? 0);
+
+                // Make AI call using the chat service
+                var aiResult = await chatService.GetCompletionAsync(
+                    AIFeatureType.SpamDetection,
+                    prompts.SystemPrompt,
+                    prompts.UserPrompt,
+                    new ChatCompletionOptions
+                    {
+                        MaxTokens = req.MaxTokens,
+                        JsonMode = true
+                    },
+                    ct);
+
+                // Throw if null to prevent caching transient failures
+                return aiResult ?? throw new InvalidOperationException("AI service returned null");
+            },
+            AICacheOptions,
+            cancellationToken: req.CancellationToken);
+
+        if (wasCacheHit)
+        {
+            logger.LogDebug("AI V2 check for {User}: Using cached result", req.UserName);
+        }
+
+        return (result, wasCacheHit);
     }
 
     /// <summary>

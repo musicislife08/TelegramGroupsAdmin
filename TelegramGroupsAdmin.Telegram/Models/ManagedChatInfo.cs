@@ -10,4 +10,5 @@ public class ManagedChatInfo
     public bool HasCustomSpamConfig { get; set; }
     public bool HasCustomWelcomeConfig { get; set; }
     public bool HasCustomServiceMsgConfig { get; set; }
+    public bool HasCustomBanCelebrationConfig { get; set; }
 }

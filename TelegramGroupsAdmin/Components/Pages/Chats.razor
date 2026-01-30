@@ -8,7 +8,7 @@
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IContentDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
-@inject BlazorAuthHelper AuthHelper
+@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @attribute [Authorize]
 @implements IDisposable
@@ -167,6 +167,7 @@
                 var configRecord = await ConfigRepository.GetAsync(chat.ChatId);
                 var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
                 var hasServiceMsgConfig = !string.IsNullOrEmpty(configRecord?.ServiceMessageDeletionConfig);
+                var hasBanCelebrationConfig = !string.IsNullOrEmpty(configRecord?.BanCelebrationConfig);
 
                 _chats.Add(new ManagedChatInfo
                 {
@@ -174,7 +175,8 @@
                     HealthStatus = health,
                     HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId),
                     HasCustomWelcomeConfig = hasWelcomeConfig,
-                    HasCustomServiceMsgConfig = hasServiceMsgConfig
+                    HasCustomServiceMsgConfig = hasServiceMsgConfig,
+                    HasCustomBanCelebrationConfig = hasBanCelebrationConfig
                 });
             }
         }

@@ -1,5 +1,6 @@
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -21,7 +22,8 @@ public class AIContentCheckTests
     private ILogger<AIContentCheckV2> _mockLogger = null!;
     private IChatService _mockChatService = null!;
     private IMessageContextProvider _mockMessageContextProvider = null!;
-    private IMemoryCache _memoryCache = null!;
+    private HybridCache _cache = null!;
+    private ServiceProvider _serviceProvider = null!;
     private AIContentCheckV2 _check = null!;
 
     [SetUp]
@@ -30,7 +32,12 @@ public class AIContentCheckTests
         _mockLogger = Substitute.For<ILogger<AIContentCheckV2>>();
         _mockChatService = Substitute.For<IChatService>();
         _mockMessageContextProvider = Substitute.For<IMessageContextProvider>();
-        _memoryCache = new MemoryCache(new MemoryCacheOptions());
+
+        // Create HybridCache via DI
+        var services = new ServiceCollection();
+        services.AddHybridCache();
+        _serviceProvider = services.BuildServiceProvider();
+        _cache = _serviceProvider.GetRequiredService<HybridCache>();
 
         // Setup message context provider to return empty list by default
         _mockMessageContextProvider
@@ -40,7 +47,7 @@ public class AIContentCheckTests
         _check = new AIContentCheckV2(
             _mockLogger,
             _mockChatService,
-            _memoryCache,
+            _cache,
             _mockMessageContextProvider
         );
     }
@@ -48,7 +55,7 @@ public class AIContentCheckTests
     [TearDown]
     public void TearDown()
     {
-        _memoryCache.Dispose();
+        _serviceProvider.Dispose();
     }
 
     #region ShouldExecute Tests

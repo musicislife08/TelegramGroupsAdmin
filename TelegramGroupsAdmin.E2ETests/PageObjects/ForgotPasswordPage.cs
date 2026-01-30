@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -29,8 +30,8 @@ public class ForgotPasswordPage
     public async Task NavigateAsync()
     {
         await _page.GotoAsync("/forgot-password");
-        // Wait for Blazor Server to hydrate the page
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        // Wait for the page title to be visible (indicates Blazor Server hydrated)
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -115,6 +116,11 @@ public class ForgotPasswordPage
     {
         return await _page.Locator(ErrorAlert).IsVisibleAsync();
     }
+
+    /// <summary>
+    /// Gets the error alert locator for Expect assertions.
+    /// </summary>
+    public ILocator ErrorAlertLocator => _page.Locator(ErrorAlert);
 
     /// <summary>
     /// Gets the error message text.

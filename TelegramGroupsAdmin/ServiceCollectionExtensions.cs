@@ -119,8 +119,7 @@ public static class ServiceCollectionExtensions
         /// </summary>
         public IServiceCollection AddApplicationServices()
         {
-            // PERF-CFG-1: Memory cache for configuration caching (95% query reduction)
-            services.AddMemoryCache();
+            // Note: HybridCache (registered in AddHttpClients) provides L1 in-memory caching
 
             // Auth services
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
@@ -137,10 +136,13 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<IAuditService, AuditService>();
             services.AddScoped<IFeatureAvailabilityService, FeatureAvailabilityService>(); // FEATURE-5.3: Check external service configuration status
-            services.AddScoped<BlazorAuthHelper>(); // Authentication context extraction helper for UI components
+            services.AddScoped<IBlazorAuthHelper, BlazorAuthHelper>(); // Authentication context extraction helper for UI components
 
             // Prompt builder service (Phase 4.X: AI-powered prompt generation)
             services.AddScoped<Services.PromptBuilder.IPromptBuilderService, Services.PromptBuilder.PromptBuilderService>();
+
+            // Exam criteria builder service (Phase 2: Entrance exam evaluation criteria generation)
+            services.AddScoped<Services.ExamCriteriaBuilder.IExamCriteriaBuilderService, Services.ExamCriteriaBuilder.ExamCriteriaBuilderService>();
 
             // Backup services (replaces old UserDataExportService)
             services.AddBackupServices();
@@ -151,7 +153,7 @@ public static class ServiceCollectionExtensions
             // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
-            services.AddScoped<NotificationStateService>(); // Blazor state for notification bell
+            services.AddScoped<INotificationStateService, NotificationStateService>(); // Blazor state for notification bell
 
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
             services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
@@ -176,6 +178,9 @@ public static class ServiceCollectionExtensions
 
             // Similarity hash backfill service (one-time migration for SimHash deduplication)
             services.AddScoped<SimilarityHashBackfillService>();
+
+            // Ban celebration GIF hash backfill service (one-time migration for duplicate detection)
+            services.AddScoped<BanCelebrationHashBackfillService>();
 
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
@@ -273,8 +278,9 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.StopWordsRepository>();
             services.AddScoped<TelegramGroupsAdmin.Configuration.Repositories.IContentDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.ContentDetectionConfigRepository>();
 
-            // Analytics repository (Phase 5: Performance metrics, from ContentDetection library)
-            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IAnalyticsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.AnalyticsRepository>();
+            // Analytics repositories (consolidated in main app)
+            services.AddScoped<TelegramGroupsAdmin.Repositories.IAnalyticsRepository, TelegramGroupsAdmin.Repositories.AnalyticsRepository>();
+            services.AddScoped<TelegramGroupsAdmin.Repositories.IMessageStatsService, TelegramGroupsAdmin.Repositories.MessageStatsService>();
 
             // Report Actions Service (uses repositories from Telegram library)
             services.AddScoped<IReportActionsService, ReportActionsService>();

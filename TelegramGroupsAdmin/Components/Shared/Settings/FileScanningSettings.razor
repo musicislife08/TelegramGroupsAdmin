@@ -8,9 +8,9 @@
 @inject IFileScanQuotaRepository QuotaRepository
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject IFileScanResultRepository FileScanResultRepository
-@inject ClamAVScannerService ClamAvService
+@inject IFileScannerService FileScannerService
 @inject IAuditService AuditService
-@inject BlazorAuthHelper AuthHelper
+@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IConfiguration Configuration
 
@@ -476,7 +476,7 @@
     private FileScanningConfig _config = new();
     private ApiKeysConfig _apiKeys = new();
     private List<FileScanQuotaModel> _quotas = [];
-    private ClamAVHealthResult? _clamAvHealth;
+    private FileScannerHealthResult? _clamAvHealth;
     private Dictionary<string, int> _scanStats = new();
     private List<DetectionResultRecord> _scanResults = [];
     private bool _isSaving;
@@ -621,7 +621,7 @@
         try
         {
             // Load ClamAV health check
-            _clamAvHealth = await ClamAvService.GetHealthAsync();
+            _clamAvHealth = await FileScannerService.GetHealthAsync();
 
             // Load scan statistics (7-day window, infected files only)
             _scanStats = await DetectionResultsRepository.GetFileScanStatsAsync();

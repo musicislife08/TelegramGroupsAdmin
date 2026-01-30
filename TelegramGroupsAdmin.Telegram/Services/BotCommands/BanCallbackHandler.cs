@@ -122,7 +122,7 @@ public class BanCallbackHandler : IBanCallbackHandler
                 executorUser.LastName);
 
             // Execute ban (resolve from scope since ModerationOrchestrator is Scoped)
-            var moderationService = scope.ServiceProvider.GetRequiredService<ModerationOrchestrator>();
+            var moderationService = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
             var result = await moderationService.BanUserAsync(
                 userId: targetUserId,
                 messageId: null, // No trigger message for fuzzy search bans

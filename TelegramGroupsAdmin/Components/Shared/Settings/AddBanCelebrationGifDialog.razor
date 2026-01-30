@@ -1,0 +1,290 @@
+@using ByteSizeLib
+@using TelegramGroupsAdmin.Core.Services
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Services
+@inject IBanCelebrationGifRepository GifRepository
+@inject IThumbnailService ThumbnailService
+@inject IPhotoHashService PhotoHashService
+@inject ISnackbar Snackbar
+@inject ILogger<AddBanCelebrationGifDialog> Logger
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Gif" Class="mr-2" />
+            Add Ban Celebration GIF
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTabs @bind-ActivePanelIndex="_activeTabIndex" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
+            <MudTabPanel Text="Upload File">
+                <MudStack Spacing="3" Class="mt-4">
+                    <MudTextField @bind-Value="_name"
+                                 Label="Name (optional)"
+                                 Variant="Variant.Outlined"
+                                 HelperText="A friendly name for this GIF" />
+
+                    <MudFileUpload T="IBrowserFile"
+                                  Accept=".gif,.mp4"
+                                  FilesChanged="OnFileSelected"
+                                  MaximumFileCount="1">
+                        <ActivatorContent>
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Primary"
+                                      StartIcon="@Icons.Material.Filled.CloudUpload"
+                                      FullWidth="true">
+                                @(_selectedFile == null ? "Select GIF or MP4 file" : _selectedFile.Name)
+                            </MudButton>
+                        </ActivatorContent>
+                    </MudFileUpload>
+
+                    @if (_selectedFile != null)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Selected: @_selectedFile.Name (@ByteSize.FromBytes(_selectedFile.Size))
+                        </MudText>
+                    }
+                </MudStack>
+            </MudTabPanel>
+            <MudTabPanel Text="From URL">
+                <MudStack Spacing="3" Class="mt-4">
+                    <MudTextField @bind-Value="_name"
+                                 Label="Name (optional)"
+                                 Variant="Variant.Outlined"
+                                 HelperText="A friendly name for this GIF" />
+
+                    <MudTextField @bind-Value="_url"
+                                 Label="GIF URL"
+                                 Variant="Variant.Outlined"
+                                 Placeholder="https://example.com/animation.gif"
+                                 HelperText="Direct link to a GIF or MP4 file" />
+                </MudStack>
+            </MudTabPanel>
+        </MudTabs>
+
+        @if (_isProcessing)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">@_errorMessage</MudAlert>
+        }
+
+        @if (_showDuplicateWarning && _similarGif != null)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-4">
+                <MudText Typo="Typo.body1">
+                    <strong>Similar GIF already exists!</strong>
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    This GIF looks very similar to "@(_similarGif.Name ?? $"GIF #{_similarGif.Id}")".
+                </MudText>
+                <div class="d-flex gap-2 mt-3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               OnClick="ConfirmDuplicate">Keep Both</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                               OnClick="CancelDuplicate">Cancel Upload</MudButton>
+                </div>
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_isProcessing">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                  Variant="Variant.Filled"
+                  OnClick="Submit"
+                  Disabled="@(!CanSubmit || _isProcessing)">
+            @(_isProcessing ? "Adding..." : "Add GIF")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@implements IAsyncDisposable
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private int _activeTabIndex;
+    private string _name = string.Empty;
+    private string _url = string.Empty;
+    private IBrowserFile? _selectedFile;
+    private bool _isProcessing;
+    private string? _errorMessage;
+
+    // Duplicate detection state
+    private BanCelebrationGif? _pendingGif;
+    private BanCelebrationGif? _similarGif;
+    private byte[]? _pendingHash;
+    private bool _showDuplicateWarning;
+    private const int DuplicateThresholdBits = 8; // 87.5% similarity
+
+    private bool CanSubmit => !_showDuplicateWarning && _activeTabIndex switch
+    {
+        0 => _selectedFile != null,
+        1 => !string.IsNullOrWhiteSpace(_url),
+        _ => false
+    };
+
+    private void OnFileSelected(IBrowserFile file)
+    {
+        _selectedFile = file;
+        _errorMessage = null;
+
+        // Auto-set name from filename if not specified
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _name = Path.GetFileNameWithoutExtension(file.Name);
+        }
+    }
+
+    private async Task Submit()
+    {
+        _isProcessing = true;
+        _errorMessage = null;
+
+        try
+        {
+            BanCelebrationGif gif;
+
+            if (_activeTabIndex == 0 && _selectedFile != null)
+            {
+                // Upload file
+                await using var stream = _selectedFile.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024); // 50MB max
+                gif = await GifRepository.AddFromFileAsync(stream, _selectedFile.Name, _name);
+            }
+            else if (_activeTabIndex == 1 && !string.IsNullOrWhiteSpace(_url))
+            {
+                // Download from URL
+                gif = await GifRepository.AddFromUrlAsync(_url, _name);
+            }
+            else
+            {
+                return;
+            }
+
+            // Generate thumbnail from first frame
+            await GenerateThumbnailAsync(gif);
+
+            // Compute perceptual hash for duplicate detection
+            var fullPath = GifRepository.GetFullPath(gif.FilePath);
+            _pendingHash = await PhotoHashService.ComputePhotoHashAsync(fullPath);
+
+            // Check for duplicates
+            if (_pendingHash != null)
+            {
+                _similarGif = await GifRepository.FindSimilarAsync(_pendingHash, DuplicateThresholdBits);
+
+                if (_similarGif != null)
+                {
+                    // Show duplicate warning - don't close dialog yet
+                    _pendingGif = gif;
+                    _showDuplicateWarning = true;
+                    return;
+                }
+
+                // No duplicate - save the hash
+                await GifRepository.UpdatePhotoHashAsync(gif.Id, _pendingHash);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+            Snackbar.Add($"Error adding GIF: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task GenerateThumbnailAsync(BanCelebrationGif gif)
+    {
+        try
+        {
+            // Build paths for thumbnail generation
+            var sourcePath = GifRepository.GetFullPath(gif.FilePath);
+            var thumbnailRelativePath = gif.FilePath.Replace(Path.GetExtension(gif.FilePath), "_thumb.png");
+            var thumbnailFullPath = GifRepository.GetFullPath(thumbnailRelativePath);
+
+            // Generate thumbnail (extracts first frame for GIFs)
+            var success = await ThumbnailService.GenerateThumbnailAsync(sourcePath, thumbnailFullPath);
+
+            if (success)
+            {
+                // Update the GIF record with thumbnail path
+                await GifRepository.UpdateThumbnailPathAsync(gif.Id, thumbnailRelativePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Thumbnail generation is non-critical - log but don't fail the upload
+            Snackbar.Add($"Note: Thumbnail generation failed: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task ConfirmDuplicate()
+    {
+        // User wants to keep both - save the hash and close
+        if (_pendingHash != null && _pendingGif != null)
+        {
+            await GifRepository.UpdatePhotoHashAsync(_pendingGif.Id, _pendingHash);
+        }
+
+        // Clear pending state so Dispose knows this was a successful confirm
+        _pendingGif = null;
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task CancelDuplicate()
+    {
+        // User wants to cancel - delete the uploaded GIF
+        if (_pendingGif != null)
+        {
+            await GifRepository.DeleteAsync(_pendingGif.Id);
+        }
+
+        // Reset state
+        _showDuplicateWarning = false;
+        _pendingGif = null;
+        _similarGif = null;
+        _pendingHash = null;
+
+        // Could close dialog or let user try again
+        MudDialog.Cancel();
+    }
+
+    private async Task Cancel()
+    {
+        // Clean up pending GIF if user cancels during duplicate warning
+        if (_pendingGif != null)
+        {
+            await GifRepository.DeleteAsync(_pendingGif.Id);
+            _pendingGif = null; // Prevent double-delete in Dispose
+        }
+
+        MudDialog.Cancel();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Clean up orphaned GIF if dialog closed via Escape, backdrop click, or other means
+        // _pendingGif is null if: never created, user confirmed, or already cleaned up
+        if (_pendingGif != null)
+        {
+            try
+            {
+                await GifRepository.DeleteAsync(_pendingGif.Id);
+            }
+            catch (Exception ex)
+            {
+                // DisposeAsync should never throw - orphaned GIF can be cleaned up later
+                Logger.LogWarning(ex, "Failed to cleanup pending GIF {GifId} during dialog disposal", _pendingGif.Id);
+            }
+        }
+    }
+}

@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -30,7 +31,7 @@ public class ResetPasswordPage
     public async Task NavigateAsync(string token)
     {
         await _page.GotoAsync($"/reset-password?token={token}");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -41,7 +42,7 @@ public class ResetPasswordPage
         // Extract the path from the full URL
         var uri = new Uri(resetLink);
         await _page.GotoAsync($"{uri.PathAndQuery}");
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -56,14 +57,14 @@ public class ResetPasswordPage
     }
 
     /// <summary>
-    /// Gets locator for the first password input (New Password).
+    /// Gets locator for the New Password input using semantic label.
     /// </summary>
-    private ILocator NewPasswordInput => _page.Locator("input.mud-input-slot").First;
+    private ILocator NewPasswordInput => _page.GetByLabel("New Password");
 
     /// <summary>
-    /// Gets locator for the second password input (Confirm Password).
+    /// Gets locator for the Confirm Password input using semantic label.
     /// </summary>
-    private ILocator ConfirmPasswordInput => _page.Locator("input.mud-input-slot").Nth(1);
+    private ILocator ConfirmPasswordInput => _page.GetByLabel("Confirm Password");
 
     /// <summary>
     /// Waits for the form to be visible (token was valid).

@@ -40,6 +40,14 @@ public interface IMessageQueryService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get a single message with detection history by message ID.
+    /// Used by orchestrator to build rich notifications after spam ban.
+    /// </summary>
+    Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
+        long messageId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get messages within a date range
     /// </summary>
     Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
@@ -71,5 +79,16 @@ public interface IMessageQueryService
     Task<UiModels.PhotoMessageRecord?> GetUserRecentPhotoAsync(
         long userId,
         long chatId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get a single message by ID with full enrichment (user photo, reply context).
+    /// Used for real-time message notifications where bare message needs enrichment.
+    /// </summary>
+    /// <param name="message">The bare message record (used for IDs and logging context)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Enriched message with UserPhotoPath, ReplyToUser, ReplyToText populated</returns>
+    Task<UiModels.MessageRecord?> GetMessageByIdAsync(
+        UiModels.MessageRecord message,
         CancellationToken cancellationToken = default);
 }

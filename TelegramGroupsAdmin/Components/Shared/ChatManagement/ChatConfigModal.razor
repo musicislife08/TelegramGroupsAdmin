@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
+@using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Configuration
 @inject ISnackbar Snackbar
 @inject IContentDetectionConfigRepository SpamConfigRepository
@@ -187,7 +188,7 @@
                     @if (_useCustomWelcomeConfig)
                     {
                         <!-- Reusable WelcomeSystemConfig component for per-chat configuration -->
-                        <WelcomeSystemConfig @ref="_welcomeConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnWelcomeConfigSaved" />
+                        <WelcomeSystemConfig @ref="_welcomeConfigComponent" Chat="@ChatInfo.Chat" OnSaved="OnWelcomeConfigSaved" />
 
                         <!-- Save Button -->
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -255,6 +256,54 @@
                     {
                         <MudAlert Severity="Severity.Info">
                             This chat is using the global service message deletion configuration.
+                            To customize settings for this chat specifically, enable "Use Custom Configuration" above.
+                        </MudAlert>
+                    }
+                </MudStack>
+            </MudTabPanel>
+
+            <!-- Ban Celebration Tab -->
+            <MudTabPanel Text="Ban Celebration" Icon="@Icons.Material.Filled.Celebration">
+                <MudStack Spacing="3">
+                    <!-- Configuration Mode Selection -->
+                    <MudPaper Elevation="1" Class="pa-4">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Configuration Mode</MudText>
+                        <MudRadioGroup @bind-Value="_useCustomBanCelebrationConfig" @bind-Value:after="OnBanCelebrationConfigModeChanged" T="bool">
+                            <MudRadio Value="false" T="bool">Use Global Configuration</MudRadio>
+                            <MudRadio Value="true" T="bool">Use Custom Configuration for this Chat</MudRadio>
+                        </MudRadioGroup>
+
+                        @if (!_useCustomBanCelebrationConfig && ChatInfo.HasCustomBanCelebrationConfig)
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mt-2">
+                                This chat currently has custom ban celebration settings. Switching to global will delete the custom settings.
+                            </MudAlert>
+                        }
+                    </MudPaper>
+
+                    @if (_useCustomBanCelebrationConfig)
+                    {
+                        <!-- Reusable BanCelebrationChatSettings component for per-chat configuration -->
+                        <BanCelebrationChatSettings @ref="_banCelebrationConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnBanCelebrationConfigSaved" />
+
+                        <!-- Save Button -->
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                  OnClick="@SaveBanCelebrationConfigAsync" Disabled="@_savingBanCelebrationConfig" FullWidth="true">
+                            @if (_savingBanCelebrationConfig)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                <MudText Class="ms-2">Saving...</MudText>
+                            }
+                            else
+                            {
+                                <span>Save Configuration</span>
+                            }
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            This chat is using the global ban celebration configuration.
                             To customize settings for this chat specifically, enable "Use Custom Configuration" above.
                         </MudAlert>
                     }
@@ -365,6 +414,11 @@
     private bool _useCustomServiceMsgConfig;
     private ServiceMessageDeletionSettings? _serviceMsgConfigComponent;
 
+    // Ban Celebration Config
+    private bool _savingBanCelebrationConfig;
+    private bool _useCustomBanCelebrationConfig;
+    private BanCelebrationChatSettings? _banCelebrationConfigComponent;
+
     // Admins Tab
     private bool _loadingAdmins = true;
     private List<ChatAdmin>? _admins;
@@ -380,6 +434,7 @@
         _useCustomConfig = ChatInfo.HasCustomSpamConfig;
         _useCustomWelcomeConfig = ChatInfo.HasCustomWelcomeConfig;
         _useCustomServiceMsgConfig = ChatInfo.HasCustomServiceMsgConfig;
+        _useCustomBanCelebrationConfig = ChatInfo.HasCustomBanCelebrationConfig;
         await Task.WhenAll(LoadAdminsAsync(), LoadCachedInviteLinkAsync());
     }
 
@@ -555,6 +610,66 @@
         finally
         {
             _savingServiceMsgConfig = false;
+        }
+    }
+
+    // Ban Celebration Config Methods
+    private async Task OnBanCelebrationConfigModeChanged()
+    {
+        if (!_useCustomBanCelebrationConfig && ChatInfo.HasCustomBanCelebrationConfig)
+        {
+            // User switched from custom to global - delete custom config
+            await SaveBanCelebrationConfigModeAsync();
+        }
+    }
+
+    private async Task SaveBanCelebrationConfigAsync()
+    {
+        if (_banCelebrationConfigComponent != null)
+        {
+            _savingBanCelebrationConfig = true;
+            try
+            {
+                await _banCelebrationConfigComponent.SaveConfiguration();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to save ban celebration config: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _savingBanCelebrationConfig = false;
+            }
+        }
+    }
+
+    private Task OnBanCelebrationConfigSaved()
+    {
+        // Config was saved by BanCelebrationChatSettings component
+        ChatInfo.HasCustomBanCelebrationConfig = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveBanCelebrationConfigModeAsync()
+    {
+        _savingBanCelebrationConfig = true;
+        try
+        {
+            if (!_useCustomBanCelebrationConfig && ChatInfo.HasCustomBanCelebrationConfig)
+            {
+                // Delete custom config (revert to global)
+                await ConfigService.DeleteAsync(ConfigType.BanCelebration, ChatInfo.Chat.ChatId);
+                ChatInfo.HasCustomBanCelebrationConfig = false;
+                Snackbar.Add("Reverted to global ban celebration configuration", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save ban celebration config: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingBanCelebrationConfig = false;
         }
     }
 

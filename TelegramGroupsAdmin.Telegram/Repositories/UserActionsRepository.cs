@@ -314,6 +314,21 @@ public class UserActionsRepository : IUserActionsRepository
             targetLastName: e.TargetUser?.LastName)).ToList();
     }
 
+    public async Task<int> GetTodaysBanCountAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Get today's start in server local time, converted to UTC for PostgreSQL
+        // PostgreSQL timestamptz only accepts UTC values via Npgsql
+        var todayStart = new DateTimeOffset(DateTime.Today).ToUniversalTime();
+
+        return await context.UserActions
+            .CountAsync(a =>
+                a.ActionType == DataModels.UserActionType.Ban &&
+                a.IssuedAt >= todayStart,
+                cancellationToken);
+    }
+
     public async Task DeactivateAsync(long actionId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

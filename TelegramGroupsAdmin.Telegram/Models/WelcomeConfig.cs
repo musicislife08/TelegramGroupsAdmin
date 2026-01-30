@@ -35,6 +35,12 @@ public class WelcomeConfig
     public string DmButtonText { get; set; } = string.Empty;
 
     /// <summary>
+    /// Entrance exam configuration (EntranceExam mode only).
+    /// Contains MC questions and/or open-ended question with evaluation criteria.
+    /// </summary>
+    public ExamConfig? ExamConfig { get; set; }
+
+    /// <summary>
     /// Default configuration
     /// </summary>
     public static WelcomeConfig Default => new()

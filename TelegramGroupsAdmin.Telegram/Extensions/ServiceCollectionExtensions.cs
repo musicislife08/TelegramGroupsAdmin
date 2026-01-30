@@ -39,12 +39,16 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
             services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
             services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
+            services.AddScoped<IReportCallbackContextRepository, ReportCallbackContextRepository>(); // DM action button contexts
             services.AddScoped<ILinkedChannelsRepository, LinkedChannelsRepository>(); // Linked channel impersonation detection
             // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+            services.AddScoped<IExamSessionRepository, ExamSessionRepository>(); // Phase 2: Entrance exam state tracking
+            services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>(); // Ban celebration GIF library
+            services.AddScoped<IBanCelebrationCaptionRepository, BanCelebrationCaptionRepository>(); // Ban celebration caption library
             // REFACTOR-3: Extracted services from MessageHistoryRepository
+            // NOTE: IMessageStatsService moved to main app (analytics consolidation)
             services.AddScoped<IMessageQueryService, MessageQueryService>();
-            services.AddScoped<IMessageStatsService, MessageStatsService>();
             services.AddScoped<IMessageTranslationService, MessageTranslationService>();
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
@@ -59,7 +63,7 @@ public static class ServiceCollectionExtensions
             // Message processing handlers (REFACTOR-1: extracted from MessageProcessingService)
             services.AddScoped<Handlers.MediaProcessingHandler>();
             services.AddScoped<Handlers.FileScanningHandler>();
-            services.AddScoped<Handlers.TranslationHandler>();
+            services.AddScoped<Handlers.ITranslationHandler, Handlers.TranslationHandler>();
 
             // REFACTOR-2: Additional handlers for image processing and job scheduling
             services.AddScoped<Handlers.ImageProcessingHandler>();
@@ -97,20 +101,23 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITrainingHandler, TrainingHandler>();
 
             // Orchestrator (routes to handlers and owns business rules)
-            services.AddScoped<ModerationOrchestrator>();
+            services.AddScoped<IModerationOrchestrator, ModerationOrchestrator>();
 
             // Report service
             services.AddScoped<IReportService, ReportService>();
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
-            services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
+            services.AddScoped<ITelegramUserManagementService, TelegramUserManagementService>(); // Orchestrates Telegram user operations
             services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
             services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
             services.AddSingleton<IWelcomeService, WelcomeService>();
             services.AddSingleton<IBanCallbackHandler, BanCallbackHandler>(); // Ban user selection callbacks
+            services.AddSingleton<IReportCallbackHandler, ReportCallbackHandler>(); // Report moderation action callbacks
             services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
+            services.AddSingleton<IBanCelebrationService, BanCelebrationService>(); // Ban celebration GIF posting (Singleton for shuffle-bag state)
+            services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs
 
             // Training data quality services
             services.AddSingleton<TextSimilarityService>();
@@ -120,6 +127,10 @@ public static class ServiceCollectionExtensions
             // Phase 4.10: Anti-Impersonation Detection
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
+
+            // Entrance exam evaluation (uses content moderation AI connection)
+            services.AddScoped<IExamEvaluationService, ExamEvaluationService>();
+            services.AddScoped<IExamFlowService, ExamFlowService>(); // Phase 2: Exam flow orchestration
 
             // CAS (Combot Anti-Spam) check on user join
             services.AddSingleton<ICasCheckService, CasCheckService>();

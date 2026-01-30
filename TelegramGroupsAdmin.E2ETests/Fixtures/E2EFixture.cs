@@ -4,14 +4,16 @@ using Testcontainers.PostgreSql;
 namespace TelegramGroupsAdmin.E2ETests;
 
 /// <summary>
-/// Assembly-level fixture that starts PostgreSQL container and installs Playwright browsers once for all tests.
+/// Assembly-level fixture that starts PostgreSQL container, Playwright, and shared browser once for all tests.
 /// Each test creates its own unique database on this shared container for isolation.
+/// Browser contexts provide per-test isolation while sharing the browser process.
 /// </summary>
 [SetUpFixture]
 public class E2EFixture
 {
     private static PostgreSqlContainer? _container;
     private static IPlaywright? _playwright;
+    private static IBrowser? _sharedBrowser;
 
     /// <summary>
     /// Gets the base connection string for the shared PostgreSQL container.
@@ -24,6 +26,12 @@ public class E2EFixture
     /// </summary>
     public static IPlaywright Playwright => _playwright ?? throw new InvalidOperationException("Playwright not initialized");
 
+    /// <summary>
+    /// Gets the shared browser instance for all tests.
+    /// Each test creates an isolated BrowserContext from this browser.
+    /// </summary>
+    public static IBrowser Browser => _sharedBrowser ?? throw new InvalidOperationException("Browser not initialized");
+
     [OneTimeSetUp]
     public async Task GlobalSetup()
     {
@@ -31,7 +39,7 @@ public class E2EFixture
         ClearArtifactsDirectory();
 
         // Start PostgreSQL container
-        _container = new PostgreSqlBuilder("postgres:17")
+        _container = new PostgreSqlBuilder("postgres:18")
             .WithCleanUp(true)
             .Build();
 
@@ -42,6 +50,14 @@ public class E2EFixture
         // Initialize Playwright
         _playwright = await Microsoft.Playwright.Playwright.CreateAsync();
         Console.WriteLine("Playwright initialized");
+
+        // Launch browser once for all tests (saves ~500ms per test)
+        // Each test creates an isolated BrowserContext for cookie/storage isolation
+        _sharedBrowser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        {
+            Headless = true
+        });
+        Console.WriteLine("Shared browser launched");
     }
 
     /// <summary>
@@ -64,6 +80,13 @@ public class E2EFixture
         // This MUST happen before disposing Playwright/container, otherwise the server hangs
         SharedE2ETestBase.DisposeSharedFactory();
         Console.WriteLine("Shared WebApplicationFactory disposed");
+
+        // Close shared browser before disposing Playwright
+        if (_sharedBrowser != null)
+        {
+            await _sharedBrowser.CloseAsync();
+            Console.WriteLine("Shared browser closed");
+        }
 
         _playwright?.Dispose();
         Console.WriteLine("Playwright disposed");

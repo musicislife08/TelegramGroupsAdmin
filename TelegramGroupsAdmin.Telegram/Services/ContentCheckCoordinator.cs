@@ -40,7 +40,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         // on first message before user record is created
         if (TelegramConstants.IsSystemUser(request.UserId))
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Skipping all content detection for Telegram system account ({User}) in {Chat}",
                 request.UserName,
                 request.ChatName);
@@ -73,7 +73,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         // Check if user is a chat admin
         isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "{User} status in {Chat}: Trusted={Trusted}, Admin={Admin}",
             request.UserName,
             request.ChatName,
@@ -84,7 +84,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         // Phase 1: Get list of critical checks (always_run=true) using optimized JSONB query
         var criticalCheckNames = await configService.GetCriticalCheckNamesAsync(request.ChatId, cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "{Chat} has {Count} critical (always_run) checks configured: {Checks}",
             request.ChatName,
             criticalCheckNames.Count,
@@ -99,7 +99,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 ? "User is trusted and no critical checks configured"
                 : "User is admin and no critical checks configured";
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Skipping all spam detection for {User} in {Chat}: {Reason}",
                 request.UserName,
                 request.ChatName,
@@ -123,7 +123,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 ? "untrusted/non-admin user"
                 : "standard user";
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Running full spam detection pipeline for {User} in {Chat}: {Reason}",
             request.UserName,
             request.ChatName,
@@ -171,7 +171,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 ? "User is trusted - regular spam detection bypassed (critical checks passed)"
                 : "User is a chat admin - regular spam detection bypassed (critical checks passed)";
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "✓ Critical checks passed, skipping regular spam detection for {User} in {Chat}: {Reason}",
                 request.UserName,
                 request.ChatName,

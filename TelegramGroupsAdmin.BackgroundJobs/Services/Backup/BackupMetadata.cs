@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 public class BackupMetadata
 {
     [JsonPropertyName("version")]
-    public string Version { get; set; } = "2.0";
+    public string Version { get; set; } = "3.0";
 
     /// <summary>
     /// Timestamp when the backup was created. Stored as ISO 8601 string in JSON.
@@ -26,4 +26,11 @@ public class BackupMetadata
 
     [JsonPropertyName("tables")]
     public List<string> Tables { get; set; } = [];
+
+    /// <summary>
+    /// Number of media files included in the backup (e.g., ban celebration GIFs).
+    /// Added in v3.0 (real tar.gz format).
+    /// </summary>
+    [JsonPropertyName("media_file_count")]
+    public int MediaFileCount { get; set; }
 }

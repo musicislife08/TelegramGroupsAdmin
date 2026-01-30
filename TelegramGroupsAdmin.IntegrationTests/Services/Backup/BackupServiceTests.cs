@@ -82,10 +82,11 @@ public class BackupServiceTests
         services.AddSingleton<IDmDeliveryService, MockDmDeliveryService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
         services.AddSingleton<INotificationService, MockNotificationService>();
+        services.AddSingleton(Substitute.For<TelegramGroupsAdmin.Telegram.Services.IThumbnailService>());
 
         // Add IJobScheduler mock (required by PassphraseManagementService)
         var mockJobScheduler = Substitute.For<TelegramGroupsAdmin.Core.BackgroundJobs.IJobScheduler>();
-        mockJobScheduler.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        mockJobScheduler.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"test_job_{Guid.NewGuid():N}"));
         mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
@@ -98,7 +99,7 @@ public class BackupServiceTests
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
-        services.AddScoped<BackupRetentionService>();
+        services.AddScoped<IBackupRetentionService, BackupRetentionService>();
 
         // Add internal handler services (required by BackupService)
         services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableDiscoveryService>();
@@ -145,14 +146,14 @@ public class BackupServiceTests
         Assert.That(backupBytes, Is.Not.Null);
         Assert.That(backupBytes.Length, Is.GreaterThan(0));
 
-        // Verify encryption header (TGAENC magic bytes)
+        // Verify backup contains encrypted database entry
         var isEncrypted = await _backupService.IsEncryptedAsync(backupBytes);
         Assert.That(isEncrypted, Is.True, "Backup should be encrypted when passphrase is configured");
 
-        // Verify can extract metadata from encrypted backup
+        // Verify can extract metadata from encrypted backup (metadata is always unencrypted in tar)
         var metadata = await _backupService.GetMetadataAsync(backupBytes);
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.1"));
+        Assert.That(metadata.Version, Is.EqualTo("3.0"));
         Assert.That(metadata.TableCount, Is.GreaterThan(0));
     }
 
@@ -173,13 +174,11 @@ public class BackupServiceTests
         // Act - Export with explicit passphrase
         var backupBytes = await _backupService!.ExportAsync(explicitPassphrase);
 
-        // Assert - Should be encrypted
+        // Assert - Should be encrypted (database.json.enc entry in tar)
         Assert.That(await _backupService.IsEncryptedAsync(backupBytes), Is.True);
 
-        // Verify decryption with explicit passphrase works
-        var decrypted = _encryptionService!.DecryptBackup(backupBytes, explicitPassphrase);
-        Assert.That(decrypted, Is.Not.Null);
-        Assert.That(decrypted.Length, Is.GreaterThan(0));
+        // Verify restore with explicit passphrase works (decrypts database.json.enc inside tar)
+        Assert.DoesNotThrowAsync(() => _backupService.RestoreAsync(backupBytes, explicitPassphrase));
     }
 
     [Test]
@@ -291,15 +290,15 @@ public class BackupServiceTests
     }
 
     [Test]
-    public async Task RestoreAsync_UnencryptedBackup_ShouldRestoreWithoutPassphrase()
+    public async Task RestoreAsync_WithDbPassphrase_ShouldRestoreWithoutExplicitPassphrase()
     {
-        // Arrange - Create unencrypted backup
+        // Arrange - Export uses DB passphrase (configured in SetUp), restore reads it back
         var originalBackup = await _backupService!.ExportAsync();
 
         var originalChatCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM managed_chats");
         Assert.That(originalChatCount, Is.GreaterThan(0));
 
-        // Act - Restore without passphrase
+        // Act - Restore without explicit passphrase (reads DB passphrase automatically)
         await _backupService.RestoreAsync(originalBackup);
 
         // Assert
@@ -466,23 +465,23 @@ public class BackupServiceTests
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.1"));
+        Assert.That(metadata.Version, Is.EqualTo("3.0"));
         Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
         Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
     }
 
     [Test]
-    public async Task GetMetadataAsync_FromUnencryptedBackup_ShouldReturnMetadata()
+    public async Task GetMetadataAsync_FromDbPassphraseBackup_ShouldReturnMetadata()
     {
-        // Arrange
-        var unencryptedBackup = await _backupService!.ExportAsync();
+        // Arrange - ExportAsync() encrypts with DB passphrase; metadata is always readable
+        var backup = await _backupService!.ExportAsync();
 
         // Act
-        var metadata = await _backupService.GetMetadataAsync(unencryptedBackup);
+        var metadata = await _backupService.GetMetadataAsync(backup);
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.1"));
+        Assert.That(metadata.Version, Is.EqualTo("3.0"));
     }
 
     [Test]
@@ -738,6 +737,23 @@ public class BackupServiceTests
                 Failed = false
             });
         }
+
+        public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
+            long telegramUserId,
+            string notificationType,
+            string messageText,
+            string? photoPath = null,
+            global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+            CancellationToken cancellationToken = default)
+        {
+            // No-op for tests - return success
+            return Task.FromResult(new DmDeliveryResult
+            {
+                DmSent = true,
+                FallbackUsed = false,
+                Failed = false
+            });
+        }
     }
 
     /// <summary>
@@ -759,6 +775,10 @@ public class BackupServiceTests
             NotificationEventType eventType,
             string subject,
             string message,
+            long? reportId = null,
+            string? photoPath = null,
+            long? reportedUserId = null,
+            ReportType? reportType = null,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests

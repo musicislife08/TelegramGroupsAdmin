@@ -3,9 +3,9 @@
 @using TelegramGroupsAdmin.ContentDetection.Services
 @using TelegramGroupsAdmin.Services
 @inject ISystemConfigRepository ConfigRepository
-@inject ClamAVScannerService ClamAvService
+@inject IFileScannerService FileScannerService
 @inject IAuditService AuditService
-@inject BlazorAuthHelper AuthHelper
+@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 
 <MudGrid>
@@ -170,7 +170,7 @@
         try
         {
             // Use the ClamAV service to test the connection with current settings
-            var healthResult = await ClamAvService.GetHealthAsync();
+            var healthResult = await FileScannerService.GetHealthAsync();
 
             if (healthResult.IsHealthy)
             {

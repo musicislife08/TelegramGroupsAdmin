@@ -7,6 +7,8 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -44,16 +46,26 @@ public class WelcomeService : IWelcomeService
         _casCheckService = casCheckService;
     }
 
+    /// <summary>
+    /// Helper to get scoped ExamFlowService for entrance exam handling.
+    /// </summary>
+    private async Task<T> WithExamFlowServiceAsync<T>(Func<IExamFlowService, Task<T>> action)
+    {
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+        return await action(examFlowService);
+    }
+
     private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
     {
-        using var scope = _serviceProvider.CreateScope();
+        await using var scope = _serviceProvider.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         return await action(repository, cancellationToken);
     }
 
     private async Task WithRepositoryAsync(Func<IWelcomeResponsesRepository, CancellationToken, Task> action, CancellationToken cancellationToken = default)
     {
-        using var scope = _serviceProvider.CreateScope();
+        await using var scope = _serviceProvider.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         await action(repository, cancellationToken);
     }
@@ -114,7 +126,7 @@ public class WelcomeService : IWelcomeService
 
         // Load welcome config from database (chat-specific or global fallback)
         // Must create scope because WelcomeService is singleton but IConfigService is scoped
-        using var scope = _serviceProvider.CreateScope();
+        await using var scope = _serviceProvider.CreateAsyncScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatMemberUpdate.Chat.Id)
                      ?? WelcomeConfig.Default;
@@ -146,7 +158,7 @@ public class WelcomeService : IWelcomeService
 
             // Create user record if not exists (IsActive: false - not engaged yet)
             // Must happen for ALL joining users, not just those checked for impersonation
-            using var impersonationScope = _serviceProvider.CreateScope();
+            await using var impersonationScope = _serviceProvider.CreateAsyncScope();
             var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
 
@@ -173,9 +185,9 @@ public class WelcomeService : IWelcomeService
                 );
                 await telegramUserRepo.UpsertAsync(newUser, cancellationToken);
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Created inactive user record for {User} on join",
-                    user.ToLogInfo());
+                    user.ToLogDebug());
             }
 
             // Step 2: Check for impersonation (name + photo similarity vs admins)
@@ -238,7 +250,7 @@ public class WelcomeService : IWelcomeService
                     casResult.Reason ?? "No reason provided");
 
                 // Ban user using ModerationOrchestrator
-                var moderationOrchestrator = impersonationScope.ServiceProvider.GetRequiredService<ModerationOrchestrator>();
+                var moderationOrchestrator = impersonationScope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
                 var reason = $"CAS banned: {casResult.Reason ?? "Listed in CAS database"}";
                 await moderationOrchestrator.BanUserAsync(
                     userId: user.Id,
@@ -253,7 +265,11 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
-            // Step 4: Send welcome message with inline buttons
+            // Step 4: Send welcome/teaser message based on mode
+            // All modes now use SendWelcomeMessageAsync:
+            // - ChatAcceptDeny: Shows full message with Accept/Deny buttons in group
+            // - DmWelcome: Shows teaser with "Read Rules" button (deep link to DM)
+            // - EntranceExam: Shows teaser with "Start Exam" button (deep link to DM)
             var welcomeMessage = await SendWelcomeMessageAsync(
                 operations,
                 chatMemberUpdate.Chat.Id,
@@ -261,13 +277,15 @@ public class WelcomeService : IWelcomeService
                 config,
                 cancellationToken);
 
+            var welcomeMessageId = welcomeMessage.MessageId;
+
             // Step 5: Create welcome response record (pending state)
             var welcomeResponse = new WelcomeResponse(
                 Id: 0, // Will be set by database
                 ChatId: chatMemberUpdate.Chat.Id,
                 UserId: user.Id,
                 Username: user.Username,
-                WelcomeMessageId: welcomeMessage.MessageId,
+                WelcomeMessageId: welcomeMessageId,
                 Response: WelcomeResponseType.Pending,
                 RespondedAt: DateTimeOffset.UtcNow,
                 DmSent: false,
@@ -282,22 +300,24 @@ public class WelcomeService : IWelcomeService
             var payload = new WelcomeTimeoutPayload(
                 chatMemberUpdate.Chat.Id,
                 user.Id,
-                welcomeMessage.MessageId
+                welcomeMessageId
             );
 
             var jobId = await _jobScheduler.ScheduleJobAsync(
                 "WelcomeTimeout",
                 payload,
                 delaySeconds: config.TimeoutSeconds,
+                deduplicationKey: None,
                 cancellationToken);
 
             // Store the job ID in the welcome response record
             await WithRepositoryAsync((repo, cancellationToken) => repo.SetTimeoutJobIdAsync(responseId, jobId, cancellationToken), cancellationToken);
 
-            _logger.LogInformation(
-                "Successfully scheduled welcome timeout for {User} in {Chat} (timeout: {Timeout}s, JobId: {JobId})",
-                user.ToLogInfo(),
-                chatMemberUpdate.Chat.ToLogInfo(),
+            _logger.LogDebug(
+                "Successfully scheduled welcome timeout for {User} in {Chat} (mode: {Mode}, timeout: {Timeout}s, JobId: {JobId})",
+                user.ToLogDebug(),
+                chatMemberUpdate.Chat.ToLogDebug(),
+                config.Mode,
                 config.TimeoutSeconds,
                 jobId);
         }
@@ -329,11 +349,21 @@ public class WelcomeService : IWelcomeService
 
         var chatId = message.Chat.Id;
 
-        _logger.LogInformation(
+        // Check if this is an exam callback (handled separately)
+        var isExamCallback = await WithExamFlowServiceAsync(examFlowService =>
+            Task.FromResult(examFlowService.IsExamCallback(data)));
+
+        if (isExamCallback)
+        {
+            await HandleExamCallbackAsync(callbackQuery, data, user, message, cancellationToken);
+            return;
+        }
+
+        _logger.LogDebug(
             "Callback query received: {Data} from {User} in {Chat}",
             data,
-            user.ToLogInfo(),
-            message.Chat.ToLogInfo());
+            user.ToLogDebug(),
+            message.Chat.ToLogDebug());
 
         // Use extracted parser for callback data
         var parsedCallback = WelcomeCallbackParser.ParseCallbackData(data);
@@ -384,7 +414,7 @@ public class WelcomeService : IWelcomeService
                 case WelcomeCallbackType.Accept:
                 case WelcomeCallbackType.Deny:
                     // Load welcome config for chat-based callbacks
-                    using (var scope = _serviceProvider.CreateScope())
+                    await using (var scope = _serviceProvider.CreateAsyncScope())
                     {
                         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
                         var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
@@ -441,11 +471,92 @@ public class WelcomeService : IWelcomeService
                 "DeleteMessage",
                 deletePayload,
                 delaySeconds: 10,
+                deduplicationKey: None,
                 cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send warning message");
+        }
+    }
+
+    private async Task HandleExamCallbackAsync(
+        CallbackQuery callbackQuery,
+        string data,
+        User user,
+        Message message,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogDebug(
+            "Exam callback received: {Data} from {User}",
+            data,
+            user.ToLogDebug());
+
+        try
+        {
+            // Parse callback and handle via ExamFlowService
+            await using var scope = _serviceProvider.CreateAsyncScope();
+            var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
+
+            var parsed = examFlowService.ParseExamCallback(data);
+            if (parsed == null)
+            {
+                _logger.LogWarning("Failed to parse exam callback: {Data}", data);
+                return;
+            }
+
+            var (sessionId, questionIndex, answerIndex) = parsed.Value;
+
+            var result = await examFlowService.HandleMcAnswerAsync(
+                sessionId,
+                questionIndex,
+                answerIndex,
+                user,
+                message,
+                cancellationToken);
+
+            if (result.ExamComplete && result.GroupChatId.HasValue)
+            {
+                _logger.LogInformation(
+                    "Exam completed for {User}: Passed={Passed}, SentToReview={SentToReview}",
+                    user.ToLogInfo(),
+                    result.Passed,
+                    result.SentToReview);
+
+                // Cancel welcome timeout job if exam completed
+                // Use GroupChatId from result (not message.Chat.Id which is the DM chat)
+                var welcomeResponse = await WithRepositoryAsync((repo, cancellationToken) =>
+                    repo.GetByUserAndChatAsync(user.Id, result.GroupChatId.Value, cancellationToken), cancellationToken);
+
+                if (welcomeResponse?.TimeoutJobId != null)
+                {
+                    await _jobScheduler.CancelJobAsync(welcomeResponse.TimeoutJobId, cancellationToken);
+                    await WithRepositoryAsync((repo, cancellationToken) =>
+                        repo.SetTimeoutJobIdAsync(welcomeResponse.Id, null, cancellationToken), cancellationToken);
+                }
+
+                // Update welcome response based on exam result
+                if (result.Passed == true)
+                {
+                    await WithRepositoryAsync((repo, cancellationToken) =>
+                        repo.UpdateResponseAsync(welcomeResponse!.Id, WelcomeResponseType.Accepted, dmSent: false, dmFallback: false, cancellationToken), cancellationToken);
+                }
+                else if (result.SentToReview)
+                {
+                    // Keep as pending - admin will decide
+                    _logger.LogInformation(
+                        "{User} failed exam and sent to review queue",
+                        user.ToLogInfo());
+                }
+            }
+
+            // Answer callback to clear loading state
+            var operations = await _botClientFactory.GetOperationsAsync();
+            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to handle exam callback {Data}", data);
         }
     }
 
@@ -473,22 +584,37 @@ public class WelcomeService : IWelcomeService
             var botInfo = await operations.GetMeAsync(cancellationToken);
             keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatId, user.Id, botInfo.Username!);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Sending DM welcome message to {User} in {Chat}",
-                user.ToLogInfo(),
-                chatInfo.ToLogInfo());
+                user.ToLogDebug(),
+                chatInfo.ToLogDebug());
+        }
+        else if (config.Mode == WelcomeMode.EntranceExam)
+        {
+            var botInfo = await operations.GetMeAsync(cancellationToken);
+            keyboard = WelcomeKeyboardBuilder.BuildExamModeKeyboard(config, chatId, user.Id, botInfo.Username!);
+
+            _logger.LogDebug(
+                "Sending entrance exam teaser to {User} in {Chat}",
+                user.ToLogDebug(),
+                chatInfo.ToLogDebug());
         }
         else
         {
             keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, user.Id);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Sending chat accept/deny welcome message to {User} in {Chat}",
-                user.ToLogInfo(),
-                chatInfo.ToLogInfo());
+                user.ToLogDebug(),
+                chatInfo.ToLogDebug());
         }
 
-        var message = await operations.SendMessageAsync(
+        // Use BotMessageService to send AND save to database (FK constraint satisfaction)
+        // Get scoped service from provider (WelcomeService is Singleton, BotMessageService is Scoped)
+        await using var scope = _serviceProvider.CreateAsyncScope();
+        var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
+
+        var message = await botMessageService.SendAndSaveMessageAsync(
             chatId: chatId,
             text: messageText,
             replyMarkup: keyboard,
@@ -511,68 +637,16 @@ public class WelcomeService : IWelcomeService
                 permissions: WelcomeChatPermissions.Restricted,
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Restricted permissions for {User} in {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+                user.ToLogDebug(),
+                chat.ToLogDebug());
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
                 "Failed to restrict {User} in {Chat}",
-                user.ToLogDebug(),
-                chat.ToLogDebug());
-            throw;
-        }
-    }
-
-    private async Task RestoreUserPermissionsAsync(
-        ITelegramOperations operations,
-        Chat chat,
-        User user,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            // Check if user is admin/owner - can't modify their permissions
-            var chatMember = await operations.GetChatMemberAsync(chat.Id, user.Id, cancellationToken);
-            if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
-            {
-                _logger.LogDebug(
-                    "Skipping permission restore for admin/owner: {User} in {Chat}",
-                    user.ToLogDebug(),
-                    chat.ToLogDebug());
-                return;
-            }
-
-            // Get chat's default permissions to restore user to group defaults
-            var chatDetails = await operations.GetChatAsync(chat.Id, cancellationToken);
-            var defaultPermissions = chatDetails.Permissions ?? WelcomeChatPermissions.Default;
-
-            _logger.LogDebug(
-                "Restoring {User} to {Chat} default permissions: Messages={CanSendMessages}, Media={CanSendPhotos}",
-                user.ToLogDebug(),
-                chat.ToLogDebug(),
-                defaultPermissions.CanSendMessages,
-                defaultPermissions.CanSendPhotos);
-
-            await operations.RestrictChatMemberAsync(
-                chatId: chat.Id,
-                userId: user.Id,
-                permissions: defaultPermissions,
-                cancellationToken: cancellationToken);
-
-            _logger.LogInformation(
-                "Restored permissions for {User} in {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to restore permissions for {User} in {Chat}",
                 user.ToLogDebug(),
                 chat.ToLogDebug());
             throw;
@@ -591,10 +665,10 @@ public class WelcomeService : IWelcomeService
             await operations.BanChatMemberAsync(chatId: chat.Id, userId: user.Id, cancellationToken: cancellationToken);
             await operations.UnbanChatMemberAsync(chatId: chat.Id, userId: user.Id, cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Kicked {User} from {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+                user.ToLogDebug(),
+                chat.ToLogDebug());
         }
         catch (Exception ex)
         {
@@ -637,18 +711,33 @@ public class WelcomeService : IWelcomeService
         // Always attempt this - previous DM sent via /start may have been deleted by user
         var (dmSent, dmFallback) = await SendRulesAsync(operations, chat, user, config, cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Rules delivery for {User}: DM sent: {DmSent}, Fallback: {DmFallback}",
-            user.ToLogInfo(),
+            user.ToLogDebug(),
             dmSent,
             dmFallback);
 
-        // Step 4: Restore user permissions
-        await RestoreUserPermissionsAsync(operations, chat, user, cancellationToken);
-
-        // Step 4b: Mark user as active (completed welcome flow)
-        using (var scope = _serviceProvider.CreateScope())
+        // Step 4: Restore user permissions via orchestrator (audit trail)
+        await using (var scope = _serviceProvider.CreateAsyncScope())
         {
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+            var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
+                userId: user.Id,
+                chatId: chat.Id,
+                executor: Actor.WelcomeFlow,
+                reason: "Completed welcome/rules flow",
+                cancellationToken: cancellationToken);
+
+            if (!restoreResult.Success)
+            {
+                _logger.LogWarning(
+                    "Failed to restore permissions for {User} in {Chat}: {Error}",
+                    user.ToLogInfo(),
+                    chat.ToLogInfo(),
+                    restoreResult.ErrorMessage);
+            }
+
+            // Step 4b: Mark user as active (completed welcome flow)
             var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
         }
@@ -813,30 +902,34 @@ public class WelcomeService : IWelcomeService
             }
         }
 
-        // Step 4: Restore user permissions in group
-        try
+        // Step 4: Restore user permissions in group via orchestrator (audit trail)
+        await using (var scope = _serviceProvider.CreateAsyncScope())
         {
-            await RestoreUserPermissionsAsync(operations, groupChat, user, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to restore permissions for {User} in {Chat}",
-                user.ToLogDebug(),
-                groupChat.ToLogDebug());
-
-            // Send error to user in DM
-            await operations.SendMessageAsync(
-                chatId: user.Id,
-                text: "❌ Failed to restore your permissions. Please contact an admin.",
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+            var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
+                userId: user.Id,
+                chatId: groupChat.Id,
+                executor: Actor.WelcomeFlow,
+                reason: "Completed welcome flow via DM",
                 cancellationToken: cancellationToken);
-            return;
-        }
 
-        // Step 4b: Mark user as active (completed welcome flow via DM)
-        using (var scope = _serviceProvider.CreateScope())
-        {
+            if (!restoreResult.Success)
+            {
+                _logger.LogError(
+                    "Failed to restore permissions for {User} in {Chat}: {Error}",
+                    user.ToLogInfo(),
+                    groupChat.ToLogInfo(),
+                    restoreResult.ErrorMessage);
+
+                // Send error to user in DM
+                await operations.SendMessageAsync(
+                    chatId: user.Id,
+                    text: "❌ Failed to restore your permissions. Please contact an admin.",
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            // Step 4b: Mark user as active (completed welcome flow via DM)
             var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
         }
@@ -849,10 +942,10 @@ public class WelcomeService : IWelcomeService
                 messageId: welcomeResponse.WelcomeMessageId,
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Deleted welcome message {MessageId} in {Chat}",
                 welcomeResponse.WelcomeMessageId,
-                groupChat.ToLogInfo());
+                groupChat.ToLogDebug());
         }
         catch (Exception ex)
         {
@@ -878,7 +971,7 @@ public class WelcomeService : IWelcomeService
             // For private chats (no username), try to get invite link
             if (chatDeepLink == null)
             {
-                using var inviteLinkScope = _serviceProvider.CreateScope();
+                await using var inviteLinkScope = _serviceProvider.CreateAsyncScope();
                 var inviteLinkService = inviteLinkScope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
                 chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChat, cancellationToken);
 
@@ -902,9 +995,9 @@ public class WelcomeService : IWelcomeService
             {
                 keyboard = WelcomeKeyboardBuilder.BuildReturnToChatKeyboard(chatName, chatDeepLink);
 
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Sent confirmation with chat deep link to {User}: {DeepLink}",
-                    user.ToLogInfo(),
+                    user.ToLogDebug(),
                     chatDeepLink);
             }
 
@@ -945,9 +1038,9 @@ public class WelcomeService : IWelcomeService
             autoDeleteSeconds: 30,
             cancellationToken: cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Rules sent to {User}: DmSent={DmSent}, FallbackUsed={FallbackUsed}",
-            user.ToLogInfo(),
+            user.ToLogDebug(),
             result.DmSent,
             result.FallbackUsed);
 
@@ -956,13 +1049,25 @@ public class WelcomeService : IWelcomeService
 
     private async Task HandleUserLeftAsync(Chat chat, User user, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "{User} left {Chat}, recording welcome response if pending",
-            user.ToLogInfo(),
-            chat.ToLogInfo());
+            user.ToLogDebug(),
+            chat.ToLogDebug());
 
         try
         {
+            // Cancel any active exam session
+            await using var examScope = _serviceProvider.CreateAsyncScope();
+            var examFlowService = examScope.ServiceProvider.GetRequiredService<IExamFlowService>();
+            if (await examFlowService.HasActiveSessionAsync(chat.Id, user.Id, cancellationToken))
+            {
+                await examFlowService.CancelSessionAsync(chat.Id, user.Id, cancellationToken);
+                _logger.LogDebug(
+                    "Cancelled exam session for {User} who left {Chat}",
+                    user.ToLogDebug(),
+                    chat.ToLogDebug());
+            }
+
             // Find any pending welcome response for this user
             var response = await WithRepositoryAsync((repo, cancellationToken) => repo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken), cancellationToken);
 
@@ -987,10 +1092,10 @@ public class WelcomeService : IWelcomeService
             // Mark as left
             await WithRepositoryAsync((repo, cancellationToken) => repo.UpdateResponseAsync(response.Id, WelcomeResponseType.Left, dmSent: false, dmFallback: false, cancellationToken), cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Recorded welcome response 'left' for {User} in {Chat}",
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+                user.ToLogDebug(),
+                chat.ToLogDebug());
         }
         catch (Exception ex)
         {
