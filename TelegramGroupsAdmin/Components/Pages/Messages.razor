@@ -1,7 +1,7 @@
 @page "/messages"
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Media
-@using TelegramGroupsAdmin.Telegram.Services.Moderation
+@using TelegramGroupsAdmin.Telegram.Services.Bot
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
@@ -21,7 +21,7 @@
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ITrainingLabelsRepository TrainingLabelsRepository
 @inject IJobTriggerService JobTriggerService
-@inject IModerationOrchestrator ModerationService
+@inject IBotModerationService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramUserRepository TelegramUserRepository
 @inject NavigationManager NavigationManager

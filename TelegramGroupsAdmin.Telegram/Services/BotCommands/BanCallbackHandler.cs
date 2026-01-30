@@ -5,7 +5,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
@@ -122,7 +122,7 @@ public class BanCallbackHandler : IBanCallbackHandler
                 executorUser.LastName);
 
             // Execute ban (resolve from scope since ModerationOrchestrator is Scoped)
-            var moderationService = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+            var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             var result = await moderationService.BanUserAsync(
                 userId: targetUserId,
                 messageId: null, // No trigger message for fuzzy search bans

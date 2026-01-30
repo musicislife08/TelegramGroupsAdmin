@@ -15,7 +15,7 @@ using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -35,7 +35,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
     private readonly IReportsRepository _reportsRepository;
-    private readonly IModerationOrchestrator _moderationActionService;
+    private readonly IBotModerationService _moderationActionService;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
@@ -54,7 +54,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
         IReportsRepository reportsRepository,
-        IModerationOrchestrator moderationActionService,
+        IBotModerationService moderationActionService,
         ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)

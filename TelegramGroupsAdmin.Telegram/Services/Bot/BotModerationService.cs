@@ -10,10 +10,11 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
 /// <summary>
 /// Manager/Worker orchestration layer for moderation actions.
@@ -28,7 +29,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
 /// Workers are domain experts that don't know about each other.
 /// Only the orchestrator composes workflows across workers.
 /// </summary>
-public class ModerationOrchestrator : IModerationOrchestrator
+public class BotModerationService : IBotModerationService
 {
     // Domain handlers (workers)
     private readonly IBotBanHandler _banHandler;
@@ -53,9 +54,9 @@ public class ModerationOrchestrator : IModerationOrchestrator
 
     // Configuration
     private readonly IConfigService _configService;
-    private readonly ILogger<ModerationOrchestrator> _logger;
+    private readonly ILogger<BotModerationService> _logger;
 
-    public ModerationOrchestrator(
+    public BotModerationService(
         IBotBanHandler banHandler,
         ITrustHandler trustHandler,
         IWarnHandler warnHandler,
@@ -70,7 +71,7 @@ public class ModerationOrchestrator : IModerationOrchestrator
         IReportService reportService,
         INotificationService notificationService,
         IConfigService configService,
-        ILogger<ModerationOrchestrator> logger)
+        ILogger<BotModerationService> logger)
     {
         _banHandler = banHandler;
         _trustHandler = trustHandler;

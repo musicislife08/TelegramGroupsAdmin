@@ -1,14 +1,16 @@
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
 /// <summary>
 /// Orchestrates moderation actions across Telegram and database.
 /// Handles bans, warnings, trust status, and message deletion with audit logging.
 /// The "boss" that knows all workers, decides who to call, and owns business rules.
+/// Uses Bot handlers for Telegram API calls (IBotBanHandler, IBotRestrictHandler, etc.).
 /// </summary>
-public interface IModerationOrchestrator
+public interface IBotModerationService
 {
     /// <summary>
     /// Mark message as spam, delete it, ban user globally, and revoke trust.

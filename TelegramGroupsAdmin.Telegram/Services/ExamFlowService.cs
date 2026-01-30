@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
@@ -716,7 +717,7 @@ public class ExamFlowService : IExamFlowService
         CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
-        var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var operations = await _botClientFactory.GetOperationsAsync();
@@ -862,7 +863,7 @@ public class ExamFlowService : IExamFlowService
         CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
-        var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         var operations = await _botClientFactory.GetOperationsAsync();
 

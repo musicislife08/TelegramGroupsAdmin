@@ -109,7 +109,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITrainingHandler, TrainingHandler>();
 
             // Orchestrator (routes to handlers and owns business rules)
-            services.AddScoped<IModerationOrchestrator, ModerationOrchestrator>();
+            services.AddScoped<IBotModerationService, BotModerationService>();
 
             // Report service
             services.AddScoped<IReportService, ReportService>();
@@ -144,7 +144,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ICasCheckService, CasCheckService>();
 
             // Bot command system (Keyed Services pattern)
-            // Commands are Scoped (to allow injecting Scoped services like ModerationOrchestrator)
+            // Commands are Scoped (to allow injecting Scoped services like BotModerationService)
             // CommandRouter is Singleton (creates scopes internally when executing commands)
             // Keyed services allow direct resolution by command name without type dictionary
             services.AddKeyedScoped<IBotCommand, StartCommand>(CommandNames.Start);

@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -73,7 +74,7 @@ public class DetectionActionService(
 
             using var scope = serviceProvider.CreateScope();
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
-            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
+            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
 
             // Check for hard block or malware (different handling than spam)
             var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
@@ -256,7 +257,7 @@ public class DetectionActionService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
+            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
 
             await moderationOrchestrator.HandleCriticalViolationAsync(
                 messageId: message.MessageId,

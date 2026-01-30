@@ -11,7 +11,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
@@ -87,7 +87,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
         var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
         var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var moderationService = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+        var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
         // Look up callback context from database
@@ -200,7 +200,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     #region Report Actions
 
     private async Task<ReviewActionResult> HandleReportActionAsync(
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         IReportsRepository reportsRepo,
         ReportBase report,
         long userId,
@@ -232,7 +232,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleSpamActionAsync(
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         ReportBase report,
         long userId,
         Core.Models.Actor executor,
@@ -263,7 +263,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleWarnActionAsync(
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         ReportBase report,
         long userId,
         Core.Models.Actor executor,
@@ -296,7 +296,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleTempBanActionAsync(
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         ReportBase report,
         long userId,
         Core.Models.Actor executor,
@@ -339,7 +339,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     #region Impersonation Actions
 
     private async Task<ReviewActionResult> HandleImpersonationActionAsync(
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         IReportsRepository reportsRepo,
         ReportBase report,
         long userId,
@@ -369,7 +369,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     }
 
     private async Task<ReviewActionResult> HandleConfirmScamAsync(
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         ReportBase report,
         long userId,
         Core.Models.Actor executor,
@@ -433,7 +433,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
     #region Exam Actions
 
     private async Task<ReviewActionResult> HandleExamActionAsync(
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         IExamFlowService examFlowService,
         IReportsRepository reportsRepo,
         ReportBase report,

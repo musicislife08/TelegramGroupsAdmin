@@ -220,7 +220,7 @@ public class WelcomeService : IWelcomeService
                     await TryDeleteMessageAsync(operations, chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
                     // Ban user using ModerationOrchestrator (triggers ban celebrations)
-                    var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+                    var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
                     var reason = $"CAS banned: {casResult.Reason ?? "Listed in CAS database"}";
                     await moderationOrchestrator.BanUserAsync(
                         userId: user.Id,
@@ -806,7 +806,7 @@ public class WelcomeService : IWelcomeService
         // Step 4: Restore user permissions via orchestrator (audit trail)
         await using (var scope = _serviceProvider.CreateAsyncScope())
         {
-            var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
                 userId: user.Id,
                 chatId: chat.Id,
@@ -991,7 +991,7 @@ public class WelcomeService : IWelcomeService
         // Step 4: Restore user permissions in group via orchestrator (audit trail)
         await using (var scope = _serviceProvider.CreateAsyncScope())
         {
-            var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
                 userId: user.Id,
                 chatId: groupChat.Id,

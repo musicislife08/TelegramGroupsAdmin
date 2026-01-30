@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -90,7 +91,7 @@ public class LanguageWarningHandler
                 .Replace("{warnings_remaining}", warningsRemaining.ToString());
 
             // Issue warning using moderation system
-            var moderationService = scope.ServiceProvider.GetRequiredService<Services.Moderation.IModerationOrchestrator>();
+            var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             await moderationService.WarnUserAsync(
                 userId: message.From.Id,
                 messageId: message.MessageId,
