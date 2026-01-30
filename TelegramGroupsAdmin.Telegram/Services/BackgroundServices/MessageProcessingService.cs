@@ -29,7 +29,7 @@ public partial class MessageProcessingService(
     IOptions<MessageHistoryOptions> historyOptions,
     ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
-    IChatManagementService chatManagementService,
+    IBotChatHealthService chatHealthService,
     IChatCache chatCache,
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
@@ -172,7 +172,7 @@ public partial class MessageProcessingService(
                 oldChatId,
                 newChatId);
 
-            await chatManagementService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
+            await chatHealthService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
             return; // Don't process migration message further
         }
 
@@ -360,7 +360,7 @@ public partial class MessageProcessingService(
 
                     try
                     {
-                        await chatManagementService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
+                        await chatHealthService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
                     }
                     catch (Exception ex)
                     {

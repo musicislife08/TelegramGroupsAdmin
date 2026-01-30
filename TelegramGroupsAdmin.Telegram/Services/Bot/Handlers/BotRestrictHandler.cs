@@ -91,8 +91,9 @@ public class BotRestrictHandler : IBotRestrictHandler
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken)
     {
+        var client = await _botClientFactory.GetBotClientAsync();
         var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-            async (ops, targetChatId, token) => await ops.RestrictChatMemberAsync(
+            async (targetChatId, token) => await client.RestrictChatMember(
                 chatId: targetChatId,
                 userId: userId,
                 permissions: permissions,

@@ -14,7 +14,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramBotService(
     IMessageProcessingService messageProcessingService,
-    IChatManagementService chatManagementService,
+    IBotChatHealthService chatHealthService,
     ILogger<TelegramBotService> logger) : ITelegramBotService
 {
     private User? _botUserInfo;
@@ -40,8 +40,8 @@ public class TelegramBotService(
 
     public event Action<ChatHealthStatus>? OnHealthUpdate
     {
-        add => chatManagementService.OnHealthUpdate += value;
-        remove => chatManagementService.OnHealthUpdate -= value;
+        add => chatHealthService.OnHealthUpdate += value;
+        remove => chatHealthService.OnHealthUpdate -= value;
     }
 
     /// <summary>

@@ -10,22 +10,26 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Handles chat management, admin caching, and health checking
-/// Phase 5.1: Sends ChatHealthWarning notifications to Owners
+/// Service for chat health monitoring, admin caching, and bot status tracking.
+/// Singleton service that maintains an in-memory cache of chat health statuses.
+/// Uses IBotChatHandler and IBotUserHandler for Telegram API calls.
 /// </summary>
-public class ChatManagementService(
+public class BotChatHealthService(
     IServiceProvider serviceProvider,
-    ITelegramBotClientFactory botFactory,
+    IBotChatHandler chatHandler,
+    IBotUserHandler userHandler,
     ITelegramConfigLoader configLoader,
     IChatCache chatCache,
-    ILogger<ChatManagementService> logger) : IChatManagementService
+    ILogger<BotChatHealthService> logger) : IBotChatHealthService
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
+    private long? _cachedBotId;
 
     // Event for real-time UI updates
     public event Action<ChatHealthStatus>? OnHealthUpdate;
@@ -453,10 +457,8 @@ public class ChatManagementService(
         Chat? chat = null; // Captured early for error logging
         try
         {
-            var operations = await botFactory.GetOperationsAsync();
-
             // Check if this is a group chat (only groups/supergroups have administrators)
-            chat = await operations.GetChatAsync(chatId, cancellationToken);
+            chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
             if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
             {
                 logger.LogDebug("Skipping admin refresh for non-group chat {Chat} (type: {Type})",
@@ -465,7 +467,7 @@ public class ChatManagementService(
             }
 
             // Get all administrators from Telegram
-            var admins = await operations.GetChatAdministratorsAsync(chatId, cancellationToken);
+            var admins = await chatHandler.GetChatAdministratorsAsync(chatId, cancellationToken);
 
             using var scope = serviceProvider.CreateScope();
             var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
@@ -570,9 +572,7 @@ public class ChatManagementService(
         string? chatName = null; // Captured early for error logging
         try
         {
-            var operations = await botFactory.GetOperationsAsync();
-
-            var (health, chatName_) = await PerformHealthCheckAsync(operations, chatId, cancellationToken);
+            var (health, chatName_) = await PerformHealthCheckAsync(chatId, cancellationToken);
             chatName = chatName_;
             _healthCache[chatId] = health;
             OnHealthUpdate?.Invoke(health);
@@ -608,7 +608,7 @@ public class ChatManagementService(
     /// Perform health check on a chat (check reachability, permissions, etc.)
     /// Returns tuple of (health status, chat name)
     /// </summary>
-    private async Task<(ChatHealthStatus Health, string? ChatName)> PerformHealthCheckAsync(ITelegramOperations operations, long chatId, CancellationToken cancellationToken = default)
+    private async Task<(ChatHealthStatus Health, string? ChatName)> PerformHealthCheckAsync(long chatId, CancellationToken cancellationToken = default)
     {
         var health = new ChatHealthStatus
         {
@@ -621,7 +621,7 @@ public class ChatManagementService(
         try
         {
             // Try to get chat info
-            var chat = await operations.GetChatAsync(chatId, cancellationToken);
+            var chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
             health.IsReachable = true;
             chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
 
@@ -641,7 +641,8 @@ public class ChatManagementService(
             // Get bot's member status (may fail if chat has hidden members and bot isn't admin)
             try
             {
-                var botMember = await operations.GetChatMemberAsync(chatId, operations.BotId, cancellationToken);
+                var botId = await GetCachedBotIdAsync(cancellationToken);
+                var botMember = await userHandler.GetChatMemberAsync(chatId, botId, cancellationToken);
                 health.BotStatus = botMember.Status.ToString();
                 health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
 
@@ -666,7 +667,7 @@ public class ChatManagementService(
             // Get admin count and refresh admin cache (only if bot is admin - these APIs require admin privileges)
             if (health.IsAdmin)
             {
-                var admins = await operations.GetChatAdministratorsAsync(chatId, cancellationToken);
+                var admins = await chatHandler.GetChatAdministratorsAsync(chatId, cancellationToken);
                 health.AdminCount = admins.Length;
 
                 // Refresh admin cache in database (for permission checks in commands)
@@ -800,8 +801,6 @@ public class ChatManagementService(
                 return;
             }
 
-            var operations = await botFactory.GetOperationsAsync();
-
             using var scope = serviceProvider.CreateScope();
             var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
             // Check all non-deleted chats (active + inactive) for health status
@@ -830,7 +829,7 @@ public class ChatManagementService(
             logger.LogInformation("Syncing linked channels for {Count} managed chats", chats.Count);
             foreach (var chat in chats)
             {
-                await FetchLinkedChannelAsync(operations, chat.ChatId, cancellationToken);
+                await FetchLinkedChannelAsync(chat.ChatId, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -998,7 +997,6 @@ public class ChatManagementService(
     /// Creates/updates the linked channel record if chat has one, deletes stale record if channel was unlinked.
     /// </summary>
     private async Task FetchLinkedChannelAsync(
-        ITelegramOperations operations,
         long chatId,
         CancellationToken cancellationToken = default)
     {
@@ -1011,7 +1009,7 @@ public class ChatManagementService(
             var photoHashService = scope.ServiceProvider.GetRequiredService<IPhotoHashService>();
 
             // Get chat info to check for linked channel
-            chat = await operations.GetChatAsync(chatId, cancellationToken);
+            chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
 
             if (chat.LinkedChatId.HasValue)
             {
@@ -1020,7 +1018,7 @@ public class ChatManagementService(
 
                 try
                 {
-                    var linkedChannel = await operations.GetChatAsync(linkedChannelId, cancellationToken);
+                    var linkedChannel = await chatHandler.GetChatAsync(linkedChannelId, cancellationToken);
 
                     // Fetch and save channel icon
                     string? iconPath = null;
@@ -1096,6 +1094,20 @@ public class ChatManagementService(
             logger.LogWarning(ex, "Failed to sync linked channel for {Chat} (non-fatal)", chat.ToLogDebug());
             // Non-fatal - don't throw
         }
+    }
+
+    /// <summary>
+    /// Get the bot's user ID, caching the result for subsequent calls.
+    /// This avoids repeated GetMe API calls during health checks.
+    /// </summary>
+    private async Task<long> GetCachedBotIdAsync(CancellationToken cancellationToken = default)
+    {
+        if (_cachedBotId.HasValue)
+            return _cachedBotId.Value;
+
+        var botUser = await userHandler.GetMeAsync(cancellationToken);
+        _cachedBotId = botUser.Id;
+        return botUser.Id;
     }
 
     /// <summary>

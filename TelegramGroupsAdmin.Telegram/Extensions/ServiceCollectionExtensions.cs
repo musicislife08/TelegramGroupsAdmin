@@ -108,7 +108,10 @@ public static class ServiceCollectionExtensions
             services.AddScoped<INotificationHandler, NotificationHandler>();
             services.AddScoped<ITrainingHandler, TrainingHandler>();
 
-            // Orchestrator (routes to handlers and owns business rules)
+            // Bot services (orchestrate handlers with business logic)
+            services.AddScoped<IBotChatService, BotChatService>();
+            services.AddScoped<IBotUserService, BotUserService>();
+            services.AddScoped<IBotMediaService, BotMediaService>();
             services.AddScoped<IBotModerationService, BotModerationService>();
 
             // Report service
@@ -168,7 +171,7 @@ public static class ServiceCollectionExtensions
 
             // Background services (refactored into smaller services)
             services.AddSingleton<DetectionActionService>();
-            services.AddSingleton<IChatManagementService, ChatManagementService>();
+            services.AddSingleton<IBotChatHealthService, BotChatHealthService>();
             services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
 
             // Telegram bot services (clean separation: capabilities vs lifecycle vs routing)

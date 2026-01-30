@@ -4,9 +4,10 @@ using TelegramGroupsAdmin.Telegram.Models;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Interface for chat management, admin caching, and health checking.
+/// Service for chat health monitoring, admin caching, and bot status tracking.
+/// Singleton service that maintains an in-memory cache of chat health statuses.
 /// </summary>
-public interface IChatManagementService
+public interface IBotChatHealthService
 {
     /// <summary>
     /// Event for real-time UI updates when chat health changes.

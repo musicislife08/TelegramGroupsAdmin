@@ -19,16 +19,16 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 [DisallowConcurrentExecution]
 public class ChatHealthCheckJob : IJob
 {
-    private readonly IChatManagementService _chatService;
+    private readonly IBotChatHealthService _chatHealthService;
     private readonly IConfigService _configService;
     private readonly ILogger<ChatHealthCheckJob> _logger;
 
     public ChatHealthCheckJob(
-        IChatManagementService chatService,
+        IBotChatHealthService chatHealthService,
         IConfigService configService,
         ILogger<ChatHealthCheckJob> logger)
     {
-        _chatService = chatService;
+        _chatHealthService = chatHealthService;
         _configService = configService;
         _logger = logger;
     }
@@ -88,13 +88,13 @@ public class ChatHealthCheckJob : IJob
                 {
                     // Single chat refresh (from manual UI button)
                     _logger.LogInformation("Running health check for chat {ChatId}", payload.ChatId.Value);
-                    await _chatService.RefreshSingleChatAsync(payload.ChatId.Value, includeIcon: true, cancellationToken);
+                    await _chatHealthService.RefreshSingleChatAsync(payload.ChatId.Value, includeIcon: true, cancellationToken);
                 }
                 else
                 {
                     // All chats refresh (from recurring job)
                     _logger.LogInformation("Running health check for all chats");
-                    await _chatService.RefreshAllHealthAsync(cancellationToken);
+                    await _chatHealthService.RefreshAllHealthAsync(cancellationToken);
                 }
 
                 _logger.LogInformation("Chat health check completed successfully");

@@ -1,41 +1,35 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
 /// <summary>
-/// Executes actions across all healthy managed chats with rate limiting.
-/// Uses SemaphoreSlim(3) to respect Telegram rate limits.
+/// Executes actions across all healthy managed chats in parallel.
+/// Pure infrastructure - callers provide the action to perform per chat.
+/// Rate limiting is handled by the Telegram.Bot library internally.
 /// </summary>
 public class CrossChatExecutor : ICrossChatExecutor
 {
-    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IManagedChatsRepository _managedChatsRepository;
-    private readonly IChatManagementService _chatManagementService;
+    private readonly IBotChatHealthService _chatHealthService;
     private readonly ILogger<CrossChatExecutor> _logger;
 
-    private const int MaxConcurrentApiCalls = 3;
-
     public CrossChatExecutor(
-        ITelegramBotClientFactory botClientFactory,
         IManagedChatsRepository managedChatsRepository,
-        IChatManagementService chatManagementService,
+        IBotChatHealthService chatHealthService,
         ILogger<CrossChatExecutor> logger)
     {
-        _botClientFactory = botClientFactory;
         _managedChatsRepository = managedChatsRepository;
-        _chatManagementService = chatManagementService;
+        _chatHealthService = chatHealthService;
         _logger = logger;
     }
 
     /// <inheritdoc />
     public async Task<CrossChatResult> ExecuteAcrossChatsAsync(
-        Func<ITelegramOperations, long, CancellationToken, Task> action,
+        Func<long, CancellationToken, Task> action,
         string actionName,
         CancellationToken cancellationToken = default)
     {
-        var operations = await _botClientFactory.GetOperationsAsync();
         var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
         var activeChatIds = allChats
             .Where(c => c.IsActive && !c.IsDeleted)
@@ -43,7 +37,7 @@ public class CrossChatExecutor : ICrossChatExecutor
             .ToList();
 
         // Health gate: Filter for chats where bot has confirmed permissions
-        var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
+        var actionableChatIds = _chatHealthService.FilterHealthyChats(activeChatIds);
 
         // Log chats skipped due to health issues
         var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
@@ -57,24 +51,18 @@ public class CrossChatExecutor : ICrossChatExecutor
                 string.Join(", ", skippedChats));
         }
 
-        // Parallel execution with concurrency limit (respects Telegram rate limits)
-        using var semaphore = new SemaphoreSlim(MaxConcurrentApiCalls);
+        // Parallel execution - rate limiting handled by Telegram.Bot library
         var tasks = actionableChatIds.Select(async chatId =>
         {
-            await semaphore.WaitAsync(cancellationToken);
             try
             {
-                await action(operations, chatId, cancellationToken);
+                await action(chatId, cancellationToken);
                 return true;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to execute {ActionName} in chat {ChatId}", actionName, chatId);
                 return false;
-            }
-            finally
-            {
-                semaphore.Release();
             }
         });
 

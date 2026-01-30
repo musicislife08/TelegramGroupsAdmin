@@ -9,7 +9,6 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
@@ -21,20 +20,20 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 /// </summary>
 public class BotBanHandler : IBotBanHandler
 {
-    private readonly ICrossChatExecutor _crossChatExecutor;
+    private readonly IBotChatService _chatService;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IJobScheduler _jobScheduler;
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<BotBanHandler> _logger;
 
     public BotBanHandler(
-        ICrossChatExecutor crossChatExecutor,
+        IBotChatService chatService,
         ITelegramBotClientFactory botClientFactory,
         IJobScheduler jobScheduler,
         ITelegramUserRepository userRepository,
         ILogger<BotBanHandler> logger)
     {
-        _crossChatExecutor = crossChatExecutor;
+        _chatService = chatService;
         _botClientFactory = botClientFactory;
         _jobScheduler = jobScheduler;
         _userRepository = userRepository;
@@ -58,19 +57,34 @@ public class BotBanHandler : IBotBanHandler
 
         try
         {
-            var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-                async (ops, chatId, token) => await ops.BanChatMemberAsync(chatId, userId, cancellationToken: token),
-                "Ban",
-                cancellationToken);
+            var client = await _botClientFactory.GetBotClientAsync();
+            var healthyChatIds = _chatService.GetHealthyChatIds();
+
+            var successCount = 0;
+            var failCount = 0;
+
+            await Parallel.ForEachAsync(healthyChatIds, cancellationToken, async (chatId, ct) =>
+            {
+                try
+                {
+                    await client.BanChatMember(chatId, userId, cancellationToken: ct);
+                    Interlocked.Increment(ref successCount);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to ban user {UserId} in chat {ChatId}", userId, chatId);
+                    Interlocked.Increment(ref failCount);
+                }
+            });
 
             // Update source of truth: is_banned column on telegram_users
             await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
                 "Ban completed for {User}: {Success} succeeded, {Failed} failed",
-                user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount);
+                user.ToLogInfo(userId), successCount, failCount);
 
-            return BanResult.Succeeded(crossResult.SuccessCount, crossResult.FailCount);
+            return BanResult.Succeeded(successCount, failCount);
         }
         catch (Exception ex)
         {
@@ -135,10 +149,25 @@ public class BotBanHandler : IBotBanHandler
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
             // Ban globally (permanent in Telegram, lifted by background job)
-            var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-                async (ops, chatId, token) => await ops.BanChatMemberAsync(chatId, userId, cancellationToken: token),
-                "TempBan",
-                cancellationToken);
+            var client = await _botClientFactory.GetBotClientAsync();
+            var healthyChatIds = _chatService.GetHealthyChatIds();
+
+            var successCount = 0;
+            var failCount = 0;
+
+            await Parallel.ForEachAsync(healthyChatIds, cancellationToken, async (chatId, ct) =>
+            {
+                try
+                {
+                    await client.BanChatMember(chatId, userId, cancellationToken: ct);
+                    Interlocked.Increment(ref successCount);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to temp ban user {UserId} in chat {ChatId}", userId, chatId);
+                    Interlocked.Increment(ref failCount);
+                }
+            });
 
             // Update source of truth: is_banned column with expiry
             await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: expiresAt, cancellationToken);
@@ -160,9 +189,9 @@ public class BotBanHandler : IBotBanHandler
             _logger.LogInformation(
                 "Temp ban completed for {User}: {Success} succeeded, {Failed} failed. " +
                 "Expires at {ExpiresAt} (JobId: {JobId})",
-                user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount, expiresAt, jobId);
+                user.ToLogInfo(userId), successCount, failCount, expiresAt, jobId);
 
-            return TempBanResult.Succeeded(crossResult.SuccessCount, expiresAt, crossResult.FailCount);
+            return TempBanResult.Succeeded(successCount, expiresAt, failCount);
         }
         catch (Exception ex)
         {
@@ -188,19 +217,34 @@ public class BotBanHandler : IBotBanHandler
         try
         {
             // Unban from all Telegram chats
-            var crossResult = await _crossChatExecutor.ExecuteAcrossChatsAsync(
-                async (ops, chatId, token) => await ops.UnbanChatMemberAsync(chatId, userId, cancellationToken: token),
-                "Unban",
-                cancellationToken);
+            var client = await _botClientFactory.GetBotClientAsync();
+            var healthyChatIds = _chatService.GetHealthyChatIds();
+
+            var successCount = 0;
+            var failCount = 0;
+
+            await Parallel.ForEachAsync(healthyChatIds, cancellationToken, async (chatId, ct) =>
+            {
+                try
+                {
+                    await client.UnbanChatMember(chatId, userId, onlyIfBanned: true, cancellationToken: ct);
+                    Interlocked.Increment(ref successCount);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to unban user {UserId} in chat {ChatId}", userId, chatId);
+                    Interlocked.Increment(ref failCount);
+                }
+            });
 
             // Update source of truth: clear is_banned flag
             await _userRepository.SetBanStatusAsync(userId, isBanned: false, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
                 "Unban completed for {User}: {Success} succeeded, {Failed} failed",
-                user.ToLogInfo(userId), crossResult.SuccessCount, crossResult.FailCount);
+                user.ToLogInfo(userId), successCount, failCount);
 
-            return UnbanResult.Succeeded(crossResult.SuccessCount, crossResult.FailCount);
+            return UnbanResult.Succeeded(successCount, failCount);
         }
         catch (Exception ex)
         {

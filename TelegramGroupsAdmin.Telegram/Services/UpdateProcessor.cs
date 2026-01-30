@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class UpdateProcessor(
     IMessageProcessingService messageProcessingService,
-    IChatManagementService chatManagementService,
+    IBotChatHealthService chatHealthService,
     IWelcomeService welcomeService,
     IBanCallbackHandler banCallbackHandler,
     IReportCallbackHandler reportCallbackHandler,
@@ -34,7 +34,7 @@ public class UpdateProcessor(
             logger.LogDebug(
                 "Routing MyChatMember update for chat {Chat}",
                 LogDisplayName.ChatDebug(myChatMember.Chat.Title, myChatMember.Chat.Id));
-            await chatManagementService.HandleMyChatMemberUpdateAsync(myChatMember, cancellationToken);
+            await chatHealthService.HandleMyChatMemberUpdateAsync(myChatMember, cancellationToken);
             return;
         }
 
@@ -48,7 +48,7 @@ public class UpdateProcessor(
                 LogDisplayName.ChatDebug(chatMember.Chat.Title, chatMember.Chat.Id));
 
             // Check for admin status changes (instant permission updates)
-            await chatManagementService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
+            await chatHealthService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
 
             // Handle joins/leaves (welcome system)
             await welcomeService.HandleChatMemberUpdateAsync(chatMember, cancellationToken);
