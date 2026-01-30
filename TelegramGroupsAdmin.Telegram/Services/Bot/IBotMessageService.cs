@@ -2,7 +2,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace TelegramGroupsAdmin.Telegram.Services;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
 /// <summary>
 /// Centralized service for sending bot messages AND saving them to the messages table.
