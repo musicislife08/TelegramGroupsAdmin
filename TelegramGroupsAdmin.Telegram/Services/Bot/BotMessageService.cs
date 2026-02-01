@@ -15,34 +15,15 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 /// Ensures all bot-sent messages are tracked in the database for complete conversation history.
 /// Orchestrates handlers and adds DB persistence logic.
 /// </summary>
-public class BotMessageService : IBotMessageService
+public class BotMessageService(
+    IBotMessageHandler messageHandler,
+    IBotUserService userService,
+    IBotChatHandler chatHandler,
+    IMessageHistoryRepository messageRepo,
+    IMessageEditService editService,
+    ITelegramUserRepository userRepo,
+    ILogger<BotMessageService> logger) : IBotMessageService
 {
-    private readonly IBotMessageHandler _messageHandler;
-    private readonly IBotUserHandler _userHandler;
-    private readonly IBotChatHandler _chatHandler;
-    private readonly IMessageHistoryRepository _messageRepo;
-    private readonly IMessageEditService _editService;
-    private readonly ITelegramUserRepository _userRepo;
-    private readonly ILogger<BotMessageService> _logger;
-    private User? _cachedBotInfo; // In-memory cache to avoid repeated GetMe() calls
-
-    public BotMessageService(
-        IBotMessageHandler messageHandler,
-        IBotUserHandler userHandler,
-        IBotChatHandler chatHandler,
-        IMessageHistoryRepository messageRepo,
-        IMessageEditService editService,
-        ITelegramUserRepository userRepo,
-        ILogger<BotMessageService> logger)
-    {
-        _messageHandler = messageHandler;
-        _userHandler = userHandler;
-        _chatHandler = chatHandler;
-        _messageRepo = messageRepo;
-        _editService = editService;
-        _userRepo = userRepo;
-        _logger = logger;
-    }
 
     /// <summary>
     /// Send message via bot AND save to messages table.
@@ -57,7 +38,7 @@ public class BotMessageService : IBotMessageService
         CancellationToken cancellationToken = default)
     {
         // Send message via handler
-        var sentMessage = await _messageHandler.SendAsync(
+        var sentMessage = await messageHandler.SendAsync(
             chatId: chatId,
             text: text,
             parseMode: parseMode,
@@ -65,13 +46,8 @@ public class BotMessageService : IBotMessageService
             replyMarkup: replyMarkup,
             ct: cancellationToken);
 
-        // Get bot user info (fetch once and cache in memory)
-        if (_cachedBotInfo == null)
-        {
-            _cachedBotInfo = await _userHandler.GetMeAsync(cancellationToken);
-            _logger.LogDebug("Fetched and cached bot info: {BotId} (@{BotUsername})", _cachedBotInfo.Id, _cachedBotInfo.Username);
-        }
-        var botInfo = _cachedBotInfo;
+        // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
+        var botInfo = await userService.GetMeAsync(cancellationToken);
 
         // Upsert bot to telegram_users table (ensures bot name is available for UI display)
         var now = DateTimeOffset.UtcNow;
@@ -92,7 +68,7 @@ public class BotMessageService : IBotMessageService
             CreatedAt: now,
             UpdatedAt: now
         );
-        await _userRepo.UpsertAsync(botUser, cancellationToken);
+        await userRepo.UpsertAsync(botUser, cancellationToken);
 
         // Save to messages table (use bot info from cache, not sentMessage.From which may be null)
         var messageRecord = new MessageRecord(
@@ -130,9 +106,9 @@ public class BotMessageService : IBotMessageService
             ContentCheckSkipReason: ContentCheckSkipReason.UserAdmin // Bot messages skip content checks
         );
 
-        await _messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
+        await messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
 
-        _logger.LogDebug(
+        logger.LogDebug(
             "Saved bot message {MessageId} to history (chat: {ChatId}, reply_to: {ReplyTo})",
             sentMessage.MessageId,
             chatId,
@@ -154,7 +130,7 @@ public class BotMessageService : IBotMessageService
         CancellationToken cancellationToken = default)
     {
         // Get old message from database for edit history
-        var oldMessage = await _messageRepo.GetMessageAsync(messageId, cancellationToken);
+        var oldMessage = await messageRepo.GetMessageAsync(messageId, cancellationToken);
         if (oldMessage == null)
         {
             throw new InvalidOperationException($"Message {messageId} not found in database");
@@ -163,7 +139,7 @@ public class BotMessageService : IBotMessageService
         var oldText = oldMessage.MessageText;
 
         // Edit message via handler
-        var editedMessage = await _messageHandler.EditTextAsync(
+        var editedMessage = await messageHandler.EditTextAsync(
             chatId: chatId,
             messageId: messageId,
             text: text,
@@ -193,7 +169,7 @@ public class BotMessageService : IBotMessageService
             NewContentHash: newContentHash
         );
 
-        await _editService.InsertMessageEditAsync(editRecord, cancellationToken);
+        await editService.InsertMessageEditAsync(editRecord, cancellationToken);
 
         // Update message in messages table with new text and edit date
         var updatedMessage = oldMessage with
@@ -204,9 +180,9 @@ public class BotMessageService : IBotMessageService
             ContentHash = newContentHash
         };
 
-        await _messageRepo.UpdateMessageAsync(updatedMessage, cancellationToken);
+        await messageRepo.UpdateMessageAsync(updatedMessage, cancellationToken);
 
-        _logger.LogDebug(
+        logger.LogDebug(
             "Edited bot message {MessageId} (chat: {ChatId}) and saved edit history",
             messageId,
             chatId);
@@ -227,12 +203,12 @@ public class BotMessageService : IBotMessageService
         try
         {
             // Delete from Telegram via handler
-            await _messageHandler.DeleteAsync(chatId, messageId, cancellationToken);
+            await messageHandler.DeleteAsync(chatId, messageId, cancellationToken);
 
             // Mark as deleted in database
-            await _messageRepo.MarkMessageAsDeletedAsync(messageId, deletionSource, cancellationToken);
+            await messageRepo.MarkMessageAsDeletedAsync(messageId, deletionSource, cancellationToken);
 
-            _logger.LogDebug(
+            logger.LogDebug(
                 "Deleted and marked message {MessageId} (chat: {ChatId}, source: {Source})",
                 messageId,
                 chatId,
@@ -240,7 +216,7 @@ public class BotMessageService : IBotMessageService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
+            logger.LogWarning(ex,
                 "Failed to delete message {MessageId} from Telegram (chat: {ChatId}), marking as deleted in DB anyway",
                 messageId,
                 chatId);
@@ -249,11 +225,11 @@ public class BotMessageService : IBotMessageService
             // (message might already be deleted, or we lost permissions)
             try
             {
-                await _messageRepo.MarkMessageAsDeletedAsync(messageId, $"{deletionSource}_failed", cancellationToken);
+                await messageRepo.MarkMessageAsDeletedAsync(messageId, $"{deletionSource}_failed", cancellationToken);
             }
             catch (Exception dbEx)
             {
-                _logger.LogError(dbEx,
+                logger.LogError(dbEx,
                     "Failed to mark message {MessageId} as deleted in database",
                     messageId);
             }
@@ -274,16 +250,11 @@ public class BotMessageService : IBotMessageService
         string text,
         CancellationToken cancellationToken = default)
     {
-        // Get bot user info (fetch once and cache in memory)
-        if (_cachedBotInfo == null)
-        {
-            _cachedBotInfo = await _userHandler.GetMeAsync(cancellationToken);
-            _logger.LogDebug("Fetched and cached bot info: {BotId} (@{BotUsername})", _cachedBotInfo.Id, _cachedBotInfo.Username);
-        }
-        var botInfo = _cachedBotInfo;
+        // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
+        var botInfo = await userService.GetMeAsync(cancellationToken);
 
         // Get chat info for the name
-        var chatInfo = await _chatHandler.GetChatAsync(chatId, cancellationToken);
+        var chatInfo = await chatHandler.GetChatAsync(chatId, cancellationToken);
 
         // Upsert bot to telegram_users table (ensures bot name is available for UI display)
         var now = DateTimeOffset.UtcNow;
@@ -304,7 +275,7 @@ public class BotMessageService : IBotMessageService
             CreatedAt: now,
             UpdatedAt: now
         );
-        await _userRepo.UpsertAsync(botUser, cancellationToken);
+        await userRepo.UpsertAsync(botUser, cancellationToken);
 
         // Save to messages table
         var messageRecord = new MessageRecord(
@@ -342,9 +313,9 @@ public class BotMessageService : IBotMessageService
             ContentCheckSkipReason: ContentCheckSkipReason.UserAdmin // Bot messages skip content checks
         );
 
-        await _messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
+        await messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
 
-        _logger.LogDebug(
+        logger.LogDebug(
             "Saved bot message {MessageId} to history (chat: {ChatId})",
             messageId,
             chatId);
@@ -359,7 +330,7 @@ public class BotMessageService : IBotMessageService
         bool showAlert = false,
         CancellationToken cancellationToken = default)
     {
-        await _messageHandler.AnswerCallbackAsync(
+        await messageHandler.AnswerCallbackAsync(
             callbackQueryId: callbackQueryId,
             text: text,
             showAlert: showAlert,
@@ -378,20 +349,15 @@ public class BotMessageService : IBotMessageService
         CancellationToken cancellationToken = default)
     {
         // Send animation via handler
-        var sentMessage = await _messageHandler.SendAnimationAsync(
+        var sentMessage = await messageHandler.SendAnimationAsync(
             chatId: chatId,
             animation: animation,
             caption: caption,
             parseMode: parseMode,
             ct: cancellationToken);
 
-        // Get bot user info (fetch once and cache in memory)
-        if (_cachedBotInfo == null)
-        {
-            _cachedBotInfo = await _userHandler.GetMeAsync(cancellationToken);
-            _logger.LogDebug("Fetched and cached bot info: {BotId} (@{BotUsername})", _cachedBotInfo.Id, _cachedBotInfo.Username);
-        }
-        var botInfo = _cachedBotInfo;
+        // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
+        var botInfo = await userService.GetMeAsync(cancellationToken);
 
         // Upsert bot to telegram_users table
         var now = DateTimeOffset.UtcNow;
@@ -412,7 +378,7 @@ public class BotMessageService : IBotMessageService
             CreatedAt: now,
             UpdatedAt: now
         );
-        await _userRepo.UpsertAsync(botUser, cancellationToken);
+        await userRepo.UpsertAsync(botUser, cancellationToken);
 
         // Save to messages table with animation metadata
         var messageRecord = new MessageRecord(
@@ -450,9 +416,9 @@ public class BotMessageService : IBotMessageService
             ContentCheckSkipReason: ContentCheckSkipReason.UserAdmin // Bot messages skip content checks
         );
 
-        await _messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
+        await messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
 
-        _logger.LogDebug(
+        logger.LogDebug(
             "Saved bot animation {MessageId} to history (chat: {ChatId})",
             sentMessage.MessageId,
             chatId);

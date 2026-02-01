@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -18,81 +17,44 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Service for chat health monitoring, admin caching, and bot status tracking.
-/// Singleton service that maintains an in-memory cache of chat health statuses.
+/// Singleton service that orchestrates health checks and admin cache management.
+/// Uses IChatHealthCache for pure state storage.
 /// Creates scopes to resolve IBotChatHandler and IBotUserHandler for Telegram API calls.
 /// </summary>
 public class BotChatHealthService(
     IServiceProvider serviceProvider,
     ITelegramConfigLoader configLoader,
     IChatCache chatCache,
+    IChatHealthCache healthCache,
     ILogger<BotChatHealthService> logger) : IBotChatHealthService
 {
-    private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
-    private long? _cachedBotId;
-
-    // Event for real-time UI updates
-    public event Action<ChatHealthStatus>? OnHealthUpdate;
+    // Delegate event to IChatHealthCache
+    public event Action<ChatHealthStatus>?  OnHealthUpdate
+    {
+        add => healthCache.OnHealthUpdate += value;
+        remove => healthCache.OnHealthUpdate -= value;
+    }
 
     /// <summary>
-    /// Get cached health status for a chat (null if not yet checked)
+    /// Get cached health status for a chat (null if not yet checked).
+    /// Delegates to IChatHealthCache.
     /// </summary>
     public ChatHealthStatus? GetCachedHealth(long chatId)
-        => _healthCache.TryGetValue(chatId, out var health) ? health : null;
+        => healthCache.GetCachedHealth(chatId);
 
     /// <summary>
     /// Get set of chat IDs where bot has healthy status (admin + required permissions).
-    /// Uses cached health data from most recent health check.
-    /// Chats with Warning/Error/Unknown status are excluded to prevent action failures.
-    /// Returns HashSet for O(1) lookup performance when filtering large chat lists.
-    ///
-    /// Fail-Closed Behavior: If health cache is empty (cold start before first health check),
-    /// returns empty set, causing all moderation actions to be skipped. This prevents
-    /// permission errors until health status is confirmed. Health checks run on startup
-    /// and every 30 minutes, so cold start window is typically less than 30 seconds.
+    /// Delegates to IChatHealthCache.
     /// </summary>
-    /// <returns>HashSet of chat IDs with "Healthy" status</returns>
     public HashSet<long> GetHealthyChatIds()
-    {
-        var healthyChatIds = _healthCache
-            .Where(kvp => kvp.Value.Status == ChatHealthStatusType.Healthy)
-            .Select(kvp => kvp.Key)
-            .ToHashSet();
-
-        if (_healthCache.Count == 0)
-        {
-            logger.LogWarning(
-                "Health cache is empty - health check may not have run yet. " +
-                "No chats will be excluded from moderation actions.");
-        }
-        else if (healthyChatIds.Count == 0)
-        {
-            logger.LogWarning(
-                "No healthy chats found in cache ({TotalChats} total). " +
-                "All moderation actions will be skipped until health check completes successfully.",
-                _healthCache.Count);
-        }
-        else
-        {
-            logger.LogDebug(
-                "Health gate: {HealthyCount}/{TotalCount} chats are healthy and actionable",
-                healthyChatIds.Count,
-                _healthCache.Count);
-        }
-
-        return healthyChatIds;
-    }
+        => healthCache.GetHealthyChatIds();
 
     /// <summary>
     /// Filters a list of chat IDs to only include healthy chats (bot has admin permissions).
-    /// DRY helper to avoid repeating health gate pattern across multiple call sites.
+    /// Delegates to IChatHealthCache.
     /// </summary>
-    /// <param name="chatIds">Chat IDs to filter</param>
-    /// <returns>Only chat IDs that are in the healthy set</returns>
     public List<long> FilterHealthyChats(IEnumerable<long> chatIds)
-    {
-        var healthyChatIds = GetHealthyChatIds();
-        return chatIds.Where(healthyChatIds.Contains).ToList();
-    }
+        => healthCache.FilterHealthyChats(chatIds);
 
     /// <summary>
     /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion)
@@ -575,8 +537,7 @@ public class BotChatHealthService(
         {
             var (health, chatName_) = await PerformHealthCheckAsync(chatId, cancellationToken);
             chatName = chatName_;
-            _healthCache[chatId] = health;
-            OnHealthUpdate?.Invoke(health);
+            healthCache.SetHealth(chatId, health);
 
             // Update chat name in database if we got a valid title from Telegram
             if (health.IsReachable && !string.IsNullOrEmpty(chatName))
@@ -619,10 +580,11 @@ public class BotChatHealthService(
         };
         string? chatName = null;
 
-        // Create scope for handler resolution (singleton service needs scoped handlers)
+        // Create scope for handler/service resolution (singleton service needs scoped handlers)
         using var handlerScope = serviceProvider.CreateScope();
         var chatHandler = handlerScope.ServiceProvider.GetRequiredService<IBotChatHandler>();
         var userHandler = handlerScope.ServiceProvider.GetRequiredService<IBotUserHandler>();
+        var userService = handlerScope.ServiceProvider.GetRequiredService<IBotUserService>();
 
         try
         {
@@ -647,7 +609,7 @@ public class BotChatHealthService(
             // Get bot's member status (may fail if chat has hidden members and bot isn't admin)
             try
             {
-                var botId = await GetCachedBotIdAsync(userHandler, cancellationToken);
+                var botId = await userService.GetBotIdAsync(cancellationToken);
                 var botMember = await userHandler.GetChatMemberAsync(chatId, botId, cancellationToken);
                 health.BotStatus = botMember.Status.ToString();
                 health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
@@ -1101,20 +1063,6 @@ public class BotChatHealthService(
             logger.LogWarning(ex, "Failed to sync linked channel for {Chat} (non-fatal)", chat.ToLogDebug());
             // Non-fatal - don't throw
         }
-    }
-
-    /// <summary>
-    /// Get the bot's user ID, caching the result for subsequent calls.
-    /// This avoids repeated GetMe API calls during health checks.
-    /// </summary>
-    private async Task<long> GetCachedBotIdAsync(IBotUserHandler userHandler, CancellationToken cancellationToken = default)
-    {
-        if (_cachedBotId.HasValue)
-            return _cachedBotId.Value;
-
-        var botUser = await userHandler.GetMeAsync(cancellationToken);
-        _cachedBotId = botUser.Id;
-        return botUser.Id;
     }
 
     /// <summary>
