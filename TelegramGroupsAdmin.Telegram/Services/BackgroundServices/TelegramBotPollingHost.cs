@@ -17,11 +17,11 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// Thin BackgroundService that manages the Telegram polling lifecycle.
 /// Only ONE polling connection per bot token (Telegram API constraint).
 /// Bot capabilities (events, state) are handled by TelegramBotService.
-/// Update routing is handled by UpdateProcessor.
+/// Update routing is handled by UpdateRouter.
 /// </summary>
 public class TelegramBotPollingHost(
     ITelegramBotClientFactory botFactory,
-    IUpdateProcessor updateProcessor,
+    IUpdateRouter updateRouter,
     ITelegramBotService botService,
     IBotChatHealthService chatHealthService,
     CommandRouter commandRouter,
@@ -211,8 +211,8 @@ public class TelegramBotPollingHost(
             _consecutiveErrors = 0;
         }
 
-        // Delegate to UpdateProcessor for testable routing
-        await updateProcessor.ProcessUpdateAsync(update, cancellationToken);
+        // Delegate to UpdateRouter for testable routing
+        await updateRouter.RouteUpdateAsync(update, cancellationToken);
     }
 
     private Task HandleErrorAsync(

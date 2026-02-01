@@ -175,7 +175,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
 
             // Telegram bot services (clean separation: capabilities vs lifecycle vs routing)
-            services.AddSingleton<IUpdateProcessor, UpdateProcessor>();
+            services.AddSingleton<IUpdateRouter, UpdateRouter>();
             services.AddSingleton<ITelegramBotService, TelegramBotService>();
             services.AddHostedService<TelegramBotPollingHost>();
 

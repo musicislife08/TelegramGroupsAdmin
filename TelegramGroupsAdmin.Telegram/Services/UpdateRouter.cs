@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -8,26 +9,34 @@ using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Routes Telegram updates to appropriate handler services.
-/// Extracted for testability - pure routing logic with mockable dependencies.
+/// Routes Telegram updates to appropriate services.
+/// Singleton that creates a scope per-update to resolve scoped services.
+/// Contains no business logic - purely routing/dispatching.
 /// </summary>
-public class UpdateProcessor(
-    IMessageProcessingService messageProcessingService,
-    IBotChatHealthService chatHealthService,
-    IWelcomeService welcomeService,
-    IBanCallbackHandler banCallbackHandler,
-    IReportCallbackHandler reportCallbackHandler,
-    IBotMessageService messageService,
-    ILogger<UpdateProcessor> logger) : IUpdateProcessor
+public class UpdateRouter(
+    IServiceProvider serviceProvider,
+    ILogger<UpdateRouter> logger) : IUpdateRouter
 {
     /// <summary>
-    /// Process a Telegram update - routes to appropriate handler based on update type.
+    /// Route a Telegram update to the appropriate service based on update type.
+    /// Creates a scope per-update for proper service lifetime management.
     /// </summary>
-    /// <param name="update">The Telegram update to process</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    public async Task ProcessUpdateAsync(Update update, CancellationToken cancellationToken = default)
+    public async Task RouteUpdateAsync(Update update, CancellationToken cancellationToken = default)
     {
-        logger.LogDebug("Processing update {UpdateId} of type {UpdateType}", update.Id, update.Type);
+        logger.LogDebug("Routing update {UpdateId} of type {UpdateType}", update.Id, update.Type);
+
+        // Create scope per-update for proper scoped service lifetime
+        // This fixes captive dependency issues and enables one-way layered flow
+        using var scope = serviceProvider.CreateScope();
+        var services = scope.ServiceProvider;
+
+        // Resolve services from scope (singletons return same instance, scoped get new instance)
+        var chatHealthService = services.GetRequiredService<IBotChatHealthService>();
+        var welcomeService = services.GetRequiredService<IWelcomeService>();
+        var messageProcessingService = services.GetRequiredService<IMessageProcessingService>();
+        var banCallbackHandler = services.GetRequiredService<IBanCallbackHandler>();
+        var reportCallbackHandler = services.GetRequiredService<IReportCallbackHandler>();
+        var messageService = services.GetRequiredService<IBotMessageService>();
 
         // Handle bot's chat member status changes (added/removed from chats)
         if (update.MyChatMember is { } myChatMember)
@@ -105,6 +114,6 @@ public class UpdateProcessor(
         }
 
         // Log unhandled update types for visibility
-        logger.LogDebug("Update {UpdateId} of type {UpdateType} not handled by any processor", update.Id, update.Type);
+        logger.LogDebug("Update {UpdateId} of type {UpdateType} not handled by any route", update.Id, update.Type);
     }
 }
