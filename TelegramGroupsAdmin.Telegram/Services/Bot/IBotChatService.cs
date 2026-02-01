@@ -50,4 +50,22 @@ public interface IBotChatService
     /// Used by moderation services for cross-chat operations.
     /// </summary>
     IReadOnlyList<long> GetHealthyChatIds();
+
+    /// <summary>
+    /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion).
+    /// Only tracks groups/supergroups - private chats are not managed.
+    /// </summary>
+    Task HandleBotMembershipUpdateAsync(ChatMemberUpdated myChatMember, CancellationToken ct = default);
+
+    /// <summary>
+    /// Handle ChatMember updates for admin promotion/demotion (instant permission updates).
+    /// Called when any user (not just bot) is promoted/demoted in a managed chat.
+    /// </summary>
+    Task HandleAdminStatusChangeAsync(ChatMemberUpdated chatMemberUpdate, CancellationToken ct = default);
+
+    /// <summary>
+    /// Handle Group to Supergroup migration.
+    /// When a Group is upgraded to Supergroup, Telegram creates a new chat ID.
+    /// </summary>
+    Task HandleChatMigrationAsync(long oldChatId, long newChatId, CancellationToken ct = default);
 }

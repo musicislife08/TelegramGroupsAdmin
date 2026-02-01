@@ -1,11 +1,11 @@
-using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Service for chat health monitoring, admin caching, and bot status tracking.
-/// Singleton service that maintains an in-memory cache of chat health statuses.
+/// Service for chat health monitoring, admin caching, and refresh orchestration.
+/// Singleton service that orchestrates bulk refresh operations for health checks and admin caches.
+/// Membership handling has moved to IBotChatService (scoped).
 /// </summary>
 public interface IBotChatHealthService
 {
@@ -32,24 +32,6 @@ public interface IBotChatHealthService
     /// <param name="chatIds">Chat IDs to filter</param>
     /// <returns>Only chat IDs that are in the healthy set</returns>
     List<long> FilterHealthyChats(IEnumerable<long> chatIds);
-
-    /// <summary>
-    /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion).
-    /// Only tracks groups/supergroups - private chats are not managed.
-    /// </summary>
-    Task HandleMyChatMemberUpdateAsync(ChatMemberUpdated myChatMember, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Handle Group to Supergroup migration.
-    /// When a Group is upgraded to Supergroup, Telegram creates a new chat ID.
-    /// </summary>
-    Task HandleChatMigrationAsync(long oldChatId, long newChatId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Handle ChatMember updates for admin promotion/demotion (instant permission updates).
-    /// Called when any user (not just bot) is promoted/demoted in a managed chat.
-    /// </summary>
-    Task HandleAdminStatusChangeAsync(ChatMemberUpdated chatMemberUpdate, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Refresh admin cache for all active managed chats on startup.

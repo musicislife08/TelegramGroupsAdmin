@@ -31,7 +31,7 @@ public class UpdateRouter(
         var services = scope.ServiceProvider;
 
         // Resolve services from scope (singletons return same instance, scoped get new instance)
-        var chatHealthService = services.GetRequiredService<IBotChatHealthService>();
+        var chatService = services.GetRequiredService<IBotChatService>();
         var welcomeService = services.GetRequiredService<IWelcomeService>();
         var messageProcessingService = services.GetRequiredService<IMessageProcessingService>();
         var banCallbackHandler = services.GetRequiredService<IBanCallbackHandler>();
@@ -44,7 +44,7 @@ public class UpdateRouter(
             logger.LogDebug(
                 "Routing MyChatMember update for chat {Chat}",
                 LogDisplayName.ChatDebug(myChatMember.Chat.Title, myChatMember.Chat.Id));
-            await chatHealthService.HandleMyChatMemberUpdateAsync(myChatMember, cancellationToken);
+            await chatService.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
             return;
         }
 
@@ -58,7 +58,7 @@ public class UpdateRouter(
                 LogDisplayName.ChatDebug(chatMember.Chat.Title, chatMember.Chat.Id));
 
             // Check for admin status changes (instant permission updates)
-            await chatHealthService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
+            await chatService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
 
             // Handle joins/leaves (welcome system)
             await welcomeService.HandleChatMemberUpdateAsync(chatMember, cancellationToken);

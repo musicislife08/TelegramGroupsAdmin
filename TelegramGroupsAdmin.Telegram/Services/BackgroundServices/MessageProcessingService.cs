@@ -170,7 +170,10 @@ public partial class MessageProcessingService(
                 oldChatId,
                 newChatId);
 
-            await chatHealthService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
+            // Resolve scoped IBotChatService from scope (singleton can't inject scoped directly)
+            using var migrationScope = _scopeFactory.CreateScope();
+            var chatService = migrationScope.ServiceProvider.GetRequiredService<IBotChatService>();
+            await chatService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
             return; // Don't process migration message further
         }
 
