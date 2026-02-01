@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -13,16 +14,19 @@ public class AdminMentionHandler
 {
     private readonly ILogger<AdminMentionHandler> _logger;
     private readonly IChatAdminsRepository _chatAdminsRepository;
-    private readonly ITelegramBotClientFactory _botClientFactory;
+    private readonly IBotUserService _userService;
+    private readonly IBotMessageService _messageService;
 
     public AdminMentionHandler(
         ILogger<AdminMentionHandler> logger,
         IChatAdminsRepository chatAdminsRepository,
-        ITelegramBotClientFactory botClientFactory)
+        IBotUserService userService,
+        IBotMessageService messageService)
     {
         _logger = logger;
         _chatAdminsRepository = chatAdminsRepository;
-        _botClientFactory = botClientFactory;
+        _userService = userService;
+        _messageService = messageService;
     }
 
     /// <summary>
@@ -45,7 +49,8 @@ public class AdminMentionHandler
     {
         try
         {
-            var operations = await _botClientFactory.GetOperationsAsync();
+            // Get bot ID for filtering
+            var botId = await _userService.GetBotIdAsync(cancellationToken);
 
             // Get all active admins for this chat
             var admins = await _chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
@@ -68,7 +73,7 @@ public class AdminMentionHandler
                     continue;
 
                 // Skip the bot itself (bots can't receive notifications anyway)
-                if (admin.TelegramId == operations.BotId)
+                if (admin.TelegramId == botId)
                     continue;
 
                 // Create HTML text mention with username or fallback to generic name
@@ -93,7 +98,7 @@ public class AdminMentionHandler
                                    "you've been mentioned in this conversation.";
 
             // Reply to the original message with admin mentions
-            await operations.SendMessageAsync(
+            await _messageService.SendAndSaveMessageAsync(
                 chatId: message.Chat.Id,
                 text: notificationText,
                 parseMode: ParseMode.Html,

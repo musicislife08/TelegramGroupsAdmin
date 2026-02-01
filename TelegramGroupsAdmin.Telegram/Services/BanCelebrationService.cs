@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -18,9 +19,8 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class BanCelebrationService : IBanCelebrationService
 {
-    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IBotDmService _dmDeliveryService;
     private readonly ILogger<BanCelebrationService> _logger;
     private readonly string _mediaBasePath;
 
@@ -31,13 +31,11 @@ public class BanCelebrationService : IBanCelebrationService
     private readonly SemaphoreSlim _captionLock = new(1, 1);
 
     public BanCelebrationService(
-        ITelegramBotClientFactory botClientFactory,
         IServiceScopeFactory scopeFactory,
-        IDmDeliveryService dmDeliveryService,
+        IBotDmService dmDeliveryService,
         IOptions<MessageHistoryOptions> historyOptions,
         ILogger<BanCelebrationService> logger)
     {
-        _botClientFactory = botClientFactory;
         _scopeFactory = scopeFactory;
         _dmDeliveryService = dmDeliveryService;
         _logger = logger;
@@ -252,15 +250,11 @@ public class BanCelebrationService : IBanCelebrationService
         string caption,
         CancellationToken cancellationToken)
     {
-        var telegramOps = await _botClientFactory.GetOperationsAsync();
-        if (telegramOps == null)
-        {
-            _logger.LogWarning("Cannot send ban celebration: bot client not available");
-            return null;
-        }
-
         try
         {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var messageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
+
             // Try cached file_id first (instant send)
             if (!string.IsNullOrEmpty(gif.FileId))
             {
@@ -269,7 +263,7 @@ public class BanCelebrationService : IBanCelebrationService
                     var inputFile = InputFile.FromFileId(gif.FileId);
                     _logger.LogDebug("Using cached file_id for GIF {GifId}", gif.Id);
 
-                    return await telegramOps.SendAnimationAsync(
+                    return await messageService.SendAndSaveAnimationAsync(
                         chatId,
                         inputFile,
                         caption,
@@ -282,15 +276,13 @@ public class BanCelebrationService : IBanCelebrationService
                     _logger.LogWarning(
                         "Cached file_id for GIF {GifId} is invalid, clearing cache and retrying with local file",
                         gif.Id);
-                    await using var clearScope = _scopeFactory.CreateAsyncScope();
-                    var gifRepository = clearScope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+                    var gifRepository = scope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
                     await gifRepository.ClearFileIdAsync(gif.Id, cancellationToken);
                 }
             }
 
             // Upload from local file (either no cache, or cache was invalid)
-            await using var pathScope = _scopeFactory.CreateAsyncScope();
-            var pathRepo = pathScope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
+            var pathRepo = scope.ServiceProvider.GetRequiredService<IBanCelebrationGifRepository>();
             var fullPath = pathRepo.GetFullPath(gif.FilePath);
             if (!System.IO.File.Exists(fullPath))
             {
@@ -303,7 +295,7 @@ public class BanCelebrationService : IBanCelebrationService
             var localInputFile = InputFile.FromStream(fileStream, fileName);
             _logger.LogDebug("Uploading GIF from disk: {Path}", fullPath);
 
-            return await telegramOps.SendAnimationAsync(
+            return await messageService.SendAndSaveAnimationAsync(
                 chatId,
                 localInputFile,
                 caption,

@@ -19,14 +19,10 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class LanguageWarningHandler
 {
-    private readonly ITelegramBotClientFactory _botFactory;
     private readonly ILogger<LanguageWarningHandler> _logger;
 
-    public LanguageWarningHandler(
-        ITelegramBotClientFactory botFactory,
-        ILogger<LanguageWarningHandler> logger)
+    public LanguageWarningHandler(ILogger<LanguageWarningHandler> logger)
     {
-        _botFactory = botFactory;
         _logger = logger;
     }
 
@@ -66,8 +62,8 @@ public class LanguageWarningHandler
                 return;
 
             // Check if user is admin in this chat
-            var operations = await _botFactory.GetOperationsAsync();
-            var chatMember = await operations.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
+            var userService = scope.ServiceProvider.GetRequiredService<IBotUserService>();
+            var chatMember = await userService.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
                 return;
 

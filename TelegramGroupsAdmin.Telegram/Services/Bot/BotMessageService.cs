@@ -150,6 +150,7 @@ public class BotMessageService : IBotMessageService
         int messageId,
         string text,
         ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
         // Get old message from database for edit history
@@ -167,6 +168,7 @@ public class BotMessageService : IBotMessageService
             messageId: messageId,
             text: text,
             parseMode: parseMode,
+            replyMarkup: replyMarkup,
             ct: cancellationToken);
 
         var editDate = editedMessage.EditDate.HasValue
@@ -346,5 +348,115 @@ public class BotMessageService : IBotMessageService
             "Saved bot message {MessageId} to history (chat: {ChatId})",
             messageId,
             chatId);
+    }
+
+    /// <summary>
+    /// Answer a callback query to acknowledge button click and remove loading state.
+    /// </summary>
+    public async Task AnswerCallbackAsync(
+        string callbackQueryId,
+        string? text = null,
+        bool showAlert = false,
+        CancellationToken cancellationToken = default)
+    {
+        await _messageHandler.AnswerCallbackAsync(
+            callbackQueryId: callbackQueryId,
+            text: text,
+            showAlert: showAlert,
+            ct: cancellationToken);
+    }
+
+    /// <summary>
+    /// Send an animation (GIF) to a chat AND save to message history.
+    /// Used for ban celebrations and other GIF content that should appear in message history.
+    /// </summary>
+    public async Task<Message> SendAndSaveAnimationAsync(
+        long chatId,
+        InputFile animation,
+        string? caption = null,
+        ParseMode? parseMode = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Send animation via handler
+        var sentMessage = await _messageHandler.SendAnimationAsync(
+            chatId: chatId,
+            animation: animation,
+            caption: caption,
+            parseMode: parseMode,
+            ct: cancellationToken);
+
+        // Get bot user info (fetch once and cache in memory)
+        if (_cachedBotInfo == null)
+        {
+            _cachedBotInfo = await _userHandler.GetMeAsync(cancellationToken);
+            _logger.LogDebug("Fetched and cached bot info: {BotId} (@{BotUsername})", _cachedBotInfo.Id, _cachedBotInfo.Username);
+        }
+        var botInfo = _cachedBotInfo;
+
+        // Upsert bot to telegram_users table
+        var now = DateTimeOffset.UtcNow;
+        var botUser = new TelegramUser(
+            TelegramUserId: botInfo.Id,
+            Username: botInfo.Username,
+            FirstName: botInfo.FirstName,
+            LastName: botInfo.LastName,
+            UserPhotoPath: null,
+            PhotoHash: null,
+            PhotoFileUniqueId: null,
+            IsBot: true,
+            IsTrusted: false,
+            IsBanned: false,
+            BotDmEnabled: false,
+            FirstSeenAt: now,
+            LastSeenAt: now,
+            CreatedAt: now,
+            UpdatedAt: now
+        );
+        await _userRepo.UpsertAsync(botUser, cancellationToken);
+
+        // Save to messages table with animation metadata
+        var messageRecord = new MessageRecord(
+            MessageId: sentMessage.MessageId,
+            UserId: botInfo.Id,
+            UserName: botInfo.Username,
+            FirstName: botInfo.FirstName,
+            LastName: botInfo.LastName,
+            ChatId: chatId,
+            Timestamp: DateTimeOffset.UtcNow,
+            MessageText: caption, // Caption as message text
+            PhotoFileId: null,
+            PhotoFileSize: null,
+            Urls: null,
+            EditDate: null,
+            ContentHash: null,
+            ChatName: sentMessage.Chat.Title ?? sentMessage.Chat.Username,
+            PhotoLocalPath: null,
+            PhotoThumbnailPath: null,
+            ChatIconPath: null,
+            UserPhotoPath: null,
+            DeletedAt: null,
+            DeletionSource: null,
+            ReplyToMessageId: null,
+            ReplyToUser: null,
+            ReplyToText: null,
+            MediaType: Models.MediaType.Animation,
+            MediaFileId: sentMessage.Animation?.FileId,
+            MediaFileSize: sentMessage.Animation?.FileSize,
+            MediaFileName: sentMessage.Animation?.FileName,
+            MediaMimeType: sentMessage.Animation?.MimeType,
+            MediaLocalPath: null,
+            MediaDuration: sentMessage.Animation?.Duration,
+            Translation: null,
+            ContentCheckSkipReason: ContentCheckSkipReason.UserAdmin // Bot messages skip content checks
+        );
+
+        await _messageRepo.InsertMessageAsync(messageRecord, cancellationToken);
+
+        _logger.LogDebug(
+            "Saved bot animation {MessageId} to history (chat: {ChatId})",
+            sentMessage.MessageId,
+            chatId);
+
+        return sentMessage;
     }
 }

@@ -522,21 +522,25 @@ public class BotModerationService : IBotModerationService
         User user,
         Chat chat,
         string reason,
+        Actor? executor = null,
         long? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
         var protectionResult = await CheckServiceAccountProtectionAsync(user.Id, cancellationToken);
         if (protectionResult != null) return protectionResult;
 
+        // Use provided executor or default to AutoDetection for backward compatibility
+        var actor = executor ?? Actor.AutoDetection;
+
         var banResult = await _banHandler.BanAsync(
-            user, chat, Actor.AutoDetection, reason, triggeredByMessageId, cancellationToken);
+            user, chat, actor, reason, triggeredByMessageId, cancellationToken);
 
         if (!banResult.Success)
             return ModerationResult.Failed(banResult.ErrorMessage ?? "Ban sync failed");
 
         // Audit successful ban sync
         await SafeAuditAsync(
-            () => _auditHandler.LogBanAsync(user.Id, Actor.AutoDetection, reason, cancellationToken),
+            () => _auditHandler.LogBanAsync(user.Id, actor, reason, cancellationToken),
             "ban sync", user.Id, chat.Id);
 
         return new ModerationResult

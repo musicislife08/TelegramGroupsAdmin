@@ -79,7 +79,7 @@ public static class ServiceCollectionExtensions
 
             // DM delivery infrastructure (shared by notification system, welcome system, etc.)
             // Singleton: Creates scopes internally for repository access
-            services.AddSingleton<IDmDeliveryService, DmDeliveryService>();
+            services.AddSingleton<IBotDmService, BotDmService>();
 
             // Notification system (DM delivery with retry queue)
             services.AddScoped<INotificationChannel, TelegramDmChannel>();
@@ -119,7 +119,6 @@ public static class ServiceCollectionExtensions
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<ITelegramUserManagementService, TelegramUserManagementService>(); // Orchestrates Telegram user operations
             services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
-            services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
             services.AddSingleton<IWelcomeService, WelcomeService>();
             services.AddSingleton<IBanCallbackHandler, BanCallbackHandler>(); // Ban user selection callbacks
             services.AddSingleton<IReportCallbackHandler, ReportCallbackHandler>(); // Report moderation action callbacks

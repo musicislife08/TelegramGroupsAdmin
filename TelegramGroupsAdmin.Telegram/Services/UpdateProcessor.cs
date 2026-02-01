@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -16,7 +17,7 @@ public class UpdateProcessor(
     IWelcomeService welcomeService,
     IBanCallbackHandler banCallbackHandler,
     IReportCallbackHandler reportCallbackHandler,
-    ITelegramBotClientFactory botFactory,
+    IBotMessageService messageService,
     ILogger<UpdateProcessor> logger) : IUpdateProcessor
 {
     /// <summary>
@@ -77,8 +78,7 @@ public class UpdateProcessor(
             }
 
             // Always answer callback queries to remove loading state
-            var operations = await botFactory.GetOperationsAsync();
-            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
+            await messageService.AnswerCallbackAsync(callbackQuery.Id, cancellationToken: cancellationToken);
             return;
         }
 

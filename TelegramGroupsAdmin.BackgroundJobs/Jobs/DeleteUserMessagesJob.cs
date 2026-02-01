@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -16,11 +16,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
-    ITelegramBotClientFactory botClientFactory,
+    IBotMessageService messageService,
     IMessageHistoryRepository messageHistoryRepository) : IJob
 {
     private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly IBotMessageService _messageService = messageService;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
 
     public async Task Execute(IJobExecutionContext context)
@@ -46,9 +46,6 @@ public class DeleteUserMessagesJob(
             _logger.LogInformation(
                 "Starting cross-chat message cleanup for user {UserId}",
                 payload.TelegramUserId);
-
-            // Get operations from factory
-            var operations = await _botClientFactory.GetOperationsAsync();
 
             // Fetch all user messages (non-deleted only)
             var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(
@@ -87,9 +84,10 @@ public class DeleteUserMessagesJob(
 
                 try
                 {
-                    await operations.DeleteMessageAsync(
+                    await _messageService.DeleteAndMarkMessageAsync(
                         chatId: message.ChatId,
                         messageId: (int)message.MessageId,
+                        deletionSource: "ban_cleanup",
                         cancellationToken: cancellationToken);
 
                     deletedCount++;

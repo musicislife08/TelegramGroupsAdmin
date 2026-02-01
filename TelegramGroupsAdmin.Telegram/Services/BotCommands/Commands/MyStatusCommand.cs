@@ -2,7 +2,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -16,18 +16,18 @@ public class MyStatusCommand : IBotCommand
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly INotificationOrchestrator _notificationOrchestrator;
-    private readonly ITelegramBotClientFactory _botFactory;
+    private readonly IBotUserService _userService;
 
     public MyStatusCommand(
         ITelegramUserRepository telegramUserRepository,
         IUserActionsRepository userActionsRepository,
         INotificationOrchestrator notificationOrchestrator,
-        ITelegramBotClientFactory botFactory)
+        IBotUserService userService)
     {
         _telegramUserRepository = telegramUserRepository;
         _userActionsRepository = userActionsRepository;
         _notificationOrchestrator = notificationOrchestrator;
-        _botFactory = botFactory;
+        _userService = userService;
     }
 
     public string Name => "mystatus";
@@ -71,8 +71,7 @@ public class MyStatusCommand : IBotCommand
             else
             {
                 // DM failed (queued), inform user in chat
-                var operations = await _botFactory.GetOperationsAsync();
-                var botInfo = await operations.GetMeAsync(cancellationToken);
+                var botInfo = await _userService.GetMeAsync(cancellationToken);
                 var deepLink = $"https://t.me/{botInfo.Username}?start=mystatus";
 
                 return new CommandResult(

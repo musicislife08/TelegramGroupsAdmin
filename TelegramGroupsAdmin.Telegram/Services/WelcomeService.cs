@@ -22,12 +22,30 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 
 public class WelcomeService : IWelcomeService
 {
+    // Deletion source constants for audit tracking
+    private const string DeletionSourceWelcomeCleanup = "welcome_cleanup";
+    private const string DeletionSourceWelcomeError = "welcome_error_cleanup";
+
+    // Reason constants for moderation audit
+    private const string ReasonDeniedRules = "Denied rules during welcome flow";
+    private const string ReasonPendingVerification = "Pending welcome verification";
+    private const string ReasonSecurityPassed = "Security checks passed (welcome disabled)";
+    private const string ReasonCompletedWelcome = "Completed welcome/rules flow";
+    private const string ReasonCompletedWelcomeDm = "Completed welcome flow via DM";
+
+    // User-facing message constants
+    private const string ErrorNoWelcomeRecord = "❌ Could not find your welcome record. Please try accepting in the group chat instead.";
+    private const string ErrorPermissionsFailed = "❌ Failed to restore your permissions. Please contact an admin.";
+
     private readonly ILogger<WelcomeService> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotProtectionService _botProtectionService;
-    private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IBotDmService _dmDeliveryService;
+    private readonly IBotMessageService _messageService;
+    private readonly IBotUserService _userService;
+    private readonly IBotChatService _chatService;
+    private readonly IBotModerationService _moderationService;
     private readonly IJobScheduler _jobScheduler;
-    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly ICasCheckService _casCheckService;
     private readonly TelegramPhotoService _photoService;
 
@@ -35,9 +53,12 @@ public class WelcomeService : IWelcomeService
         ILogger<WelcomeService> logger,
         IServiceProvider serviceProvider,
         IBotProtectionService botProtectionService,
-        IDmDeliveryService dmDeliveryService,
+        IBotDmService dmDeliveryService,
+        IBotMessageService messageService,
+        IBotUserService userService,
+        IBotChatService chatService,
+        IBotModerationService moderationService,
         IJobScheduler jobScheduler,
-        ITelegramBotClientFactory botClientFactory,
         ICasCheckService casCheckService,
         TelegramPhotoService photoService)
     {
@@ -45,8 +66,11 @@ public class WelcomeService : IWelcomeService
         _serviceProvider = serviceProvider;
         _botProtectionService = botProtectionService;
         _dmDeliveryService = dmDeliveryService;
+        _messageService = messageService;
+        _userService = userService;
+        _chatService = chatService;
+        _moderationService = moderationService;
         _jobScheduler = jobScheduler;
-        _botClientFactory = botClientFactory;
         _casCheckService = casCheckService;
         _photoService = photoService;
     }
@@ -141,10 +165,8 @@ public class WelcomeService : IWelcomeService
 
         try
         {
-            var operations = await _botClientFactory.GetOperationsAsync();
-
             // Step 1: Check if user is an admin/owner - skip all checks for admins
-            var chatMember = await operations.GetChatMemberAsync(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
+            var chatMember = await _userService.GetChatMemberAsync(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
             {
                 _logger.LogInformation(
@@ -155,12 +177,12 @@ public class WelcomeService : IWelcomeService
             }
 
             // Step 2: Restrict user permissions (mute immediately - no spam window)
-            await RestrictUserPermissionsAsync(operations, chatMemberUpdate.Chat, user, cancellationToken);
+            await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
 
             // Step 3: Send verifying message
             var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
             var verifyingText = WelcomeMessageBuilder.FormatVerifyingMessage(username);
-            var verifyingMessage = await operations.SendMessageAsync(
+            var verifyingMessage = await _messageService.SendAndSaveMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
                 text: verifyingText,
                 cancellationToken: cancellationToken);
@@ -217,7 +239,7 @@ public class WelcomeService : IWelcomeService
                         casResult.Reason ?? "No reason provided");
 
                     // Delete verifying message before ban
-                    await TryDeleteMessageAsync(operations, chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+                    await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
                     // Ban user using ModerationOrchestrator (triggers ban celebrations)
                     var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
@@ -299,7 +321,7 @@ public class WelcomeService : IWelcomeService
                         if (impersonationResult.ShouldAutoBan)
                         {
                             // Delete verifying message
-                            await TryDeleteMessageAsync(operations, chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+                            await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
                             _logger.LogInformation(
                                 "{User} auto-banned for impersonation, skipping welcome flow",
@@ -332,18 +354,19 @@ public class WelcomeService : IWelcomeService
                     chatMemberUpdate.Chat.ToLogDebug(),
                     user.ToLogDebug());
 
-                // Restore user permissions
-                await operations.RestrictChatMemberAsync(
-                    chatId: chatMemberUpdate.Chat.Id,
+                // Restore user permissions via moderation service
+                await _moderationService.RestoreUserPermissionsAsync(
                     userId: user.Id,
-                    permissions: WelcomeChatPermissions.Default,
+                    chatId: chatMemberUpdate.Chat.Id,
+                    executor: Actor.WelcomeFlow,
+                    reason: ReasonSecurityPassed,
                     cancellationToken: cancellationToken);
 
                 // Mark user as active (security passed, no welcome flow)
                 await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
 
                 // Delete verifying message
-                await TryDeleteMessageAsync(operations, chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+                await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
                 _logger.LogInformation(
                     "{User} passed security checks in {Chat} (welcome disabled)",
@@ -353,7 +376,7 @@ public class WelcomeService : IWelcomeService
             }
 
             // Welcome ENABLED: Update verifying message to full welcome content
-            var chatInfo = await operations.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
+            var chatInfo = await _chatService.GetChatAsync(chatMemberUpdate.Chat.Id, cancellationToken);
             var chatName = chatInfo.Title ?? "this chat";
             var messageText = WelcomeMessageBuilder.FormatWelcomeMessage(config, username, chatName);
 
@@ -361,12 +384,12 @@ public class WelcomeService : IWelcomeService
             InlineKeyboardMarkup keyboard;
             if (config.Mode == WelcomeMode.DmWelcome)
             {
-                var botInfo = await operations.GetMeAsync(cancellationToken);
+                var botInfo = await _userService.GetMeAsync(cancellationToken);
                 keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatMemberUpdate.Chat.Id, user.Id, botInfo.Username!);
             }
             else if (config.Mode == WelcomeMode.EntranceExam)
             {
-                var botInfo = await operations.GetMeAsync(cancellationToken);
+                var botInfo = await _userService.GetMeAsync(cancellationToken);
                 keyboard = WelcomeKeyboardBuilder.BuildExamModeKeyboard(config, chatMemberUpdate.Chat.Id, user.Id, botInfo.Username!);
             }
             else
@@ -375,7 +398,7 @@ public class WelcomeService : IWelcomeService
             }
 
             // Update the verifying message to become the welcome message
-            await operations.EditMessageTextAsync(
+            await _messageService.EditAndUpdateMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
                 messageId: verifyingMessageId.Value,
                 text: messageText,
@@ -453,8 +476,7 @@ public class WelcomeService : IWelcomeService
             {
                 try
                 {
-                    var operations = await _botClientFactory.GetOperationsAsync();
-                    await operations.DeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+                    await _messageService.DeleteAndMarkMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, DeletionSourceWelcomeError, cancellationToken);
                 }
                 catch
                 {
@@ -468,11 +490,11 @@ public class WelcomeService : IWelcomeService
     /// Helper to delete a message without throwing on failure.
     /// Used for cleanup during security check failures.
     /// </summary>
-    private async Task TryDeleteMessageAsync(ITelegramOperations operations, long chatId, int messageId, CancellationToken cancellationToken)
+    private async Task TryDeleteMessageAsync(long chatId, int messageId, CancellationToken cancellationToken)
     {
         try
         {
-            await operations.DeleteMessageAsync(chatId, messageId, cancellationToken);
+            await _messageService.DeleteAndMarkMessageAsync(chatId, messageId, DeletionSourceWelcomeCleanup, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -484,8 +506,6 @@ public class WelcomeService : IWelcomeService
         CallbackQuery callbackQuery,
         CancellationToken cancellationToken)
     {
-        var operations = await _botClientFactory.GetOperationsAsync();
-
         var data = callbackQuery.Data;
         var user = callbackQuery.From;
         var message = callbackQuery.Message;
@@ -533,7 +553,7 @@ public class WelcomeService : IWelcomeService
             // For DM accept, just show alert (no message in DM chat)
             if (parsedCallback.Type == WelcomeCallbackType.DmAccept)
             {
-                await operations.AnswerCallbackQueryAsync(
+                await _messageService.AnswerCallbackAsync(
                     callbackQueryId: callbackQuery.Id,
                     text: "⚠️ This button is not for you.",
                     cancellationToken: cancellationToken);
@@ -541,7 +561,7 @@ public class WelcomeService : IWelcomeService
             }
 
             // For chat buttons, send temporary warning message
-            await SendWrongUserWarningAsync(operations, chatId, user, message.MessageId, cancellationToken);
+            await SendWrongUserWarningAsync(chatId, user, message.MessageId, cancellationToken);
             return;
         }
 
@@ -552,7 +572,6 @@ public class WelcomeService : IWelcomeService
             {
                 case WelcomeCallbackType.DmAccept:
                     await HandleDmAcceptAsync(
-                        operations,
                         parsedCallback.ChatId!.Value,
                         user,
                         message.Chat.Id,
@@ -571,11 +590,11 @@ public class WelcomeService : IWelcomeService
 
                         if (parsedCallback.Type == WelcomeCallbackType.Accept)
                         {
-                            await HandleAcceptAsync(operations, message.Chat, user, message.MessageId, config, cancellationToken);
+                            await HandleAcceptAsync(message.Chat, user, message.MessageId, config, cancellationToken);
                         }
                         else
                         {
-                            await HandleDenyAsync(operations, message.Chat, user, message.MessageId, cancellationToken);
+                            await HandleDenyAsync(message.Chat, user, message.MessageId, cancellationToken);
                         }
                     }
                     break;
@@ -593,7 +612,6 @@ public class WelcomeService : IWelcomeService
     }
 
     private async Task SendWrongUserWarningAsync(
-        ITelegramOperations operations,
         long chatId,
         User user,
         int replyToMessageId,
@@ -603,7 +621,7 @@ public class WelcomeService : IWelcomeService
         {
             var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
             var warningText = WelcomeMessageBuilder.FormatWrongUserWarning(username);
-            var warningMsg = await operations.SendMessageAsync(
+            var warningMsg = await _messageService.SendAndSaveMessageAsync(
                 chatId: chatId,
                 text: warningText,
                 replyParameters: new ReplyParameters { MessageId = replyToMessageId },
@@ -700,8 +718,7 @@ public class WelcomeService : IWelcomeService
             }
 
             // Answer callback to clear loading state
-            var operations = await _botClientFactory.GetOperationsAsync();
-            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
+            await _messageService.AnswerCallbackAsync(callbackQuery.Id, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -710,23 +727,37 @@ public class WelcomeService : IWelcomeService
     }
 
     private async Task RestrictUserPermissionsAsync(
-        ITelegramOperations operations,
         Chat chat,
         User user,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            await operations.RestrictChatMemberAsync(
-                chatId: chat.Id,
+            // Use a long duration (365 days) - the welcome timeout job controls the actual timeout
+            var result = await _moderationService.RestrictUserAsync(
                 userId: user.Id,
-                permissions: WelcomeChatPermissions.Restricted,
+                messageId: null,
+                executor: Actor.WelcomeFlow,
+                reason: ReasonPendingVerification,
+                duration: TimeSpan.FromDays(365),
+                chatId: chat.Id,
                 cancellationToken: cancellationToken);
 
-            _logger.LogDebug(
-                "Restricted permissions for {User} in {Chat}",
-                user.ToLogDebug(),
-                chat.ToLogDebug());
+            if (!result.Success)
+            {
+                _logger.LogWarning(
+                    "Failed to restrict {User} in {Chat}: {Error}",
+                    user.ToLogDebug(),
+                    chat.ToLogDebug(),
+                    result.ErrorMessage);
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Restricted permissions for {User} in {Chat}",
+                    user.ToLogDebug(),
+                    chat.ToLogDebug());
+            }
         }
         catch (Exception ex)
         {
@@ -740,21 +771,35 @@ public class WelcomeService : IWelcomeService
     }
 
     private async Task KickUserAsync(
-        ITelegramOperations operations,
         Chat chat,
         User user,
+        string reason,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            // Ban then immediately unban (removes user from chat without permanent ban)
-            await operations.BanChatMemberAsync(chatId: chat.Id, userId: user.Id, cancellationToken: cancellationToken);
-            await operations.UnbanChatMemberAsync(chatId: chat.Id, userId: user.Id, cancellationToken: cancellationToken);
+            var result = await _moderationService.KickUserFromChatAsync(
+                userId: user.Id,
+                chatId: chat.Id,
+                executor: Actor.WelcomeFlow,
+                reason: reason,
+                cancellationToken: cancellationToken);
 
-            _logger.LogDebug(
-                "Kicked {User} from {Chat}",
-                user.ToLogDebug(),
-                chat.ToLogDebug());
+            if (!result.Success)
+            {
+                _logger.LogWarning(
+                    "Failed to kick {User} from {Chat}: {Error}",
+                    user.ToLogDebug(),
+                    chat.ToLogDebug(),
+                    result.ErrorMessage);
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Kicked {User} from {Chat}",
+                    user.ToLogDebug(),
+                    chat.ToLogDebug());
+            }
         }
         catch (Exception ex)
         {
@@ -768,7 +813,6 @@ public class WelcomeService : IWelcomeService
     }
 
     private async Task HandleAcceptAsync(
-        ITelegramOperations operations,
         Chat chat,
         User user,
         int welcomeMessageId,
@@ -795,7 +839,7 @@ public class WelcomeService : IWelcomeService
 
         // Step 3: Try to send rules via DM (or fallback to chat)
         // Always attempt this - previous DM sent via /start may have been deleted by user
-        var (dmSent, dmFallback) = await SendRulesAsync(operations, chat, user, config, cancellationToken);
+        var (dmSent, dmFallback) = await SendRulesAsync(chat, user, config, cancellationToken);
 
         _logger.LogDebug(
             "Rules delivery for {User}: DM sent: {DmSent}, Fallback: {DmFallback}",
@@ -811,7 +855,7 @@ public class WelcomeService : IWelcomeService
                 userId: user.Id,
                 chatId: chat.Id,
                 executor: Actor.WelcomeFlow,
-                reason: "Completed welcome/rules flow",
+                reason: ReasonCompletedWelcome,
                 cancellationToken: cancellationToken);
 
             if (!restoreResult.Success)
@@ -829,14 +873,7 @@ public class WelcomeService : IWelcomeService
         }
 
         // Step 5: Delete welcome message
-        try
-        {
-            await operations.DeleteMessageAsync(chatId: chat.Id, messageId: welcomeMessageId, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", welcomeMessageId);
-        }
+        await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
 
         // Step 6: Update or create response record
         if (existingResponse != null)
@@ -865,7 +902,6 @@ public class WelcomeService : IWelcomeService
     }
 
     private async Task HandleDenyAsync(
-        ITelegramOperations operations,
         Chat chat,
         User user,
         int welcomeMessageId,
@@ -887,17 +923,10 @@ public class WelcomeService : IWelcomeService
         }
 
         // Step 2: Kick user
-        await KickUserAsync(operations, chat, user, cancellationToken);
+        await KickUserAsync(chat, user, ReasonDeniedRules, cancellationToken);
 
         // Step 3: Delete welcome message
-        try
-        {
-            await operations.DeleteMessageAsync(chatId: chat.Id, messageId: welcomeMessageId, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", welcomeMessageId);
-        }
+        await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
 
         // Step 4: Update or create response record
         if (existingResponse != null)
@@ -924,7 +953,6 @@ public class WelcomeService : IWelcomeService
     }
 
     private async Task HandleDmAcceptAsync(
-        ITelegramOperations operations,
         long groupChatId,
         User user,
         long dmChatId,
@@ -932,7 +960,7 @@ public class WelcomeService : IWelcomeService
         CancellationToken cancellationToken = default)
     {
         // Fetch group chat info early for logging throughout the method
-        var groupChat = await operations.GetChatAsync(groupChatId, cancellationToken);
+        var groupChat = await _chatService.GetChatAsync(groupChatId, cancellationToken);
 
         _logger.LogInformation(
             "{User} accepted rules via DM for {Chat}",
@@ -942,10 +970,7 @@ public class WelcomeService : IWelcomeService
         // Step 1: Delete the Accept button message in DM (separate message from rules)
         try
         {
-            await operations.DeleteMessageAsync(
-                chatId: dmChatId,
-                messageId: buttonMessageId,
-                cancellationToken: cancellationToken);
+            await _dmDeliveryService.DeleteDmMessageAsync(dmChatId, buttonMessageId, cancellationToken);
 
             _logger.LogDebug(
                 "Deleted DM Accept button message {MessageId} for {User}",
@@ -972,10 +997,7 @@ public class WelcomeService : IWelcomeService
                 groupChat.ToLogDebug());
 
             // Send error to user in DM
-            await operations.SendMessageAsync(
-                chatId: user.Id,
-                text: "❌ Could not find your welcome record. Please try accepting in the group chat instead.",
-                cancellationToken: cancellationToken);
+            await _dmDeliveryService.SendDmAsync(user.Id, ErrorNoWelcomeRecord, cancellationToken: cancellationToken);
             return;
         }
 
@@ -996,7 +1018,7 @@ public class WelcomeService : IWelcomeService
                 userId: user.Id,
                 chatId: groupChat.Id,
                 executor: Actor.WelcomeFlow,
-                reason: "Completed welcome flow via DM",
+                reason: ReasonCompletedWelcomeDm,
                 cancellationToken: cancellationToken);
 
             if (!restoreResult.Success)
@@ -1008,10 +1030,7 @@ public class WelcomeService : IWelcomeService
                     restoreResult.ErrorMessage);
 
                 // Send error to user in DM
-                await operations.SendMessageAsync(
-                    chatId: user.Id,
-                    text: "❌ Failed to restore your permissions. Please contact an admin.",
-                    cancellationToken: cancellationToken);
+                await _dmDeliveryService.SendDmAsync(user.Id, ErrorPermissionsFailed, cancellationToken: cancellationToken);
                 return;
             }
 
@@ -1021,27 +1040,7 @@ public class WelcomeService : IWelcomeService
         }
 
         // Step 5: Delete welcome message in group
-        try
-        {
-            await operations.DeleteMessageAsync(
-                chatId: groupChatId,
-                messageId: welcomeResponse.WelcomeMessageId,
-                cancellationToken: cancellationToken);
-
-            _logger.LogDebug(
-                "Deleted welcome message {MessageId} in {Chat}",
-                welcomeResponse.WelcomeMessageId,
-                groupChat.ToLogDebug());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to delete welcome message {MessageId} in {Chat}",
-                welcomeResponse.WelcomeMessageId,
-                groupChat.ToLogDebug());
-            // Non-fatal - continue with response update
-        }
+        await TryDeleteMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, cancellationToken);
 
         // Step 6: Update welcome response record (mark as accepted via DM)
         await WithRepositoryAsync((repo, cancellationToken) => repo.UpdateResponseAsync(welcomeResponse.Id, WelcomeResponseType.Accepted, dmSent: true, dmFallback: false, cancellationToken), cancellationToken);
@@ -1057,9 +1056,7 @@ public class WelcomeService : IWelcomeService
             // For private chats (no username), try to get invite link
             if (chatDeepLink == null)
             {
-                await using var inviteLinkScope = _serviceProvider.CreateAsyncScope();
-                var inviteLinkService = inviteLinkScope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
-                chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChat, cancellationToken);
+                chatDeepLink = await _chatService.GetInviteLinkAsync(groupChat.Id, cancellationToken);
 
                 if (chatDeepLink != null)
                 {
@@ -1088,11 +1085,7 @@ public class WelcomeService : IWelcomeService
             }
 
             var confirmationText = WelcomeMessageBuilder.FormatDmAcceptanceConfirmation(chatName);
-            await operations.SendMessageAsync(
-                chatId: user.Id,
-                text: confirmationText,
-                replyMarkup: keyboard,
-                cancellationToken: cancellationToken);
+            await _dmDeliveryService.SendDmAsync(user.Id, confirmationText, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -1104,7 +1097,6 @@ public class WelcomeService : IWelcomeService
     }
 
     private async Task<(bool DmSent, bool DmFallback)> SendRulesAsync(
-        ITelegramOperations operations,
         Chat chat,
         User user,
         WelcomeConfig config,

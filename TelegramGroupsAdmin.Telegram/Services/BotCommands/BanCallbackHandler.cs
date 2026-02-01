@@ -22,16 +22,13 @@ public class BanCallbackHandler : IBanCallbackHandler
 {
     private readonly ILogger<BanCallbackHandler> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public BanCallbackHandler(
         ILogger<BanCallbackHandler> logger,
-        IServiceScopeFactory scopeFactory,
-        ITelegramBotClientFactory botClientFactory)
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
-        _botClientFactory = botClientFactory;
     }
 
     public bool CanHandle(string callbackData)
@@ -58,15 +55,13 @@ public class BanCallbackHandler : IBanCallbackHandler
             return;
         }
 
-        var operations = await _botClientFactory.GetOperationsAsync();
-
         if (data.StartsWith(CallbackConstants.BanSelectPrefix))
         {
-            await HandleSelectAsync(callbackQuery, data, chatId.Value, selectionMessageId.Value, operations, cancellationToken);
+            await HandleSelectAsync(callbackQuery, data, chatId.Value, selectionMessageId.Value, cancellationToken);
         }
         else if (data.StartsWith(CallbackConstants.BanCancelPrefix))
         {
-            await HandleCancelAsync(data, chatId.Value, selectionMessageId.Value, operations, cancellationToken);
+            await HandleCancelAsync(data, chatId.Value, selectionMessageId.Value, cancellationToken);
         }
     }
 
@@ -75,7 +70,6 @@ public class BanCallbackHandler : IBanCallbackHandler
         string data,
         long chatId,
         int selectionMessageId,
-        ITelegramOperations operations,
         CancellationToken cancellationToken)
     {
         // Parse: ban_select:{userId}:{commandMessageId}
@@ -93,12 +87,13 @@ public class BanCallbackHandler : IBanCallbackHandler
         // Create scope for scoped services (ModerationOrchestrator, repositories, etc.)
         using var scope = _scopeFactory.CreateScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var messageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
         var targetUser = await userRepo.GetByTelegramIdAsync(targetUserId, cancellationToken);
 
         if (targetUser == null)
         {
             _logger.LogWarning("Ban target user {User} not found", LogDisplayName.UserDebug(null, null, null, targetUserId));
-            await CleanupMessagesAsync(operations, chatId, selectionMessageId, commandMessageId, cancellationToken);
+            await CleanupMessagesAsync(messageService, chatId, selectionMessageId, commandMessageId, cancellationToken);
             return;
         }
 
@@ -108,7 +103,7 @@ public class BanCallbackHandler : IBanCallbackHandler
         if (isAdmin)
         {
             _logger.LogWarning("Attempted to ban admin user {User}", targetUser.ToLogDebug(targetUserId));
-            await CleanupMessagesAsync(operations, chatId, selectionMessageId, commandMessageId, cancellationToken);
+            await CleanupMessagesAsync(messageService, chatId, selectionMessageId, commandMessageId, cancellationToken);
             return;
         }
 
@@ -164,14 +159,13 @@ public class BanCallbackHandler : IBanCallbackHandler
         }
 
         // Cleanup messages
-        await CleanupMessagesAsync(operations, chatId, selectionMessageId, commandMessageId, cancellationToken);
+        await CleanupMessagesAsync(messageService, chatId, selectionMessageId, commandMessageId, cancellationToken);
     }
 
     private async Task HandleCancelAsync(
         string data,
         long chatId,
         int selectionMessageId,
-        ITelegramOperations operations,
         CancellationToken cancellationToken)
     {
         // Parse: ban_cancel:{commandMessageId}
@@ -184,12 +178,16 @@ public class BanCallbackHandler : IBanCallbackHandler
 
         _logger.LogDebug("Ban selection cancelled, cleaning up messages");
 
+        // Create scope to get IBotMessageService
+        using var scope = _scopeFactory.CreateScope();
+        var messageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
+
         // Cleanup messages
-        await CleanupMessagesAsync(operations, chatId, selectionMessageId, commandMessageId, cancellationToken);
+        await CleanupMessagesAsync(messageService, chatId, selectionMessageId, commandMessageId, cancellationToken);
     }
 
     private async Task CleanupMessagesAsync(
-        ITelegramOperations operations,
+        IBotMessageService messageService,
         long chatId,
         int selectionMessageId,
         int commandMessageId,
@@ -198,7 +196,7 @@ public class BanCallbackHandler : IBanCallbackHandler
         // Delete the selection message (with buttons)
         try
         {
-            await operations.DeleteMessageAsync(chatId, selectionMessageId, cancellationToken);
+            await messageService.DeleteAndMarkMessageAsync(chatId, selectionMessageId, "ban_callback_cleanup", cancellationToken);
         }
         catch (Exception ex)
         {
@@ -208,7 +206,7 @@ public class BanCallbackHandler : IBanCallbackHandler
         // Delete the original /ban command message
         try
         {
-            await operations.DeleteMessageAsync(chatId, commandMessageId, cancellationToken);
+            await messageService.DeleteAndMarkMessageAsync(chatId, commandMessageId, "ban_callback_cleanup", cancellationToken);
         }
         catch (Exception ex)
         {

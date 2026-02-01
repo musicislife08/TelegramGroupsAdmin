@@ -34,7 +34,7 @@ public class NotificationHandler : INotificationHandler
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
-    private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IBotDmService _dmDeliveryService;
     private readonly IBotChatService _chatService;
     private readonly IChatCache _chatCache;
     private readonly ILogger<NotificationHandler> _logger;
@@ -46,7 +46,7 @@ public class NotificationHandler : INotificationHandler
         ITelegramUserRepository telegramUserRepository,
         IChatAdminsRepository chatAdminsRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
-        IDmDeliveryService dmDeliveryService,
+        IBotDmService dmDeliveryService,
         IBotChatService chatService,
         IChatCache chatCache,
         ILogger<NotificationHandler> logger)

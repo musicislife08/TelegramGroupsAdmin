@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -25,7 +26,7 @@ public class NotificationService : INotificationService
 {
     private readonly INotificationPreferencesRepository _preferencesRepo;
     private readonly IEmailService _emailService;
-    private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IBotDmService _dmDeliveryService;
     private readonly IWebPushNotificationService _webPushService;
     private readonly ITelegramUserMappingRepository _telegramMappingRepo;
     private readonly IChatAdminsRepository _chatAdminsRepo;
@@ -38,7 +39,7 @@ public class NotificationService : INotificationService
     public NotificationService(
         INotificationPreferencesRepository preferencesRepo,
         IEmailService emailService,
-        IDmDeliveryService dmDeliveryService,
+        IBotDmService dmDeliveryService,
         IWebPushNotificationService webPushService,
         ITelegramUserMappingRepository telegramMappingRepo,
         IChatAdminsRepository chatAdminsRepo,

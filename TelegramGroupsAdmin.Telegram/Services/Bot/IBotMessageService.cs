@@ -31,6 +31,7 @@ public interface IBotMessageService
         int messageId,
         string text,
         ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -51,5 +52,25 @@ public interface IBotMessageService
         long chatId,
         int messageId,
         string text,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Answer a callback query to acknowledge button click and remove loading state.
+    /// </summary>
+    Task AnswerCallbackAsync(
+        string callbackQueryId,
+        string? text = null,
+        bool showAlert = false,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Send an animation (GIF) to a chat AND save to message history.
+    /// Used for ban celebrations and other GIF content that should appear in message history.
+    /// </summary>
+    Task<Message> SendAndSaveAnimationAsync(
+        long chatId,
+        InputFile animation,
+        string? caption = null,
+        ParseMode? parseMode = null,
         CancellationToken cancellationToken = default);
 }

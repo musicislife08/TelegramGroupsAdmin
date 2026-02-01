@@ -5,7 +5,7 @@ using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -18,11 +18,13 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class WelcomeTimeoutJob(
     ILogger<WelcomeTimeoutJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    ITelegramBotClientFactory botClientFactory) : IJob
+    IBotModerationService moderationService,
+    IBotMessageService messageService) : IJob
 {
     private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly IBotModerationService _moderationService = moderationService;
+    private readonly IBotMessageService _messageService = messageService;
 
     /// <summary>
     /// Quartz.NET entry point - extracts payload and delegates to ExecuteAsync
@@ -52,9 +54,6 @@ public class WelcomeTimeoutJob(
                 payload.UserId,
                 payload.ChatId);
 
-            // Get operations from factory
-            var operations = await _botClientFactory.GetOperationsAsync();
-
             // Check if user has responded
             await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var response = await dbContext.WelcomeResponses
@@ -77,16 +76,14 @@ public class WelcomeTimeoutJob(
                 payload.UserId,
                 payload.ChatId);
 
-            // Kick user for timeout (ban then immediately unban)
+            // Kick user for timeout
             try
             {
-                await operations.BanChatMemberAsync(
-                    chatId: payload.ChatId,
+                await _moderationService.KickUserFromChatAsync(
                     userId: payload.UserId,
-                    cancellationToken: cancellationToken);
-                await operations.UnbanChatMemberAsync(
                     chatId: payload.ChatId,
-                    userId: payload.UserId,
+                    executor: Core.Models.Actor.WelcomeFlow,
+                    reason: "Welcome timeout",
                     cancellationToken: cancellationToken);
 
                 _logger.LogInformation(
@@ -107,9 +104,10 @@ public class WelcomeTimeoutJob(
             // Delete welcome message
             try
             {
-                await operations.DeleteMessageAsync(
+                await _messageService.DeleteAndMarkMessageAsync(
                     chatId: payload.ChatId,
                     messageId: payload.WelcomeMessageId,
+                    deletionSource: "welcome_timeout",
                     cancellationToken: cancellationToken);
             }
             catch (Exception ex)

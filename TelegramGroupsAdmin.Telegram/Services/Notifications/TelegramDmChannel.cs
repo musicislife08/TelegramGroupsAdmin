@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Notifications;
 
@@ -8,13 +9,13 @@ namespace TelegramGroupsAdmin.Telegram.Services.Notifications;
 public class TelegramDmChannel : INotificationChannel
 {
     private readonly ILogger<TelegramDmChannel> _logger;
-    private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IBotDmService _dmDeliveryService;
 
     public string ChannelName => "telegram-dm";
 
     public TelegramDmChannel(
         ILogger<TelegramDmChannel> logger,
-        IDmDeliveryService dmDeliveryService)
+        IBotDmService dmDeliveryService)
     {
         _logger = logger;
         _dmDeliveryService = dmDeliveryService;

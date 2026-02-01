@@ -27,7 +27,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
     IOptions<MessageHistoryOptions> historyOptions,
-    ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
     IBotChatHealthService chatHealthService,
     IChatCache chatCache,
@@ -38,7 +37,6 @@ public partial class MessageProcessingService(
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
-    private readonly ITelegramBotClientFactory _botFactory = botFactory;
     private readonly IChatCache _chatCache = chatCache;
     private readonly TelegramPhotoService _photoService = telegramPhotoService;
     private readonly TelegramMediaService _mediaService = telegramMediaService;
@@ -267,8 +265,9 @@ public partial class MessageProcessingService(
             // Bot no longer has permissions to delete messages after being kicked
             if (message.LeftChatMember != null)
             {
-                var operations = await _botFactory.GetOperationsAsync();
-                if (message.LeftChatMember.Id == operations.BotId)
+                var userService = messageScope.ServiceProvider.GetRequiredService<IBotUserService>();
+                var botInfo = await userService.GetMeAsync(cancellationToken);
+                if (message.LeftChatMember.Id == botInfo.Id)
                 {
                     logger.LogInformation(
                         "Skipping deletion of LeftChatMember service message - bot was removed from {Chat}",

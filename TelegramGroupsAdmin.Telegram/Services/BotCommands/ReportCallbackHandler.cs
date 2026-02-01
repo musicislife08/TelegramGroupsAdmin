@@ -27,16 +27,13 @@ public class ReportCallbackHandler : IReportCallbackHandler
 {
     private readonly ILogger<ReportCallbackHandler> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public ReportCallbackHandler(
         ILogger<ReportCallbackHandler> logger,
-        IServiceScopeFactory scopeFactory,
-        ITelegramBotClientFactory botClientFactory)
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
-        _botClientFactory = botClientFactory;
     }
 
     public bool CanHandle(string callbackData)
@@ -576,7 +573,6 @@ public class ReportCallbackHandler : IReportCallbackHandler
     /// Checks database first (faster), falls back to Telegram API, then to chat ID.
     /// </summary>
     private async Task<string> GetChatNameForNotificationAsync(
-        ITelegramOperations operations,
         long chatId,
         CancellationToken cancellationToken)
     {
@@ -591,7 +587,8 @@ public class ReportCallbackHandler : IReportCallbackHandler
         // Fallback to Telegram API
         try
         {
-            var chatInfo = await operations.GetChatAsync(chatId, cancellationToken);
+            var chatService = scope.ServiceProvider.GetRequiredService<IBotChatService>();
+            var chatInfo = await chatService.GetChatAsync(chatId, cancellationToken);
             return chatInfo.Title ?? chatId.ToString();
         }
         catch (Exception ex)
@@ -605,17 +602,15 @@ public class ReportCallbackHandler : IReportCallbackHandler
     /// Sends a DM notification to a user. Failures are logged but don't block the calling operation.
     /// </summary>
     private async Task TrySendUserNotificationAsync(
-        ITelegramOperations operations,
         long userId,
         string message,
         CancellationToken cancellationToken)
     {
         try
         {
-            await operations.SendMessageAsync(
-                chatId: userId,
-                text: message,
-                cancellationToken: cancellationToken);
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var dmService = scope.ServiceProvider.GetRequiredService<IBotDmService>();
+            await dmService.SendDmAsync(userId, message, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -642,16 +637,18 @@ public class ReportCallbackHandler : IReportCallbackHandler
         string? actionName,
         CancellationToken cancellationToken)
     {
-        var operations = await _botClientFactory.GetOperationsAsync();
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var messageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
 
         // 1. Delete the /report command message (for all actions)
         if (report.ReportCommandMessageId.HasValue)
         {
             try
             {
-                await operations.DeleteMessageAsync(
+                await messageService.DeleteAndMarkMessageAsync(
                     report.ChatId,
                     report.ReportCommandMessageId.Value,
+                    "report_cleanup",
                     cancellationToken);
 
                 _logger.LogDebug(
@@ -671,7 +668,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
         {
             try
             {
-                await operations.SendMessageAsync(
+                await messageService.SendAndSaveMessageAsync(
                     chatId: report.ChatId,
                     text: "✓ This message was reviewed and no action was taken",
                     replyParameters: new ReplyParameters { MessageId = report.MessageId.Value },
@@ -708,7 +705,8 @@ public class ReportCallbackHandler : IReportCallbackHandler
         if (callbackQuery.Message == null)
             return;
 
-        var operations = await _botClientFactory.GetOperationsAsync();
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dmService = scope.ServiceProvider.GetRequiredService<IBotDmService>();
 
         try
         {
@@ -720,7 +718,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
             if (callbackQuery.Message.Photo != null || callbackQuery.Message.Video != null)
             {
                 // For media messages, edit caption
-                await operations.EditMessageCaptionAsync(
+                await dmService.EditDmCaptionAsync(
                     callbackQuery.Message.Chat.Id,
                     callbackQuery.Message.MessageId,
                     updatedText,
@@ -730,7 +728,7 @@ public class ReportCallbackHandler : IReportCallbackHandler
             else
             {
                 // For text messages, edit text
-                await operations.EditMessageTextAsync(
+                await dmService.EditDmTextAsync(
                     callbackQuery.Message.Chat.Id,
                     callbackQuery.Message.MessageId,
                     updatedText,

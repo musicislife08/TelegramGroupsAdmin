@@ -172,10 +172,12 @@ public interface IBotModerationService
     /// <summary>
     /// Sync an existing global ban to a specific chat (lazy sync for chats added after ban).
     /// Use when a globally banned user joins or posts in a chat that was added after their ban.
+    /// Also used by BotProtectionService to ban unauthorized bots in a single chat.
     /// </summary>
     /// <param name="user">The Telegram User object to ban.</param>
     /// <param name="chat">The Telegram Chat to sync the ban to.</param>
     /// <param name="reason">Reason for the ban sync.</param>
+    /// <param name="executor">The actor performing this action. Defaults to AutoDetection if not specified.</param>
     /// <param name="triggeredByMessageId">Optional message ID that triggered the sync.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating success and affected chats.</returns>
@@ -183,6 +185,7 @@ public interface IBotModerationService
         User user,
         Chat chat,
         string reason,
+        Actor? executor = null,
         long? triggeredByMessageId = null,
         CancellationToken cancellationToken = default);
 

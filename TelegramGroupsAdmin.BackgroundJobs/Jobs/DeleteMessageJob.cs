@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -15,10 +15,10 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteMessageJob(
     ILogger<DeleteMessageJob> logger,
-    ITelegramBotClientFactory botClientFactory) : IJob
+    IBotMessageService messageService) : IJob
 {
     private readonly ILogger<DeleteMessageJob> _logger = logger;
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly IBotMessageService _messageService = messageService;
 
     /// <summary>
     /// Execute delayed message deletion (Quartz.NET entry point)
@@ -48,12 +48,10 @@ public class DeleteMessageJob(
                 payload.ChatId,
                 payload.Reason);
 
-            // Get operations from factory
-            var operations = await _botClientFactory.GetOperationsAsync();
-
-            await operations.DeleteMessageAsync(
+            await _messageService.DeleteAndMarkMessageAsync(
                 chatId: payload.ChatId,
                 messageId: payload.MessageId,
+                deletionSource: payload.Reason ?? "scheduled_delete",
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(

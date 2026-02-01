@@ -18,8 +18,8 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class WebBotMessagingService : IWebBotMessagingService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ITelegramBotClientFactory _botFactory;
     private readonly IBotMessageService _botMessageService;
+    private readonly IBotUserService _botUserService;
     private readonly ITelegramUserRepository _userRepo;
     private readonly ITelegramUserMappingRepository _mappingRepo;
     private readonly ITelegramBotService _botService;
@@ -27,16 +27,16 @@ public class WebBotMessagingService : IWebBotMessagingService
 
     public WebBotMessagingService(
         IServiceScopeFactory scopeFactory,
-        ITelegramBotClientFactory botFactory,
         IBotMessageService botMessageService,
+        IBotUserService botUserService,
         ITelegramUserRepository userRepo,
         ITelegramUserMappingRepository mappingRepo,
         ITelegramBotService botService,
         ILogger<WebBotMessagingService> logger)
     {
         _scopeFactory = scopeFactory;
-        _botFactory = botFactory;
         _botMessageService = botMessageService;
+        _botUserService = botUserService;
         _userRepo = userRepo;
         _mappingRepo = mappingRepo;
         _botService = botService;
@@ -50,11 +50,11 @@ public class WebBotMessagingService : IWebBotMessagingService
     {
         try
         {
-            // Check 1: Bot must be configured (check if bot token exists via factory)
-            // TelegramConfigLoader.LoadConfigAsync() throws InvalidOperationException if token not configured
+            // Check 1: Bot must be configured (check if bot token exists via user service)
+            // GetMeAsync throws InvalidOperationException if token not configured
             try
             {
-                await _botFactory.GetOperationsAsync();
+                await _botUserService.GetMeAsync(cancellationToken);
             }
             catch (InvalidOperationException)
             {

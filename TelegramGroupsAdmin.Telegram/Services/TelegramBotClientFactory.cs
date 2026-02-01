@@ -10,28 +10,23 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Uses a "refresh on change" pattern - tracks single active client, disposes old
 /// client when token changes. This keeps resource usage low for homelab deployment.
 ///
-/// Two usage patterns:
-/// - GetBotClientAsync(): Returns raw client for polling (TelegramBotPollingHost only)
-/// - GetOperationsAsync(): Returns ITelegramOperations wrapper (all other services)
+/// Only used by Bot Handlers layer - services and application code should use IBot*Service interfaces.
 /// </summary>
 public class TelegramBotClientFactory : ITelegramBotClientFactory
 {
     private readonly ITelegramConfigLoader _configLoader;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TelegramBotClientFactory> _logger;
     private readonly Lock _lock = new();
 
     // Single client/token pair (not dictionary) - replaced when token changes
     private string? _currentToken;
     private ITelegramBotClient? _currentClient;
-    private TelegramOperations? _currentOperations;
 
     public TelegramBotClientFactory(
         ITelegramConfigLoader configLoader,
         ILoggerFactory loggerFactory)
     {
         _configLoader = configLoader;
-        _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<TelegramBotClientFactory>();
     }
 
@@ -40,19 +35,6 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
     {
         var botToken = await _configLoader.LoadConfigAsync();
         return GetOrRefresh(botToken);
-    }
-
-    /// <inheritdoc />
-    public async Task<ITelegramOperations> GetOperationsAsync()
-    {
-        var botToken = await _configLoader.LoadConfigAsync();
-        GetOrRefresh(botToken); // Ensure client is current
-
-        lock (_lock)
-        {
-            return _currentOperations
-                ?? throw new InvalidOperationException("Operations not initialized - GetOrRefresh failed to create instance");
-        }
     }
 
     private ITelegramBotClient GetOrRefresh(string botToken)
@@ -69,12 +51,9 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
                 _logger.LogInformation("Bot token changed, replacing client");
             }
 
-            // Create new client and wrapper
+            // Create new client
             _currentToken = botToken;
             _currentClient = new TelegramBotClient(botToken);
-            _currentOperations = new TelegramOperations(
-                _currentClient,
-                _loggerFactory.CreateLogger<TelegramOperations>());
 
             _logger.LogDebug("Created new Telegram client");
             return _currentClient;
@@ -86,7 +65,6 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
         lock (_lock)
         {
             _currentClient = null;
-            _currentOperations = null;
             _currentToken = null;
         }
     }

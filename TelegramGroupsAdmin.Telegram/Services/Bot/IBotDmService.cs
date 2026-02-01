@@ -1,10 +1,11 @@
-namespace TelegramGroupsAdmin.Telegram.Services;
+namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
 /// <summary>
 /// Centralized DM delivery service with consistent bot_dm_enabled tracking and fallback handling.
 /// Used by: NotificationSystem, WelcomeService, and any other feature that needs DM delivery.
+/// This service is in the Bot layer and can use IBotMessageHandler directly.
 /// </summary>
-public interface IDmDeliveryService
+public interface IBotDmService
 {
     /// <summary>
     /// Attempt to send a DM to a user. Updates bot_dm_enabled flag automatically.
@@ -78,5 +79,52 @@ public interface IDmDeliveryService
         string messageText,
         string? photoPath = null,
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Edit a DM text message with optional inline keyboard change.
+    /// Used for updating review notification DMs after admin action (removes buttons, shows result).
+    /// </summary>
+    Task<global::Telegram.Bot.Types.Message> EditDmTextAsync(
+        long dmChatId,
+        int messageId,
+        string text,
+        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Edit a DM media message caption with optional inline keyboard change.
+    /// Used for updating review notification DMs with photos/videos after admin action.
+    /// </summary>
+    Task<global::Telegram.Bot.Types.Message> EditDmCaptionAsync(
+        long dmChatId,
+        int messageId,
+        string? caption,
+        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete a message from a DM conversation.
+    /// Used for cleaning up exam question messages after user answers.
+    /// </summary>
+    Task DeleteDmMessageAsync(
+        long dmChatId,
+        int messageId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Send a DM with an inline keyboard to a user.
+    /// Does NOT queue on failure (keyboards can't be queued).
+    /// Used for exam questions with answer buttons.
+    /// </summary>
+    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
+    /// <param name="messageText">Message text to send</param>
+    /// <param name="keyboard">Inline keyboard markup with buttons</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result indicating success or failure, with MessageId if successful</returns>
+    Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+        long telegramUserId,
+        string messageText,
+        global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup keyboard,
         CancellationToken cancellationToken = default);
 }

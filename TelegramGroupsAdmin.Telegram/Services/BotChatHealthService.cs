@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
@@ -18,12 +19,10 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// <summary>
 /// Service for chat health monitoring, admin caching, and bot status tracking.
 /// Singleton service that maintains an in-memory cache of chat health statuses.
-/// Uses IBotChatHandler and IBotUserHandler for Telegram API calls.
+/// Creates scopes to resolve IBotChatHandler and IBotUserHandler for Telegram API calls.
 /// </summary>
 public class BotChatHealthService(
     IServiceProvider serviceProvider,
-    IBotChatHandler chatHandler,
-    IBotUserHandler userHandler,
     ITelegramConfigLoader configLoader,
     IChatCache chatCache,
     ILogger<BotChatHealthService> logger) : IBotChatHealthService
@@ -457,6 +456,10 @@ public class BotChatHealthService(
         Chat? chat = null; // Captured early for error logging
         try
         {
+            // Create scope for handler resolution (singleton service needs scoped handlers)
+            using var scope = serviceProvider.CreateScope();
+            var chatHandler = scope.ServiceProvider.GetRequiredService<IBotChatHandler>();
+
             // Check if this is a group chat (only groups/supergroups have administrators)
             chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
             if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
@@ -468,8 +471,6 @@ public class BotChatHealthService(
 
             // Get all administrators from Telegram
             var admins = await chatHandler.GetChatAdministratorsAsync(chatId, cancellationToken);
-
-            using var scope = serviceProvider.CreateScope();
             var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
             // Get current admin IDs from Telegram
@@ -618,6 +619,11 @@ public class BotChatHealthService(
         };
         string? chatName = null;
 
+        // Create scope for handler resolution (singleton service needs scoped handlers)
+        using var handlerScope = serviceProvider.CreateScope();
+        var chatHandler = handlerScope.ServiceProvider.GetRequiredService<IBotChatHandler>();
+        var userHandler = handlerScope.ServiceProvider.GetRequiredService<IBotUserHandler>();
+
         try
         {
             // Try to get chat info
@@ -641,7 +647,7 @@ public class BotChatHealthService(
             // Get bot's member status (may fail if chat has hidden members and bot isn't admin)
             try
             {
-                var botId = await GetCachedBotIdAsync(cancellationToken);
+                var botId = await GetCachedBotIdAsync(userHandler, cancellationToken);
                 var botMember = await userHandler.GetChatMemberAsync(chatId, botId, cancellationToken);
                 health.BotStatus = botMember.Status.ToString();
                 health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
@@ -931,11 +937,11 @@ public class BotChatHealthService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var inviteLinkService = scope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
+            var chatService = scope.ServiceProvider.GetRequiredService<IBotChatService>();
 
             // Refresh from Telegram API to validate and update if needed
             // This fetches the current primary link and only writes to DB if it changed
-            var inviteLink = await inviteLinkService.RefreshInviteLinkAsync(chat, cancellationToken);
+            var inviteLink = await chatService.RefreshInviteLinkAsync(chat.Id, cancellationToken);
 
             if (inviteLink != null)
             {
@@ -1004,6 +1010,7 @@ public class BotChatHealthService(
         try
         {
             using var scope = serviceProvider.CreateScope();
+            var chatHandler = scope.ServiceProvider.GetRequiredService<IBotChatHandler>();
             var linkedChannelsRepository = scope.ServiceProvider.GetRequiredService<ILinkedChannelsRepository>();
             var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
             var photoHashService = scope.ServiceProvider.GetRequiredService<IPhotoHashService>();
@@ -1100,7 +1107,7 @@ public class BotChatHealthService(
     /// Get the bot's user ID, caching the result for subsequent calls.
     /// This avoids repeated GetMe API calls during health checks.
     /// </summary>
-    private async Task<long> GetCachedBotIdAsync(CancellationToken cancellationToken = default)
+    private async Task<long> GetCachedBotIdAsync(IBotUserHandler userHandler, CancellationToken cancellationToken = default)
     {
         if (_cachedBotId.HasValue)
             return _cachedBotId.Value;

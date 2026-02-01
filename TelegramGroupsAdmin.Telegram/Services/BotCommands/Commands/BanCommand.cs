@@ -20,7 +20,7 @@ public class BanCommand : IBotCommand
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotModerationService _moderationService;
     private readonly IUserMessagingService _messagingService;
-    private readonly ITelegramBotClientFactory _botClientFactory;
+    private readonly IBotMessageService _messageService;
 
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
@@ -35,13 +35,13 @@ public class BanCommand : IBotCommand
         IServiceProvider serviceProvider,
         IBotModerationService moderationService,
         IUserMessagingService messagingService,
-        ITelegramBotClientFactory botClientFactory)
+        IBotMessageService messageService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
         _messagingService = messagingService;
-        _botClientFactory = botClientFactory;
+        _messageService = messageService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -157,8 +157,7 @@ public class BanCommand : IBotCommand
 
         var keyboard = new InlineKeyboardMarkup(buttons);
 
-        var operations = await _botClientFactory.GetOperationsAsync();
-        await operations.SendMessageAsync(
+        await _messageService.SendAndSaveMessageAsync(
             commandMessage.Chat.Id,
             "Multiple users found. Select one to ban:",
             replyMarkup: keyboard,

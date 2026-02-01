@@ -5,6 +5,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -54,7 +55,7 @@ public class InviteCommand : IBotCommand
 
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var inviteLinkService = scope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
+        var chatService = scope.ServiceProvider.GetRequiredService<IBotChatService>();
 
         // Check if command is enabled (global + per-chat override)
         var config = await configService.GetEffectiveAsync<InviteCommandConfig>(ConfigType.Moderation, chatId)
@@ -69,7 +70,7 @@ public class InviteCommand : IBotCommand
         }
 
         // Get cached invite link (or fetch from Telegram if not cached)
-        var inviteLink = await inviteLinkService.GetInviteLinkAsync(message.Chat, cancellationToken);
+        var inviteLink = await chatService.GetInviteLinkAsync(chatId, cancellationToken);
 
         if (string.IsNullOrEmpty(inviteLink))
         {
