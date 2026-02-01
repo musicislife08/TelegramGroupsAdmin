@@ -68,4 +68,16 @@ public interface IBotChatService
     /// When a Group is upgraded to Supergroup, Telegram creates a new chat ID.
     /// </summary>
     Task HandleChatMigrationAsync(long oldChatId, long newChatId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Refresh admin list for a specific chat from Telegram API.
+    /// Updates chat_admins table and auto-trusts new admins.
+    /// </summary>
+    Task RefreshChatAdminsAsync(long chatId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Refresh admin cache for all active managed chats.
+    /// Called on startup to warm the admin cache.
+    /// </summary>
+    Task RefreshAllChatAdminsAsync(CancellationToken ct = default);
 }

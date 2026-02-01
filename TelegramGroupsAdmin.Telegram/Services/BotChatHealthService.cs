@@ -16,10 +16,11 @@ using TelegramGroupsAdmin.Telegram.Services.Telegram;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Service for chat health monitoring, admin caching, and bot status tracking.
-/// Singleton service that orchestrates health checks and admin cache management.
+/// Service for chat health monitoring.
+/// Singleton service that orchestrates health checks and status tracking.
 /// Uses IChatHealthCache for pure state storage.
-/// Creates scopes to resolve IBotChatHandler and IBotUserHandler for Telegram API calls.
+/// Creates scopes to resolve handlers for Telegram API calls.
+/// Note: Admin refresh has moved to IBotChatService (scoped).
 /// </summary>
 public class BotChatHealthService(
     IServiceProvider serviceProvider,
@@ -55,159 +56,6 @@ public class BotChatHealthService(
     /// </summary>
     public List<long> FilterHealthyChats(IEnumerable<long> chatIds)
         => healthCache.FilterHealthyChats(chatIds);
-
-    /// <summary>
-    /// Refresh admin cache for all active managed chats on startup
-    /// </summary>
-    public async Task RefreshAllChatAdminsAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var managedChats = await managedChatsRepository.GetActiveChatsAsync(cancellationToken);
-
-            logger.LogInformation("Refreshing admin cache for {Count} managed chats", managedChats.Count);
-
-            var refreshedCount = 0;
-            foreach (var chat in managedChats)
-            {
-                try
-                {
-                    await RefreshChatAdminsAsync(chat.ChatId, cancellationToken);
-                    refreshedCount++;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Failed to refresh admin cache for {Chat}",
-                        LogDisplayName.ChatDebug(chat.ChatName, chat.ChatId));
-                }
-            }
-
-            logger.LogInformation("✅ Admin cache refreshed for {Count}/{Total} chats", refreshedCount, managedChats.Count);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to refresh admin cache on startup");
-        }
-    }
-
-    /// <summary>
-    /// Refresh admin list for a specific chat (groups/supergroups only)
-    /// </summary>
-    public async Task RefreshChatAdminsAsync(long chatId, CancellationToken cancellationToken = default)
-    {
-        Chat? chat = null; // Captured early for error logging
-        try
-        {
-            // Create scope for handler resolution (singleton service needs scoped handlers)
-            using var scope = serviceProvider.CreateScope();
-            var chatHandler = scope.ServiceProvider.GetRequiredService<IBotChatHandler>();
-
-            // Check if this is a group chat (only groups/supergroups have administrators)
-            chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
-            if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
-            {
-                logger.LogDebug("Skipping admin refresh for non-group chat {Chat} (type: {Type})",
-                    LogDisplayName.ChatDebug(chat.Title, chatId), chat.Type);
-                return;
-            }
-
-            // Get all administrators from Telegram
-            var admins = await chatHandler.GetChatAdministratorsAsync(chatId, cancellationToken);
-            var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-
-            // Get current admin IDs from Telegram
-            var currentAdminIds = admins.Select(a => a.User.Id).ToHashSet();
-
-            // Get cached admins from database
-            var cachedAdmins = await chatAdminsRepository.GetChatAdminsAsync(chatId, cancellationToken);
-            var cachedAdminIds = cachedAdmins.Select(a => a.TelegramId).ToHashSet();
-
-            // Find demoted admins (in cache but not in current list)
-            var demotedAdminIds = cachedAdminIds.Except(currentAdminIds).ToList();
-
-            // Deactivate demoted admins
-            foreach (var demotedId in demotedAdminIds)
-            {
-                await chatAdminsRepository.DeactivateAsync(chatId, demotedId, cancellationToken);
-                var demotedAdmin = cachedAdmins.First(a => a.TelegramId == demotedId);
-                logger.LogInformation(
-                    "⬇️ {Admin} demoted in {Chat}",
-                    demotedAdmin.DisplayName,
-                    LogDisplayName.ChatInfo(chat.Title, chatId));
-            }
-
-            // Upsert current admins (add new, update existing)
-            var adminNames = new List<string>();
-            var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-
-            foreach (var admin in admins)
-            {
-                // Ensure user exists in telegram_users first (FK constraint)
-                await EnsureUserExistsAsync(userRepo, admin.User, cancellationToken);
-
-                var isCreator = admin.Status == ChatMemberStatus.Creator;
-                var wasNew = !cachedAdminIds.Contains(admin.User.Id);
-
-                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, cancellationToken);
-
-                var displayName = TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id);
-                adminNames.Add(displayName + (isCreator ? " (creator)" : ""));
-
-                if (wasNew)
-                {
-                    logger.LogInformation(
-                        "⬆️ New admin {Admin} promoted in {Chat}",
-                        LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
-                        LogDisplayName.ChatInfo(chat.Title, chatId));
-
-                    // AUTO-TRUST: Trust new admins globally
-                    try
-                    {
-                        var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-
-                        var trustAction = new UserActionRecord(
-                            Id: 0,
-                            UserId: admin.User.Id,
-                            ActionType: UserActionType.Trust,
-                            MessageId: null,
-                            IssuedBy: Actor.AutoTrust,
-                            IssuedAt: DateTimeOffset.UtcNow,
-                            ExpiresAt: null,
-                            Reason: $"Admin in chat {chatId}"
-                        );
-
-                        await userActionsRepo.InsertAsync(trustAction, cancellationToken);
-                        await userRepo.UpdateTrustStatusAsync(admin.User.Id, isTrusted: true, cancellationToken);
-
-                        logger.LogInformation(
-                            "Auto-trusted {User} - admin in {Chat}",
-                            LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
-                            LogDisplayName.ChatInfo(chat.Title, chatId));
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Failed to auto-trust admin {User} in {Chat}",
-                            LogDisplayName.UserDebug(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
-                            LogDisplayName.ChatDebug(chat.Title, chatId));
-                    }
-                }
-            }
-
-            logger.LogDebug(
-                "✅ Synced {Count} admins for {Chat}: {Admins}",
-                admins.Length,
-                LogDisplayName.ChatDebug(chat.Title, chatId),
-                string.Join(", ", adminNames));
-
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to refresh admins for {Chat}", chat.ToLogDebug());
-            throw; // Re-throw so caller can track failures
-        }
-    }
 
     /// <summary>
     /// Perform health check on a specific chat and update cache
@@ -321,7 +169,8 @@ public class BotChatHealthService(
                 health.AdminCount = admins.Length;
 
                 // Refresh admin cache in database (for permission checks in commands)
-                await RefreshChatAdminsAsync(chatId, cancellationToken);
+                var chatService = handlerScope.ServiceProvider.GetRequiredService<IBotChatService>();
+                await chatService.RefreshChatAdminsAsync(chatId, cancellationToken);
 
                 // Validate and refresh cached invite link (all groups - public and private)
                 if (chat.Type is ChatType.Supergroup or ChatType.Group)
@@ -515,8 +364,12 @@ public class BotChatHealthService(
             logger.LogDebug("Refreshing single chat {Chat}",
                 LogDisplayName.ChatDebug(chat?.ChatName, chatId));
 
-            // Refresh admin list and health
-            await RefreshChatAdminsAsync(chatId, cancellationToken);
+            // Refresh admin list via IBotChatService (scoped)
+            using var adminScope = serviceProvider.CreateScope();
+            var chatService = adminScope.ServiceProvider.GetRequiredService<IBotChatService>();
+            await chatService.RefreshChatAdminsAsync(chatId, cancellationToken);
+
+            // Refresh health check
             await RefreshHealthForChatAsync(chatId, cancellationToken);
 
             // Optionally fetch fresh chat icon
@@ -602,43 +455,6 @@ public class BotChatHealthService(
             // Non-fatal - invite link validation failure shouldn't fail health check
             logger.LogWarning(ex, "Failed to validate invite link for {Chat}", chat.ToLogDebug());
         }
-    }
-
-    /// <summary>
-    /// Ensures a Telegram user exists in the database before creating dependent records (e.g., chat_admins).
-    /// Creates a minimal user record if the user doesn't exist yet (they may not have sent any messages).
-    /// Required for FK constraint: chat_admins.telegram_id → telegram_users.telegram_user_id
-    /// </summary>
-    private static async Task EnsureUserExistsAsync(
-        ITelegramUserRepository userRepo,
-        global::Telegram.Bot.Types.User telegramUser,
-        CancellationToken cancellationToken)
-    {
-        var existingUser = await userRepo.GetByTelegramIdAsync(telegramUser.Id, cancellationToken);
-        if (existingUser != null)
-            return;
-
-        // Create minimal user record - they haven't messaged yet so we only have basic profile info
-        var now = DateTimeOffset.UtcNow;
-        var newUser = new TelegramUser(
-            TelegramUserId: telegramUser.Id,
-            Username: telegramUser.Username,
-            FirstName: telegramUser.FirstName,
-            LastName: telegramUser.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: telegramUser.IsBot,
-            IsTrusted: false, // Will be set to true by auto-trust logic after this
-            IsBanned: false,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-
-        await userRepo.UpsertAsync(newUser, cancellationToken);
     }
 
     /// <summary>

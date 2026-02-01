@@ -28,7 +28,6 @@ public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
     IOptions<MessageHistoryOptions> historyOptions,
     CommandRouter commandRouter,
-    IBotChatHealthService chatHealthService,
     IChatCache chatCache,
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
@@ -362,7 +361,8 @@ public partial class MessageProcessingService(
 
                     try
                     {
-                        await chatHealthService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
+                        var chatService = messageScope.ServiceProvider.GetRequiredService<IBotChatService>();
+                        await chatService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
                     }
                     catch (Exception ex)
                     {

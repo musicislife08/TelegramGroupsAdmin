@@ -34,16 +34,6 @@ public interface IBotChatHealthService
     List<long> FilterHealthyChats(IEnumerable<long> chatIds);
 
     /// <summary>
-    /// Refresh admin cache for all active managed chats on startup.
-    /// </summary>
-    Task RefreshAllChatAdminsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Refresh admin list for a specific chat (groups/supergroups only).
-    /// </summary>
-    Task RefreshChatAdminsAsync(long chatId, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Perform health check on a specific chat and update cache.
     /// </summary>
     Task RefreshHealthForChatAsync(long chatId, CancellationToken cancellationToken = default);

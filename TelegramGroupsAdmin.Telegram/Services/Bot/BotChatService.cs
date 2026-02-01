@@ -219,7 +219,7 @@ public class BotChatService(
                     LogDisplayName.ChatInfo(chatName, chat.Id));
 
                 // Refresh admin cache immediately instead of waiting for periodic health check (30min)
-                await chatHealthService.RefreshChatAdminsAsync(chat.Id, ct);
+                await RefreshChatAdminsAsync(chat.Id, ct);
             }
 
             if (isActive)
@@ -411,6 +411,150 @@ public class BotChatService(
                 "Failed to handle chat migration from {OldChatId} to {NewChatId}",
                 oldChatId,
                 newChatId);
+        }
+    }
+
+    /// <summary>
+    /// Refresh admin list for a specific chat from Telegram API.
+    /// Updates chat_admins table and auto-trusts new admins.
+    /// </summary>
+    public async Task RefreshChatAdminsAsync(long chatId, CancellationToken ct = default)
+    {
+        Chat? chat = null;
+        try
+        {
+            // Check if this is a group chat (only groups/supergroups have administrators)
+            chat = await chatHandler.GetChatAsync(chatId, ct);
+            if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
+            {
+                logger.LogDebug("Skipping admin refresh for non-group chat {Chat} (type: {Type})",
+                    LogDisplayName.ChatDebug(chat.Title, chatId), chat.Type);
+                return;
+            }
+
+            // Get all administrators from Telegram
+            var admins = await chatHandler.GetChatAdministratorsAsync(chatId, ct);
+
+            // Get current admin IDs from Telegram
+            var currentAdminIds = admins.Select(a => a.User.Id).ToHashSet();
+
+            // Get cached admins from database
+            var cachedAdmins = await chatAdminsRepo.GetChatAdminsAsync(chatId, ct);
+            var cachedAdminIds = cachedAdmins.Select(a => a.TelegramId).ToHashSet();
+
+            // Find demoted admins (in cache but not in current list)
+            var demotedAdminIds = cachedAdminIds.Except(currentAdminIds).ToList();
+
+            // Deactivate demoted admins
+            foreach (var demotedId in demotedAdminIds)
+            {
+                await chatAdminsRepo.DeactivateAsync(chatId, demotedId, ct);
+                var demotedAdmin = cachedAdmins.First(a => a.TelegramId == demotedId);
+                logger.LogInformation(
+                    "⬇️ {Admin} demoted in {Chat}",
+                    demotedAdmin.DisplayName,
+                    LogDisplayName.ChatInfo(chat.Title, chatId));
+            }
+
+            // Upsert current admins (add new, update existing)
+            var adminNames = new List<string>();
+
+            foreach (var admin in admins)
+            {
+                // Ensure user exists in telegram_users first (FK constraint)
+                await EnsureUserExistsAsync(admin.User, ct);
+
+                var isCreator = admin.Status == ChatMemberStatus.Creator;
+                var wasNew = !cachedAdminIds.Contains(admin.User.Id);
+
+                await chatAdminsRepo.UpsertAsync(chatId, admin.User.Id, isCreator, ct);
+
+                var displayName = TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id);
+                adminNames.Add(displayName + (isCreator ? " (creator)" : ""));
+
+                if (wasNew)
+                {
+                    logger.LogInformation(
+                        "⬆️ New admin {Admin} promoted in {Chat}",
+                        LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
+                        LogDisplayName.ChatInfo(chat.Title, chatId));
+
+                    // AUTO-TRUST: Trust new admins globally
+                    try
+                    {
+                        var trustAction = new UserActionRecord(
+                            Id: 0,
+                            UserId: admin.User.Id,
+                            ActionType: UserActionType.Trust,
+                            MessageId: null,
+                            IssuedBy: Actor.AutoTrust,
+                            IssuedAt: DateTimeOffset.UtcNow,
+                            ExpiresAt: null,
+                            Reason: $"Admin in chat {chatId}"
+                        );
+
+                        await userActionsRepo.InsertAsync(trustAction, ct);
+                        await userRepo.UpdateTrustStatusAsync(admin.User.Id, isTrusted: true, ct);
+
+                        logger.LogInformation(
+                            "Auto-trusted {User} - admin in {Chat}",
+                            LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
+                            LogDisplayName.ChatInfo(chat.Title, chatId));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to auto-trust admin {User} in {Chat}",
+                            LogDisplayName.UserDebug(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
+                            LogDisplayName.ChatDebug(chat.Title, chatId));
+                    }
+                }
+            }
+
+            logger.LogDebug(
+                "✅ Synced {Count} admins for {Chat}: {Admins}",
+                admins.Length,
+                LogDisplayName.ChatDebug(chat.Title, chatId),
+                string.Join(", ", adminNames));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to refresh admins for {Chat}", chat?.ToLogDebug());
+            throw; // Re-throw so caller can track failures
+        }
+    }
+
+    /// <summary>
+    /// Refresh admin cache for all active managed chats.
+    /// Called on startup to warm the admin cache.
+    /// </summary>
+    public async Task RefreshAllChatAdminsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var managedChats = await managedChatsRepo.GetActiveChatsAsync(ct);
+
+            logger.LogInformation("Refreshing admin cache for {Count} managed chats", managedChats.Count);
+
+            var refreshedCount = 0;
+            foreach (var chat in managedChats)
+            {
+                try
+                {
+                    await RefreshChatAdminsAsync(chat.ChatId, ct);
+                    refreshedCount++;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to refresh admin cache for {Chat}",
+                        LogDisplayName.ChatDebug(chat.ChatName, chat.ChatId));
+                }
+            }
+
+            logger.LogInformation("✅ Admin cache refreshed for {Count}/{Total} chats", refreshedCount, managedChats.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to refresh admin cache on startup");
         }
     }
 

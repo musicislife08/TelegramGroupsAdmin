@@ -151,8 +151,12 @@ public class TelegramBotPollingHost(
         // Register bot commands in Telegram UI
         await RegisterBotCommandsAsync(botClient, stoppingToken);
 
-        // Cache admin lists for all managed chats
-        await chatHealthService.RefreshAllChatAdminsAsync(stoppingToken);
+        // Cache admin lists for all managed chats (via scoped IBotChatService)
+        using (var adminScope = scopeFactory.CreateScope())
+        {
+            var chatService = adminScope.ServiceProvider.GetRequiredService<Bot.IBotChatService>();
+            await chatService.RefreshAllChatAdminsAsync(stoppingToken);
+        }
 
         // Perform initial health check for all chats
         await chatHealthService.RefreshAllHealthAsync(stoppingToken);
