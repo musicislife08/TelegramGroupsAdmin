@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
@@ -17,15 +16,22 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Orchestrates chat health refresh operations.
-/// Singleton service that performs health checks and updates IChatHealthCache.
-/// Creates scopes to resolve handlers for Telegram API calls.
+/// Scoped service that performs health checks and updates IChatHealthCache.
 /// For reading cached health state, inject IChatHealthCache directly.
 /// </summary>
 public class ChatHealthRefreshOrchestrator(
-    IServiceProvider serviceProvider,
     ITelegramConfigLoader configLoader,
     IChatCache chatCache,
     IChatHealthCache healthCache,
+    IManagedChatsRepository managedChatsRepository,
+    ILinkedChannelsRepository linkedChannelsRepository,
+    IBotChatHandler chatHandler,
+    IBotUserHandler userHandler,
+    IBotUserService userService,
+    IBotChatService chatService,
+    TelegramPhotoService photoService,
+    IPhotoHashService photoHashService,
+    INotificationService notificationService,
     ILogger<ChatHealthRefreshOrchestrator> logger) : IChatHealthRefreshOrchestrator
 {
     /// <summary>
@@ -43,8 +49,6 @@ public class ChatHealthRefreshOrchestrator(
             // Update chat name in database if we got a valid title from Telegram
             if (health.IsReachable && !string.IsNullOrEmpty(chatName))
             {
-                using var scope = serviceProvider.CreateScope();
-                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
                 var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
 
                 if (existingChat != null && existingChat.ChatName != chatName)
@@ -80,12 +84,6 @@ public class ChatHealthRefreshOrchestrator(
             Status = ChatHealthStatusType.Unknown
         };
         string? chatName = null;
-
-        // Create scope for handler/service resolution (singleton service needs scoped handlers)
-        using var handlerScope = serviceProvider.CreateScope();
-        var chatHandler = handlerScope.ServiceProvider.GetRequiredService<IBotChatHandler>();
-        var userHandler = handlerScope.ServiceProvider.GetRequiredService<IBotUserHandler>();
-        var userService = handlerScope.ServiceProvider.GetRequiredService<IBotUserService>();
 
         try
         {
@@ -140,7 +138,6 @@ public class ChatHealthRefreshOrchestrator(
                 health.AdminCount = admins.Length;
 
                 // Refresh admin cache in database (for permission checks in commands)
-                var chatService = handlerScope.ServiceProvider.GetRequiredService<IBotChatService>();
                 await chatService.RefreshChatAdminsAsync(chatId, cancellationToken);
 
                 // Validate and refresh cached invite link (all groups - public and private)
@@ -178,10 +175,6 @@ public class ChatHealthRefreshOrchestrator(
             if (health.Status is ChatHealthStatusType.Warning or ChatHealthStatusType.Error)
             {
                 var warningsText = string.Join("\n- ", health.Warnings);
-
-                // Create scope to resolve scoped INotificationService from singleton
-                using var scope = serviceProvider.CreateScope();
-                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatHealthWarning,
@@ -238,10 +231,6 @@ public class ChatHealthRefreshOrchestrator(
 
                 // Notify about critical health failure (Phase 5.1)
                 // Only send notifications for non-transient errors (e.g., bot kicked, permission issues)
-                // Create scope to resolve scoped INotificationService from singleton
-                using var scope = serviceProvider.CreateScope();
-                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatHealthWarning,
                     subject: $"Chat Health Check Failed: {chatName ?? chatId.ToString()}",
@@ -271,8 +260,6 @@ public class ChatHealthRefreshOrchestrator(
                 return;
             }
 
-            using var scope = serviceProvider.CreateScope();
-            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
             // Check all non-deleted chats (active + inactive) for health status
             var chats = await managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
 
@@ -321,9 +308,7 @@ public class ChatHealthRefreshOrchestrator(
         ManagedChatRecord? chat = null;
         try
         {
-            using var scope = serviceProvider.CreateScope();
-            var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            chat = await managedChatsRepo.GetByChatIdAsync(chatId, cancellationToken);
+            chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
         }
         catch
         {
@@ -335,9 +320,7 @@ public class ChatHealthRefreshOrchestrator(
             logger.LogDebug("Refreshing single chat {Chat}",
                 LogDisplayName.ChatDebug(chat?.ChatName, chatId));
 
-            // Refresh admin list via IBotChatService (scoped)
-            using var adminScope = serviceProvider.CreateScope();
-            var chatService = adminScope.ServiceProvider.GetRequiredService<IBotChatService>();
+            // Refresh admin list
             await chatService.RefreshChatAdminsAsync(chatId, cancellationToken);
 
             // Refresh health check
@@ -372,14 +355,11 @@ public class ChatHealthRefreshOrchestrator(
         var (chatId, chatName) = (chat.ChatId, chat.ChatName);
         try
         {
-            using var scope = serviceProvider.CreateScope();
-            var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
             var iconPath = await photoService.GetChatIconAsync(chatId);
 
             if (iconPath != null)
             {
                 // Save icon path to database
-                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
                 var updatedChat = chat with { ChatIconPath = iconPath };
                 await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
                 logger.LogInformation("✅ Cached chat icon for {Chat}",
@@ -404,9 +384,6 @@ public class ChatHealthRefreshOrchestrator(
     {
         try
         {
-            using var scope = serviceProvider.CreateScope();
-            var chatService = scope.ServiceProvider.GetRequiredService<IBotChatService>();
-
             // Refresh from Telegram API to validate and update if needed
             // This fetches the current primary link and only writes to DB if it changed
             var inviteLink = await chatService.RefreshInviteLinkAsync(chat.Id, cancellationToken);
@@ -440,12 +417,6 @@ public class ChatHealthRefreshOrchestrator(
         ChatFullInfo? chat = null; // Captured early for error logging
         try
         {
-            using var scope = serviceProvider.CreateScope();
-            var chatHandler = scope.ServiceProvider.GetRequiredService<IBotChatHandler>();
-            var linkedChannelsRepository = scope.ServiceProvider.GetRequiredService<ILinkedChannelsRepository>();
-            var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
-            var photoHashService = scope.ServiceProvider.GetRequiredService<IPhotoHashService>();
-
             // Get chat info to check for linked channel
             chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
 

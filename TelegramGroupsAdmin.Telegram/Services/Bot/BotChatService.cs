@@ -19,7 +19,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 /// </summary>
 public class BotChatService(
     IBotChatHandler chatHandler,
-    IChatHealthRefreshOrchestrator chatHealthRefreshOrchestrator,
     IChatCache chatCache,
     IChatHealthCache healthCache,
     IConfigRepository configRepo,
@@ -254,8 +253,7 @@ public class BotChatService(
                     newStatus);
             }
 
-            // Trigger immediate health check when bot status changes
-            await chatHealthRefreshOrchestrator.RefreshHealthForChatAsync(chat.Id, ct);
+            // Note: Health refresh is triggered by UpdateRouter after this method returns
         }
         catch (Exception ex)
         {

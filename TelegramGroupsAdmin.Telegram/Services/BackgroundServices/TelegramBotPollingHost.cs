@@ -23,7 +23,6 @@ public class TelegramBotPollingHost(
     ITelegramBotClientFactory botFactory,
     IUpdateRouter updateRouter,
     ITelegramBotService botService,
-    IChatHealthRefreshOrchestrator chatHealthRefreshOrchestrator,
     CommandRouter commandRouter,
     IServiceScopeFactory scopeFactory,
     ILogger<TelegramBotPollingHost> logger) : BackgroundService
@@ -152,14 +151,14 @@ public class TelegramBotPollingHost(
         await RegisterBotCommandsAsync(botClient, stoppingToken);
 
         // Cache admin lists for all managed chats (via scoped IBotChatService)
-        using (var adminScope = scopeFactory.CreateScope())
-        {
-            var chatService = adminScope.ServiceProvider.GetRequiredService<Bot.IBotChatService>();
-            await chatService.RefreshAllChatAdminsAsync(stoppingToken);
-        }
+        using var adminScope = scopeFactory.CreateScope();
+        var chatService = adminScope.ServiceProvider.GetRequiredService<Bot.IBotChatService>();
+        await chatService.RefreshAllChatAdminsAsync(stoppingToken);
 
-        // Perform initial health check for all chats
-        await chatHealthRefreshOrchestrator.RefreshAllHealthAsync(stoppingToken);
+        // Perform initial health check for all chats (resolve from scope since orchestrator is scoped)
+        using var healthScope = scopeFactory.CreateScope();
+        var healthOrchestrator = healthScope.ServiceProvider.GetRequiredService<IChatHealthRefreshOrchestrator>();
+        await healthOrchestrator.RefreshAllHealthAsync(stoppingToken);
 
         // Periodic health checks handled by ChatHealthCheckJob via Quartz.NET
         logger.LogInformation("Telegram bot started listening for messages in all chats");

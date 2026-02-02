@@ -36,6 +36,7 @@ public class UpdateRouter(
         var banCallbackService = services.GetRequiredService<IBanCallbackService>();
         var reportCallbackService = services.GetRequiredService<IReportCallbackService>();
         var messageService = services.GetRequiredService<IBotMessageService>();
+        var healthOrchestrator = services.GetRequiredService<IChatHealthRefreshOrchestrator>();
 
         // Handle bot's chat member status changes (added/removed from chats)
         if (update.MyChatMember is { } myChatMember)
@@ -44,6 +45,9 @@ public class UpdateRouter(
                 "Routing MyChatMember update for chat {Chat}",
                 LogDisplayName.ChatDebug(myChatMember.Chat.Title, myChatMember.Chat.Id));
             await chatService.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
+
+            // Trigger immediate health check when bot status changes
+            await healthOrchestrator.RefreshHealthForChatAsync(myChatMember.Chat.Id, cancellationToken);
             return;
         }
 

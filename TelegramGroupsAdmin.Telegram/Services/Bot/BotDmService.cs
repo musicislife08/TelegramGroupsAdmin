@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
@@ -14,24 +13,17 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
 /// <summary>
 /// Centralized DM delivery service with consistent bot_dm_enabled tracking and fallback handling.
-/// Singleton service that creates scopes internally for handler and repository access.
+/// Scoped service with direct dependency injection.
 /// Part of the Bot services layer - can use IBotMessageHandler directly.
 /// </summary>
-public class BotDmService : IBotDmService
+public class BotDmService(
+    IBotMessageHandler messageHandler,
+    ITelegramUserRepository telegramUserRepository,
+    IPendingNotificationsRepository pendingNotificationsRepository,
+    IManagedChatsRepository managedChatsRepository,
+    IJobScheduler jobScheduler,
+    ILogger<BotDmService> logger) : IBotDmService
 {
-    private readonly ILogger<BotDmService> _logger;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IJobScheduler _jobScheduler;
-
-    public BotDmService(
-        ILogger<BotDmService> logger,
-        IServiceProvider serviceProvider,
-        IJobScheduler jobScheduler)
-    {
-        _logger = logger;
-        _serviceProvider = serviceProvider;
-        _jobScheduler = jobScheduler;
-    }
 
     public async Task<DmDeliveryResult> SendDmAsync(
         long telegramUserId,
@@ -40,10 +32,6 @@ public class BotDmService : IBotDmService
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default)
     {
-        // Create scope for handler and repository access (singleton needs scoped services)
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-        var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
@@ -54,7 +42,7 @@ public class BotDmService : IBotDmService
                 text: messageText,
                 ct: cancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "DM sent successfully to {User}",
                 user.ToLogInfo(telegramUserId));
 
@@ -72,7 +60,7 @@ public class BotDmService : IBotDmService
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
             // User has blocked the bot or hasn't started a DM
-            _logger.LogWarning(
+            logger.LogWarning(
                 "DM blocked for {User} (403 Forbidden){FallbackInfo}",
                 user.ToLogDebug(telegramUserId),
                 fallbackChatId.HasValue ? $" - falling back to chat {fallbackChatId.Value}" : " - no fallback configured");
@@ -84,7 +72,6 @@ public class BotDmService : IBotDmService
             if (fallbackChatId.HasValue)
             {
                 return await SendFallbackToChatAsync(
-                    messageHandler,
                     fallbackChatId.Value,
                     messageText,
                     autoDeleteSeconds,
@@ -101,7 +88,7 @@ public class BotDmService : IBotDmService
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            logger.LogError(
                 ex,
                 "Failed to send DM to {User}",
                 user.ToLogDebug(telegramUserId));
@@ -122,11 +109,6 @@ public class BotDmService : IBotDmService
         string messageText,
         CancellationToken cancellationToken = default)
     {
-        // Create scope for handler and repository access (singleton needs scoped services)
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-        var telegramUserRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var pendingNotificationsRepository = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
         var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
@@ -137,7 +119,7 @@ public class BotDmService : IBotDmService
                 text: messageText,
                 ct: cancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "DM sent successfully to {User} (notification type: {NotificationType})",
                 user.ToLogInfo(telegramUserId),
                 notificationType);
@@ -155,7 +137,7 @@ public class BotDmService : IBotDmService
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
             // User has blocked the bot or hasn't started a DM - queue for later
-            _logger.LogWarning(
+            logger.LogWarning(
                 "DM blocked for {User} - queueing {NotificationType} notification for later delivery",
                 user.ToLogDebug(telegramUserId),
                 notificationType);
@@ -183,14 +165,14 @@ public class BotDmService : IBotDmService
             // Log network errors cleanly without stack traces
             if (IsNetworkError(ex))
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Failed to send DM to {User} - network unavailable (notification type: {NotificationType})",
                     user.ToLogDebug(telegramUserId),
                     notificationType);
             }
             else
             {
-                _logger.LogError(
+                logger.LogError(
                     ex,
                     "Failed to send DM to {User} (notification type: {NotificationType})",
                     user.ToLogDebug(telegramUserId),
@@ -211,16 +193,13 @@ public class BotDmService : IBotDmService
     /// Send fallback message in chat with optional auto-delete
     /// </summary>
     private async Task<DmDeliveryResult> SendFallbackToChatAsync(
-        IBotMessageHandler messageHandler,
         long chatId,
         string messageText,
         int? autoDeleteSeconds,
         CancellationToken cancellationToken)
     {
         // Fetch chat once for logging (reuse for all logs in this method)
-        using var scope = _serviceProvider.CreateScope();
-        var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-        var chat = await managedChatsRepo.GetByChatIdAsync(chatId, cancellationToken);
+        var chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
 
         try
         {
@@ -229,7 +208,7 @@ public class BotDmService : IBotDmService
                 text: messageText,
                 ct: cancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Sent fallback message {MessageId} in {Chat}{DeleteInfo}",
                 fallbackMessage.MessageId,
                 chat.ToLogInfo(chatId),
@@ -244,7 +223,7 @@ public class BotDmService : IBotDmService
                     "dm_fallback"
                 );
 
-                await _jobScheduler.ScheduleJobAsync(
+                await jobScheduler.ScheduleJobAsync(
                     "DeleteMessage",
                     deletePayload,
                     delaySeconds: autoDeleteSeconds.Value,
@@ -265,13 +244,13 @@ public class BotDmService : IBotDmService
             // Log network errors cleanly without stack traces
             if (IsNetworkError(ex))
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Failed to send fallback message in {Chat} - network unavailable",
                     chat.ToLogDebug(chatId));
             }
             else
             {
-                _logger.LogError(
+                logger.LogError(
                     ex,
                     "Failed to send fallback message in {Chat}",
                     chat.ToLogDebug(chatId));
@@ -295,12 +274,7 @@ public class BotDmService : IBotDmService
         string? videoPath = null,
         CancellationToken cancellationToken = default)
     {
-        // Create scope for handler and repository access (singleton needs scoped services)
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var notificationRepo = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
-        var user = await telegramUserRepo.GetByTelegramIdAsync(telegramUserId, cancellationToken);
+        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
         {
@@ -321,7 +295,7 @@ public class BotDmService : IBotDmService
                         parseMode: ParseMode.MarkdownV2,
                         ct: cancellationToken);
 
-                    _logger.LogInformation("DM with photo sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                    logger.LogInformation("DM with photo sent successfully to {User}", user.ToLogInfo(telegramUserId));
                 }
                 else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
                 {
@@ -334,12 +308,12 @@ public class BotDmService : IBotDmService
                         parseMode: ParseMode.MarkdownV2,
                         ct: cancellationToken);
 
-                    _logger.LogInformation("DM with video sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                    logger.LogInformation("DM with video sent successfully to {User}", user.ToLogInfo(telegramUserId));
                 }
                 else
                 {
                     // Media path provided but file doesn't exist - fallback to text only
-                    _logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to {User}",
+                    logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to {User}",
                         photoPath, videoPath, user.ToLogDebug(telegramUserId));
 
                     await messageHandler.SendAsync(
@@ -358,11 +332,11 @@ public class BotDmService : IBotDmService
                     parseMode: ParseMode.MarkdownV2,
                     ct: cancellationToken);
 
-                _logger.LogInformation("DM sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                logger.LogInformation("DM sent successfully to {User}", user.ToLogInfo(telegramUserId));
             }
 
             // Update bot_dm_enabled flag to true
-            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -374,12 +348,12 @@ public class BotDmService : IBotDmService
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
             // User has blocked the bot - update flag and queue notification
-            _logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
+            logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
 
-            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
 
             // Queue notification for later delivery
-            await notificationRepo.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
+            await pendingNotificationsRepository.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -391,7 +365,7 @@ public class BotDmService : IBotDmService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send DM with media to {User}", user.ToLogDebug(telegramUserId));
+            logger.LogError(ex, "Failed to send DM with media to {User}", user.ToLogDebug(telegramUserId));
             return new DmDeliveryResult
             {
                 DmSent = false,
@@ -410,12 +384,7 @@ public class BotDmService : IBotDmService
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
         CancellationToken cancellationToken = default)
     {
-        // Create scope for handler and repository access (singleton needs scoped services)
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var notificationRepo = scope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
-        var user = await telegramUserRepo.GetByTelegramIdAsync(telegramUserId, cancellationToken);
+        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
         {
@@ -431,7 +400,7 @@ public class BotDmService : IBotDmService
                     replyMarkup: keyboard,
                     ct: cancellationToken);
 
-                _logger.LogInformation("DM with photo and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                logger.LogInformation("DM with photo and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
             }
             else
             {
@@ -443,11 +412,11 @@ public class BotDmService : IBotDmService
                     replyMarkup: keyboard,
                     ct: cancellationToken);
 
-                _logger.LogInformation("DM with keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+                logger.LogInformation("DM with keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
             }
 
             // Update bot_dm_enabled flag to true
-            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -459,12 +428,12 @@ public class BotDmService : IBotDmService
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
             // User has blocked the bot - update flag and queue notification (without buttons)
-            _logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
+            logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
 
-            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
 
             // Queue notification for later delivery (text only, no buttons)
-            await notificationRepo.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
+            await pendingNotificationsRepository.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -476,7 +445,7 @@ public class BotDmService : IBotDmService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send DM with keyboard to {User}", user.ToLogDebug(telegramUserId));
+            logger.LogError(ex, "Failed to send DM with keyboard to {User}", user.ToLogDebug(telegramUserId));
             return new DmDeliveryResult
             {
                 DmSent = false,
@@ -494,9 +463,6 @@ public class BotDmService : IBotDmService
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-
         var editedMessage = await messageHandler.EditTextAsync(
             chatId: dmChatId,
             messageId: messageId,
@@ -504,7 +470,7 @@ public class BotDmService : IBotDmService
             replyMarkup: replyMarkup,
             ct: cancellationToken);
 
-        _logger.LogDebug("Edited DM text message {MessageId} in chat {ChatId}", messageId, dmChatId);
+        logger.LogDebug("Edited DM text message {MessageId} in chat {ChatId}", messageId, dmChatId);
 
         return editedMessage;
     }
@@ -516,9 +482,6 @@ public class BotDmService : IBotDmService
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken cancellationToken = default)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-
         var editedMessage = await messageHandler.EditCaptionAsync(
             chatId: dmChatId,
             messageId: messageId,
@@ -526,7 +489,7 @@ public class BotDmService : IBotDmService
             replyMarkup: replyMarkup,
             ct: cancellationToken);
 
-        _logger.LogDebug("Edited DM caption for message {MessageId} in chat {ChatId}", messageId, dmChatId);
+        logger.LogDebug("Edited DM caption for message {MessageId} in chat {ChatId}", messageId, dmChatId);
 
         return editedMessage;
     }
@@ -537,13 +500,9 @@ public class BotDmService : IBotDmService
         int messageId,
         CancellationToken cancellationToken = default)
     {
-        // Create scope for handler access (singleton needs scoped services)
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-
         await messageHandler.DeleteAsync(dmChatId, messageId, cancellationToken);
 
-        _logger.LogDebug("Deleted DM message {MessageId} in chat {ChatId}", messageId, dmChatId);
+        logger.LogDebug("Deleted DM message {MessageId} in chat {ChatId}", messageId, dmChatId);
     }
 
     /// <inheritdoc />
@@ -553,11 +512,7 @@ public class BotDmService : IBotDmService
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup keyboard,
         CancellationToken cancellationToken = default)
     {
-        // Create scope for handler and repository access (singleton needs scoped services)
-        using var scope = _serviceProvider.CreateScope();
-        var messageHandler = scope.ServiceProvider.GetRequiredService<IBotMessageHandler>();
-        var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var user = await telegramUserRepo.GetByTelegramIdAsync(telegramUserId, cancellationToken);
+        var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
 
         try
         {
@@ -568,13 +523,13 @@ public class BotDmService : IBotDmService
                 replyMarkup: keyboard,
                 ct: cancellationToken);
 
-            _logger.LogDebug(
+            logger.LogDebug(
                 "DM with keyboard sent successfully to {User} (MessageId: {MessageId})",
                 user.ToLogDebug(telegramUserId),
                 sentMessage.MessageId);
 
             // Update bot_dm_enabled flag to true
-            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -587,11 +542,11 @@ public class BotDmService : IBotDmService
         catch (ApiRequestException ex) when (ex.ErrorCode == 403)
         {
             // User has blocked the bot - can't send keyboard messages, no queue fallback
-            _logger.LogWarning(
+            logger.LogWarning(
                 "DM blocked for {User} (403 Forbidden) - cannot send keyboard message",
                 user.ToLogDebug(telegramUserId));
 
-            await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -603,7 +558,7 @@ public class BotDmService : IBotDmService
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            logger.LogError(
                 ex,
                 "Failed to send DM with keyboard to {User}",
                 user.ToLogDebug(telegramUserId));

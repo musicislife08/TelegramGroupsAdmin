@@ -78,8 +78,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IContentCheckCoordinator, ContentCheckCoordinator>();
 
             // DM delivery infrastructure (shared by notification system, welcome system, etc.)
-            // Singleton: Creates scopes internally for repository access
-            services.AddSingleton<IBotDmService, BotDmService>();
+            services.AddScoped<IBotDmService, BotDmService>();
 
             // Notification system (DM delivery with retry queue)
             services.AddScoped<INotificationChannel, TelegramDmChannel>();
@@ -119,13 +118,14 @@ public static class ServiceCollectionExtensions
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<ITelegramUserManagementService, TelegramUserManagementService>(); // Orchestrates Telegram user operations
             services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
-            services.AddSingleton<IWelcomeService, WelcomeService>();
+            services.AddScoped<IWelcomeService, WelcomeService>();
             services.AddSingleton<IBanCallbackService, BanCallbackService>(); // Ban user selection callbacks
             services.AddSingleton<IReportCallbackService, ReportCallbackService>(); // Report moderation action callbacks
-            services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
+            services.AddScoped<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
-            services.AddSingleton<IBanCelebrationService, BanCelebrationService>(); // Ban celebration GIF posting (Singleton for shuffle-bag state)
+            services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>(); // Singleton: shuffle-bag state for ban celebrations
+            services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Scoped: uses IBanCelebrationCache for state
             services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs
 
             // Training data quality services
@@ -171,7 +171,7 @@ public static class ServiceCollectionExtensions
 
             // Background services (refactored into smaller services)
             services.AddSingleton<DetectionActionService>();
-            services.AddSingleton<IChatHealthRefreshOrchestrator, ChatHealthRefreshOrchestrator>();
+            services.AddScoped<IChatHealthRefreshOrchestrator, ChatHealthRefreshOrchestrator>();
             services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
 
             // Telegram bot services (clean separation: capabilities vs lifecycle vs routing)
