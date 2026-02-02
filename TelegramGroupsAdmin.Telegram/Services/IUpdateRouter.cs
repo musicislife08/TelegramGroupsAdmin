@@ -15,9 +15,9 @@ public interface IUpdateRouter
     /// <param name="cancellationToken">Cancellation token</param>
     /// <remarks>
     /// Creates a scope per-update and routes to:
-    /// - MyChatMember → IBotChatHealthService (bot added/removed from chats)
-    /// - ChatMember → IBotChatHealthService + IWelcomeService (user joins/leaves/promotions)
-    /// - CallbackQuery → Callback handlers + IWelcomeService (inline button clicks)
+    /// - MyChatMember → IBotChatService (bot added/removed from chats)
+    /// - ChatMember → IBotChatService + IWelcomeService (user joins/leaves/admin changes)
+    /// - CallbackQuery → IBanCallbackService, IReportCallbackService, IWelcomeService (inline button clicks)
     /// - Message → IMessageProcessingService (new messages)
     /// - EditedMessage → IMessageProcessingService (message edits)
     /// </remarks>

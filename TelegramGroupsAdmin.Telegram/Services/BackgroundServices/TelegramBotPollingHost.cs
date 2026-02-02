@@ -23,7 +23,7 @@ public class TelegramBotPollingHost(
     ITelegramBotClientFactory botFactory,
     IUpdateRouter updateRouter,
     ITelegramBotService botService,
-    IBotChatHealthService chatHealthService,
+    IChatHealthRefreshOrchestrator chatHealthRefreshOrchestrator,
     CommandRouter commandRouter,
     IServiceScopeFactory scopeFactory,
     ILogger<TelegramBotPollingHost> logger) : BackgroundService
@@ -159,7 +159,7 @@ public class TelegramBotPollingHost(
         }
 
         // Perform initial health check for all chats
-        await chatHealthService.RefreshAllHealthAsync(stoppingToken);
+        await chatHealthRefreshOrchestrator.RefreshAllHealthAsync(stoppingToken);
 
         // Periodic health checks handled by ChatHealthCheckJob via Quartz.NET
         logger.LogInformation("Telegram bot started listening for messages in all chats");

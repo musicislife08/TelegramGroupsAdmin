@@ -3,8 +3,9 @@
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
+@using TelegramGroupsAdmin.Telegram.Services.Bot
 @inject ITelegramBotService BotService
-@inject IBotChatHealthService ChatHealthService
+@inject IChatHealthCache ChatHealthCache
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IContentDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
@@ -155,8 +156,8 @@
             _chats = [];
             foreach (var chat in chats)
             {
-                // Get cached health status from chat management service
-                var health = ChatHealthService.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
+                // Get cached health status from health cache
+                var health = ChatHealthCache.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
                 {
                     ChatId = chat.ChatId,
                     Status = ChatHealthStatusType.Unknown,

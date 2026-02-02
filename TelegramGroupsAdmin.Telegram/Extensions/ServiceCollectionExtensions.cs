@@ -171,7 +171,7 @@ public static class ServiceCollectionExtensions
 
             // Background services (refactored into smaller services)
             services.AddSingleton<DetectionActionService>();
-            services.AddSingleton<IBotChatHealthService, BotChatHealthService>();
+            services.AddSingleton<IChatHealthRefreshOrchestrator, ChatHealthRefreshOrchestrator>();
             services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
 
             // Telegram bot services (clean separation: capabilities vs lifecycle vs routing)

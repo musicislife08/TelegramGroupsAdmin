@@ -16,47 +16,18 @@ using TelegramGroupsAdmin.Telegram.Services.Telegram;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Service for chat health monitoring.
-/// Singleton service that orchestrates health checks and status tracking.
-/// Uses IChatHealthCache for pure state storage.
+/// Orchestrates chat health refresh operations.
+/// Singleton service that performs health checks and updates IChatHealthCache.
 /// Creates scopes to resolve handlers for Telegram API calls.
-/// Note: Admin refresh has moved to IBotChatService (scoped).
+/// For reading cached health state, inject IChatHealthCache directly.
 /// </summary>
-public class BotChatHealthService(
+public class ChatHealthRefreshOrchestrator(
     IServiceProvider serviceProvider,
     ITelegramConfigLoader configLoader,
     IChatCache chatCache,
     IChatHealthCache healthCache,
-    ILogger<BotChatHealthService> logger) : IBotChatHealthService
+    ILogger<ChatHealthRefreshOrchestrator> logger) : IChatHealthRefreshOrchestrator
 {
-    // Delegate event to IChatHealthCache
-    public event Action<ChatHealthStatus>?  OnHealthUpdate
-    {
-        add => healthCache.OnHealthUpdate += value;
-        remove => healthCache.OnHealthUpdate -= value;
-    }
-
-    /// <summary>
-    /// Get cached health status for a chat (null if not yet checked).
-    /// Delegates to IChatHealthCache.
-    /// </summary>
-    public ChatHealthStatus? GetCachedHealth(long chatId)
-        => healthCache.GetCachedHealth(chatId);
-
-    /// <summary>
-    /// Get set of chat IDs where bot has healthy status (admin + required permissions).
-    /// Delegates to IChatHealthCache.
-    /// </summary>
-    public HashSet<long> GetHealthyChatIds()
-        => healthCache.GetHealthyChatIds();
-
-    /// <summary>
-    /// Filters a list of chat IDs to only include healthy chats (bot has admin permissions).
-    /// Delegates to IChatHealthCache.
-    /// </summary>
-    public List<long> FilterHealthyChats(IEnumerable<long> chatIds)
-        => healthCache.FilterHealthyChats(chatIds);
-
     /// <summary>
     /// Perform health check on a specific chat and update cache
     /// </summary>
