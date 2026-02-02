@@ -1,12 +1,13 @@
 using Telegram.Bot.Types;
 
-namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Handles callback queries for report moderation action buttons in DMs.
-/// Routes to type-specific handlers based on ReportType (ContentReport, ImpersonationAlert, ExamFailure).
+/// Application-level service for handling report moderation callback queries from inline buttons in DMs.
+/// Orchestrates the report review workflow, calling bot services for Telegram operations
+/// and routing to type-specific handlers based on ReportType (ContentReport, ImpersonationAlert, ExamFailure).
 /// </summary>
-public interface IReportCallbackHandler
+public interface IReportCallbackService
 {
     /// <summary>
     /// Returns true if this handler can handle the given callback data.

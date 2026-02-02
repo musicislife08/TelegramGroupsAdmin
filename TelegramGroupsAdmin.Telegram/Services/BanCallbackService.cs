@@ -7,10 +7,11 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
-namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Handles callback queries for ban user selection buttons.
+/// Application-level service for handling ban callback queries from inline buttons.
+/// Orchestrates the ban selection workflow, calling bot services for Telegram operations.
 /// Callback formats:
 /// - ban_select:{userId}:{commandMessageId} - Execute ban for selected user
 /// - ban_cancel:{commandMessageId} - Cancel selection, cleanup messages
@@ -18,13 +19,13 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 /// <remarks>
 /// Registered as Singleton - creates scopes internally for scoped services.
 /// </remarks>
-public class BanCallbackHandler : IBanCallbackHandler
+public class BanCallbackService : IBanCallbackService
 {
-    private readonly ILogger<BanCallbackHandler> _logger;
+    private readonly ILogger<BanCallbackService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
 
-    public BanCallbackHandler(
-        ILogger<BanCallbackHandler> logger,
+    public BanCallbackService(
+        ILogger<BanCallbackService> logger,
         IServiceScopeFactory scopeFactory)
     {
         _logger = logger;

@@ -13,23 +13,24 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
-namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Handles callback queries for report moderation buttons in DMs.
-/// Routes to type-specific handlers based on ReportType.
+/// Application-level service for handling report moderation callback queries from inline buttons in DMs.
+/// Orchestrates the report review workflow, calling bot services for Telegram operations
+/// and routing to type-specific handlers based on ReportType.
 /// Callback format: rev:{contextId}:{actionInt} (or legacy rpt:{contextId}:{actionInt})
 /// </summary>
 /// <remarks>
 /// Registered as Singleton - creates scopes internally for scoped services.
 /// </remarks>
-public class ReportCallbackHandler : IReportCallbackHandler
+public class ReportCallbackService : IReportCallbackService
 {
-    private readonly ILogger<ReportCallbackHandler> _logger;
+    private readonly ILogger<ReportCallbackService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
 
-    public ReportCallbackHandler(
-        ILogger<ReportCallbackHandler> logger,
+    public ReportCallbackService(
+        ILogger<ReportCallbackService> logger,
         IServiceScopeFactory scopeFactory)
     {
         _logger = logger;

@@ -4,7 +4,6 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
-using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -34,8 +33,8 @@ public class UpdateRouter(
         var chatService = services.GetRequiredService<IBotChatService>();
         var welcomeService = services.GetRequiredService<IWelcomeService>();
         var messageProcessingService = services.GetRequiredService<IMessageProcessingService>();
-        var banCallbackHandler = services.GetRequiredService<IBanCallbackHandler>();
-        var reportCallbackHandler = services.GetRequiredService<IReportCallbackHandler>();
+        var banCallbackService = services.GetRequiredService<IBanCallbackService>();
+        var reportCallbackService = services.GetRequiredService<IReportCallbackService>();
         var messageService = services.GetRequiredService<IBotMessageService>();
 
         // Handle bot's chat member status changes (added/removed from chats)
@@ -70,15 +69,15 @@ public class UpdateRouter(
         {
             logger.LogDebug("Routing CallbackQuery {CallbackId}", callbackQuery.Id);
 
-            // Route to appropriate handler based on callback data prefix
+            // Route to appropriate service based on callback data prefix
             var callbackData = callbackQuery.Data ?? "";
-            if (reportCallbackHandler.CanHandle(callbackData))
+            if (reportCallbackService.CanHandle(callbackData))
             {
-                await reportCallbackHandler.HandleCallbackAsync(callbackQuery, cancellationToken);
+                await reportCallbackService.HandleCallbackAsync(callbackQuery, cancellationToken);
             }
-            else if (banCallbackHandler.CanHandle(callbackData))
+            else if (banCallbackService.CanHandle(callbackData))
             {
-                await banCallbackHandler.HandleCallbackAsync(callbackQuery, cancellationToken);
+                await banCallbackService.HandleCallbackAsync(callbackQuery, cancellationToken);
             }
             else
             {
