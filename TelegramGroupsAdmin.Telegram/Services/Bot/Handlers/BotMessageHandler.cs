@@ -1,4 +1,3 @@
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -7,7 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 /// <summary>
 /// Low-level handler for Telegram message operations.
-/// Thin wrapper around ITelegramBotClient - no business logic, just API calls.
+/// Thin wrapper around ITelegramApiClient - no business logic, just API calls.
 /// This is the ONLY layer that should touch ITelegramBotClientFactory for message operations.
 /// </summary>
 public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBotMessageHandler
@@ -22,14 +21,14 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        return await client.SendMessage(
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        return await apiClient.SendMessageAsync(
             chatId,
             text,
-            parseMode: parseMode ?? default,
+            parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
-            cancellationToken: ct);
+            ct: ct);
     }
 
     public async Task<Message> SendPhotoAsync(
@@ -41,15 +40,15 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        return await client.SendPhoto(
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        return await apiClient.SendPhotoAsync(
             chatId,
             photo,
             caption: caption,
-            parseMode: parseMode ?? default,
+            parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
-            cancellationToken: ct);
+            ct: ct);
     }
 
     public async Task<Message> SendVideoAsync(
@@ -61,15 +60,15 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        return await client.SendVideo(
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        return await apiClient.SendVideoAsync(
             chatId,
             video,
             caption: caption,
-            parseMode: parseMode ?? default,
+            parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
-            cancellationToken: ct);
+            ct: ct);
     }
 
     public async Task<Message> SendAnimationAsync(
@@ -81,15 +80,15 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        return await client.SendAnimation(
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        return await apiClient.SendAnimationAsync(
             chatId,
             animation,
             caption: caption,
-            parseMode: parseMode ?? default,
+            parseMode: parseMode,
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
-            cancellationToken: ct);
+            ct: ct);
     }
 
     public async Task<Message> EditTextAsync(
@@ -100,14 +99,14 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        return await client.EditMessageText(
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        return await apiClient.EditMessageTextAsync(
             chatId,
             messageId,
             text,
-            parseMode: parseMode ?? default,
+            parseMode: parseMode,
             replyMarkup: replyMarkup,
-            cancellationToken: ct);
+            ct: ct);
     }
 
     public async Task<Message> EditCaptionAsync(
@@ -118,20 +117,20 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        return await client.EditMessageCaption(
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        return await apiClient.EditMessageCaptionAsync(
             chatId,
             messageId,
-            caption ?? string.Empty,
-            parseMode: parseMode ?? default,
+            caption: caption ?? string.Empty,
+            parseMode: parseMode,
             replyMarkup: replyMarkup,
-            cancellationToken: ct);
+            ct: ct);
     }
 
     public async Task DeleteAsync(long chatId, int messageId, CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        await client.DeleteMessage(chatId, messageId, ct);
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        await apiClient.DeleteMessageAsync(chatId, messageId, ct);
     }
 
     public async Task AnswerCallbackAsync(
@@ -140,7 +139,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         bool showAlert = false,
         CancellationToken ct = default)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
-        await client.AnswerCallbackQuery(callbackQueryId, text: text, showAlert: showAlert, cancellationToken: ct);
+        var apiClient = await _botClientFactory.GetApiClientAsync();
+        await apiClient.AnswerCallbackQueryAsync(callbackQueryId, text: text, showAlert: showAlert, ct: ct);
     }
 }

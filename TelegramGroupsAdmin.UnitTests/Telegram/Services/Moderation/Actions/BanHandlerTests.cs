@@ -6,42 +6,45 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
+using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 
 /// <summary>
-/// Unit tests for BanHandler.
+/// Unit tests for BotBanHandler.
 /// Tests domain logic for banning, temp-banning, and unbanning users across managed chats.
-/// REFACTOR-5: Updated to use ITelegramUserRepository.SetBanStatusAsync instead of IUserActionsRepository.
+/// PHASE8: Updated to mock ITelegramApiClient (wrapper interface) instead of ITelegramBotClient (extension methods unmockable).
 /// </summary>
 [TestFixture]
 public class BanHandlerTests
 {
-    private ICrossChatExecutor _mockCrossChatExecutor = null!;
+    private IBotChatService _mockBotChatService = null!;
     private ITelegramBotClientFactory _mockBotClientFactory = null!;
-    private ITelegramOperations _mockOperations = null!;
+    private ITelegramApiClient _mockApiClient = null!;
     private IJobScheduler _mockJobScheduler = null!;
     private ITelegramUserRepository _mockUserRepository = null!;
-    private ILogger<BanHandler> _mockLogger = null!;
-    private BanHandler _handler = null!;
+    private ILogger<BotBanHandler> _mockLogger = null!;
+    private BotBanHandler _handler = null!;
+
+    // Test chat IDs for cross-chat operations
+    private static readonly long[] TestChatIds = [-100001, -100002, -100003, -100004, -100005];
 
     [SetUp]
     public void SetUp()
     {
-        _mockCrossChatExecutor = Substitute.For<ICrossChatExecutor>();
+        _mockBotChatService = Substitute.For<IBotChatService>();
         _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
-        _mockOperations = Substitute.For<ITelegramOperations>();
-        _mockBotClientFactory.GetOperationsAsync().Returns(_mockOperations);
+        _mockApiClient = Substitute.For<ITelegramApiClient>();
+        _mockBotClientFactory.GetApiClientAsync().Returns(_mockApiClient);
         _mockJobScheduler = Substitute.For<IJobScheduler>();
         _mockUserRepository = Substitute.For<ITelegramUserRepository>();
-        _mockLogger = Substitute.For<ILogger<BanHandler>>();
+        _mockLogger = Substitute.For<ILogger<BotBanHandler>>();
 
-        _handler = new BanHandler(
-            _mockCrossChatExecutor,
+        _handler = new BotBanHandler(
+            _mockBotChatService,
             _mockBotClientFactory,
             _mockJobScheduler,
             _mockUserRepository,
@@ -64,11 +67,8 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Ban",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 5, FailCount: 0, SkippedCount: 0));
+        // Setup 5 healthy chats, all bans succeed
+        _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
 
         // Act
         var result = await _handler.BanAsync(userId, executor, "Spam violation");
@@ -90,11 +90,14 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromTelegramUser(999, "AdminUser");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Ban",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 3, FailCount: 2, SkippedCount: 1));
+        // Setup 5 healthy chats, but make 2 fail
+        _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
+
+        // Make specific chats fail
+        _mockApiClient.BanChatMemberAsync(TestChatIds[1], userId, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Chat error 1"));
+        _mockApiClient.BanChatMemberAsync(TestChatIds[3], userId, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Chat error 2"));
 
         // Act
         var result = await _handler.BanAsync(userId, executor, "Repeated violations", 100L);
@@ -115,11 +118,9 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Ban",
-                Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("Network error"));
+        // Make getting healthy chats fail
+        _mockBotChatService.GetHealthyChatIds()
+            .Returns(_ => throw new InvalidOperationException("Network error"));
 
         // Act
         var result = await _handler.BanAsync(userId, executor, "Test reason");
@@ -140,11 +141,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Ban",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 2, FailCount: 0, SkippedCount: 0));
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002 }.AsReadOnly());
 
         // Act
         var result = await _handler.BanAsync(userId, executor, reason: null);
@@ -160,11 +157,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Ban",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 3, FailCount: 0, SkippedCount: 0));
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
 
         // Act
         await _handler.BanAsync(userId, executor, "Spam violation", 42L);
@@ -189,11 +182,7 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
         var duration = TimeSpan.FromHours(24);
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "TempBan",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 3, FailCount: 0, SkippedCount: 0));
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
 
         _mockJobScheduler.ScheduleJobAsync(
                 "TempbanExpiry",
@@ -232,11 +221,7 @@ public class BanHandlerTests
         var duration = TimeSpan.FromHours(2);
         var beforeCall = DateTimeOffset.UtcNow;
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "TempBan",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 3, FailCount: 0, SkippedCount: 0));
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
 
         _mockJobScheduler.ScheduleJobAsync(
                 Arg.Any<string>(),
@@ -268,11 +253,7 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
         var duration = TimeSpan.FromMinutes(30);
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "TempBan",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 1, FailCount: 0, SkippedCount: 0));
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001 }.AsReadOnly());
 
         _mockJobScheduler.ScheduleJobAsync(
                 Arg.Any<string>(),
@@ -304,11 +285,8 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "TempBan",
-                Arg.Any<CancellationToken>())
-            .ThrowsAsync(new Exception("Telegram API error"));
+        _mockBotChatService.GetHealthyChatIds()
+            .Returns(_ => throw new Exception("Telegram API error"));
 
         // Act
         var result = await _handler.TempBanAsync(userId, executor, TimeSpan.FromHours(1), "Test");
@@ -332,11 +310,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Unban",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 4, FailCount: 0, SkippedCount: 0));
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003, -100004 }.AsReadOnly());
 
         // Act
         var result = await _handler.UnbanAsync(userId, executor, "False positive");
@@ -364,11 +338,11 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromTelegramUser(888, "Admin");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Unban",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 2, FailCount: 1, SkippedCount: 0));
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
+
+        // Make one chat fail
+        _mockApiClient.UnbanChatMemberAsync(-100002, userId, Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Chat error"));
 
         // Act
         var result = await _handler.UnbanAsync(userId, executor, "Appeal approved");
@@ -389,11 +363,8 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Unban",
-                Arg.Any<CancellationToken>())
-            .ThrowsAsync(new Exception("Telegram API error"));
+        _mockBotChatService.GetHealthyChatIds()
+            .Returns(_ => throw new Exception("Telegram API error"));
 
         // Act
         var result = await _handler.UnbanAsync(userId, executor, "Test");
@@ -414,14 +385,13 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
         var callOrder = new List<string>();
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Unban",
-                Arg.Any<CancellationToken>())
+        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001 }.AsReadOnly());
+
+        _mockApiClient.UnbanChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 callOrder.Add("TelegramUnban");
-                return Task.FromResult(new CrossChatResult(SuccessCount: 1, FailCount: 0, SkippedCount: 0));
+                return Task.CompletedTask;
             });
 
         _mockUserRepository.SetBanStatusAsync(
@@ -465,8 +435,8 @@ public class BanHandlerTests
         });
 
         // Verify Telegram API called
-        await _mockOperations.Received(1).BanChatMemberAsync(
-            chat.Id, user.Id, Arg.Any<DateTime?>(), Arg.Any<CancellationToken>());
+        await _mockApiClient.Received(1).BanChatMemberAsync(
+            chat.Id, user.Id, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
         // Verify ban status set (idempotent)
         await _mockUserRepository.Received(1).SetBanStatusAsync(
@@ -481,7 +451,7 @@ public class BanHandlerTests
         var chat = new Chat { Id = -100123456789, Title = "Test Group" };
         var executor = Actor.AutoDetection;
 
-        _mockOperations.BanChatMemberAsync(chat.Id, user.Id, Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _mockApiClient.BanChatMemberAsync(chat.Id, user.Id, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("User is admin"));
 
         // Act

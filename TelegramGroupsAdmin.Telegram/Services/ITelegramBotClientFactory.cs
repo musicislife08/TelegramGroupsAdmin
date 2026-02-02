@@ -1,4 +1,5 @@
 using Telegram.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -14,4 +15,11 @@ public interface ITelegramBotClientFactory : IDisposable
     /// </summary>
     /// <returns>Current ITelegramBotClient instance</returns>
     Task<ITelegramBotClient> GetBotClientAsync();
+
+    /// <summary>
+    /// Get ITelegramApiClient wrapper for mockable Telegram API access.
+    /// This wraps the extension methods into an interface for unit testing.
+    /// </summary>
+    /// <returns>Current ITelegramApiClient instance</returns>
+    Task<ITelegramApiClient> GetApiClientAsync();
 }

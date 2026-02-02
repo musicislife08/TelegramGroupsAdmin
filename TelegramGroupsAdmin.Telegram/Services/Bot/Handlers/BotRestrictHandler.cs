@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -90,7 +89,7 @@ public class BotRestrictHandler : IBotRestrictHandler
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
+        var apiClient = await _botClientFactory.GetApiClientAsync();
         var healthyChatIds = _chatService.GetHealthyChatIds();
 
         var successCount = 0;
@@ -100,12 +99,12 @@ public class BotRestrictHandler : IBotRestrictHandler
         {
             try
             {
-                await client.RestrictChatMember(
+                await apiClient.RestrictChatMemberAsync(
                     chatId: targetChatId,
                     userId: userId,
                     permissions: permissions,
                     untilDate: expiresAt.UtcDateTime,
-                    cancellationToken: ct);
+                    ct: ct);
                 Interlocked.Increment(ref successCount);
             }
             catch (Exception ex)
@@ -134,14 +133,14 @@ public class BotRestrictHandler : IBotRestrictHandler
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken)
     {
-        var client = await _botClientFactory.GetBotClientAsync();
+        var apiClient = await _botClientFactory.GetApiClientAsync();
 
-        await client.RestrictChatMember(
+        await apiClient.RestrictChatMemberAsync(
             chatId: chatId,
             userId: userId,
             permissions: permissions,
             untilDate: expiresAt.UtcDateTime,
-            cancellationToken: cancellationToken);
+            ct: cancellationToken);
 
         _logger.LogInformation(
             "Single-chat restriction completed for {User} in {Chat}. Expires at {ExpiresAt}",
@@ -168,10 +167,10 @@ public class BotRestrictHandler : IBotRestrictHandler
 
         try
         {
-            var client = await _botClientFactory.GetBotClientAsync();
+            var apiClient = await _botClientFactory.GetApiClientAsync();
 
             // Get the chat's default permissions
-            var chatDetails = await client.GetChat(chatId, cancellationToken);
+            var chatDetails = await apiClient.GetChatAsync(chatId, cancellationToken);
             var defaultPermissions = chatDetails.Permissions ?? CreateDefaultPermissions();
 
             _logger.LogDebug(
@@ -179,11 +178,11 @@ public class BotRestrictHandler : IBotRestrictHandler
                 user.ToLogDebug(userId), chat.ToLogDebug(chatId),
                 defaultPermissions.CanSendMessages, defaultPermissions.CanSendPhotos);
 
-            await client.RestrictChatMember(
+            await apiClient.RestrictChatMemberAsync(
                 chatId: chatId,
                 userId: userId,
                 permissions: defaultPermissions,
-                cancellationToken: cancellationToken);
+                ct: cancellationToken);
 
             _logger.LogInformation(
                 "Restored permissions for {User} in {Chat}",

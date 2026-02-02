@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -57,7 +56,7 @@ public class BotBanHandler : IBotBanHandler
 
         try
         {
-            var client = await _botClientFactory.GetBotClientAsync();
+            var apiClient = await _botClientFactory.GetApiClientAsync();
             var healthyChatIds = _chatService.GetHealthyChatIds();
 
             var successCount = 0;
@@ -67,7 +66,7 @@ public class BotBanHandler : IBotBanHandler
             {
                 try
                 {
-                    await client.BanChatMember(chatId, userId, cancellationToken: ct);
+                    await apiClient.BanChatMemberAsync(chatId, userId, ct: ct);
                     Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
@@ -108,8 +107,8 @@ public class BotBanHandler : IBotBanHandler
 
         try
         {
-            var client = await _botClientFactory.GetBotClientAsync();
-            await client.BanChatMember(chat.Id, user.Id, cancellationToken: cancellationToken);
+            var apiClient = await _botClientFactory.GetApiClientAsync();
+            await apiClient.BanChatMemberAsync(chat.Id, user.Id, ct: cancellationToken);
 
             // Ensure global ban status is set (idempotent if already banned)
             await _userRepository.SetBanStatusAsync(user.Id, isBanned: true, expiresAt: null, cancellationToken);
@@ -149,7 +148,7 @@ public class BotBanHandler : IBotBanHandler
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
             // Ban globally (permanent in Telegram, lifted by background job)
-            var client = await _botClientFactory.GetBotClientAsync();
+            var apiClient = await _botClientFactory.GetApiClientAsync();
             var healthyChatIds = _chatService.GetHealthyChatIds();
 
             var successCount = 0;
@@ -159,7 +158,7 @@ public class BotBanHandler : IBotBanHandler
             {
                 try
                 {
-                    await client.BanChatMember(chatId, userId, cancellationToken: ct);
+                    await apiClient.BanChatMemberAsync(chatId, userId, ct: ct);
                     Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
@@ -217,7 +216,7 @@ public class BotBanHandler : IBotBanHandler
         try
         {
             // Unban from all Telegram chats
-            var client = await _botClientFactory.GetBotClientAsync();
+            var apiClient = await _botClientFactory.GetApiClientAsync();
             var healthyChatIds = _chatService.GetHealthyChatIds();
 
             var successCount = 0;
@@ -227,7 +226,7 @@ public class BotBanHandler : IBotBanHandler
             {
                 try
                 {
-                    await client.UnbanChatMember(chatId, userId, onlyIfBanned: true, cancellationToken: ct);
+                    await apiClient.UnbanChatMemberAsync(chatId, userId, onlyIfBanned: true, ct: ct);
                     Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
@@ -270,11 +269,11 @@ public class BotBanHandler : IBotBanHandler
 
         try
         {
-            var client = await _botClientFactory.GetBotClientAsync();
+            var apiClient = await _botClientFactory.GetApiClientAsync();
 
             // Ban then immediately unban (removes user from chat without permanent ban)
-            await client.BanChatMember(chatId, userId, cancellationToken: cancellationToken);
-            await client.UnbanChatMember(chatId, userId, onlyIfBanned: true, cancellationToken: cancellationToken);
+            await apiClient.BanChatMemberAsync(chatId, userId, ct: cancellationToken);
+            await apiClient.UnbanChatMemberAsync(chatId, userId, onlyIfBanned: true, ct: cancellationToken);
 
             _logger.LogInformation(
                 "Kicked {User} from chat {ChatId}",
