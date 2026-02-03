@@ -9,17 +9,17 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components.ChatManagement;
 
 /// <summary>
 /// Custom test context for ChatActionsCell with mocked dependencies.
+/// PHASE8: Updated to use IBotChatService instead of ITelegramBotClientFactory + IChatService.
 /// </summary>
 public abstract class ChatActionsCellTestContext : BunitContext
 {
-    protected ITelegramBotClientFactory BotClientFactory { get; }
-    protected ITelegramOperations TelegramOperations { get; }
+    protected IBotChatService ChatService { get; }
     protected IManagedChatsRepository ManagedChatsRepository { get; }
     protected IJobScheduler JobScheduler { get; }
     protected IDialogService DialogService { get; private set; } = null!;
@@ -27,17 +27,12 @@ public abstract class ChatActionsCellTestContext : BunitContext
     protected ChatActionsCellTestContext()
     {
         // Create mocks FIRST (before AddMudServices locks the container)
-        BotClientFactory = Substitute.For<ITelegramBotClientFactory>();
-        TelegramOperations = Substitute.For<ITelegramOperations>();
+        ChatService = Substitute.For<IBotChatService>();
         ManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
         JobScheduler = Substitute.For<IJobScheduler>();
 
-        // Configure BotClientFactory to return TelegramOperations
-        BotClientFactory.GetOperationsAsync()
-            .Returns(TelegramOperations);
-
         // Register mocks
-        Services.AddSingleton(BotClientFactory);
+        Services.AddSingleton(ChatService);
         Services.AddSingleton(ManagedChatsRepository);
         Services.AddSingleton(JobScheduler);
         Services.AddSingleton(Substitute.For<ILogger<ChatActionsCell>>());
@@ -103,8 +98,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
     [SetUp]
     public void Setup()
     {
-        BotClientFactory.ClearReceivedCalls();
-        TelegramOperations.ClearReceivedCalls();
+        ChatService.ClearReceivedCalls();
         ManagedChatsRepository.ClearReceivedCalls();
         JobScheduler.ClearReceivedCalls();
     }
@@ -275,7 +269,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
         await cut.InvokeAsync(() => confirmButton.Click());
 
         // Verify API was called
-        await TelegramOperations.Received(1).LeaveChatAsync(-100777, Arg.Any<CancellationToken>());
+        await ChatService.Received(1).LeaveChatAsync(-100777, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -361,7 +355,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
         await cut.InvokeAsync(() => cancelButton.Click());
 
         // Verify API was NOT called
-        await TelegramOperations.DidNotReceive().LeaveChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
+        await ChatService.DidNotReceive().LeaveChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
         await ManagedChatsRepository.DidNotReceive().DeleteAsync(Arg.Any<long>());
     }
 
@@ -428,7 +422,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
         var provider = RenderDialogProvider();
         var chatInfo = CreateChatInfo();
 
-        TelegramOperations.LeaveChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        ChatService.LeaveChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new Exception("Telegram API error")));
 
         var cut = Render<ChatActionsCell>(p => p.Add(x => x.ChatInfo, chatInfo));
@@ -458,7 +452,7 @@ public class ChatActionsCellTests : ChatActionsCellTestContext
         var chatInfo = CreateChatInfo();
         var callbackInvoked = false;
 
-        TelegramOperations.LeaveChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        ChatService.LeaveChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException(new Exception("Telegram API error")));
 
         var cut = Render<ChatActionsCell>(p => p

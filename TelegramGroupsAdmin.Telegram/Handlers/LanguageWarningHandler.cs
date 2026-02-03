@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -18,14 +19,10 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class LanguageWarningHandler
 {
-    private readonly ITelegramBotClientFactory _botFactory;
     private readonly ILogger<LanguageWarningHandler> _logger;
 
-    public LanguageWarningHandler(
-        ITelegramBotClientFactory botFactory,
-        ILogger<LanguageWarningHandler> logger)
+    public LanguageWarningHandler(ILogger<LanguageWarningHandler> logger)
     {
-        _botFactory = botFactory;
         _logger = logger;
     }
 
@@ -65,8 +62,8 @@ public class LanguageWarningHandler
                 return;
 
             // Check if user is admin in this chat
-            var operations = await _botFactory.GetOperationsAsync();
-            var chatMember = await operations.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
+            var userService = scope.ServiceProvider.GetRequiredService<IBotUserService>();
+            var chatMember = await userService.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
                 return;
 
@@ -90,7 +87,7 @@ public class LanguageWarningHandler
                 .Replace("{warnings_remaining}", warningsRemaining.ToString());
 
             // Issue warning using moderation system
-            var moderationService = scope.ServiceProvider.GetRequiredService<Services.Moderation.IModerationOrchestrator>();
+            var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             await moderationService.WarnUserAsync(
                 userId: message.From.Id,
                 messageId: message.MessageId,

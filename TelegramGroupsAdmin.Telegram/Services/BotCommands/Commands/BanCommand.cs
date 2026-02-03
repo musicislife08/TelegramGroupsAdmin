@@ -5,7 +5,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -18,9 +18,9 @@ public class BanCommand : IBotCommand
 {
     private readonly ILogger<BanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IModerationOrchestrator _moderationService;
+    private readonly IBotModerationService _moderationService;
     private readonly IUserMessagingService _messagingService;
-    private readonly ITelegramBotClientFactory _botClientFactory;
+    private readonly IBotMessageService _messageService;
 
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
@@ -33,15 +33,15 @@ public class BanCommand : IBotCommand
     public BanCommand(
         ILogger<BanCommand> logger,
         IServiceProvider serviceProvider,
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         IUserMessagingService messagingService,
-        ITelegramBotClientFactory botClientFactory)
+        IBotMessageService messageService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
         _messagingService = messagingService;
-        _botClientFactory = botClientFactory;
+        _messageService = messageService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -157,8 +157,7 @@ public class BanCommand : IBotCommand
 
         var keyboard = new InlineKeyboardMarkup(buttons);
 
-        var operations = await _botClientFactory.GetOperationsAsync();
-        await operations.SendMessageAsync(
+        await _messageService.SendAndSaveMessageAsync(
             commandMessage.Chat.Id,
             "Multiple users found. Select one to ban:",
             replyMarkup: keyboard,
@@ -187,7 +186,7 @@ public class BanCommand : IBotCommand
                 message.From.FirstName,
                 message.From.LastName);
 
-            // Execute ban via ModerationOrchestrator
+            // Execute ban via BotModerationService
             var result = await _moderationService.BanUserAsync(
                 userId: targetUser.Id,
                 messageId: triggerMessageId,

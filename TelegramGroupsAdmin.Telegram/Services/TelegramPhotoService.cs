@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -20,18 +21,21 @@ public class TelegramPhotoService
     private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
 
     private readonly ILogger<TelegramPhotoService> _logger;
-    private readonly ITelegramBotClientFactory _botClientFactory;
+    private readonly IBotMediaService _mediaService;
+    private readonly IBotChatService _chatService;
     private readonly MessageHistoryOptions _options;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
 
     public TelegramPhotoService(
         ILogger<TelegramPhotoService> logger,
-        ITelegramBotClientFactory botClientFactory,
+        IBotMediaService mediaService,
+        IBotChatService chatService,
         IOptions<MessageHistoryOptions> options)
     {
         _logger = logger;
-        _botClientFactory = botClientFactory;
+        _mediaService = mediaService;
+        _chatService = chatService;
         _options = options.Value;
 
         // Create subdirectories for chat icons and user photos under media/
@@ -62,8 +66,7 @@ public class TelegramPhotoService
             }
 
             // Fetch from Telegram
-            var operations = await _botClientFactory.GetOperationsAsync();
-            var chat = await operations.GetChatAsync(chatId, cancellationToken);
+            var chat = await _chatService.GetChatAsync(chatId, cancellationToken);
             var chatName = chat.Title ?? chat.Username;
 
             if (chat.Photo == null)
@@ -74,7 +77,7 @@ public class TelegramPhotoService
             }
 
             // Download the small version of the chat photo
-            var file = await operations.GetFileAsync(chat.Photo.SmallFileId, cancellationToken);
+            var file = await _mediaService.GetFileAsync(chat.Photo.SmallFileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for chat {Chat} photo",
@@ -88,7 +91,7 @@ public class TelegramPhotoService
             {
                 await using (var fileStream = File.Create(tempPath))
                 {
-                    await operations.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
+                    await _mediaService.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Resize to 64x64 icon
@@ -162,8 +165,7 @@ public class TelegramPhotoService
             var relativePath = $"user_photos/{fileName}";
 
             // Fetch current photo from Telegram
-            var operations = await _botClientFactory.GetOperationsAsync();
-            var photos = await operations.GetUserProfilePhotosAsync(userId, limit: 1, cancellationToken: cancellationToken);
+            var photos = await _mediaService.GetUserProfilePhotosAsync(userId, limit: 1, ct: cancellationToken);
             if (photos.TotalCount == 0 || photos.Photos.Length == 0)
             {
                 _logger.LogDebug("User {User} has no profile photo", user.ToLogDebug(userId));
@@ -191,7 +193,7 @@ public class TelegramPhotoService
             }
 
             // Photo changed or first download - fetch from Telegram
-            var file = await operations.GetFileAsync(smallestPhoto.FileId, cancellationToken);
+            var file = await _mediaService.GetFileAsync(smallestPhoto.FileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for user {User} photo", user.ToLogDebug(userId));
@@ -204,7 +206,7 @@ public class TelegramPhotoService
             {
                 await using (var fileStream = File.Create(tempPath))
                 {
-                    await operations.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
+                    await _mediaService.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Resize to 64x64 icon

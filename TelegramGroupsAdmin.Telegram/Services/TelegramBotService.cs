@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -14,7 +15,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramBotService(
     IMessageProcessingService messageProcessingService,
-    IChatManagementService chatManagementService,
+    IChatHealthCache chatHealthCache,
     ILogger<TelegramBotService> logger) : ITelegramBotService
 {
     private User? _botUserInfo;
@@ -40,8 +41,8 @@ public class TelegramBotService(
 
     public event Action<ChatHealthStatus>? OnHealthUpdate
     {
-        add => chatManagementService.OnHealthUpdate += value;
-        remove => chatManagementService.OnHealthUpdate -= value;
+        add => chatHealthCache.OnHealthUpdate += value;
+        remove => chatHealthCache.OnHealthUpdate -= value;
     }
 
     /// <summary>

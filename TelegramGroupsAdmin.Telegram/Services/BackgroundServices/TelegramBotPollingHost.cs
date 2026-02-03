@@ -17,13 +17,12 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// Thin BackgroundService that manages the Telegram polling lifecycle.
 /// Only ONE polling connection per bot token (Telegram API constraint).
 /// Bot capabilities (events, state) are handled by TelegramBotService.
-/// Update routing is handled by UpdateProcessor.
+/// Update routing is handled by UpdateRouter.
 /// </summary>
 public class TelegramBotPollingHost(
     ITelegramBotClientFactory botFactory,
-    IUpdateProcessor updateProcessor,
+    IUpdateRouter updateRouter,
     ITelegramBotService botService,
-    IChatManagementService chatManagementService,
     CommandRouter commandRouter,
     IServiceScopeFactory scopeFactory,
     ILogger<TelegramBotPollingHost> logger) : BackgroundService
@@ -151,11 +150,15 @@ public class TelegramBotPollingHost(
         // Register bot commands in Telegram UI
         await RegisterBotCommandsAsync(botClient, stoppingToken);
 
-        // Cache admin lists for all managed chats
-        await chatManagementService.RefreshAllChatAdminsAsync(stoppingToken);
+        // Cache admin lists for all managed chats (via scoped IBotChatService)
+        using var adminScope = scopeFactory.CreateScope();
+        var chatService = adminScope.ServiceProvider.GetRequiredService<Bot.IBotChatService>();
+        await chatService.RefreshAllChatAdminsAsync(stoppingToken);
 
-        // Perform initial health check for all chats
-        await chatManagementService.RefreshAllHealthAsync(stoppingToken);
+        // Perform initial health check for all chats (resolve from scope since orchestrator is scoped)
+        using var healthScope = scopeFactory.CreateScope();
+        var healthOrchestrator = healthScope.ServiceProvider.GetRequiredService<IChatHealthRefreshOrchestrator>();
+        await healthOrchestrator.RefreshAllHealthAsync(stoppingToken);
 
         // Periodic health checks handled by ChatHealthCheckJob via Quartz.NET
         logger.LogInformation("Telegram bot started listening for messages in all chats");
@@ -211,8 +214,8 @@ public class TelegramBotPollingHost(
             _consecutiveErrors = 0;
         }
 
-        // Delegate to UpdateProcessor for testable routing
-        await updateProcessor.ProcessUpdateAsync(update, cancellationToken);
+        // Delegate to UpdateRouter for testable routing
+        await updateRouter.RouteUpdateAsync(update, cancellationToken);
     }
 
     private Task HandleErrorAsync(

@@ -1,9 +1,10 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Core.BackgroundJobs
 @using TelegramGroupsAdmin.Core.JobPayloads
 @using TelegramGroupsAdmin.Components.Shared
-@inject ITelegramBotClientFactory BotClientFactory
+@inject IBotChatService ChatService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IJobScheduler JobScheduler
 @inject IDialogService DialogService
@@ -116,8 +117,7 @@
                 var alreadyLeft = ChatInfo.Chat.BotStatus is BotChatStatus.Left or BotChatStatus.Kicked;
                 if (!alreadyLeft)
                 {
-                    var operations = await BotClientFactory.GetOperationsAsync();
-                    await operations.LeaveChatAsync(ChatInfo.Chat.ChatId);
+                    await ChatService.LeaveChatAsync(ChatInfo.Chat.ChatId);
                 }
 
                 // 2. Soft-delete from database (preserves config for potential re-add)

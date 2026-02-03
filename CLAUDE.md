@@ -251,7 +251,7 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 **Translation Storage**: Exclusive arc pattern (message_id XOR edit_id) in message_translations table. MessageProcessingService translates before save (≥10 chars, <80% Latin script). Reused by spam detection.
 
-**DM Notifications**: IDmDeliveryService (Singleton), pending_notifications table (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup.
+**DM Notifications**: IBotDmService (Scoped), pending_notifications table (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup.
 
 ## Permissions
 

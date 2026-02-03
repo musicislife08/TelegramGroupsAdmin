@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -16,7 +16,7 @@ public class TempBanCommand : IBotCommand
 {
     private readonly ILogger<TempBanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IModerationOrchestrator _moderationService;
+    private readonly IBotModerationService _moderationService;
 
     public string Name => "tempban";
     public string Description => "Temporarily ban user with auto-unrestriction";
@@ -29,7 +29,7 @@ public class TempBanCommand : IBotCommand
     public TempBanCommand(
         ILogger<TempBanCommand> logger,
         IServiceProvider serviceProvider,
-        IModerationOrchestrator moderationService)
+        IBotModerationService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

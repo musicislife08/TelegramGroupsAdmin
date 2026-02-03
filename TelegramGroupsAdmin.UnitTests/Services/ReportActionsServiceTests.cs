@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using Report = TelegramGroupsAdmin.Core.Models.Report;
 using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.ModerationResult;
@@ -23,7 +24,7 @@ namespace TelegramGroupsAdmin.UnitTests.Services;
 /// <summary>
 /// Unit tests for ReportActionsService.
 /// Tests the web UI report actions (spam, ban, warn, dismiss).
-/// Uses IModerationOrchestrator interface (enabled by Issue #127 interface extraction).
+/// Uses IBotModerationService for moderation workflows.
 /// </summary>
 [TestFixture]
 public class ReportActionsServiceTests
@@ -36,7 +37,7 @@ public class ReportActionsServiceTests
 
     private IReportsRepository _mockReportsRepo = null!;
     private IMessageHistoryRepository _mockMessageRepo = null!;
-    private IModerationOrchestrator _mockModerationService = null!;
+    private IBotModerationService _mockModerationService = null!;
     private IAuditService _mockAuditService = null!;
     private IBotMessageService _mockBotMessageService = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
@@ -49,7 +50,7 @@ public class ReportActionsServiceTests
     {
         _mockReportsRepo = Substitute.For<IReportsRepository>();
         _mockMessageRepo = Substitute.For<IMessageHistoryRepository>();
-        _mockModerationService = Substitute.For<IModerationOrchestrator>();
+        _mockModerationService = Substitute.For<IBotModerationService>();
         _mockAuditService = Substitute.For<IAuditService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();

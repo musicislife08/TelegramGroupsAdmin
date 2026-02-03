@@ -29,4 +29,9 @@ public record DmDeliveryResult
     /// Message ID of the fallback message in chat (if fallback was used)
     /// </summary>
     public int? FallbackMessageId { get; init; }
+
+    /// <summary>
+    /// Message ID of the successfully sent DM (if DM was sent)
+    /// </summary>
+    public int? MessageId { get; init; }
 }

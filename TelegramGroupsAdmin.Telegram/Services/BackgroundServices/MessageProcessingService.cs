@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -26,21 +27,14 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
     IOptions<MessageHistoryOptions> historyOptions,
-    ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
-    IChatManagementService chatManagementService,
     IChatCache chatCache,
-    TelegramPhotoService telegramPhotoService,
-    TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
     ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
-    private readonly ITelegramBotClientFactory _botFactory = botFactory;
     private readonly IChatCache _chatCache = chatCache;
-    private readonly TelegramPhotoService _photoService = telegramPhotoService;
-    private readonly TelegramMediaService _mediaService = telegramMediaService;
 
     // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
     // These are NOT injected in constructor since MessageProcessingService is Singleton
@@ -171,7 +165,10 @@ public partial class MessageProcessingService(
                 oldChatId,
                 newChatId);
 
-            await chatManagementService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
+            // Resolve scoped IBotChatService from scope (singleton can't inject scoped directly)
+            using var migrationScope = _scopeFactory.CreateScope();
+            var chatService = migrationScope.ServiceProvider.GetRequiredService<IBotChatService>();
+            await chatService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
             return; // Don't process migration message further
         }
 
@@ -239,7 +236,7 @@ public partial class MessageProcessingService(
             if (message.NewChatMembers != null)
             {
                 var userRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<IBotModerationService>();
 
                 foreach (var joiningUser in message.NewChatMembers)
                 {
@@ -266,8 +263,9 @@ public partial class MessageProcessingService(
             // Bot no longer has permissions to delete messages after being kicked
             if (message.LeftChatMember != null)
             {
-                var operations = await _botFactory.GetOperationsAsync();
-                if (message.LeftChatMember.Id == operations.BotId)
+                var userService = messageScope.ServiceProvider.GetRequiredService<IBotUserService>();
+                var botInfo = await userService.GetMeAsync(cancellationToken);
+                if (message.LeftChatMember.Id == botInfo.Id)
                 {
                     logger.LogInformation(
                         "Skipping deletion of LeftChatMember service message - bot was removed from {Chat}",
@@ -359,7 +357,8 @@ public partial class MessageProcessingService(
 
                     try
                     {
-                        await chatManagementService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
+                        var chatService = messageScope.ServiceProvider.GetRequiredService<IBotChatService>();
+                        await chatService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -613,7 +612,7 @@ public partial class MessageProcessingService(
                     LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                     message.MessageId);
 
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<IBotModerationService>();
                 await moderationService.DeleteMessageAsync(
                     messageId: message.MessageId,
                     chatId: message.Chat.Id,

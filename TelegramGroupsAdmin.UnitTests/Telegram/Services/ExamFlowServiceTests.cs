@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -20,13 +21,17 @@ public class ExamFlowServiceTests
         // Create service with mocked dependencies (only needed for constructor)
         var logger = NullLogger<ExamFlowService>.Instance;
         var serviceProvider = Substitute.For<IServiceProvider>();
-        var botClientFactory = Substitute.For<ITelegramBotClientFactory>();
+        var botMessageService = Substitute.For<IBotMessageService>();
+        var botDmService = Substitute.For<IBotDmService>();
+        var botChatService = Substitute.For<IBotChatService>();
         var examEvaluationService = Substitute.For<IExamEvaluationService>();
 
         _service = new ExamFlowService(
             logger,
             serviceProvider,
-            botClientFactory,
+            botMessageService,
+            botDmService,
+            botChatService,
             examEvaluationService);
     }
 

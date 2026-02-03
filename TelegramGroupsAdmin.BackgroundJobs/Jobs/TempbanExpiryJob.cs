@@ -5,7 +5,7 @@ using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -19,11 +19,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class TempbanExpiryJob(
     ILogger<TempbanExpiryJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    ITelegramBotClientFactory botClientFactory) : IJob
+    IBotModerationService moderationService) : IJob
 {
     private readonly ILogger<TempbanExpiryJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly IBotModerationService _moderationService = moderationService;
 
     public async Task Execute(IJobExecutionContext context)
     {
@@ -52,71 +52,33 @@ public class TempbanExpiryJob(
                 payload.Reason,
                 payload.ExpiresAt);
 
-            // Get operations from factory
-            var operations = await _botClientFactory.GetOperationsAsync();
-
             try
             {
-                // Get all managed chats to unban user from (only active, non-deleted)
-                await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
-                var managedChats = await dbContext.ManagedChats
-                    .Where(c => c.IsActive && !c.IsDeleted)
-                    .ToListAsync(cancellationToken);
+                // Unban user across all managed chats via moderation service
+                var result = await _moderationService.UnbanUserAsync(
+                    userId: payload.UserId,
+                    executor: Core.Models.Actor.TempbanExpiry,
+                    reason: $"Tempban expired (original reason: {payload.Reason})",
+                    restoreTrust: false,
+                    cancellationToken: cancellationToken);
 
-                _logger.LogInformation(
-                    "Found {ChatCount} active managed chats for tempban expiry",
-                    managedChats.Count);
-
-                int successCount = 0;
-                int failureCount = 0;
-
-                // Unban user from all managed chats
-                foreach (var chat in managedChats)
+                if (result.Success)
                 {
-                    try
-                    {
-                        await operations.UnbanChatMemberAsync(
-                            chatId: chat.ChatId,
-                            userId: payload.UserId,
-                            onlyIfBanned: true,
-                            cancellationToken: cancellationToken);
-
-                        successCount++;
-                        _logger.LogInformation(
-                            "Successfully unbanned user {UserId} from chat {ChatId} ({ChatName})",
-                            payload.UserId,
-                            chat.ChatId,
-                            chat.ChatName);
-                    }
-                    catch (Exception ex)
-                    {
-                        failureCount++;
-                        _logger.LogWarning(
-                            ex,
-                            "Failed to unban user {UserId} from chat {ChatId} ({ChatName})",
-                            payload.UserId,
-                            chat.ChatId,
-                            chat.ChatName);
-                        // Continue processing other chats even if one fails
-                    }
+                    _logger.LogInformation(
+                        "Completed tempban expiry for user {UserId}. Unbanned from {ChatsAffected} chats",
+                        payload.UserId,
+                        result.ChatsAffected);
+                    success = true;
                 }
-
-                _logger.LogInformation(
-                    "Completed tempban expiry for user {UserId}. Success: {SuccessCount}/{TotalCount} chats",
-                    payload.UserId,
-                    successCount,
-                    managedChats.Count);
-
-                if (failureCount > 0)
+                else
                 {
                     _logger.LogWarning(
-                        "Tempban expiry partially failed for user {UserId}. {FailureCount}/{TotalCount} chats failed to unban",
+                        "Tempban expiry partially failed for user {UserId}: {Error}",
                         payload.UserId,
-                        failureCount,
-                        managedChats.Count);
+                        result.ErrorMessage);
+                    // Don't throw - partial success is acceptable for tempban expiry
+                    success = true;
                 }
-
-                success = true;
             }
             catch (Exception ex)
             {

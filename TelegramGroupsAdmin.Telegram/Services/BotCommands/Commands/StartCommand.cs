@@ -7,7 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -22,7 +22,9 @@ public class StartCommand : IBotCommand
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IPendingNotificationsRepository _pendingNotificationsRepository;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ITelegramBotClientFactory _botFactory;
+    private readonly IBotMessageService _messageService;
+    private readonly IBotChatService _chatService;
+    private readonly IBotDmService _dmService;
 
     public StartCommand(
         ILogger<StartCommand> logger,
@@ -30,14 +32,18 @@ public class StartCommand : IBotCommand
         ITelegramUserRepository telegramUserRepository,
         IPendingNotificationsRepository pendingNotificationsRepository,
         IServiceProvider serviceProvider,
-        ITelegramBotClientFactory botFactory)
+        IBotMessageService messageService,
+        IBotChatService chatService,
+        IBotDmService dmService)
     {
         _logger = logger;
         _welcomeResponsesRepository = welcomeResponsesRepository;
         _telegramUserRepository = telegramUserRepository;
         _pendingNotificationsRepository = pendingNotificationsRepository;
         _serviceProvider = serviceProvider;
-        _botFactory = botFactory;
+        _messageService = messageService;
+        _chatService = chatService;
+        _dmService = dmService;
     }
 
     public string Name => "start";
@@ -60,8 +66,6 @@ public class StartCommand : IBotCommand
             return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
         }
 
-        var operations = await _botFactory.GetOperationsAsync();
-
         // User started a private conversation with the bot - enable DM notifications
         // This allows the bot to send private messages to this user in the future
         if (message.From != null)
@@ -69,19 +73,19 @@ public class StartCommand : IBotCommand
             await _telegramUserRepository.SetBotDmEnabledAsync(message.From.Id, enabled: true, cancellationToken);
 
             // Deliver any pending notifications
-            await DeliverPendingNotificationsAsync(operations, message.From.Id, cancellationToken);
+            await DeliverPendingNotificationsAsync(message.From.Id, cancellationToken);
         }
 
         // Check if this is a deep link for welcome system
         if (args.Length > 0 && args[0].StartsWith("welcome_"))
         {
-            return await HandleWelcomeDeepLinkAsync(operations, message, args[0], cancellationToken);
+            return await HandleWelcomeDeepLinkAsync(message, args[0], cancellationToken);
         }
 
         // Check if this is a deep link for entrance exam
         if (args.Length > 0 && WelcomeDeepLinkBuilder.IsExamPayload(args[0]))
         {
-            return await HandleExamDeepLinkAsync(operations, message, args[0], cancellationToken);
+            return await HandleExamDeepLinkAsync(message, args[0], cancellationToken);
         }
 
         // Default /start response
@@ -94,7 +98,6 @@ public class StartCommand : IBotCommand
     }
 
     private async Task<CommandResult> HandleWelcomeDeepLinkAsync(
-        ITelegramOperations operations,
         Message message,
         string payload,
         CancellationToken cancellationToken)
@@ -122,7 +125,7 @@ public class StartCommand : IBotCommand
         ChatFullInfo chat;
         try
         {
-            chat = await operations.GetChatAsync(chatId, cancellationToken);
+            chat = await _chatService.GetChatAsync(chatId, cancellationToken);
         }
         catch (Exception)
         {
@@ -151,7 +154,7 @@ public class StartCommand : IBotCommand
             .Replace("{chat_name}", chatName)
             .Replace("{timeout}", config.TimeoutSeconds.ToString());
 
-        await operations.SendMessageAsync(
+        await _messageService.SendAndSaveMessageAsync(
             chatId: message.Chat.Id,
             text: messageText,
             parseMode: ParseMode.Html,
@@ -167,7 +170,7 @@ public class StartCommand : IBotCommand
             ]
         ]);
 
-        await operations.SendMessageAsync(
+        await _messageService.SendAndSaveMessageAsync(
             chatId: message.Chat.Id,
             text: "👇 Click below to accept the rules:",
             replyMarkup: keyboard,
@@ -194,7 +197,6 @@ public class StartCommand : IBotCommand
     /// Handle exam deep link - starts entrance exam in DM
     /// </summary>
     private async Task<CommandResult> HandleExamDeepLinkAsync(
-        ITelegramOperations operations,
         Message message,
         string payload,
         CancellationToken cancellationToken)
@@ -222,7 +224,7 @@ public class StartCommand : IBotCommand
         ChatFullInfo chat;
         try
         {
-            chat = await operations.GetChatAsync(examPayload.ChatId, cancellationToken);
+            chat = await _chatService.GetChatAsync(examPayload.ChatId, cancellationToken);
         }
         catch (Exception)
         {
@@ -276,7 +278,6 @@ public class StartCommand : IBotCommand
     /// Deliver all pending notifications to user when they enable DMs
     /// </summary>
     private async Task DeliverPendingNotificationsAsync(
-        ITelegramOperations operations,
         long telegramUserId,
         CancellationToken cancellationToken)
     {
@@ -296,26 +297,36 @@ public class StartCommand : IBotCommand
                 pendingNotifications.Count,
                 telegramUserId);
 
-            // Send each pending notification
+            // Send each pending notification via DM service
             foreach (var notification in pendingNotifications)
             {
                 try
                 {
-                    await operations.SendMessageAsync(
-                        chatId: telegramUserId,
-                        text: notification.MessageText,
+                    var result = await _dmService.SendDmAsync(
+                        telegramUserId: telegramUserId,
+                        messageText: notification.MessageText,
                         cancellationToken: cancellationToken);
 
-                    // Delete successfully delivered notification
-                    await _pendingNotificationsRepository.DeletePendingNotificationAsync(
-                        notification.Id,
-                        cancellationToken);
+                    if (result.DmSent)
+                    {
+                        // Delete successfully delivered notification
+                        await _pendingNotificationsRepository.DeletePendingNotificationAsync(
+                            notification.Id,
+                            cancellationToken);
 
-                    _logger.LogInformation(
-                        "Delivered pending {NotificationType} notification {Id} to user {UserId}",
-                        notification.NotificationType,
-                        notification.Id,
-                        telegramUserId);
+                        _logger.LogInformation(
+                            "Delivered pending {NotificationType} notification {Id} to user {UserId}",
+                            notification.NotificationType,
+                            notification.Id,
+                            telegramUserId);
+                    }
+                    else
+                    {
+                        // DM failed - increment retry count
+                        await _pendingNotificationsRepository.IncrementRetryCountAsync(
+                            notification.Id,
+                            cancellationToken);
+                    }
                 }
                 catch (Exception ex)
                 {

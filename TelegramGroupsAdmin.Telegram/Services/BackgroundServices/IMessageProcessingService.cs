@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
 /// Interface for message processing service.
-/// Extracted to enable testing of UpdateProcessor routing logic.
+/// Extracted to enable testing of UpdateRouter routing logic.
 /// </summary>
 public interface IMessageProcessingService
 {

@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
@@ -27,18 +28,24 @@ public class ExamFlowService : IExamFlowService
 
     private readonly ILogger<ExamFlowService> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ITelegramBotClientFactory _botClientFactory;
+    private readonly IBotMessageService _messageService;
+    private readonly IBotDmService _dmService;
+    private readonly IBotChatService _chatService;
     private readonly IExamEvaluationService _examEvaluationService;
 
     public ExamFlowService(
         ILogger<ExamFlowService> logger,
         IServiceProvider serviceProvider,
-        ITelegramBotClientFactory botClientFactory,
+        IBotMessageService messageService,
+        IBotDmService dmService,
+        IBotChatService chatService,
         IExamEvaluationService examEvaluationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
-        _botClientFactory = botClientFactory;
+        _messageService = messageService;
+        _dmService = dmService;
+        _chatService = chatService;
         _examEvaluationService = examEvaluationService;
     }
 
@@ -76,7 +83,6 @@ public class ExamFlowService : IExamFlowService
         }
 
         var examConfig = config.ExamConfig;
-        var operations = await _botClientFactory.GetOperationsAsync();
 
         try
         {
@@ -93,7 +99,7 @@ public class ExamFlowService : IExamFlowService
                 user.ToLogInfo(),
                 chat.ToLogInfo());
 
-            // Send first question
+            // Send first question to user's DM (user.Id is the DM chat ID)
             int messageId;
             if (examConfig.HasMcQuestions)
             {
@@ -101,7 +107,7 @@ public class ExamFlowService : IExamFlowService
                 var shuffleState = GenerateShuffleForQuestion(sessionId, 0, examConfig.McQuestions[0].Answers.Count);
 
                 messageId = await SendMcQuestionAsync(
-                    operations, chat.Id, user, sessionId,
+                    user.Id, user, sessionId,
                     examConfig.McQuestions[0], 0, shuffleState,
                     examConfig.McQuestions.Count, cancellationToken);
             }
@@ -109,7 +115,7 @@ public class ExamFlowService : IExamFlowService
             {
                 // Only open-ended question
                 messageId = await SendOpenEndedQuestionAsync(
-                    operations, chat.Id, user, examConfig, cancellationToken);
+                    user.Id, user, examConfig, cancellationToken);
             }
 
             return new ExamStartResult(Success: true, WelcomeMessageId: messageId);
@@ -136,7 +142,6 @@ public class ExamFlowService : IExamFlowService
         }
 
         var examConfig = config.ExamConfig;
-        var operations = await _botClientFactory.GetOperationsAsync();
 
         try
         {
@@ -156,14 +161,11 @@ public class ExamFlowService : IExamFlowService
 
             // Send exam intro (MainWelcomeMessage) first - rules/guidelines without buttons
             var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
-            var chatInfo = await operations.GetChatAsync(groupChatId, cancellationToken);
+            var chatInfo = await _chatService.GetChatAsync(groupChatId, cancellationToken);
             var chatName = chatInfo.Title ?? "the group";
 
             var introText = WelcomeMessageBuilder.FormatExamIntro(config, username, chatName);
-            await operations.SendMessageAsync(
-                chatId: dmChatId,
-                text: introText,
-                cancellationToken: cancellationToken);
+            await _dmService.SendDmAsync(dmChatId, introText, cancellationToken: cancellationToken);
 
             // Then send first question to DM
             int messageId;
@@ -173,7 +175,7 @@ public class ExamFlowService : IExamFlowService
                 var shuffleState = GenerateShuffleForQuestion(sessionId, 0, examConfig.McQuestions[0].Answers.Count);
 
                 messageId = await SendMcQuestionAsync(
-                    operations, dmChatId, user, sessionId,  // dmChatId instead of groupChatId
+                    dmChatId, user, sessionId,
                     examConfig.McQuestions[0], 0, shuffleState,
                     examConfig.McQuestions.Count, cancellationToken);
             }
@@ -181,7 +183,7 @@ public class ExamFlowService : IExamFlowService
             {
                 // Only open-ended question
                 messageId = await SendOpenEndedQuestionAsync(
-                    operations, dmChatId, user, examConfig, cancellationToken);  // dmChatId
+                    dmChatId, user, examConfig, cancellationToken);
             }
 
             return new ExamStartResult(Success: true, WelcomeMessageId: messageId);
@@ -249,7 +251,6 @@ public class ExamFlowService : IExamFlowService
         }
 
         var examConfig = config.ExamConfig;
-        var operations = await _botClientFactory.GetOperationsAsync();
 
         // Convert answer index to letter (A=0, B=1, C=2, D=3)
         var answerLetter = IndexToLetter(answerIndex);
@@ -260,10 +261,10 @@ public class ExamFlowService : IExamFlowService
         // Record answer with shuffle state for audit/review display
         await sessionRepo.RecordMcAnswerAsync(sessionId, questionIndex, answerLetter, shuffleState, cancellationToken);
 
-        // Delete the question message
+        // Delete the question message from DM
         try
         {
-            await operations.DeleteMessageAsync(message.Chat.Id, message.MessageId, cancellationToken);
+            await _dmService.DeleteDmMessageAsync(message.Chat.Id, message.MessageId, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -280,9 +281,9 @@ public class ExamFlowService : IExamFlowService
             // Generate deterministic shuffle for next question
             var nextShuffleState = GenerateShuffleForQuestion(sessionId, nextQuestionIndex, examConfig.McQuestions[nextQuestionIndex].Answers.Count);
 
-            // Send next MC question to DM (or group for legacy)
+            // Send next MC question to DM
             await SendMcQuestionAsync(
-                operations, targetChatId, user, sessionId,
+                targetChatId, user, sessionId,
                 examConfig.McQuestions[nextQuestionIndex],
                 nextQuestionIndex, nextShuffleState,
                 examConfig.McQuestions.Count, cancellationToken);
@@ -294,7 +295,7 @@ public class ExamFlowService : IExamFlowService
         if (examConfig.HasOpenEndedQuestion)
         {
             await SendOpenEndedQuestionAsync(
-                operations, targetChatId, user, examConfig, cancellationToken);
+                targetChatId, user, examConfig, cancellationToken);
 
             return new ExamAnswerResult(ExamComplete: false, Passed: null, SentToReview: false);
         }
@@ -409,7 +410,6 @@ public class ExamFlowService : IExamFlowService
         await using var scope = _serviceProvider.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
         var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
-        var operations = await _botClientFactory.GetOperationsAsync();
 
         // Calculate MC score
         bool? mcPassed = null;
@@ -559,9 +559,9 @@ public class ExamFlowService : IExamFlowService
             cancellationToken: cancellationToken);
 
         // Send pending message to user in DM
-        await operations.SendMessageAsync(
-            chatId: messageChatId,
-            text: "⏳ Your answers are being reviewed by an admin. Please wait.",
+        await _dmService.SendDmAsync(
+            messageChatId,
+            "⏳ Your answers are being reviewed by an admin. Please wait.",
             cancellationToken: cancellationToken);
 
         _logger.LogInformation("User {User} failed entrance exam in {Chat}, sent to review",
@@ -571,8 +571,7 @@ public class ExamFlowService : IExamFlowService
     }
 
     private async Task<int> SendMcQuestionAsync(
-        ITelegramOperations operations,
-        long chatId,
+        long dmChatId,
         User user,
         long sessionId,
         ExamMcQuestion question,
@@ -597,18 +596,13 @@ public class ExamFlowService : IExamFlowService
 
         var keyboard = new InlineKeyboardMarkup(buttons);
 
-        var message = await operations.SendMessageAsync(
-            chatId: chatId,
-            text: text,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken);
-
-        return message.MessageId;
+        // Exam questions are always sent to DMs with keyboard
+        var result = await _dmService.SendDmWithKeyboardAsync(dmChatId, text, keyboard, cancellationToken);
+        return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 
     private async Task<int> SendOpenEndedQuestionAsync(
-        ITelegramOperations operations,
-        long chatId,
+        long dmChatId,
         User user,
         ExamConfig examConfig,
         CancellationToken cancellationToken)
@@ -616,12 +610,9 @@ public class ExamFlowService : IExamFlowService
         var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
         var text = ExamMessageBuilder.FormatOpenEndedQuestion(username, examConfig.OpenEndedQuestion!);
 
-        var message = await operations.SendMessageAsync(
-            chatId: chatId,
-            text: text,
-            cancellationToken: cancellationToken);
-
-        return message.MessageId;
+        // Exam questions are always sent to DMs (no keyboard for open-ended)
+        var result = await _dmService.SendDmAsync(dmChatId, text, cancellationToken: cancellationToken);
+        return result.MessageId ?? throw new InvalidOperationException("Failed to send exam question - no MessageId returned");
     }
 
     /// <summary>
@@ -716,10 +707,9 @@ public class ExamFlowService : IExamFlowService
         CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
-        var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-        var operations = await _botClientFactory.GetOperationsAsync();
 
         // 1. Restore user permissions via orchestrator (audit trail for both flows)
         var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
@@ -738,7 +728,7 @@ public class ExamFlowService : IExamFlowService
         ChatFullInfo? groupChat = null;
         try
         {
-            groupChat = await operations.GetChatAsync(chatId, cancellationToken);
+            groupChat = await _chatService.GetChatAsync(chatId, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -781,8 +771,7 @@ public class ExamFlowService : IExamFlowService
             if (chatDeepLink == null)
             {
                 // For private chats (no username), try to get invite link
-                var inviteLinkService = scope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
-                chatDeepLink = await inviteLinkService.GetInviteLinkAsync(groupChat, cancellationToken);
+                chatDeepLink = await _chatService.GetInviteLinkAsync(groupChat.Id, cancellationToken);
             }
         }
 
@@ -799,11 +788,14 @@ public class ExamFlowService : IExamFlowService
 
         try
         {
-            await operations.SendMessageAsync(
-                chatId: userId, // DM chat ID = user ID
-                text: messageText,
-                replyMarkup: keyboard,
-                cancellationToken: cancellationToken);
+            if (keyboard != null)
+            {
+                await _dmService.SendDmWithKeyboardAsync(userId, messageText, keyboard, cancellationToken);
+            }
+            else
+            {
+                await _dmService.SendDmAsync(userId, messageText, cancellationToken: cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -862,15 +854,14 @@ public class ExamFlowService : IExamFlowService
         CancellationToken cancellationToken)
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
-        var orchestrator = scope.ServiceProvider.GetRequiredService<IModerationOrchestrator>();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
-        var operations = await _botClientFactory.GetOperationsAsync();
 
         // 1. Get chat info from Telegram API (needed for notification message)
         string chatName = "the chat";
         try
         {
-            var groupChat = await operations.GetChatAsync(chatId, cancellationToken);
+            var groupChat = await _chatService.GetChatAsync(chatId, cancellationToken);
             chatName = groupChat.Title ?? chatName;
         }
         catch (Exception ex)
@@ -939,9 +930,9 @@ public class ExamFlowService : IExamFlowService
 
         try
         {
-            await operations.SendMessageAsync(
-                chatId: userId, // DM chat ID = user ID
-                text: notificationText,
+            await _dmService.SendDmAsync(
+                userId, // DM chat ID = user ID
+                notificationText,
                 cancellationToken: cancellationToken);
         }
         catch (Exception ex)

@@ -50,6 +50,7 @@ public record Actor
     public static Actor SystemSeed => FromSystem("system_seed"); // Initial data seeding
     public static Actor ExamFlow => FromSystem("exam_flow"); // Entrance exam auto-pass
     public static Actor WelcomeFlow => FromSystem("welcome_flow"); // Welcome/rules flow completion
+    public static Actor TempbanExpiry => FromSystem("tempban_expiry"); // Scheduled tempban expiry
     public static Actor Unknown => FromSystem("unknown");
 
     /// <summary>
@@ -98,6 +99,7 @@ public record Actor
             "web_admin" => "Web Admin (Legacy)",
             "exam_flow" => "Exam Flow",
             "welcome_flow" => "Welcome Flow",
+            "tempban_expiry" => "Tempban Expiry",
             "unknown" => "Unknown",
             _ => systemIdentifier
         };

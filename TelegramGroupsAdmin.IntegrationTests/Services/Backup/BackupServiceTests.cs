@@ -3,12 +3,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
@@ -79,7 +82,7 @@ public class BackupServiceTests
         });
 
         // Add mock services (BackupService dependencies)
-        services.AddSingleton<IDmDeliveryService, MockDmDeliveryService>();
+        services.AddSingleton<IBotDmService, MockBotDmService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
         services.AddSingleton<INotificationService, MockNotificationService>();
         services.AddSingleton(Substitute.For<TelegramGroupsAdmin.Telegram.Services.IThumbnailService>());
@@ -688,38 +691,30 @@ public class BackupServiceTests
     /// <summary>
     /// Mock DM delivery service for tests (BackupService sends notifications on export failure)
     /// </summary>
-    private class MockDmDeliveryService : IDmDeliveryService
+    private class MockBotDmService : IBotDmService
     {
+        private static readonly DmDeliveryResult SuccessResult = new()
+        {
+            DmSent = true,
+            FallbackUsed = false,
+            Failed = false,
+            MessageId = 1
+        };
+
         public Task<DmDeliveryResult> SendDmAsync(
             long telegramUserId,
             string messageText,
             long? fallbackChatId = null,
             int? autoDeleteSeconds = null,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithQueueAsync(
             long telegramUserId,
             string notificationType,
             string messageText,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithMediaAsync(
             long telegramUserId,
@@ -728,32 +723,45 @@ public class BackupServiceTests
             string? photoPath = null,
             string? videoPath = null,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
             long telegramUserId,
             string notificationType,
             string messageText,
             string? photoPath = null,
-            global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+            InlineKeyboardMarkup? keyboard = null,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
+
+        public Task<Message> EditDmTextAsync(
+            long dmChatId,
+            int messageId,
+            string text,
+            InlineKeyboardMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
+
+        public Task<Message> EditDmCaptionAsync(
+            long dmChatId,
+            int messageId,
+            string? caption,
+            InlineKeyboardMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
+
+        public Task DeleteDmMessageAsync(
+            long dmChatId,
+            int messageId,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+            long telegramUserId,
+            string messageText,
+            InlineKeyboardMarkup keyboard,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
     }
 
     /// <summary>

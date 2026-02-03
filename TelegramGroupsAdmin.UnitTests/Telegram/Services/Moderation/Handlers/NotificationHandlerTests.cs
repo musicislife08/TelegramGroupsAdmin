@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
@@ -37,8 +38,8 @@ public class NotificationHandlerTests
     private ITelegramUserRepository _mockTelegramUserRepository = null!;
     private IChatAdminsRepository _mockChatAdminsRepository = null!;
     private ITelegramUserMappingRepository _mockTelegramUserMappingRepository = null!;
-    private IDmDeliveryService _mockDmDeliveryService = null!;
-    private IChatInviteLinkService _mockChatInviteLinkService = null!;
+    private IBotDmService _mockDmDeliveryService = null!;
+    private IBotChatService _mockChatService = null!;
     private IChatCache _mockChatCache = null!;
     private ILogger<NotificationHandler> _mockLogger = null!;
     private NotificationHandler _handler = null!;
@@ -52,8 +53,8 @@ public class NotificationHandlerTests
         _mockTelegramUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockChatAdminsRepository = Substitute.For<IChatAdminsRepository>();
         _mockTelegramUserMappingRepository = Substitute.For<ITelegramUserMappingRepository>();
-        _mockDmDeliveryService = Substitute.For<IDmDeliveryService>();
-        _mockChatInviteLinkService = Substitute.For<IChatInviteLinkService>();
+        _mockDmDeliveryService = Substitute.For<IBotDmService>();
+        _mockChatService = Substitute.For<IBotChatService>();
         _mockChatCache = Substitute.For<IChatCache>();
         _mockLogger = Substitute.For<ILogger<NotificationHandler>>();
 
@@ -65,7 +66,7 @@ public class NotificationHandlerTests
             _mockChatAdminsRepository,
             _mockTelegramUserMappingRepository,
             _mockDmDeliveryService,
-            _mockChatInviteLinkService,
+            _mockChatService,
             _mockChatCache,
             _mockLogger);
     }

@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
@@ -33,8 +34,8 @@ public class NotificationHandler : INotificationHandler
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
-    private readonly IDmDeliveryService _dmDeliveryService;
-    private readonly IChatInviteLinkService _chatInviteLinkService;
+    private readonly IBotDmService _dmDeliveryService;
+    private readonly IBotChatService _chatService;
     private readonly IChatCache _chatCache;
     private readonly ILogger<NotificationHandler> _logger;
 
@@ -45,8 +46,8 @@ public class NotificationHandler : INotificationHandler
         ITelegramUserRepository telegramUserRepository,
         IChatAdminsRepository chatAdminsRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
-        IDmDeliveryService dmDeliveryService,
-        IChatInviteLinkService chatInviteLinkService,
+        IBotDmService dmDeliveryService,
+        IBotChatService chatService,
         IChatCache chatCache,
         ILogger<NotificationHandler> logger)
     {
@@ -57,7 +58,7 @@ public class NotificationHandler : INotificationHandler
         _chatAdminsRepository = chatAdminsRepository;
         _telegramUserMappingRepository = telegramUserMappingRepository;
         _dmDeliveryService = dmDeliveryService;
-        _chatInviteLinkService = chatInviteLinkService;
+        _chatService = chatService;
         _chatCache = chatCache;
         _logger = logger;
     }
@@ -253,29 +254,21 @@ public class NotificationHandler : INotificationHandler
 
         foreach (var managedChat in activeChats)
         {
-            // Look up SDK Chat from cache (populated by health checks on startup)
-            var sdkChat = _chatCache.GetChat(managedChat.ChatId);
-            if (sdkChat == null)
-            {
-                _logger.LogDebug(
-                    "Chat {ChatId} not in cache, skipping invite link for notification",
-                    managedChat.ChatId);
-                continue;
-            }
-
             try
             {
-                var inviteLink = await _chatInviteLinkService.GetInviteLinkAsync(sdkChat, cancellationToken);
+                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.ChatId, cancellationToken);
                 if (!string.IsNullOrEmpty(inviteLink))
                 {
-                    inviteLinks.Add($"• [{sdkChat.ToLogInfo()}]({inviteLink})");
+                    // Use chat name from managed chat record, or fall back to chatId
+                    var chatDisplayName = managedChat.ChatName ?? managedChat.ChatId.ToString();
+                    inviteLinks.Add($"• [{chatDisplayName}]({inviteLink})");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex,
-                    "Failed to get invite link for {Chat}, skipping from notification",
-                    sdkChat.ToLogDebug());
+                    "Failed to get invite link for chat {ChatId}, skipping from notification",
+                    managedChat.ChatId);
             }
         }
 

@@ -11,11 +11,12 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
-/// Handles content detection actions: routes moderation through ModerationOrchestrator.
+/// Handles content detection actions: routes moderation through BotModerationService.
 /// Responsible for:
 /// - Loading detection config thresholds
 /// - Routing hard block, malware, spam, and critical violations to orchestrator
@@ -47,7 +48,7 @@ public class DetectionActionService(
 
     /// <summary>
     /// Handle content detection actions based on violation type and confidence levels.
-    /// Routes all moderation actions through ModerationOrchestrator for consistent handling.
+    /// Routes all moderation actions through BotModerationService for consistent handling.
     /// - HardBlock → MarkAsSpamAndBanAsync (instant policy violation)
     /// - Malware → HandleMalwareViolationAsync (delete + alert, no ban)
     /// - Spam (high confidence + OpenAI confirmed) → MarkAsSpamAndBanAsync
@@ -73,7 +74,7 @@ public class DetectionActionService(
 
             using var scope = serviceProvider.CreateScope();
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
-            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
+            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
 
             // Check for hard block or malware (different handling than spam)
             var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
@@ -240,7 +241,7 @@ public class DetectionActionService(
     /// Handle critical check violations for trusted/admin users.
     /// Policy: Delete message + DM notice, NO ban/warn for trusted/admin users.
     /// Critical checks (URL filtering, file scanning) bypass trust status.
-    /// Routes through ModerationOrchestrator for consistent handling.
+    /// Routes through BotModerationService for consistent handling.
     /// </summary>
     public async Task HandleCriticalCheckViolationAsync(
         Message message,
@@ -256,7 +257,7 @@ public class DetectionActionService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
+            var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
 
             await moderationOrchestrator.HandleCriticalViolationAsync(
                 messageId: message.MessageId,
