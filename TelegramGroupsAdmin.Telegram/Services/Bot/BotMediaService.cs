@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
@@ -20,6 +21,7 @@ public class BotMediaService : IBotMediaService
 {
     private readonly IBotMediaHandler _mediaHandler;
     private readonly IBotChatHandler _chatHandler;
+    private readonly IFileSystem _fileSystem;
     private readonly ILogger<BotMediaService> _logger;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
@@ -27,20 +29,22 @@ public class BotMediaService : IBotMediaService
     public BotMediaService(
         IBotMediaHandler mediaHandler,
         IBotChatHandler chatHandler,
+        IFileSystem fileSystem,
         IOptions<MessageHistoryOptions> options,
         ILogger<BotMediaService> logger)
     {
         _mediaHandler = mediaHandler;
         _chatHandler = chatHandler;
+        _fileSystem = fileSystem;
         _logger = logger;
 
         // Create subdirectories for chat icons and user photos under media/
-        var mediaPath = Path.Combine(options.Value.ImageStoragePath, "media");
-        _chatIconsPath = Path.Combine(mediaPath, "chat_icons");
-        _userPhotosPath = Path.Combine(mediaPath, "user_photos");
+        var mediaPath = _fileSystem.Path.Combine(options.Value.ImageStoragePath, "media");
+        _chatIconsPath = _fileSystem.Path.Combine(mediaPath, "chat_icons");
+        _userPhotosPath = _fileSystem.Path.Combine(mediaPath, "user_photos");
 
-        Directory.CreateDirectory(_chatIconsPath);
-        Directory.CreateDirectory(_userPhotosPath);
+        _fileSystem.Directory.CreateDirectory(_chatIconsPath);
+        _fileSystem.Directory.CreateDirectory(_userPhotosPath);
     }
 
     public async Task<UserPhotoResult?> GetUserPhotoAsync(
@@ -52,7 +56,7 @@ public class BotMediaService : IBotMediaService
         try
         {
             var fileName = $"{userId}.jpg";
-            var localPath = Path.Combine(_userPhotosPath, fileName);
+            var localPath = _fileSystem.Path.Combine(_userPhotosPath, fileName);
             var relativePath = $"user_photos/{fileName}";
 
             // Fetch current photo from Telegram
@@ -69,7 +73,7 @@ public class BotMediaService : IBotMediaService
             var currentPhotoId = smallestPhoto.FileUniqueId;
 
             // Smart cache check: return cached if file exists and photo hasn't changed
-            if (System.IO.File.Exists(localPath))
+            if (_fileSystem.File.Exists(localPath))
             {
                 if (knownPhotoId == null || knownPhotoId == currentPhotoId)
                 {
@@ -91,10 +95,10 @@ public class BotMediaService : IBotMediaService
             }
 
             // Download and resize to square icon
-            var tempPath = Path.GetTempFileName();
+            var tempPath = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetRandomFileName());
             try
             {
-                await using (var fileStream = System.IO.File.Create(tempPath))
+                await using (var fileStream = _fileSystem.File.Create(tempPath))
                 {
                     await _mediaHandler.DownloadFileAsync(file.FilePath, fileStream, ct);
                 }
@@ -107,9 +111,9 @@ public class BotMediaService : IBotMediaService
             }
             finally
             {
-                if (System.IO.File.Exists(tempPath))
+                if (_fileSystem.File.Exists(tempPath))
                 {
-                    System.IO.File.Delete(tempPath);
+                    _fileSystem.File.Delete(tempPath);
                 }
             }
         }
@@ -132,11 +136,11 @@ public class BotMediaService : IBotMediaService
         try
         {
             var fileName = $"{Math.Abs(chatId)}.jpg";
-            var localPath = Path.Combine(_chatIconsPath, fileName);
+            var localPath = _fileSystem.Path.Combine(_chatIconsPath, fileName);
             var relativePath = $"chat_icons/{fileName}";
 
             // Return cached if exists
-            if (System.IO.File.Exists(localPath))
+            if (_fileSystem.File.Exists(localPath))
             {
                 return relativePath;
             }
@@ -162,10 +166,10 @@ public class BotMediaService : IBotMediaService
             }
 
             // Download and resize to square icon
-            var tempPath = Path.GetTempFileName();
+            var tempPath = _fileSystem.Path.Combine(_fileSystem.Path.GetTempPath(), _fileSystem.Path.GetRandomFileName());
             try
             {
-                await using (var fileStream = System.IO.File.Create(tempPath))
+                await using (var fileStream = _fileSystem.File.Create(tempPath))
                 {
                     await _mediaHandler.DownloadFileAsync(file.FilePath, fileStream, ct);
                 }
@@ -179,9 +183,9 @@ public class BotMediaService : IBotMediaService
             }
             finally
             {
-                if (System.IO.File.Exists(tempPath))
+                if (_fileSystem.File.Exists(tempPath))
                 {
-                    System.IO.File.Delete(tempPath);
+                    _fileSystem.File.Delete(tempPath);
                 }
             }
         }
@@ -233,16 +237,20 @@ public class BotMediaService : IBotMediaService
 
     /// <summary>
     /// Resize image to square icon using ImageSharp.
+    /// Uses IFileSystem streams for testability - all I/O goes through the abstraction,
+    /// leaving ImageSharp to only handle the image mutation.
     /// </summary>
-    private static async Task ResizeImageAsync(
+    private async Task ResizeImageAsync(
         string sourcePath,
         string targetPath,
         int size,
         CancellationToken ct = default)
     {
-        using var image = await Image.LoadAsync(sourcePath, ct);
+        // Read source image through IFileSystem
+        await using var sourceStream = _fileSystem.File.OpenRead(sourcePath);
+        using var image = await Image.LoadAsync(sourceStream, ct);
 
-        // Crop to center square, then resize
+        // Crop to center square, then resize (ImageSharp handles mutation)
         image.Mutate(x => x
             .Resize(new ResizeOptions
             {
@@ -251,7 +259,9 @@ public class BotMediaService : IBotMediaService
                 Position = AnchorPositionMode.Center
             }));
 
-        await image.SaveAsJpegAsync(targetPath, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder
+        // Write target image through IFileSystem
+        await using var targetStream = _fileSystem.File.Create(targetPath);
+        await image.SaveAsJpegAsync(targetStream, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder
         {
             Quality = 85
         }, ct);

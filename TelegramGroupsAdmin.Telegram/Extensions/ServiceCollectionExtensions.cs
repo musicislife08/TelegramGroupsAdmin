@@ -1,3 +1,4 @@
+using System.IO.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -15,6 +16,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using Testably.Abstractions;
 
 namespace TelegramGroupsAdmin.Telegram.Extensions;
 
@@ -58,6 +60,7 @@ public static class ServiceCollectionExtensions
             // Telegram infrastructure
             services.AddSingleton<ITelegramBotClientFactory, TelegramBotClientFactory>();
             services.AddSingleton<ITelegramConfigLoader, TelegramConfigLoader>(); // Database-backed config loader (replaces IOptions<TelegramOptions>)
+            services.AddSingleton<IFileSystem, RealFileSystem>(); // Testable file system abstraction for BotMediaService
             services.AddScoped<ITelegramImageService, TelegramImageService>();
             services.AddScoped<TelegramPhotoService>();
             services.AddScoped<TelegramMediaService>();

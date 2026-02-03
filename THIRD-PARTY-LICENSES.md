@@ -81,6 +81,11 @@ TelegramGroupsAdmin is built on the shoulders of many excellent open-source proj
 - **Testcontainers** - MIT License - https://github.com/testcontainers/testcontainers-dotnet
 - **NSubstitute** - BSD 3-Clause - https://github.com/nsubstitute/NSubstitute
 - **WireMock.Net** - Apache License 2.0 - https://github.com/WireMock-Net/WireMock.Net
+- **Testably.Abstractions** - MIT License - https://github.com/Testably/Testably.Abstractions
+
+### Utilities
+- **Testably.Abstractions** - MIT License - https://github.com/Testably/Testably.Abstractions
+  - Provides `IFileSystem` abstraction for testable file operations (replaces static `System.IO` calls)
 
 ---
 
