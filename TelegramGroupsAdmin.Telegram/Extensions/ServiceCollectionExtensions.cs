@@ -59,8 +59,8 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ITelegramBotClientFactory, TelegramBotClientFactory>();
             services.AddSingleton<ITelegramConfigLoader, TelegramConfigLoader>(); // Database-backed config loader (replaces IOptions<TelegramOptions>)
             services.AddScoped<ITelegramImageService, TelegramImageService>();
-            services.AddSingleton<TelegramPhotoService>();
-            services.AddSingleton<TelegramMediaService>();
+            services.AddScoped<TelegramPhotoService>();
+            services.AddScoped<TelegramMediaService>();
 
             // Message processing handlers (REFACTOR-1: extracted from MessageProcessingService)
             services.AddScoped<Handlers.MediaProcessingHandler>();

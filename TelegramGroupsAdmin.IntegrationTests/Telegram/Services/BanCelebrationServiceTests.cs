@@ -16,6 +16,7 @@ using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -31,7 +32,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 ///
 /// Test Strategy:
 /// - Real PostgreSQL for config, GIFs, captions, and ban counts
-/// - Mocked ITelegramBotClientFactory and IDmDeliveryService (external APIs)
+/// - Mocked ITelegramBotClientFactory and IBotDmService (external APIs)
 /// - Tests config logic, placeholder replacement, and file_id caching
 /// </summary>
 [TestFixture]
@@ -48,9 +49,8 @@ public class BanCelebrationServiceTests
     private IBanCelebrationGifRepository? _gifRepository;
     private IBanCelebrationCaptionRepository? _captionRepository;
     private IConfigService? _configService;
-    private ITelegramBotClientFactory? _mockBotClientFactory;
-    private ITelegramOperations? _mockTelegramOps;
-    private IDmDeliveryService? _mockDmDeliveryService;
+    private IBotMessageService? _mockMessageService;
+    private IBotDmService? _mockDmService;
     private string _tempMediaPath = null!;
 
     [SetUp]
@@ -70,16 +70,11 @@ public class BanCelebrationServiceTests
         Directory.CreateDirectory(_tempMediaPath);
 
         // Set up mocks for external services
-        _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
-        _mockTelegramOps = Substitute.For<ITelegramOperations>();
-        _mockDmDeliveryService = Substitute.For<IDmDeliveryService>();
-
-        // Configure mock to return operations
-        _mockBotClientFactory.GetOperationsAsync()
-            .Returns(Task.FromResult(_mockTelegramOps)!);
+        _mockMessageService = Substitute.For<IBotMessageService>();
+        _mockDmService = Substitute.For<IBotDmService>();
 
         // Configure mock to return a message with animation
-        _mockTelegramOps.SendAnimationAsync(
+        _mockMessageService.SendAndSaveAnimationAsync(
             Arg.Any<long>(),
             Arg.Any<InputFile>(),
             Arg.Any<string?>(),
@@ -128,8 +123,11 @@ public class BanCelebrationServiceTests
         services.AddScoped<IConfigService, ConfigService>();
 
         // Register mocked external services
-        services.AddSingleton(_mockBotClientFactory);
-        services.AddSingleton(_mockDmDeliveryService);
+        services.AddSingleton(_mockMessageService);
+        services.AddSingleton(_mockDmService);
+
+        // Register BanCelebrationCache (real singleton for shuffle-bag state)
+        services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>();
 
         // Register BanCelebrationService
         services.AddScoped<IBanCelebrationService, BanCelebrationService>();
@@ -147,9 +145,6 @@ public class BanCelebrationServiceTests
     public void TearDown()
     {
         (_serviceProvider as IDisposable)?.Dispose();
-        (_mockBotClientFactory as IDisposable)?.Dispose();
-        (_mockTelegramOps as IDisposable)?.Dispose();
-        (_mockDmDeliveryService as IDisposable)?.Dispose();
         _testHelper?.Dispose();
 
         // Clean up temp directory
@@ -180,7 +175,7 @@ public class BanCelebrationServiceTests
 
         // Assert
         Assert.That(result, Is.False);
-        await _mockTelegramOps!.DidNotReceive().SendAnimationAsync(
+        await _mockMessageService!.DidNotReceive().SendAndSaveAnimationAsync(
             Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(),
             Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>());
     }
@@ -198,7 +193,7 @@ public class BanCelebrationServiceTests
 
         // Assert
         Assert.That(result, Is.True);
-        await _mockTelegramOps!.Received(1).SendAnimationAsync(
+        await _mockMessageService!.Received(1).SendAndSaveAnimationAsync(
             TestChatId, Arg.Any<InputFile>(), Arg.Any<string?>(),
             ParseMode.Markdown, Arg.Any<CancellationToken>());
     }
@@ -216,7 +211,7 @@ public class BanCelebrationServiceTests
 
         // Assert
         Assert.That(result, Is.False);
-        await _mockTelegramOps!.DidNotReceive().SendAnimationAsync(
+        await _mockMessageService!.DidNotReceive().SendAndSaveAnimationAsync(
             Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(),
             Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>());
     }
@@ -300,7 +295,7 @@ public class BanCelebrationServiceTests
         await EnableBanCelebration(TestChatId);
 
         string? capturedCaption = null;
-        _mockTelegramOps!.SendAnimationAsync(
+        _mockMessageService!.SendAndSaveAnimationAsync(
             Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<string?>(c => capturedCaption = c),
             Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 1, chatId: TestChatId));
@@ -324,7 +319,7 @@ public class BanCelebrationServiceTests
         await EnableBanCelebration(TestChatId);
 
         string? capturedCaption = null;
-        _mockTelegramOps!.SendAnimationAsync(
+        _mockMessageService!.SendAndSaveAnimationAsync(
             Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<string?>(c => capturedCaption = c),
             Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 1, chatId: TestChatId));
@@ -351,7 +346,7 @@ public class BanCelebrationServiceTests
         await SeedBanActions(3);
 
         string? capturedCaption = null;
-        _mockTelegramOps!.SendAnimationAsync(
+        _mockMessageService!.SendAndSaveAnimationAsync(
             Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Do<string?>(c => capturedCaption = c),
             Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
         ).Returns(TelegramTestFactory.CreateMessage(messageId: 1, chatId: TestChatId));
@@ -401,7 +396,7 @@ public class BanCelebrationServiceTests
         await SeedTestGifAndCaption();
         await EnableBanCelebration(TestChatId);
 
-        _mockTelegramOps!.SendAnimationAsync(
+        _mockMessageService!.SendAndSaveAnimationAsync(
             Arg.Any<long>(), Arg.Any<InputFile>(), Arg.Any<string?>(),
             Arg.Any<ParseMode?>(), Arg.Any<CancellationToken>()
         ).Returns<Message>(x => throw new Exception("Telegram API error"));
@@ -411,24 +406,6 @@ public class BanCelebrationServiceTests
             TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
 
         // Assert - Should fail gracefully
-        Assert.That(result, Is.False);
-    }
-
-    [Test]
-    public async Task SendBanCelebrationAsync_WhenBotClientUnavailable_ReturnsFalse()
-    {
-        // Arrange
-        await SeedTestGifAndCaption();
-        await EnableBanCelebration(TestChatId);
-
-        _mockBotClientFactory!.GetOperationsAsync()
-            .Returns(Task.FromResult<ITelegramOperations>(null!));
-
-        // Act
-        var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
-
-        // Assert
         Assert.That(result, Is.False);
     }
 
@@ -446,7 +423,7 @@ public class BanCelebrationServiceTests
         // Enable DM welcome mode (required for DM delivery)
         await EnableDmWelcomeMode(TestChatId);
 
-        _mockDmDeliveryService!.SendDmWithMediaAsync(
+        _mockDmService!.SendDmWithMediaAsync(
             Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = true });
@@ -456,7 +433,7 @@ public class BanCelebrationServiceTests
             TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
 
         // Assert - DM delivery was attempted
-        await _mockDmDeliveryService.Received(1).SendDmWithMediaAsync(
+        await _mockDmService!.Received(1).SendDmWithMediaAsync(
             TestUserId, "ban_celebration", Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
@@ -473,7 +450,7 @@ public class BanCelebrationServiceTests
             TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted
-        await _mockDmDeliveryService!.DidNotReceive().SendDmWithMediaAsync(
+        await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
             Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
@@ -491,7 +468,7 @@ public class BanCelebrationServiceTests
             TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted (no DM mode enabled)
-        await _mockDmDeliveryService!.DidNotReceive().SendDmWithMediaAsync(
+        await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
             Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
@@ -504,7 +481,7 @@ public class BanCelebrationServiceTests
         await EnableBanCelebration(TestChatId, sendToBannedUser: true);
         await EnableDmWelcomeMode(TestChatId);
 
-        _mockDmDeliveryService!.SendDmWithMediaAsync(
+        _mockDmService!.SendDmWithMediaAsync(
             Arg.Any<long>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()
         ).Returns(new DmDeliveryResult { DmSent = false, Failed = true, ErrorMessage = "User blocked bot" });

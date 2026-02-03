@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -35,7 +36,9 @@ public class ExamFlowServiceTests
 
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
-    private ITelegramOperations? _mockOperations;
+    private IBotMessageService? _mockMessageService;
+    private IBotChatService? _mockChatService;
+    private IBotDmService? _mockDmService;
 
     [SetUp]
     public async Task SetUp()
@@ -43,9 +46,10 @@ public class ExamFlowServiceTests
         _testHelper = new MigrationTestHelper();
         await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
 
-        // Set up mocks
-        _mockOperations = Substitute.For<ITelegramOperations>();
-        var mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
+        // Set up mocks for the new Bot*Service interfaces
+        _mockMessageService = Substitute.For<IBotMessageService>();
+        _mockChatService = Substitute.For<IBotChatService>();
+        _mockDmService = Substitute.For<IBotDmService>();
         var mockExamEvaluationService = Substitute.For<IExamEvaluationService>();
         var mockConfigService = Substitute.For<IConfigService>();
 
@@ -61,19 +65,20 @@ public class ExamFlowServiceTests
 
         // Mock GetChatAsync to return chat info (needed for exam intro message)
         var testChatInfo = TelegramTestFactory.CreateChatFullInfo(id: TestChatId, type: ChatType.Supergroup, title: "Test Chat");
-        _mockOperations.GetChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _mockChatService.GetChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(testChatInfo));
 
-        _mockOperations.SendMessageAsync(
+        // Mock message service methods
+        _mockMessageService.SendAndSaveMessageAsync(
                 Arg.Any<long>(),
                 Arg.Any<string>(),
                 Arg.Any<ParseMode?>(),
                 Arg.Any<ReplyParameters?>(),
-                Arg.Any<ReplyMarkup?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(responseMessage));
 
-        _mockOperations.EditMessageTextAsync(
+        _mockMessageService.EditAndUpdateMessageAsync(
                 Arg.Any<long>(),
                 Arg.Any<int>(),
                 Arg.Any<string>(),
@@ -82,7 +87,28 @@ public class ExamFlowServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(responseMessage));
 
-        mockBotClientFactory.GetOperationsAsync().Returns(Task.FromResult(_mockOperations));
+        // Mock DM service methods - exam questions are sent via DM
+        var dmSuccessResult = new DmDeliveryResult { DmSent = true, MessageId = 1 };
+        _mockDmService.SendDmWithKeyboardAsync(
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<InlineKeyboardMarkup>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(dmSuccessResult));
+
+        _mockDmService.SendDmAsync(
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<long?>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(dmSuccessResult));
+
+        _mockDmService.DeleteDmMessageAsync(
+                Arg.Any<long>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
 
         // Build service provider with real database and mocked externals
         var services = new ServiceCollection();
@@ -104,7 +130,9 @@ public class ExamFlowServiceTests
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
         // Mocked external services (match scopes from main app registration)
-        services.AddSingleton(mockBotClientFactory);  // Singleton in main app
+        services.AddSingleton(_mockMessageService);
+        services.AddSingleton(_mockChatService);
+        services.AddSingleton(_mockDmService);
         services.AddScoped(_ => mockExamEvaluationService);  // Scoped in main app
         services.AddScoped(_ => mockConfigService);  // Scoped in main app
 

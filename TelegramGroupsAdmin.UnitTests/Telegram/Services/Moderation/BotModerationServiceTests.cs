@@ -11,7 +11,8 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -19,19 +20,19 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation;
 
 /// <summary>
-/// Unit tests for ModerationOrchestrator.
+/// Unit tests for BotModerationService.
 /// Tests business rules (bans revoke trust, N warnings = auto-ban) and workflow composition.
 /// The orchestrator is the "boss" that coordinates handlers and owns business rules.
 /// </summary>
 [TestFixture]
-public class ModerationOrchestratorTests
+public class BotModerationServiceTests
 {
     private const long TestChatId = 123456789L;
-    private IBanHandler _mockBanHandler = null!;
+    private IBotBanHandler _mockBanHandler = null!;
     private ITrustHandler _mockTrustHandler = null!;
     private IWarnHandler _mockWarnHandler = null!;
-    private IMessageHandler _mockMessageHandler = null!;
-    private IRestrictHandler _mockRestrictHandler = null!;
+    private IBotModerationMessageHandler _mockMessageHandler = null!;
+    private IBotRestrictHandler _mockRestrictHandler = null!;
     private IAuditHandler _mockAuditHandler = null!;
     private INotificationHandler _mockNotificationHandler = null!;
     private ITrainingHandler _mockTrainingHandler = null!;
@@ -41,17 +42,17 @@ public class ModerationOrchestratorTests
     private IReportService _mockReportService = null!;
     private INotificationService _mockNotificationService = null!;
     private IConfigService _mockConfigService = null!;
-    private ILogger<ModerationOrchestrator> _mockLogger = null!;
-    private ModerationOrchestrator _orchestrator = null!;
+    private ILogger<BotModerationService> _mockLogger = null!;
+    private BotModerationService _orchestrator = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockBanHandler = Substitute.For<IBanHandler>();
+        _mockBanHandler = Substitute.For<IBotBanHandler>();
         _mockTrustHandler = Substitute.For<ITrustHandler>();
         _mockWarnHandler = Substitute.For<IWarnHandler>();
-        _mockMessageHandler = Substitute.For<IMessageHandler>();
-        _mockRestrictHandler = Substitute.For<IRestrictHandler>();
+        _mockMessageHandler = Substitute.For<IBotModerationMessageHandler>();
+        _mockRestrictHandler = Substitute.For<IBotRestrictHandler>();
         _mockAuditHandler = Substitute.For<IAuditHandler>();
         _mockNotificationHandler = Substitute.For<INotificationHandler>();
         _mockTrainingHandler = Substitute.For<ITrainingHandler>();
@@ -61,9 +62,9 @@ public class ModerationOrchestratorTests
         _mockReportService = Substitute.For<IReportService>();
         _mockNotificationService = Substitute.For<INotificationService>();
         _mockConfigService = Substitute.For<IConfigService>();
-        _mockLogger = Substitute.For<ILogger<ModerationOrchestrator>>();
+        _mockLogger = Substitute.For<ILogger<BotModerationService>>();
 
-        _orchestrator = new ModerationOrchestrator(
+        _orchestrator = new BotModerationService(
             _mockBanHandler,
             _mockTrustHandler,
             _mockWarnHandler,

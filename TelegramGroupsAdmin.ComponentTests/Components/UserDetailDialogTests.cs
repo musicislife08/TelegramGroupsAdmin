@@ -10,14 +10,14 @@ using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
 /// <summary>
 /// Component tests for UserDetailDialog.razor
 /// Tests loading states, user profile display, quick action buttons visibility.
-/// Uses ITelegramUserManagementService and IModerationOrchestrator interfaces
+/// Uses ITelegramUserManagementService and IBotModerationService interfaces
 /// (enabled by Issue #127 interface extraction).
 /// </summary>
 /// <remarks>
@@ -28,7 +28,7 @@ namespace TelegramGroupsAdmin.ComponentTests.Components;
 public class UserDetailDialogTests : MudBlazorTestContext
 {
     private ITelegramUserManagementService _mockUserService = null!;
-    private IModerationOrchestrator _mockModerationService = null!;
+    private IBotModerationService _mockModerationService = null!;
     private IAdminNotesRepository _mockNotesRepo = null!;
     private IUserTagsRepository _mockTagsRepo = null!;
     private ITagDefinitionsRepository _mockTagDefinitionsRepo = null!;
@@ -49,7 +49,7 @@ public class UserDetailDialogTests : MudBlazorTestContext
 
         // Create mocks for services used by the dialog
         _mockUserService = Substitute.For<ITelegramUserManagementService>();
-        _mockModerationService = Substitute.For<IModerationOrchestrator>();
+        _mockModerationService = Substitute.For<IBotModerationService>();
         _mockAuthHelper = Substitute.For<IBlazorAuthHelper>();
         _mockSnackbar = Substitute.For<ISnackbar>();
         _mockTagDefinitionsRepo = Substitute.For<ITagDefinitionsRepository>();

@@ -2,12 +2,13 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
 /// <summary>
 /// Unit tests for TelegramBotClientFactory.
-/// Tests the refresh-on-change caching behavior and operations wrapper creation.
+/// Tests the refresh-on-change caching behavior and API client wrapper creation.
 /// </summary>
 [TestFixture]
 public class TelegramBotClientFactoryTests
@@ -17,7 +18,6 @@ public class TelegramBotClientFactoryTests
     private ILoggerFactory _mockLoggerFactory = null!;
 #pragma warning restore NUnit1032
     private ILogger<TelegramBotClientFactory> _mockFactoryLogger = null!;
-    private ILogger<TelegramOperations> _mockOperationsLogger = null!;
     private TelegramBotClientFactory _sut = null!;
 
     private const string TestToken1 = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11";
@@ -29,12 +29,9 @@ public class TelegramBotClientFactoryTests
         _mockConfigLoader = Substitute.For<ITelegramConfigLoader>();
         _mockLoggerFactory = Substitute.For<ILoggerFactory>();
         _mockFactoryLogger = Substitute.For<ILogger<TelegramBotClientFactory>>();
-        _mockOperationsLogger = Substitute.For<ILogger<TelegramOperations>>();
 
         _mockLoggerFactory.CreateLogger<TelegramBotClientFactory>()
             .Returns(_mockFactoryLogger);
-        _mockLoggerFactory.CreateLogger<TelegramOperations>()
-            .Returns(_mockOperationsLogger);
 
         _sut = new TelegramBotClientFactory(_mockConfigLoader, _mockLoggerFactory);
     }
@@ -96,48 +93,48 @@ public class TelegramBotClientFactoryTests
 
     #endregion
 
-    #region GetOperationsAsync Tests
+    #region GetApiClientAsync Tests
 
     [Test]
-    public async Task GetOperationsAsync_ReturnsITelegramOperations()
+    public async Task GetApiClientAsync_ReturnsITelegramApiClient()
     {
         // Arrange
         _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
 
         // Act
-        var operations = await _sut.GetOperationsAsync();
+        var apiClient = await _sut.GetApiClientAsync();
 
         // Assert
-        Assert.That(operations, Is.Not.Null);
-        Assert.That(operations, Is.InstanceOf<ITelegramOperations>());
+        Assert.That(apiClient, Is.Not.Null);
+        Assert.That(apiClient, Is.InstanceOf<ITelegramApiClient>());
     }
 
     [Test]
-    public async Task GetOperationsAsync_SameToken_ReturnsSameOperations()
+    public async Task GetApiClientAsync_SameToken_ReturnsSameApiClient()
     {
         // Arrange
         _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
 
         // Act
-        var operations1 = await _sut.GetOperationsAsync();
-        var operations2 = await _sut.GetOperationsAsync();
+        var apiClient1 = await _sut.GetApiClientAsync();
+        var apiClient2 = await _sut.GetApiClientAsync();
 
         // Assert
-        Assert.That(operations2, Is.SameAs(operations1), "Same token should return cached operations");
+        Assert.That(apiClient2, Is.SameAs(apiClient1), "Same token should return cached API client");
     }
 
     [Test]
-    public async Task GetOperationsAsync_DifferentToken_ReturnsNewOperations()
+    public async Task GetApiClientAsync_DifferentToken_ReturnsNewApiClient()
     {
         // Arrange - First call returns token1, second returns token2
         _mockConfigLoader.LoadConfigAsync().Returns(TestToken1, TestToken2);
 
         // Act
-        var operations1 = await _sut.GetOperationsAsync();
-        var operations2 = await _sut.GetOperationsAsync();
+        var apiClient1 = await _sut.GetApiClientAsync();
+        var apiClient2 = await _sut.GetApiClientAsync();
 
         // Assert
-        Assert.That(operations2, Is.Not.SameAs(operations1), "Different token should return new operations");
+        Assert.That(apiClient2, Is.Not.SameAs(apiClient1), "Different token should return new API client");
     }
 
     #endregion
@@ -198,20 +195,20 @@ public class TelegramBotClientFactoryTests
     }
 
     [Test]
-    public void GetOperationsAsync_WhenLoaderReturnsNull_ThrowsArgumentNullException()
+    public void GetApiClientAsync_WhenLoaderReturnsNull_ThrowsArgumentNullException()
     {
         // Arrange
         _mockConfigLoader.LoadConfigAsync().Returns((string)null!);
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<ArgumentNullException>(async () =>
-            await _sut.GetOperationsAsync());
+            await _sut.GetApiClientAsync());
 
         Assert.That(ex!.ParamName, Is.EqualTo("token"));
     }
 
     [Test]
-    public void GetOperationsAsync_WhenLoaderThrowsException_PropagatesException()
+    public void GetApiClientAsync_WhenLoaderThrowsException_PropagatesException()
     {
         // Arrange
         var expectedException = new InvalidOperationException("Config not available");
@@ -219,7 +216,7 @@ public class TelegramBotClientFactoryTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _sut.GetOperationsAsync());
+            await _sut.GetApiClientAsync());
 
         Assert.That(ex, Is.SameAs(expectedException));
     }
@@ -277,18 +274,18 @@ public class TelegramBotClientFactoryTests
     }
 
     [Test]
-    public async Task GetOperationsAsync_AfterDispose_ReturnsNewOperations()
+    public async Task GetApiClientAsync_AfterDispose_ReturnsNewApiClient()
     {
-        // Arrange - Get operations, then dispose
+        // Arrange - Get API client, then dispose
         _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
-        var operationsBefore = await _sut.GetOperationsAsync();
+        var apiClientBefore = await _sut.GetApiClientAsync();
         _sut.Dispose();
 
         // Act - Call again after dispose
-        var operationsAfter = await _sut.GetOperationsAsync();
+        var apiClientAfter = await _sut.GetApiClientAsync();
 
-        // Assert - Should create new operations since cache was cleared
-        Assert.That(operationsAfter, Is.Not.SameAs(operationsBefore));
+        // Assert - Should create new API client since cache was cleared
+        Assert.That(apiClientAfter, Is.Not.SameAs(apiClientBefore));
     }
 
     #endregion
@@ -315,22 +312,22 @@ public class TelegramBotClientFactoryTests
     }
 
     [Test]
-    public async Task GetOperationsAsync_ConcurrentCalls_ReturnsSameOperationsInstance()
+    public async Task GetApiClientAsync_ConcurrentCalls_ReturnsSameApiClientInstance()
     {
         // Arrange
         _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
 
         // Act - Call from multiple threads simultaneously
         var tasks = Enumerable.Range(0, 10)
-            .Select(_ => _sut.GetOperationsAsync())
+            .Select(_ => _sut.GetApiClientAsync())
             .ToList();
 
-        var operationsList = await Task.WhenAll(tasks);
+        var apiClientList = await Task.WhenAll(tasks);
 
         // Assert - All should return the same cached instance
-        var firstOperations = operationsList[0];
-        Assert.That(operationsList.All(o => ReferenceEquals(o, firstOperations)), Is.True,
-            "All concurrent calls should return the same operations instance");
+        var firstApiClient = apiClientList[0];
+        Assert.That(apiClientList.All(o => ReferenceEquals(o, firstApiClient)), Is.True,
+            "All concurrent calls should return the same API client instance");
     }
 
     [Test]

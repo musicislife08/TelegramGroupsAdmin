@@ -186,7 +186,7 @@ public class BanCommand : IBotCommand
                 message.From.FirstName,
                 message.From.LastName);
 
-            // Execute ban via ModerationOrchestrator
+            // Execute ban via BotModerationService
             var result = await _moderationService.BanUserAsync(
                 userId: targetUser.Id,
                 messageId: triggerMessageId,

@@ -14,8 +14,7 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.BotCommands;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using ReportBase = TelegramGroupsAdmin.Core.Models.ReportBase;
 using ReportStatus = TelegramGroupsAdmin.Core.Models.ReportStatus;
 using ReportType = TelegramGroupsAdmin.Core.Models.ReportType;
@@ -27,12 +26,12 @@ using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.Modera
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.BotCommands;
 
 /// <summary>
-/// Unit tests for ReportCallbackHandler.
+/// Unit tests for ReportCallbackService.
 /// Tests callback parsing, context lookup, action execution, and cleanup.
-/// Uses IModerationOrchestrator interface (enabled by Issue #127 interface extraction).
+/// Uses IBotModerationService for moderation, IBotDmService for DMs, IBotMessageService for messages.
 /// </summary>
 [TestFixture]
-public class ReportCallbackHandlerTests
+public class ReportCallbackServiceTests
 {
     private const long TestContextId = 12345L;
     private const long TestReportId = 99L;
@@ -40,43 +39,42 @@ public class ReportCallbackHandlerTests
     private const long TestUserId = 54321L;
     private const int TestMessageId = 42;
 
-    private ILogger<ReportCallbackHandler> _mockLogger = null!;
+    private ILogger<ReportCallbackService> _mockLogger = null!;
     private IServiceScopeFactory _mockScopeFactory = null!;
     private IServiceScope _mockScope = null!;
     private IServiceProvider _mockServiceProvider = null!;
-    private ITelegramBotClientFactory _mockBotClientFactory = null!;
-    private ITelegramOperations _mockOperations = null!;
 
     // Scoped services resolved from the mock scope
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
     private IReportsRepository _mockReportsRepo = null!;
     private ITelegramUserRepository _mockUserRepo = null!;
-    private IModerationOrchestrator _mockModerationService = null!;
+    private IBotModerationService _mockModerationService = null!;
     private IExamFlowService _mockExamFlowService = null!;
-    private IManagedChatsRepository _mockManagedChatsRepo = null!;
+    private IBotDmService _mockDmService = null!;
+    private IBotMessageService _mockMessageService = null!;
 
-    private ReportCallbackHandler _handler = null!;
+    private ReportCallbackService _service = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockLogger = Substitute.For<ILogger<ReportCallbackHandler>>();
+        _mockLogger = Substitute.For<ILogger<ReportCallbackService>>();
         _mockScopeFactory = Substitute.For<IServiceScopeFactory>();
         _mockScope = Substitute.For<IServiceScope>();
         _mockServiceProvider = Substitute.For<IServiceProvider>();
-        _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
-        _mockOperations = Substitute.For<ITelegramOperations>();
 
         // Scoped services
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
         _mockReportsRepo = Substitute.For<IReportsRepository>();
         _mockUserRepo = Substitute.For<ITelegramUserRepository>();
-        _mockModerationService = Substitute.For<IModerationOrchestrator>();
+        _mockModerationService = Substitute.For<IBotModerationService>();
         _mockExamFlowService = Substitute.For<IExamFlowService>();
-        _mockManagedChatsRepo = Substitute.For<IManagedChatsRepository>();
+        _mockDmService = Substitute.For<IBotDmService>();
+        _mockMessageService = Substitute.For<IBotMessageService>();
 
         // Wire up scope factory → scope → service provider
         _mockScopeFactory.CreateScope().Returns(_mockScope);
+        _mockScopeFactory.CreateAsyncScope().Returns(new AsyncServiceScope(_mockScope));
         _mockScope.ServiceProvider.Returns(_mockServiceProvider);
 
         // Wire up service resolution
@@ -86,27 +84,24 @@ public class ReportCallbackHandlerTests
             .Returns(_mockReportsRepo);
         _mockServiceProvider.GetService(typeof(ITelegramUserRepository))
             .Returns(_mockUserRepo);
-        _mockServiceProvider.GetService(typeof(IModerationOrchestrator))
+        _mockServiceProvider.GetService(typeof(IBotModerationService))
             .Returns(_mockModerationService);
         _mockServiceProvider.GetService(typeof(IExamFlowService))
             .Returns(_mockExamFlowService);
-        _mockServiceProvider.GetService(typeof(IManagedChatsRepository))
-            .Returns(_mockManagedChatsRepo);
+        _mockServiceProvider.GetService(typeof(IBotDmService))
+            .Returns(_mockDmService);
+        _mockServiceProvider.GetService(typeof(IBotMessageService))
+            .Returns(_mockMessageService);
 
-        // Bot client factory returns operations
-        _mockBotClientFactory.GetOperationsAsync().Returns(_mockOperations);
-
-        _handler = new ReportCallbackHandler(
+        _service = new ReportCallbackService(
             _mockLogger,
-            _mockScopeFactory,
-            _mockBotClientFactory);
+            _mockScopeFactory);
     }
 
     [TearDown]
     public void TearDown()
     {
         _mockScope?.Dispose();
-        _mockBotClientFactory?.Dispose();
     }
 
     #region CanHandle Tests
@@ -118,7 +113,7 @@ public class ReportCallbackHandlerTests
         var callbackData = "rpt:123:0";
 
         // Act
-        var result = _handler.CanHandle(callbackData);
+        var result = _service.CanHandle(callbackData);
 
         // Assert
         Assert.That(result, Is.True);
@@ -133,7 +128,7 @@ public class ReportCallbackHandlerTests
     public void CanHandle_NonReportPrefix_ReturnsFalse(string callbackData)
     {
         // Act
-        var result = _handler.CanHandle(callbackData);
+        var result = _service.CanHandle(callbackData);
 
         // Assert
         Assert.That(result, Is.False);
@@ -150,7 +145,7 @@ public class ReportCallbackHandlerTests
         var callbackQuery = CreateCallbackQuery(data: null);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - no scope created since we return early
         _mockScopeFactory.DidNotReceive().CreateScope();
@@ -163,7 +158,7 @@ public class ReportCallbackHandlerTests
         var callbackQuery = CreateCallbackQuery(data: "");
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert
         _mockScopeFactory.DidNotReceive().CreateScope();
@@ -176,7 +171,7 @@ public class ReportCallbackHandlerTests
         var callbackQuery = CreateCallbackQuery(data: "rpt:123");
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - scope created but no context lookup attempted
         await _mockCallbackContextRepo.DidNotReceive()
@@ -190,7 +185,7 @@ public class ReportCallbackHandlerTests
         var callbackQuery = CreateCallbackQuery(data: "rpt:abc:0");
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert
         await _mockCallbackContextRepo.DidNotReceive()
@@ -204,7 +199,7 @@ public class ReportCallbackHandlerTests
         var callbackQuery = CreateCallbackQuery(data: "rpt:123:xyz");
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert
         await _mockCallbackContextRepo.DidNotReceive()
@@ -229,10 +224,10 @@ public class ReportCallbackHandlerTests
             .Returns(report);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - message updated to show invalid action
-        await _mockOperations.Received(1).EditMessageTextAsync(
+        await _mockDmService.Received(1).EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("Invalid action") || s.Contains("failed")),
@@ -253,10 +248,10 @@ public class ReportCallbackHandlerTests
             .Returns((ReportCallbackContext?)null);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - message updated to show expired
-        await _mockOperations.Received(1).EditMessageTextAsync(
+        await _mockDmService.Received(1).EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("expired")),
@@ -278,7 +273,7 @@ public class ReportCallbackHandlerTests
             .Returns(context);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - should look up the report
         await _mockReportsRepo.Received(1)
@@ -299,10 +294,10 @@ public class ReportCallbackHandlerTests
             .Returns((ReportBase?)null);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - message updated
-        await _mockOperations.Received(1).EditMessageTextAsync(
+        await _mockDmService.Received(1).EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("not found")),
@@ -325,7 +320,7 @@ public class ReportCallbackHandlerTests
             .Returns(report);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - Moderation should NOT be called for already-reviewed reports
         await _mockModerationService.DidNotReceive()
@@ -367,10 +362,10 @@ public class ReportCallbackHandlerTests
             .Returns(pendingReport, reviewedReport);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - message shows already handled by other admin
-        await _mockOperations.Received().EditMessageTextAsync(
+        await _mockDmService.Received().EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("OtherAdmin") && s.Contains("Spam")),
@@ -394,10 +389,10 @@ public class ReportCallbackHandlerTests
             .Returns(reviewedReport);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - message shows who already handled it
-        await _mockOperations.Received().EditMessageTextAsync(
+        await _mockDmService.Received().EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("FirstAdmin") && s.Contains("Warn")),
@@ -435,7 +430,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - ban was called
         await _mockModerationService.Received(1).BanUserAsync(
@@ -473,10 +468,10 @@ public class ReportCallbackHandlerTests
             .Returns(ModerationResult.Failed("User is admin"));
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - message updated with failure
-        await _mockOperations.Received().EditMessageTextAsync(
+        await _mockDmService.Received().EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("failed") || s.Contains("User is admin")),
@@ -517,7 +512,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert
         await _mockModerationService.Received(1).WarnUserAsync(
@@ -556,10 +551,10 @@ public class ReportCallbackHandlerTests
             .Returns(ModerationResult.Failed("Database error"));
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert
-        await _mockOperations.Received().EditMessageTextAsync(
+        await _mockDmService.Received().EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("failed") || s.Contains("Database error")),
@@ -595,7 +590,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert
         await _mockModerationService.Received(1).TempBanUserAsync(
@@ -634,10 +629,10 @@ public class ReportCallbackHandlerTests
             .Returns(ModerationResult.Failed("Rate limited"));
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert
-        await _mockOperations.Received().EditMessageTextAsync(
+        await _mockDmService.Received().EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("failed") || s.Contains("Rate limited")),
@@ -663,7 +658,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - no moderation action called
         await _mockModerationService.DidNotReceive()
@@ -700,14 +695,16 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - sends reply to original message in chat
-        await _mockOperations.Received().SendMessageAsync(
-            chatId: TestChatId,
-            text: Arg.Is<string>(s => s.Contains("reviewed") && s.Contains("no action")),
-            replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == TestMessageId),
-            cancellationToken: Arg.Any<CancellationToken>());
+        await _mockMessageService.Received().SendAndSaveMessageAsync(
+            TestChatId,
+            Arg.Is<string>(s => s.Contains("reviewed") && s.Contains("no action")),
+            Arg.Any<ParseMode?>(),
+            Arg.Is<ReplyParameters>(r => r.MessageId == TestMessageId),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -728,7 +725,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - callback context deleted
         await _mockCallbackContextRepo.Received(1)
@@ -754,12 +751,13 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - /report command message deleted
-        await _mockOperations.Received().DeleteMessageAsync(
+        await _mockMessageService.Received().DeleteAndMarkMessageAsync(
             TestChatId,
             reportCommandMessageId,
+            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -781,11 +779,11 @@ public class ReportCallbackHandlerTests
                 Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        _mockOperations.DeleteMessageAsync(TestChatId, reportCommandMessageId, Arg.Any<CancellationToken>())
+        _mockMessageService.DeleteAndMarkMessageAsync(TestChatId, reportCommandMessageId, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Message not found"));
 
         // Act - should not throw
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - test passes if no exception thrown
     }
@@ -808,19 +806,20 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - EditMessageTextAsync called (not EditMessageCaptionAsync)
-        await _mockOperations.Received().EditMessageTextAsync(
+        await _mockDmService.Received().EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
             replyMarkup: null,
             cancellationToken: Arg.Any<CancellationToken>());
 
-        await _mockOperations.DidNotReceive().EditMessageCaptionAsync(
-            Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+        await _mockDmService.DidNotReceive().EditDmCaptionAsync(
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
     }
@@ -839,10 +838,10 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - EditMessageCaptionAsync called (not EditMessageTextAsync)
-        await _mockOperations.Received().EditMessageCaptionAsync(
+        await _mockDmService.Received().EditDmCaptionAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
@@ -864,10 +863,10 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - EditMessageCaptionAsync called for videos (like photos)
-        await _mockOperations.Received().EditMessageCaptionAsync(
+        await _mockDmService.Received().EditDmCaptionAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Any<string>(),
@@ -875,9 +874,10 @@ public class ReportCallbackHandlerTests
             cancellationToken: Arg.Any<CancellationToken>());
 
         // Verify text update was NOT called
-        await _mockOperations.DidNotReceive().EditMessageTextAsync(
-            Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+        await _mockDmService.DidNotReceive().EditDmTextAsync(
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Any<string>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
     }
@@ -896,18 +896,20 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - no message edit attempted since message is null
-        await _mockOperations.DidNotReceive().EditMessageTextAsync(
-            Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+        await _mockDmService.DidNotReceive().EditDmTextAsync(
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Any<string>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
 
-        await _mockOperations.DidNotReceive().EditMessageCaptionAsync(
-            Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
-            Arg.Any<ParseMode?>(),
+        await _mockDmService.DidNotReceive().EditDmCaptionAsync(
+            Arg.Any<long>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<InlineKeyboardMarkup?>(),
             Arg.Any<CancellationToken>());
 
@@ -938,10 +940,10 @@ public class ReportCallbackHandlerTests
             .ThrowsAsync(new Exception("Unexpected error"));
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - message updated with failure
-        await _mockOperations.Received().EditMessageTextAsync(
+        await _mockDmService.Received().EditDmTextAsync(
             Arg.Any<long>(),
             Arg.Any<int>(),
             Arg.Is<string>(s => s.Contains("failed") || s.Contains("Unexpected error")),
@@ -975,7 +977,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - ExamFlowService.DenyExamFailureAsync called (handles teaser deletion, kick, DM)
         await _mockExamFlowService.Received(1).DenyExamFailureAsync(
@@ -1003,7 +1005,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - ExamFlowService.DenyAndBanExamFailureAsync called (handles teaser deletion, global ban, DM)
         await _mockExamFlowService.Received(1).DenyAndBanExamFailureAsync(
@@ -1032,7 +1034,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - Report status updated to Reviewed
         await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
@@ -1062,7 +1064,7 @@ public class ReportCallbackHandlerTests
             .Returns(true);
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - Correct parameters passed (flow service handles chat name lookup internally)
         await _mockExamFlowService.Received(1).DenyExamFailureAsync(
@@ -1085,7 +1087,7 @@ public class ReportCallbackHandlerTests
             .Returns(new ModerationResult { Success = false, ErrorMessage = "Failed to kick user" });
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - Report status NOT updated (action failed)
         await _mockReportsRepo.DidNotReceive().TryUpdateStatusAsync(
@@ -1106,7 +1108,7 @@ public class ReportCallbackHandlerTests
             .Returns(new ModerationResult { Success = false, ErrorMessage = "Failed to ban user" });
 
         // Act
-        await _handler.HandleCallbackAsync(callbackQuery);
+        await _service.HandleCallbackAsync(callbackQuery);
 
         // Assert - Report status NOT updated (action failed)
         await _mockReportsRepo.DidNotReceive().TryUpdateStatusAsync(
@@ -1345,24 +1347,6 @@ public class ReportCallbackHandlerTests
         var report = CreateExamReviewReport(status: ReportStatus.Pending);
         _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
-    }
-
-    private void SetupManagedChatWithName(string chatName)
-    {
-        var managedChat = new TelegramGroupsAdmin.Telegram.Models.ManagedChatRecord(
-            ChatId: TestChatId,
-            ChatName: chatName,
-            ChatType: TelegramGroupsAdmin.Telegram.Models.ManagedChatType.Supergroup,
-            BotStatus: TelegramGroupsAdmin.Telegram.Models.BotChatStatus.Administrator,
-            IsAdmin: true,
-            AddedAt: DateTimeOffset.UtcNow.AddDays(-30),
-            IsActive: true,
-            IsDeleted: false,
-            LastSeenAt: DateTimeOffset.UtcNow.AddMinutes(-5),
-            SettingsJson: null,
-            ChatIconPath: null);
-        _mockManagedChatsRepo.GetByChatIdAsync(TestChatId, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<TelegramGroupsAdmin.Telegram.Models.ManagedChatRecord?>(managedChat));
     }
 
     #endregion

@@ -29,16 +29,12 @@ public partial class MessageProcessingService(
     IOptions<MessageHistoryOptions> historyOptions,
     CommandRouter commandRouter,
     IChatCache chatCache,
-    TelegramPhotoService telegramPhotoService,
-    TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
     ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
     private readonly IChatCache _chatCache = chatCache;
-    private readonly TelegramPhotoService _photoService = telegramPhotoService;
-    private readonly TelegramMediaService _mediaService = telegramMediaService;
 
     // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
     // These are NOT injected in constructor since MessageProcessingService is Singleton

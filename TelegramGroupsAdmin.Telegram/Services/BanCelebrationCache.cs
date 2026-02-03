@@ -1,30 +1,31 @@
-namespace TelegramGroupsAdmin.Telegram.Services.Bot;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Singleton cache for ban celebration shuffle-bag state.
 /// Uses Fisher-Yates shuffle to randomize order and ensures all items
 /// are shown before any repeats.
-/// Thread-safe via semaphore locks.
+/// Thread-safe via .NET 9+ Lock type.
 /// </summary>
 public class BanCelebrationCache : IBanCelebrationCache
 {
     private readonly Queue<int> _gifBag = new();
     private readonly Queue<int> _captionBag = new();
-    private readonly SemaphoreSlim _gifLock = new(1, 1);
-    private readonly SemaphoreSlim _captionLock = new(1, 1);
+    private readonly Lock _gifLock = new();
+    private readonly Lock _captionLock = new();
 
     public bool IsGifBagEmpty
     {
         get
         {
-            _gifLock.Wait();
-            try
+            using var _ = _gifLock.EnterScope();
+            
+            using (_gifLock.EnterScope())
+            {
+                
+            }
+            lock (_gifLock)
             {
                 return _gifBag.Count == 0;
-            }
-            finally
-            {
-                _gifLock.Release();
             }
         }
     }
@@ -33,35 +34,24 @@ public class BanCelebrationCache : IBanCelebrationCache
     {
         get
         {
-            _captionLock.Wait();
-            try
+            lock (_captionLock)
             {
                 return _captionBag.Count == 0;
-            }
-            finally
-            {
-                _captionLock.Release();
             }
         }
     }
 
     public int? GetNextGifId()
     {
-        _gifLock.Wait();
-        try
+        lock (_gifLock)
         {
             return _gifBag.Count > 0 ? _gifBag.Dequeue() : null;
-        }
-        finally
-        {
-            _gifLock.Release();
         }
     }
 
     public void RepopulateGifBag(List<int> ids)
     {
-        _gifLock.Wait();
-        try
+        lock (_gifLock)
         {
             _gifBag.Clear();
 
@@ -77,29 +67,19 @@ public class BanCelebrationCache : IBanCelebrationCache
                 _gifBag.Enqueue(id);
             }
         }
-        finally
-        {
-            _gifLock.Release();
-        }
     }
 
     public int? GetNextCaptionId()
     {
-        _captionLock.Wait();
-        try
+        lock (_captionLock)
         {
             return _captionBag.Count > 0 ? _captionBag.Dequeue() : null;
-        }
-        finally
-        {
-            _captionLock.Release();
         }
     }
 
     public void RepopulateCaptionBag(List<int> ids)
     {
-        _captionLock.Wait();
-        try
+        lock (_captionLock)
         {
             _captionBag.Clear();
 
@@ -114,10 +94,6 @@ public class BanCelebrationCache : IBanCelebrationCache
             {
                 _captionBag.Enqueue(id);
             }
-        }
-        finally
-        {
-            _captionLock.Release();
         }
     }
 }

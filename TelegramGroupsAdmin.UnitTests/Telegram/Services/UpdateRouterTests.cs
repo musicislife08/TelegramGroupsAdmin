@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -7,60 +8,78 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
-using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
 /// <summary>
-/// Unit tests for UpdateProcessor routing logic.
-/// Tests verify updates are routed to correct handlers based on update type.
+/// Unit tests for UpdateRouter routing logic.
+/// Tests verify updates are routed to correct services based on update type.
+/// Uses scope-per-update architecture for proper DI lifetime management.
 /// </summary>
 [TestFixture]
-public class UpdateProcessorTests
+public class UpdateRouterTests
 {
-    private IMessageProcessingService _mockMessageProcessingService = null!;
-    private IBotChatHealthService _mockChatHealthService = null!;
+    private IServiceProvider _mockServiceProvider = null!;
+    private IServiceScope _mockScope = null!;
+    private IServiceProvider _mockScopeServiceProvider = null!;
+    private ILogger<UpdateRouter> _mockLogger = null!;
+
+    // Services resolved from scope
+    private IBotChatService _mockChatService = null!;
     private IWelcomeService _mockWelcomeService = null!;
-    private IBanCallbackHandler _mockBanCallbackHandler = null!;
-    private IReportCallbackHandler _mockReviewCallbackHandler = null!;
-    private ITelegramBotClientFactory _mockBotFactory = null!;
-    private ITelegramOperations _mockOperations = null!;
-    private ILogger<UpdateProcessor> _mockLogger = null!;
-    private UpdateProcessor _sut = null!;
+    private IMessageProcessingService _mockMessageProcessingService = null!;
+    private IBanCallbackService _mockBanCallbackService = null!;
+    private IReportCallbackService _mockReportCallbackService = null!;
+    private IBotMessageService _mockMessageService = null!;
+    private IChatHealthRefreshOrchestrator _mockHealthOrchestrator = null!;
+
+    private UpdateRouter _sut = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockMessageProcessingService = Substitute.For<IMessageProcessingService>();
-        _mockChatHealthService = Substitute.For<IBotChatHealthService>();
+        _mockServiceProvider = Substitute.For<IServiceProvider>();
+        _mockScope = Substitute.For<IServiceScope>();
+        _mockScopeServiceProvider = Substitute.For<IServiceProvider>();
+        _mockLogger = Substitute.For<ILogger<UpdateRouter>>();
+
+        // Services resolved from scope
+        _mockChatService = Substitute.For<IBotChatService>();
         _mockWelcomeService = Substitute.For<IWelcomeService>();
-        _mockBanCallbackHandler = Substitute.For<IBanCallbackHandler>();
-        _mockReviewCallbackHandler = Substitute.For<IReportCallbackHandler>();
-        _mockBotFactory = Substitute.For<ITelegramBotClientFactory>();
-        _mockOperations = Substitute.For<ITelegramOperations>();
-        _mockLogger = Substitute.For<ILogger<UpdateProcessor>>();
+        _mockMessageProcessingService = Substitute.For<IMessageProcessingService>();
+        _mockBanCallbackService = Substitute.For<IBanCallbackService>();
+        _mockReportCallbackService = Substitute.For<IReportCallbackService>();
+        _mockMessageService = Substitute.For<IBotMessageService>();
+        _mockHealthOrchestrator = Substitute.For<IChatHealthRefreshOrchestrator>();
 
-        // Setup factory to return mock operations
-        _mockBotFactory.GetOperationsAsync().Returns(_mockOperations);
+        // Wire up scope factory pattern
+        var mockScopeFactory = Substitute.For<IServiceScopeFactory>();
+        mockScopeFactory.CreateScope().Returns(_mockScope);
+        _mockServiceProvider.GetService(typeof(IServiceScopeFactory)).Returns(mockScopeFactory);
 
-        // Ban and report callback handlers return false by default (routes to welcome service)
-        _mockBanCallbackHandler.CanHandle(Arg.Any<string>()).Returns(false);
-        _mockReviewCallbackHandler.CanHandle(Arg.Any<string>()).Returns(false);
+        _mockScope.ServiceProvider.Returns(_mockScopeServiceProvider);
 
-        _sut = new UpdateProcessor(
-            _mockMessageProcessingService,
-            _mockChatHealthService,
-            _mockWelcomeService,
-            _mockBanCallbackHandler,
-            _mockReviewCallbackHandler,
-            _mockBotFactory,
-            _mockLogger);
+        // Wire up service resolution from scope
+        _mockScopeServiceProvider.GetService(typeof(IBotChatService)).Returns(_mockChatService);
+        _mockScopeServiceProvider.GetService(typeof(IWelcomeService)).Returns(_mockWelcomeService);
+        _mockScopeServiceProvider.GetService(typeof(IMessageProcessingService)).Returns(_mockMessageProcessingService);
+        _mockScopeServiceProvider.GetService(typeof(IBanCallbackService)).Returns(_mockBanCallbackService);
+        _mockScopeServiceProvider.GetService(typeof(IReportCallbackService)).Returns(_mockReportCallbackService);
+        _mockScopeServiceProvider.GetService(typeof(IBotMessageService)).Returns(_mockMessageService);
+        _mockScopeServiceProvider.GetService(typeof(IChatHealthRefreshOrchestrator)).Returns(_mockHealthOrchestrator);
+
+        // Callback services return false by default (routes to welcome service)
+        _mockBanCallbackService.CanHandle(Arg.Any<string>()).Returns(false);
+        _mockReportCallbackService.CanHandle(Arg.Any<string>()).Returns(false);
+
+        _sut = new UpdateRouter(_mockServiceProvider, _mockLogger);
     }
 
     [TearDown]
     public void TearDown()
     {
-        _mockBotFactory?.Dispose();
+        _mockScope?.Dispose();
     }
 
     #region Test Data Helpers
@@ -167,32 +186,46 @@ public class UpdateProcessorTests
     #region MyChatMember Update Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WithMyChatMember_RoutesToChatManagementService()
+    public async Task RouteUpdateAsync_WithMyChatMember_RoutesToChatService()
     {
         // Arrange
         var update = CreateMyChatMemberUpdate(chatId: 12345);
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
-        await _mockChatHealthService.Received(1)
-            .HandleMyChatMemberUpdateAsync(
+        await _mockChatService.Received(1)
+            .HandleBotMembershipUpdateAsync(
                 Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 12345),
                 Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithMyChatMember_DoesNotCallOtherHandlers()
+    public async Task RouteUpdateAsync_WithMyChatMember_TriggersHealthRefresh()
+    {
+        // Arrange
+        var update = CreateMyChatMemberUpdate(chatId: 12345);
+
+        // Act
+        await _sut.RouteUpdateAsync(update);
+
+        // Assert - health refresh triggered for the chat
+        await _mockHealthOrchestrator.Received(1)
+            .RefreshHealthForChatAsync(12345, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RouteUpdateAsync_WithMyChatMember_DoesNotCallOtherHandlers()
     {
         // Arrange
         var update = CreateMyChatMemberUpdate();
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert - verify other handlers NOT called
-        await _mockChatHealthService.DidNotReceive()
+        await _mockChatService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
@@ -201,7 +234,7 @@ public class UpdateProcessorTests
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithMyChatMember_PassesCancellationToken()
+    public async Task RouteUpdateAsync_WithMyChatMember_PassesCancellationToken()
     {
         // Arrange
         var update = CreateMyChatMemberUpdate();
@@ -209,11 +242,11 @@ public class UpdateProcessorTests
         var token = cts.Token;
 
         // Act
-        await _sut.ProcessUpdateAsync(update, token);
+        await _sut.RouteUpdateAsync(update, token);
 
         // Assert
-        await _mockChatHealthService.Received(1)
-            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), token);
+        await _mockChatService.Received(1)
+            .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), token);
     }
 
     #endregion
@@ -221,16 +254,16 @@ public class UpdateProcessorTests
     #region ChatMember Update Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WithChatMember_RoutesToBothServices()
+    public async Task RouteUpdateAsync_WithChatMember_RoutesToBothServices()
     {
         // Arrange
         var update = CreateChatMemberUpdate(chatId: 789, userId: 999);
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert - both handlers called
-        await _mockChatHealthService.Received(1)
+        await _mockChatService.Received(1)
             .HandleAdminStatusChangeAsync(
                 Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 789),
                 Arg.Any<CancellationToken>());
@@ -241,21 +274,21 @@ public class UpdateProcessorTests
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithChatMember_DoesNotCallMyChatMemberHandler()
+    public async Task RouteUpdateAsync_WithChatMember_DoesNotCallMyChatMemberHandler()
     {
         // Arrange
         var update = CreateChatMemberUpdate();
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
-        await _mockChatHealthService.DidNotReceive()
-            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockChatService.DidNotReceive()
+            .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithChatMember_PassesCancellationToken()
+    public async Task RouteUpdateAsync_WithChatMember_PassesCancellationToken()
     {
         // Arrange
         var update = CreateChatMemberUpdate();
@@ -263,10 +296,10 @@ public class UpdateProcessorTests
         var token = cts.Token;
 
         // Act
-        await _sut.ProcessUpdateAsync(update, token);
+        await _sut.RouteUpdateAsync(update, token);
 
         // Assert
-        await _mockChatHealthService.Received(1)
+        await _mockChatService.Received(1)
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), token);
         await _mockWelcomeService.Received(1)
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), token);
@@ -277,13 +310,13 @@ public class UpdateProcessorTests
     #region CallbackQuery Update Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WithCallbackQuery_RoutesToWelcomeService()
+    public async Task RouteUpdateAsync_WithCallbackQuery_RoutesToWelcomeService()
     {
         // Arrange
         var update = CreateCallbackQueryUpdate("my-callback-id");
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
         await _mockWelcomeService.Received(1)
@@ -293,40 +326,39 @@ public class UpdateProcessorTests
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithCallbackQuery_AnswersCallback()
+    public async Task RouteUpdateAsync_WithCallbackQuery_AnswersCallback()
     {
         // Arrange
         var update = CreateCallbackQueryUpdate("answer-this-callback");
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
-        await _mockBotFactory.Received(1).GetOperationsAsync();
-        await _mockOperations.Received(1)
-            .AnswerCallbackQueryAsync("answer-this-callback", text: null, cancellationToken: Arg.Any<CancellationToken>());
+        await _mockMessageService.Received(1)
+            .AnswerCallbackAsync("answer-this-callback", null, false, Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithCallbackQuery_DoesNotCallOtherHandlers()
+    public async Task RouteUpdateAsync_WithCallbackQuery_DoesNotCallOtherHandlers()
     {
         // Arrange
         var update = CreateCallbackQueryUpdate();
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
-        await _mockChatHealthService.DidNotReceive()
-            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
-        await _mockChatHealthService.DidNotReceive()
+        await _mockChatService.DidNotReceive()
+            .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockChatService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithCallbackQuery_PassesCancellationToken()
+    public async Task RouteUpdateAsync_WithCallbackQuery_PassesCancellationToken()
     {
         // Arrange
         var update = CreateCallbackQueryUpdate();
@@ -334,40 +366,71 @@ public class UpdateProcessorTests
         var token = cts.Token;
 
         // Act
-        await _sut.ProcessUpdateAsync(update, token);
+        await _sut.RouteUpdateAsync(update, token);
 
         // Assert
         await _mockWelcomeService.Received(1)
             .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), token);
-        await _mockOperations.Received(1)
-            .AnswerCallbackQueryAsync(Arg.Any<string>(), text: null, cancellationToken: token);
+        await _mockMessageService.Received(1)
+            .AnswerCallbackAsync(Arg.Any<string>(), null, false, token);
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithReportCallback_RoutesToReportCallbackHandler()
+    public async Task RouteUpdateAsync_WithReportCallback_RoutesToReportCallbackService()
     {
         // Arrange
-        _mockReviewCallbackHandler.CanHandle("rpt:12345:0").Returns(true);
+        _mockReportCallbackService.CanHandle("rpt:12345:0").Returns(true);
         var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
-        await _mockReviewCallbackHandler.Received(1).HandleCallbackAsync(
+        await _mockReportCallbackService.Received(1).HandleCallbackAsync(
             Arg.Is<CallbackQuery>(q => q.Data == "rpt:12345:0"),
             Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithReportCallback_DoesNotRouteToWelcomeService()
+    public async Task RouteUpdateAsync_WithReportCallback_DoesNotRouteToWelcomeService()
     {
-        // Arrange - report handler claims the callback
-        _mockReviewCallbackHandler.CanHandle("rpt:12345:0").Returns(true);
+        // Arrange - report service claims the callback
+        _mockReportCallbackService.CanHandle("rpt:12345:0").Returns(true);
         var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
+
+        // Assert - welcome service should NOT be called
+        await _mockWelcomeService.DidNotReceive()
+            .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RouteUpdateAsync_WithBanCallback_RoutesToBanCallbackService()
+    {
+        // Arrange
+        _mockBanCallbackService.CanHandle("ban:12345:confirm").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "ban:12345:confirm");
+
+        // Act
+        await _sut.RouteUpdateAsync(update);
+
+        // Assert
+        await _mockBanCallbackService.Received(1).HandleCallbackAsync(
+            Arg.Is<CallbackQuery>(q => q.Data == "ban:12345:confirm"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RouteUpdateAsync_WithBanCallback_DoesNotRouteToWelcomeService()
+    {
+        // Arrange - ban service claims the callback
+        _mockBanCallbackService.CanHandle("ban:12345:confirm").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "ban:12345:confirm");
+
+        // Act
+        await _sut.RouteUpdateAsync(update);
 
         // Assert - welcome service should NOT be called
         await _mockWelcomeService.DidNotReceive()
@@ -379,34 +442,33 @@ public class UpdateProcessorTests
     #region Unhandled Update Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WithUnhandledUpdate_DoesNotCallAnyHandlers()
+    public async Task RouteUpdateAsync_WithUnhandledUpdate_DoesNotCallAnyHandlers()
     {
         // Arrange
         var update = CreateUnhandledUpdate();
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert - no handlers called
-        await _mockChatHealthService.DidNotReceive()
-            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
-        await _mockChatHealthService.DidNotReceive()
+        await _mockChatService.DidNotReceive()
+            .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockChatService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
-        await _mockBotFactory.DidNotReceive().GetOperationsAsync();
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithUnhandledUpdate_CompletesWithoutError()
+    public async Task RouteUpdateAsync_WithUnhandledUpdate_CompletesWithoutError()
     {
         // Arrange
         var update = CreateUnhandledUpdate();
 
         // Act & Assert - should not throw
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
     }
 
     #endregion
@@ -414,7 +476,7 @@ public class UpdateProcessorTests
     #region Priority/Early Return Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WithMyChatMemberAndChatMember_OnlyProcessesMyChatMember()
+    public async Task RouteUpdateAsync_WithMyChatMemberAndChatMember_OnlyProcessesMyChatMember()
     {
         // Arrange - Update with both properties set (edge case, violates Telegram API contract)
         var update = new Update
@@ -425,14 +487,14 @@ public class UpdateProcessorTests
         };
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert - MyChatMember processed (first in priority), ChatMember skipped
-        await _mockChatHealthService.Received(1)
-            .HandleMyChatMemberUpdateAsync(
+        await _mockChatService.Received(1)
+            .HandleBotMembershipUpdateAsync(
                 Arg.Is<ChatMemberUpdated>(m => m.Chat.Id == 111),
                 Arg.Any<CancellationToken>());
-        await _mockChatHealthService.DidNotReceive()
+        await _mockChatService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
     }
 
@@ -441,13 +503,13 @@ public class UpdateProcessorTests
     #region Message Update Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WithMessage_RoutesToMessageProcessingService()
+    public async Task RouteUpdateAsync_WithMessage_RoutesToMessageProcessingService()
     {
         // Arrange
         var update = CreateMessageUpdate(messageId: 12345);
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
         await _mockMessageProcessingService.Received(1)
@@ -457,18 +519,18 @@ public class UpdateProcessorTests
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithMessage_DoesNotCallOtherHandlers()
+    public async Task RouteUpdateAsync_WithMessage_DoesNotCallOtherHandlers()
     {
         // Arrange
         var update = CreateMessageUpdate();
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert - verify other handlers NOT called
-        await _mockChatHealthService.DidNotReceive()
-            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
-        await _mockChatHealthService.DidNotReceive()
+        await _mockChatService.DidNotReceive()
+            .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockChatService.DidNotReceive()
             .HandleAdminStatusChangeAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
@@ -477,7 +539,7 @@ public class UpdateProcessorTests
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithMessage_PassesCancellationToken()
+    public async Task RouteUpdateAsync_WithMessage_PassesCancellationToken()
     {
         // Arrange
         var update = CreateMessageUpdate();
@@ -485,7 +547,7 @@ public class UpdateProcessorTests
         var token = cts.Token;
 
         // Act
-        await _sut.ProcessUpdateAsync(update, token);
+        await _sut.RouteUpdateAsync(update, token);
 
         // Assert
         await _mockMessageProcessingService.Received(1)
@@ -497,13 +559,13 @@ public class UpdateProcessorTests
     #region EditedMessage Update Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WithEditedMessage_RoutesToMessageProcessingService()
+    public async Task RouteUpdateAsync_WithEditedMessage_RoutesToMessageProcessingService()
     {
         // Arrange
         var update = CreateEditedMessageUpdate(messageId: 67890);
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert
         await _mockMessageProcessingService.Received(1)
@@ -513,25 +575,25 @@ public class UpdateProcessorTests
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithEditedMessage_DoesNotCallOtherHandlers()
+    public async Task RouteUpdateAsync_WithEditedMessage_DoesNotCallOtherHandlers()
     {
         // Arrange
         var update = CreateEditedMessageUpdate();
 
         // Act
-        await _sut.ProcessUpdateAsync(update);
+        await _sut.RouteUpdateAsync(update);
 
         // Assert - verify other handlers NOT called
         await _mockMessageProcessingService.DidNotReceive()
             .HandleNewMessageAsync(Arg.Any<Message>(), Arg.Any<CancellationToken>());
-        await _mockChatHealthService.DidNotReceive()
-            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
+        await _mockChatService.DidNotReceive()
+            .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>());
         await _mockWelcomeService.DidNotReceive()
             .HandleCallbackQueryAsync(Arg.Any<CallbackQuery>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WithEditedMessage_PassesCancellationToken()
+    public async Task RouteUpdateAsync_WithEditedMessage_PassesCancellationToken()
     {
         // Arrange
         var update = CreateEditedMessageUpdate();
@@ -539,7 +601,7 @@ public class UpdateProcessorTests
         var token = cts.Token;
 
         // Act
-        await _sut.ProcessUpdateAsync(update, token);
+        await _sut.RouteUpdateAsync(update, token);
 
         // Assert
         await _mockMessageProcessingService.Received(1)
@@ -551,21 +613,21 @@ public class UpdateProcessorTests
     #region Exception Propagation Tests
 
     [Test]
-    public async Task ProcessUpdateAsync_WhenChatManagementServiceThrows_ExceptionPropagates()
+    public async Task RouteUpdateAsync_WhenChatServiceThrows_ExceptionPropagates()
     {
         // Arrange
         var update = CreateMyChatMemberUpdate();
-        _mockChatHealthService
-            .HandleMyChatMemberUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>())
+        _mockChatService
+            .HandleBotMembershipUpdateAsync(Arg.Any<ChatMemberUpdated>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("Test exception"));
 
         // Act & Assert
         Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _sut.ProcessUpdateAsync(update));
+            async () => await _sut.RouteUpdateAsync(update));
     }
 
     [Test]
-    public async Task ProcessUpdateAsync_WhenWelcomeServiceThrows_ExceptionPropagates()
+    public async Task RouteUpdateAsync_WhenWelcomeServiceThrows_ExceptionPropagates()
     {
         // Arrange
         var update = CreateCallbackQueryUpdate();
@@ -575,7 +637,7 @@ public class UpdateProcessorTests
 
         // Act & Assert
         Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _sut.ProcessUpdateAsync(update));
+            async () => await _sut.RouteUpdateAsync(update));
     }
 
     #endregion

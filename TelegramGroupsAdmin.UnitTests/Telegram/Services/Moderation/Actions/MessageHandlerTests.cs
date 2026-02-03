@@ -10,13 +10,14 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 
 /// <summary>
-/// Unit tests for MessageHandler.
+/// Unit tests for BotModerationMessageHandler.
 /// Tests domain logic for message operations (backfill and deletion).
 /// </summary>
 [TestFixture]
@@ -28,8 +29,8 @@ public class MessageHandlerTests
     private IBotMessageService _mockBotMessageService = null!;
     private IManagedChatsRepository _mockChatsRepository = null!;
     private IJobScheduler _mockJobScheduler = null!;
-    private ILogger<MessageHandler> _mockLogger = null!;
-    private MessageHandler _handler = null!;
+    private ILogger<BotModerationMessageHandler> _mockLogger = null!;
+    private BotModerationMessageHandler _handler = null!;
 
     [SetUp]
     public void SetUp()
@@ -40,9 +41,9 @@ public class MessageHandlerTests
         _mockBotMessageService = Substitute.For<IBotMessageService>();
         _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockJobScheduler = Substitute.For<IJobScheduler>();
-        _mockLogger = Substitute.For<ILogger<MessageHandler>>();
+        _mockLogger = Substitute.For<ILogger<BotModerationMessageHandler>>();
 
-        _handler = new MessageHandler(
+        _handler = new BotModerationMessageHandler(
             _mockMessageHistoryRepository,
             _mockMessageQueryService,
             _mockMessageBackfillService,

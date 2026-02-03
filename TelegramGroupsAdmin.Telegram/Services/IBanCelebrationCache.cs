@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Services.Bot;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Singleton cache for ban celebration shuffle-bag state.

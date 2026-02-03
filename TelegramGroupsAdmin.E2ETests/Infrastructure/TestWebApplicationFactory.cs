@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 
@@ -49,8 +50,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly ITelegramConfigLoader _mockTelegramConfigLoader;
     private readonly ITelegramBotClient _mockTelegramBotClient;
     private readonly ITelegramBotClientFactory _mockTelegramBotClientFactory;
-    private readonly ITelegramOperations _mockTelegramOperations;
-    private readonly IModerationOrchestrator _mockModerationOrchestrator;
+    private readonly IBotMessageService _mockBotMessageService;
+    private readonly IBotChatService _mockBotChatService;
+    private readonly IBotDmService _mockBotDmService;
+    private readonly IBotModerationService _mockBotModerationService;
 
     // Job scheduler mock (for verifying timeout cancellation in exam flow tests)
     private readonly IJobScheduler _mockJobScheduler;
@@ -87,12 +90,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Mock ITelegramBotClient for low-level API access (used by some services directly)
         _mockTelegramBotClient = Substitute.For<ITelegramBotClient>();
 
-        // Mock ITelegramOperations directly (instead of wrapping mock client in real TelegramOperations)
-        // This gives us full control over returns without dealing with extension methods
-        _mockTelegramOperations = Substitute.For<ITelegramOperations>();
+        // Mock IBotChatService for chat information
+        _mockBotChatService = Substitute.For<IBotChatService>();
 
         // Configure GetChatAsync to return valid ChatFullInfo for any chat
-        _mockTelegramOperations.GetChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _mockBotChatService.GetChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 var chatId = callInfo.Arg<long>();
@@ -105,10 +107,31 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 };
             });
 
-        // Configure SendMessageAsync to return valid Message
-        _mockTelegramOperations.SendMessageAsync(
+        // Mock IBotDmService for DM operations (exam flow, notifications, etc.)
+        _mockBotDmService = Substitute.For<IBotDmService>();
+
+        // Configure SendDmAsync to return success
+        _mockBotDmService.SendDmAsync(
+                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
+
+        // Configure SendDmWithKeyboardAsync to return success with message ID (used for exam questions)
+        _mockBotDmService.SendDmWithKeyboardAsync(
+                Arg.Any<long>(), Arg.Any<string>(), Arg.Any<global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup>(), Arg.Any<CancellationToken>())
+            .Returns(new DmDeliveryResult { DmSent = true, Failed = false, MessageId = Random.Shared.Next(1, 100000) });
+
+        // Configure DeleteDmMessageAsync to succeed (used after answering exam questions)
+        _mockBotDmService.DeleteDmMessageAsync(
+                Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        // Mock IBotMessageService for message operations
+        _mockBotMessageService = Substitute.For<IBotMessageService>();
+
+        // Configure SendAndSaveMessageAsync to return valid Message
+        _mockBotMessageService.SendAndSaveMessageAsync(
                 Arg.Any<long>(), Arg.Any<string>(), Arg.Any<ParseMode?>(),
-                Arg.Any<ReplyParameters?>(), Arg.Any<ReplyMarkup?>(), Arg.Any<CancellationToken>())
+                Arg.Any<ReplyParameters?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => new Message
             {
                 Id = Random.Shared.Next(1, 100000),
@@ -116,8 +139,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 Chat = new Chat { Id = callInfo.Arg<long>(), Type = ChatType.Private }
             });
 
-        // Configure EditMessageTextAsync to return valid Message
-        _mockTelegramOperations.EditMessageTextAsync(
+        // Configure EditAndUpdateMessageAsync to return valid Message
+        _mockBotMessageService.EditAndUpdateMessageAsync(
                 Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(),
                 Arg.Any<ParseMode?>(), Arg.Any<InlineKeyboardMarkup?>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => new Message
@@ -127,41 +150,39 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 Chat = new Chat { Id = callInfo.Arg<long>(), Type = ChatType.Private }
             });
 
-        // Configure AnswerCallbackQueryAsync (used after processing exam callbacks)
-        _mockTelegramOperations.AnswerCallbackQueryAsync(
-                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        // Configure AnswerCallbackAsync (used after processing exam callbacks)
+        _mockBotMessageService.AnswerCallbackAsync(
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        // Configure DeleteMessageAsync (used to delete exam question messages)
-        _mockTelegramOperations.DeleteMessageAsync(
-                Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        // Configure DeleteAndMarkMessageAsync (used to delete exam question messages)
+        _mockBotMessageService.DeleteAndMarkMessageAsync(
+                Arg.Any<long>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        // Mock ITelegramBotClientFactory that returns the mock operations
+        // Mock ITelegramBotClientFactory that returns the mock client
         _mockTelegramBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockTelegramBotClientFactory.GetBotClientAsync()
             .Returns(Task.FromResult(_mockTelegramBotClient));
-        _mockTelegramBotClientFactory.GetOperationsAsync()
-            .Returns(Task.FromResult(_mockTelegramOperations));
 
-        // Mock IModerationOrchestrator - returns success for all moderation actions
-        // (E2E tests don't have a real Telegram bot, so we mock the orchestrator)
-        _mockModerationOrchestrator = Substitute.For<IModerationOrchestrator>();
+        // Mock IBotModerationService - returns success for all moderation actions
+        // (E2E tests don't have a real Telegram bot, so we mock the service)
+        _mockBotModerationService = Substitute.For<IBotModerationService>();
         var successResult = new ModerationResult { Success = true, ChatsAffected = 1 };
-        _mockModerationOrchestrator.RestoreUserPermissionsAsync(
+        _mockBotModerationService.RestoreUserPermissionsAsync(
                 Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
-        _mockModerationOrchestrator.KickUserFromChatAsync(
+        _mockBotModerationService.KickUserFromChatAsync(
                 Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
-        _mockModerationOrchestrator.BanUserAsync(
+        _mockBotModerationService.BanUserAsync(
                 Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
-        _mockModerationOrchestrator.MarkAsSpamAndBanAsync(
+        _mockBotModerationService.MarkAsSpamAndBanAsync(
                 Arg.Any<long>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(),
                 Arg.Any<global::Telegram.Bot.Types.Message?>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
-        _mockModerationOrchestrator.WarnUserAsync(
+        _mockBotModerationService.WarnUserAsync(
                 Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long>(),
                 Arg.Any<CancellationToken>())
             .Returns(successResult);
@@ -321,10 +342,19 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ITelegramBotClientFactory>();
             services.AddSingleton(_mockTelegramBotClientFactory);
 
-            // Moderation orchestrator mock (for exam actions that don't have real Telegram)
+            // Bot services mocks (for exam actions that don't have real Telegram)
             // Must be Scoped to match the original registration
-            services.RemoveAll<IModerationOrchestrator>();
-            services.AddScoped<IModerationOrchestrator>(_ => _mockModerationOrchestrator);
+            services.RemoveAll<IBotMessageService>();
+            services.AddScoped<IBotMessageService>(_ => _mockBotMessageService);
+
+            services.RemoveAll<IBotChatService>();
+            services.AddScoped<IBotChatService>(_ => _mockBotChatService);
+
+            services.RemoveAll<IBotDmService>();
+            services.AddScoped<IBotDmService>(_ => _mockBotDmService);
+
+            services.RemoveAll<IBotModerationService>();
+            services.AddScoped<IBotModerationService>(_ => _mockBotModerationService);
 
             // Job scheduler mock (for verifying timeout job cancellation in exam flow tests)
             services.RemoveAll<IJobScheduler>();

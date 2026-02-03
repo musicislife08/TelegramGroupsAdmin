@@ -27,4 +27,5 @@ using var scope = _serviceProvider.CreateScope();
 var handler = scope.ServiceProvider.GetRequiredService<IBotChatHandler>();
 ```
 
-## ITelegramOperations is DEPRECATED - use IBot*Service instead
+## Legacy Note
+The `ITelegramOperations` abstraction was removed and replaced with specialized `IBot*Service` interfaces.

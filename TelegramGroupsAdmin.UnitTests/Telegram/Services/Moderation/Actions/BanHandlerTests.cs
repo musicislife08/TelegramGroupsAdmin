@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 /// <summary>
 /// Unit tests for BotBanHandler.
 /// Tests domain logic for banning, temp-banning, and unbanning users across managed chats.
-/// PHASE8: Updated to mock ITelegramApiClient (wrapper interface) instead of ITelegramBotClient (extension methods unmockable).
+/// Uses ITelegramApiClient wrapper for mockable API calls (Telegram.Bot extension methods are not mockable).
 /// </summary>
 [TestFixture]
 public class BanHandlerTests

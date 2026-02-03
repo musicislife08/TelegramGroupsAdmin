@@ -85,7 +85,7 @@ public class BanCallbackService : IBanCallbackService
 
         var executorUser = callbackQuery.From;
 
-        // Create scope for scoped services (ModerationOrchestrator, repositories, etc.)
+        // Create scope for scoped services (BotModerationService, repositories, etc.)
         using var scope = _scopeFactory.CreateScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var messageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
@@ -117,7 +117,7 @@ public class BanCallbackService : IBanCallbackService
                 executorUser.FirstName,
                 executorUser.LastName);
 
-            // Execute ban (resolve from scope since ModerationOrchestrator is Scoped)
+            // Execute ban (resolve from scope since BotModerationService is Scoped)
             var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             var result = await moderationService.BanUserAsync(
                 userId: targetUserId,

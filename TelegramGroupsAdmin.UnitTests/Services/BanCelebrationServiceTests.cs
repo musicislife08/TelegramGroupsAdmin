@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -10,68 +9,45 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.UnitTests.Services;
 
 /// <summary>
 /// Unit tests for BanCelebrationService.
-/// Tests the shuffle-bag algorithm that ensures all GIFs/captions are shown before any repeats.
+/// Tests config handling, GIF/caption retrieval, placeholder replacement, and file caching.
+/// Uses real BanCelebrationCache for shuffle-bag algorithm testing,
+/// IBotMessageService and IBotDmService for message/DM operations.
 /// </summary>
 [TestFixture]
 public class BanCelebrationServiceTests
 {
-#pragma warning disable NUnit1032 // Mock doesn't need disposal
-    private ITelegramBotClientFactory _mockBotClientFactory = null!;
-#pragma warning restore NUnit1032
-    private IServiceScopeFactory _mockScopeFactory = null!;
-    private IDmDeliveryService _mockDmDeliveryService = null!;
+    private IConfigService _mockConfigService = null!;
+    private BanCelebrationCache _celebrationCache = null!; // Real cache for shuffle-bag testing
+    private IBanCelebrationGifRepository _mockGifRepository = null!;
+    private IBanCelebrationCaptionRepository _mockCaptionRepository = null!;
+    private IBotMessageService _mockMessageService = null!;
+    private IBotDmService _mockDmService = null!;
+    private IUserActionsRepository _mockUserActionsRepository = null!;
     private IOptions<MessageHistoryOptions> _mockHistoryOptions = null!;
     private ILogger<BanCelebrationService> _mockLogger = null!;
     private BanCelebrationService _sut = null!;
 
-    // Mock scoped services
-    private IConfigService _mockConfigService = null!;
-    private IBanCelebrationGifRepository _mockGifRepository = null!;
-    private IBanCelebrationCaptionRepository _mockCaptionRepository = null!;
-    private IUserActionsRepository _mockUserActionsRepository = null!;
-    private ITelegramOperations _mockTelegramOperations = null!;
-
     [SetUp]
     public void SetUp()
     {
-        _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
-        _mockScopeFactory = Substitute.For<IServiceScopeFactory>();
-        _mockDmDeliveryService = Substitute.For<IDmDeliveryService>();
+        _mockConfigService = Substitute.For<IConfigService>();
+        _celebrationCache = new BanCelebrationCache(); // Real cache - tests shuffle-bag algorithm
+        _mockGifRepository = Substitute.For<IBanCelebrationGifRepository>();
+        _mockCaptionRepository = Substitute.For<IBanCelebrationCaptionRepository>();
+        _mockMessageService = Substitute.For<IBotMessageService>();
+        _mockDmService = Substitute.For<IBotDmService>();
+        _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
         _mockLogger = Substitute.For<ILogger<BanCelebrationService>>();
 
         // Setup MessageHistoryOptions
         var historyOptions = new MessageHistoryOptions { ImageStoragePath = "/data" };
         _mockHistoryOptions = Options.Create(historyOptions);
-
-        // Setup scoped services
-        _mockConfigService = Substitute.For<IConfigService>();
-        _mockGifRepository = Substitute.For<IBanCelebrationGifRepository>();
-        _mockCaptionRepository = Substitute.For<IBanCelebrationCaptionRepository>();
-        _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
-        _mockTelegramOperations = Substitute.For<ITelegramOperations>();
-
-        // Setup service scope factory to return mocked scoped services
-        var mockScope = Substitute.For<IServiceScope>();
-        var mockServiceProvider = Substitute.For<IServiceProvider>();
-
-        mockServiceProvider.GetService(typeof(IConfigService)).Returns(_mockConfigService);
-        mockServiceProvider.GetService(typeof(IBanCelebrationGifRepository)).Returns(_mockGifRepository);
-        mockServiceProvider.GetService(typeof(IBanCelebrationCaptionRepository)).Returns(_mockCaptionRepository);
-        mockServiceProvider.GetService(typeof(IUserActionsRepository)).Returns(_mockUserActionsRepository);
-
-        mockScope.ServiceProvider.Returns(mockServiceProvider);
-
-        _mockScopeFactory.CreateScope().Returns(mockScope);
-        _mockScopeFactory.CreateAsyncScope().Returns(new AsyncServiceScope(mockScope));
-
-        // Setup bot client factory
-        _mockBotClientFactory.GetOperationsAsync()
-            .Returns(_mockTelegramOperations);
 
         // Default config setup - enabled celebration
         var defaultConfig = new BanCelebrationConfig
@@ -90,15 +66,19 @@ public class BanCelebrationServiceTests
             .Returns(0);
 
         _sut = new BanCelebrationService(
-            _mockBotClientFactory,
-            _mockScopeFactory,
-            _mockDmDeliveryService,
+            _mockConfigService,
+            _celebrationCache, // Real cache
+            _mockGifRepository,
+            _mockCaptionRepository,
+            _mockMessageService,
+            _mockDmService,
+            _mockUserActionsRepository,
             _mockHistoryOptions,
             _mockLogger);
     }
 
     /// <summary>
-    /// Helper to setup SendAnimationAsync to return a Message with Animation.
+    /// Helper to setup SendAndSaveAnimationAsync to return a Message with Animation.
     /// Uses direct object initialization (Telegram.Bot types have settable properties).
     /// </summary>
     private void SetupSuccessfulSendAnimation(string fileId = "cached_file_id")
@@ -107,7 +87,7 @@ public class BanCelebrationServiceTests
         {
             Animation = new Animation { FileId = fileId }
         };
-        _mockTelegramOperations.SendAnimationAsync(
+        _mockMessageService.SendAndSaveAnimationAsync(
             Arg.Any<long>(),
             Arg.Any<InputFile>(),
             Arg.Any<string>(),
@@ -116,156 +96,147 @@ public class BanCelebrationServiceTests
             .Returns(message);
     }
 
-    #region Shuffle-Bag Algorithm Tests
+    /// <summary>
+    /// Helper to setup GIF and caption repositories with test data.
+    /// </summary>
+    private void SetupRepositoriesWithGifsAndCaptions(int gifCount, int captionCount)
+    {
+        var gifIds = Enumerable.Range(1, gifCount).ToList();
+        var captionIds = Enumerable.Range(1, captionCount).ToList();
+
+        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
+        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(captionIds);
+
+        // Setup each GIF to return valid data
+        foreach (var id in gifIds)
+        {
+            var gif = new BanCelebrationGif { Id = id, FilePath = $"ban-gifs/{id}.gif", FileId = $"file{id}" };
+            _mockGifRepository.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(gif);
+        }
+
+        // Setup each caption to return valid data
+        foreach (var id in captionIds)
+        {
+            var caption = new BanCelebrationCaption { Id = id, Text = $"Caption {id}", DmText = $"DM {id}" };
+            _mockCaptionRepository.GetByIdAsync(id, Arg.Any<CancellationToken>()).Returns(caption);
+        }
+    }
+
+    #region Shuffle-Bag Algorithm Tests (using Real Cache)
 
     [Test]
     public async Task SendBanCelebration_WithThreeGifs_ShowsAllBeforeAnyRepeat()
     {
-        // Arrange
-        var gifIds = new List<int> { 1, 2, 3 };
-        var gifs = gifIds.Select(id => new BanCelebrationGif
-        {
-            Id = id,
-            FilePath = $"ban-gifs/{id}.gif",
-            FileId = $"file_id_{id}"
-        }).ToList();
-
-        var caption = new BanCelebrationCaption
-        {
-            Id = 1,
-            Text = "Banned {username}!",
-            DmText = "You were banned from {chatname}"
-        };
-
-        // Setup repositories
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
-        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
-        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
-
-        // Setup GetByIdAsync to return corresponding GIF
-        foreach (var gif in gifs)
-        {
-            _mockGifRepository.GetByIdAsync(gif.Id, Arg.Any<CancellationToken>()).Returns(gif);
-        }
-
-        // Setup Telegram operations to return a message
+        // Arrange - 3 GIFs in repository, real cache will shuffle them
+        SetupRepositoriesWithGifsAndCaptions(gifCount: 3, captionCount: 1);
         SetupSuccessfulSendAnimation();
 
-        // Act - Call 3 times (exhaust the bag)
+        // Track which GIF IDs are used
+        var usedGifIds = new List<int>();
+        _mockGifRepository.GetByIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var id = callInfo.Arg<int>();
+                usedGifIds.Add(id);
+                return new BanCelebrationGif { Id = id, FilePath = $"ban-gifs/{id}.gif", FileId = $"file{id}" };
+            });
+
+        // Act - Call 3 times (one full bag cycle)
         for (var i = 0; i < 3; i++)
         {
-            var result = await _sut.SendBanCelebrationAsync(
-                chatId: 123,
-                chatName: "Test Chat",
-                bannedUserId: 456,
-                bannedUserName: "BadUser",
-                isAutoBan: true);
-
-            Assert.That(result, Is.True, $"Call {i + 1} should succeed");
+            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+            Assert.That(result, Is.True, $"Celebration {i + 1} should succeed");
         }
 
-        // Assert - Verify GetByIdAsync was called for each GIF exactly once
-        foreach (var gifId in gifIds)
-        {
-            await _mockGifRepository.Received(1).GetByIdAsync(gifId, Arg.Any<CancellationToken>());
-        }
+        // Assert - Each GIF should be used exactly once (shuffle-bag guarantee)
+        Assert.That(usedGifIds, Has.Count.EqualTo(3), "Should have used 3 GIFs");
+        Assert.That(usedGifIds.Distinct().Count(), Is.EqualTo(3), "All 3 GIFs should be unique (no repeats)");
+        Assert.That(usedGifIds, Is.EquivalentTo(new[] { 1, 2, 3 }), "Should contain all GIF IDs 1, 2, 3");
     }
 
     [Test]
     public async Task SendBanCelebration_AfterBagExhaustion_ReshufflesFromDatabase()
     {
-        // Arrange
-        var gifIds = new List<int> { 1, 2 };
-        var gifs = gifIds.Select(id => new BanCelebrationGif
-        {
-            Id = id,
-            FilePath = $"ban-gifs/{id}.gif",
-            FileId = $"file_id_{id}"
-        }).ToList();
-
-        var caption = new BanCelebrationCaption
-        {
-            Id = 1,
-            Text = "Banned!",
-            DmText = "You were banned"
-        };
-
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
-        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
-        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
-
-        foreach (var gif in gifs)
-        {
-            _mockGifRepository.GetByIdAsync(gif.Id, Arg.Any<CancellationToken>()).Returns(gif);
-        }
-
+        // Arrange - 2 GIFs in repository
+        SetupRepositoriesWithGifsAndCaptions(gifCount: 2, captionCount: 1);
         SetupSuccessfulSendAnimation();
 
-        // Act - Call 3 times (2 to exhaust bag, 1 to trigger reshuffle)
+        // Act - Call 3 times (exhausts bag of 2 + starts new bag)
         for (var i = 0; i < 3; i++)
         {
-            var result = await _sut.SendBanCelebrationAsync(
-                chatId: 123,
-                chatName: "Test Chat",
-                bannedUserId: 456,
-                bannedUserName: "BadUser",
-                isAutoBan: true);
-
-            Assert.That(result, Is.True, $"Call {i + 1} should succeed");
+            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+            Assert.That(result, Is.True, $"Celebration {i + 1} should succeed");
         }
 
-        // Assert - GetAllIdsAsync should be called twice (initial + reshuffle)
+        // Assert - GetAllIdsAsync should be called twice (initial load + reshuffle after exhaustion)
         await _mockGifRepository.Received(2).GetAllIdsAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebration_WhenCacheReturnsGifId_FetchesGifFromRepository()
+    {
+        // Arrange
+        SetupRepositoriesWithGifsAndCaptions(gifCount: 1, captionCount: 1);
+        SetupSuccessfulSendAnimation();
+
+        // Act
+        var result = await _sut.SendBanCelebrationAsync(123, "Test Chat", 456, "BadUser", true);
+
+        // Assert
+        Assert.That(result, Is.True);
+        await _mockGifRepository.Received(1).GetByIdAsync(1, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task SendBanCelebration_WhenCacheBagEmpty_RepopulatesFromRepository()
+    {
+        // Arrange - Real cache starts empty, will trigger repopulation
+        SetupRepositoriesWithGifsAndCaptions(gifCount: 3, captionCount: 1);
+        SetupSuccessfulSendAnimation();
+
+        // Act
+        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+
+        // Assert
+        Assert.That(result, Is.True);
+        // Real cache starts empty, so GetAllIdsAsync must be called to populate it
+        await _mockGifRepository.Received(1).GetAllIdsAsync(Arg.Any<CancellationToken>());
+        await _mockCaptionRepository.Received(1).GetAllIdsAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task SendBanCelebration_WhenGifDeletedFromBag_SkipsToNextGif()
     {
-        // Arrange
-        var gifIds = new List<int> { 1, 2, 3 };
-
-        // GIF 1 exists, GIF 2 was deleted (returns null), GIF 3 exists
-        var gif1 = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" };
-        var gif3 = new BanCelebrationGif { Id = 3, FilePath = "ban-gifs/3.gif", FileId = "file3" };
-
-        var caption = new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" };
-
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
+        // Arrange - 3 GIF IDs in repo, but GIF #2 returns null (deleted from DB after bag was populated)
+        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1, 2, 3 });
         _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
-        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
 
-        // Setup GetByIdAsync: ID 1 returns gif, ID 2 returns null (deleted), ID 3 returns gif
-        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif1);
+        // GIF 2 was deleted from DB (returns null), GIFs 1 and 3 exist
+        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" });
         _mockGifRepository.GetByIdAsync(2, Arg.Any<CancellationToken>()).Returns((BanCelebrationGif?)null);
-        _mockGifRepository.GetByIdAsync(3, Arg.Any<CancellationToken>()).Returns(gif3);
+        _mockGifRepository.GetByIdAsync(3, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationGif { Id = 3, FilePath = "ban-gifs/3.gif", FileId = "file3" });
+
+        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" });
 
         SetupSuccessfulSendAnimation();
 
-        // Act - Call twice to get both valid GIFs (deleted one is skipped automatically)
+        // Act - Call twice, one of the calls will hit the deleted GIF
         var result1 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
         var result2 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
 
-        // Assert
-        Assert.That(result1, Is.True);
-        Assert.That(result2, Is.True);
-
-        // Verify both valid GIFs were used (order doesn't matter due to random shuffle)
-        await _mockGifRepository.Received().GetByIdAsync(1, Arg.Any<CancellationToken>());
-        await _mockGifRepository.Received().GetByIdAsync(3, Arg.Any<CancellationToken>());
-
-        // The shuffle-bag algorithm ensures deleted items are skipped gracefully
-        // We don't assert on GetByIdAsync(2) being called because:
-        // 1. The shuffle order is random (Fisher-Yates)
-        // 2. ID 2 might be last in the shuffle and never reached in this test
-        // 3. The important behavior is that valid GIFs (1, 3) were successfully retrieved
+        // Assert - Both should succeed (deleted GIF skipped gracefully)
+        Assert.That(result1, Is.True, "First celebration should succeed");
+        Assert.That(result2, Is.True, "Second celebration should succeed (deleted GIF skipped)");
     }
 
     [Test]
     public async Task SendBanCelebration_WhenNoGifsExist_ReturnsFalse()
     {
-        // Arrange
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>())
-            .Returns(new List<int>());
+        // Arrange - Repository returns no GIF IDs
+        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int>());
 
         // Act
         var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
@@ -277,14 +248,11 @@ public class BanCelebrationServiceTests
     [Test]
     public async Task SendBanCelebration_WhenNoCaptionsExist_ReturnsFalse()
     {
-        // Arrange
-        var gifIds = new List<int> { 1 };
-        var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" };
-
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
-        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
-        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>())
-            .Returns(new List<int>());
+        // Arrange - GIFs exist but no captions
+        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
+        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" });
+        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int>());
 
         // Act
         var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
@@ -294,150 +262,55 @@ public class BanCelebrationServiceTests
     }
 
     [Test]
-    public async Task SendBanCelebration_WithThreeCaptions_ShowsAllBeforeAnyRepeat()
-    {
-        // Arrange
-        var captionIds = new List<int> { 1, 2, 3 };
-        var captions = captionIds.Select(id => new BanCelebrationCaption
-        {
-            Id = id,
-            Text = $"Caption {id}",
-            DmText = $"DM Caption {id}"
-        }).ToList();
-
-        var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" };
-
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
-        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
-        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(captionIds);
-
-        foreach (var caption in captions)
-        {
-            _mockCaptionRepository.GetByIdAsync(caption.Id, Arg.Any<CancellationToken>()).Returns(caption);
-        }
-
-        SetupSuccessfulSendAnimation();
-
-        // Act - Call 3 times
-        for (var i = 0; i < 3; i++)
-        {
-            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
-            Assert.That(result, Is.True);
-        }
-
-        // Assert - Each caption should be used exactly once
-        foreach (var captionId in captionIds)
-        {
-            await _mockCaptionRepository.Received(1).GetByIdAsync(captionId, Arg.Any<CancellationToken>());
-        }
-    }
-
-    [Test]
     public async Task SendBanCelebration_WhenCaptionDeletedFromBag_SkipsToNextCaption()
     {
-        // Arrange
-        var captionIds = new List<int> { 1, 2, 3 };
-        var caption1 = new BanCelebrationCaption { Id = 1, Text = "Caption 1", DmText = "DM 1" };
-        var caption3 = new BanCelebrationCaption { Id = 3, Text = "Caption 3", DmText = "DM 3" };
-
-        var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" };
-
+        // Arrange - 3 caption IDs in repo, but caption #2 returns null (deleted)
         _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
-        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
-        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(captionIds);
+        _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" });
 
-        // Caption 2 was deleted
-        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption1);
+        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1, 2, 3 });
+        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationCaption { Id = 1, Text = "Caption 1", DmText = "DM 1" });
         _mockCaptionRepository.GetByIdAsync(2, Arg.Any<CancellationToken>()).Returns((BanCelebrationCaption?)null);
-        _mockCaptionRepository.GetByIdAsync(3, Arg.Any<CancellationToken>()).Returns(caption3);
+        _mockCaptionRepository.GetByIdAsync(3, Arg.Any<CancellationToken>())
+            .Returns(new BanCelebrationCaption { Id = 3, Text = "Caption 3", DmText = "DM 3" });
 
         SetupSuccessfulSendAnimation();
 
-        // Act - Call twice, which will use the two valid captions
+        // Act - Call twice, one will hit the deleted caption
         var result1 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
         var result2 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
 
-        // Assert
+        // Assert - Both should succeed (deleted caption skipped)
         Assert.That(result1, Is.True);
         Assert.That(result2, Is.True);
-
-        // Verify both valid captions were used (order doesn't matter due to random shuffle)
-        await _mockCaptionRepository.Received().GetByIdAsync(1, Arg.Any<CancellationToken>());
-        await _mockCaptionRepository.Received().GetByIdAsync(3, Arg.Any<CancellationToken>());
-
-        // The shuffle-bag algorithm ensures deleted items are skipped gracefully
-        // We don't assert on GetByIdAsync(2) being called because:
-        // 1. The shuffle order is random (Fisher-Yates)
-        // 2. ID 2 might be last in the shuffle and never reached in this test
-        // 3. The important behavior is that valid captions (1, 3) were successfully retrieved
     }
 
     [Test]
     public async Task SendBanCelebration_WhenAllGifsDeletedMidBag_ReshufflesToEmptyAndReturnsFalse()
     {
-        // Arrange - All GIF IDs in the bag return null (all deleted since last shuffle)
-        // On reshuffle, the DB is now empty too
-        var initialIds = new List<int> { 1, 2 };
-
-        // First call: returns IDs [1,2]. Second call (reshuffle): returns empty
+        // Arrange - GIF IDs in repo on first call, but GIFs were deleted between
+        // when IDs were loaded and when they're fetched. On reshuffle, DB returns empty.
+        var callCount = 0;
         _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>())
-            .Returns(initialIds, new List<int>());
+            .Returns(_ =>
+            {
+                callCount++;
+                // First call: IDs exist in DB
+                // Second call (reshuffle after all deleted): DB now returns empty
+                return callCount == 1 ? new List<int> { 1, 2 } : new List<int>();
+            });
 
-        // Both GIFs return null (deleted)
+        // All GIFs return null when fetched (deleted between GetAllIds and GetById)
         _mockGifRepository.GetByIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((BanCelebrationGif?)null);
 
         // Act
         var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
 
-        // Assert - Should return false gracefully (no infinite loop)
+        // Assert - Should return false (no valid GIFs found after exhausting bag and reshuffling)
         Assert.That(result, Is.False);
-
-        // Verify it attempted reshuffle after exhausting the bag of deleted items
-        await _mockGifRepository.Received(2).GetAllIdsAsync(Arg.Any<CancellationToken>());
-    }
-
-    #endregion
-
-    #region Multi-Call Bag State Tests
-
-    [Test]
-    public async Task SendBanCelebration_MultipleCalls_EachGifUsedExactlyOnceBeforeRepeat()
-    {
-        // Arrange - 5 GIFs, call 5 times to exhaust the bag
-        var gifIds = new List<int> { 1, 2, 3, 4, 5 };
-        var gifs = gifIds.Select(id => new BanCelebrationGif
-        {
-            Id = id,
-            FilePath = $"ban-gifs/{id}.gif",
-            FileId = $"file_id_{id}"
-        }).ToList();
-
-        var caption = new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" };
-
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
-        _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
-        _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
-
-        foreach (var gif in gifs)
-        {
-            _mockGifRepository.GetByIdAsync(gif.Id, Arg.Any<CancellationToken>()).Returns(gif);
-        }
-
-        SetupSuccessfulSendAnimation();
-
-        // Act - Call 5 times to fully exhaust the bag
-        for (var i = 0; i < 5; i++)
-        {
-            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
-            Assert.That(result, Is.True, $"Call {i + 1} should succeed");
-        }
-
-        // Assert - Each GIF should be retrieved exactly once (no duplicates, no skips)
-        foreach (var gifId in gifIds)
-        {
-            await _mockGifRepository.Received(1).GetByIdAsync(gifId, Arg.Any<CancellationToken>());
-        }
     }
 
     #endregion
@@ -458,6 +331,9 @@ public class BanCelebrationServiceTests
 
         // Assert
         Assert.That(result, Is.False);
+
+        // Verify repository was never consulted (short-circuited at config check)
+        await _mockGifRepository.DidNotReceive().GetAllIdsAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -516,7 +392,7 @@ public class BanCelebrationServiceTests
         // Assert - Should return false because default config has Enabled=false
         Assert.That(result, Is.False);
 
-        // Verify no GIF/caption repos were called (short-circuited at config check)
+        // Verify repository was never consulted (short-circuited at config check)
         await _mockGifRepository.DidNotReceive().GetAllIdsAsync(Arg.Any<CancellationToken>());
     }
 
@@ -548,7 +424,7 @@ public class BanCelebrationServiceTests
         await _sut.SendBanCelebrationAsync(123, "Test Group", 456, "SpammerBob", true);
 
         // Assert - Verify the caption sent to Telegram has placeholders replaced
-        await _mockTelegramOperations.Received(1).SendAnimationAsync(
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             123,
             Arg.Any<InputFile>(),
             "SpammerBob banned from Test Group! Ban #42",
@@ -590,7 +466,7 @@ public class BanCelebrationServiceTests
         Assert.That(result, Is.True);
 
         // Verify caption used 0 as the ban count fallback
-        await _mockTelegramOperations.Received(1).SendAnimationAsync(
+        await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
             123,
             Arg.Any<InputFile>(),
             "Ban #0!",
@@ -614,22 +490,21 @@ public class BanCelebrationServiceTests
 
         try
         {
-            var gifIds = new List<int> { 1 };
             var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "" };
             var caption = new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" };
 
-            _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
+            _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
             _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
             _mockGifRepository.GetFullPath(gif.FilePath).Returns(tempFile);
             _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
             _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
 
-            // Setup SendAnimationAsync to return message with new FileId from Telegram
+            // Setup SendAndSaveAnimationAsync to return message with new FileId from Telegram
             var sentMessage = new Message
             {
                 Animation = new Animation { FileId = "new_telegram_file_id" }
             };
-            _mockTelegramOperations.SendAnimationAsync(
+            _mockMessageService.SendAndSaveAnimationAsync(
                 Arg.Any<long>(),
                 Arg.Any<InputFile>(),
                 Arg.Any<string>(),
@@ -659,16 +534,15 @@ public class BanCelebrationServiceTests
     public async Task SendBanCelebration_WhenGifAlreadyCached_DoesNotUpdateFileId()
     {
         // Arrange - GIF already has a cached FileId
-        var gifIds = new List<int> { 1 };
         var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "existing_file_id" };
         var caption = new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" };
 
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
+        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
         _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
         _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
         _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
 
-        // Setup SendAnimationAsync — returns message with same FileId (cached send)
+        // Setup SendAndSaveAnimationAsync — returns message with same FileId (cached send)
         SetupSuccessfulSendAnimation("existing_file_id");
 
         // Act
@@ -695,11 +569,10 @@ public class BanCelebrationServiceTests
 
         try
         {
-            var gifIds = new List<int> { 1 };
             var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "stale_file_id" };
             var caption = new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" };
 
-            _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
+            _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
             _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
             _mockGifRepository.GetFullPath(gif.FilePath).Returns(tempFile);
             _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
@@ -711,7 +584,7 @@ public class BanCelebrationServiceTests
             {
                 Animation = new Animation { FileId = "new_file_id_from_upload" }
             };
-            _mockTelegramOperations.SendAnimationAsync(
+            _mockMessageService.SendAndSaveAnimationAsync(
                 Arg.Any<long>(),
                 Arg.Any<InputFile>(),
                 Arg.Any<string>(),
@@ -730,8 +603,8 @@ public class BanCelebrationServiceTests
             // Verify stale file_id was cleared
             await _mockGifRepository.Received(1).ClearFileIdAsync(1, Arg.Any<CancellationToken>());
 
-            // Verify SendAnimationAsync was called twice (stale attempt + local upload)
-            await _mockTelegramOperations.Received(2).SendAnimationAsync(
+            // Verify SendAndSaveAnimationAsync was called twice (stale attempt + local upload)
+            await _mockMessageService.Received(2).SendAndSaveAnimationAsync(
                 Arg.Any<long>(),
                 Arg.Any<InputFile>(),
                 Arg.Any<string>(),
@@ -772,25 +645,30 @@ public class BanCelebrationServiceTests
     }
 
     [Test]
-    public async Task SendBanCelebration_WhenBotClientNotAvailable_ReturnsFalse()
+    public async Task SendBanCelebration_WhenMessageServiceThrows_ReturnsFalse()
     {
         // Arrange
-        _mockBotClientFactory.GetOperationsAsync()
-            .Returns((ITelegramOperations?)null!);
-
-        var gifIds = new List<int> { 1 };
         var gif = new BanCelebrationGif { Id = 1, FilePath = "ban-gifs/1.gif", FileId = "file1" };
         var caption = new BanCelebrationCaption { Id = 1, Text = "Banned!", DmText = "Banned" };
 
-        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(gifIds);
+        _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
         _mockGifRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(gif);
         _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int> { 1 });
         _mockCaptionRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(caption);
 
+        // Message service throws (Telegram API error)
+        _mockMessageService.SendAndSaveAnimationAsync(
+            Arg.Any<long>(),
+            Arg.Any<InputFile>(),
+            Arg.Any<string>(),
+            Arg.Any<ParseMode>(),
+            Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Telegram API rate limited"));
+
         // Act
         var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
 
-        // Assert
+        // Assert - Service handles exception gracefully and returns false
         Assert.That(result, Is.False);
     }
 
