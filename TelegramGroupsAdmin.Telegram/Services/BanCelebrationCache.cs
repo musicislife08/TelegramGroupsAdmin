@@ -17,12 +17,6 @@ public class BanCelebrationCache : IBanCelebrationCache
     {
         get
         {
-            using var _ = _gifLock.EnterScope();
-            
-            using (_gifLock.EnterScope())
-            {
-                
-            }
             lock (_gifLock)
             {
                 return _gifBag.Count == 0;
