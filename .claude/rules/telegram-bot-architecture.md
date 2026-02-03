@@ -14,7 +14,7 @@ paths:
 
 ## Available Services
 - `IBotMessageService`: SendAndSaveMessageAsync, EditAndUpdateMessageAsync, DeleteAndMarkMessageAsync
-- `IBotChatService`: GetChatAsync, GetAdministratorsAsync, GetInviteLinkAsync, LeaveChatAsync
+- `IBotChatService`: GetChatAsync, GetInviteLinkAsync, LeaveChatAsync, RefreshChatAdminsAsync
 - `IBotUserService`: GetMeAsync, GetChatMemberAsync, IsAdminAsync
 - `IBotMediaService`: GetFileAsync, DownloadFileAsync, GetUserPhotoAsync, GetChatIconAsync
 - `IBotModerationService`: BanAsync, UnbanAsync, RestrictAsync, KickAsync

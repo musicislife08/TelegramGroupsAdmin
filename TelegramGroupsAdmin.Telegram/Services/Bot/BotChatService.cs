@@ -34,17 +34,6 @@ public class BotChatService(
         return await chatHandler.GetChatAsync(chatId, ct);
     }
 
-    public async Task<IReadOnlyList<ChatMember>> GetAdministratorsAsync(
-        long chatId,
-        bool forceRefresh = false,
-        CancellationToken ct = default)
-    {
-        // For now, delegate directly to handler
-        // TODO: Add caching layer when admin cache is migrated from ChatManagementService
-        var admins = await chatHandler.GetChatAdministratorsAsync(chatId, ct);
-        return admins;
-    }
-
     public async Task<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default)
     {
         try

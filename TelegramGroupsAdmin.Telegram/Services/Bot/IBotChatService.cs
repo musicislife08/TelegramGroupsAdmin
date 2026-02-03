@@ -13,15 +13,6 @@ public interface IBotChatService
     Task<ChatFullInfo> GetChatAsync(long chatId, CancellationToken ct = default);
 
     /// <summary>
-    /// Get administrators of a chat with caching.
-    /// Uses chat_admins table for caching, refreshes from Telegram API when needed.
-    /// </summary>
-    /// <param name="chatId">Chat ID</param>
-    /// <param name="forceRefresh">Force refresh from Telegram API (bypasses cache)</param>
-    /// <param name="ct">Cancellation token</param>
-    Task<IReadOnlyList<ChatMember>> GetAdministratorsAsync(long chatId, bool forceRefresh = false, CancellationToken ct = default);
-
-    /// <summary>
     /// Get invite link for a chat (from cache or Telegram API).
     /// For public groups, returns t.me/username.
     /// For private groups, returns cached link or exports primary link on first call.
