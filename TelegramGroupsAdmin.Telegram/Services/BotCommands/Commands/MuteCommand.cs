@@ -102,7 +102,6 @@ public class MuteCommand : IBotCommand
                     User = UserIdentity.From(targetUser),
                     Executor = executor,
                     Reason = reason,
-                    MessageId = message.ReplyToMessage.MessageId,
                     Duration = duration
                     // Chat = null → global restriction
                 },

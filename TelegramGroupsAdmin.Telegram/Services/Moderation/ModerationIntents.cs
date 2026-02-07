@@ -94,7 +94,6 @@ public sealed record DeleteMessageIntent : ModerationIntent
 
 public sealed record RestrictIntent : ModerationIntent
 {
-    public long? MessageId { get; init; }
     public required TimeSpan Duration { get; init; }
     public ChatIdentity? Chat { get; init; }
 }
