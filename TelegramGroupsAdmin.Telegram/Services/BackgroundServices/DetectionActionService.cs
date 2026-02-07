@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -91,13 +92,16 @@ public class DetectionActionService(
                     hardBlockResult.Details);
 
                 await moderationOrchestrator.MarkAsSpamAndBanAsync(
-                    messageId: message.MessageId,
-                    userId: message.From!.Id,
-                    chatId: message.Chat.Id,
-                    executor: Actor.AutoDetection,
-                    reason: $"Hard block policy violation: {hardBlockResult.Details}",
-                    telegramMessage: message,
-                    cancellationToken: cancellationToken);
+                    new SpamBanIntent
+                    {
+                        User = UserIdentity.From(message.From!),
+                        Chat = ChatIdentity.From(message.Chat),
+                        MessageId = message.MessageId,
+                        Executor = Actor.AutoDetection,
+                        Reason = $"Hard block policy violation: {hardBlockResult.Details}",
+                        TelegramMessage = message
+                    },
+                    cancellationToken);
 
                 return;
             }
@@ -113,12 +117,17 @@ public class DetectionActionService(
                     malwareResult.Details);
 
                 await moderationOrchestrator.HandleMalwareViolationAsync(
-                    messageId: message.MessageId,
-                    chatId: message.Chat.Id,
-                    userId: message.From!.Id,
-                    malwareDetails: malwareResult.Details ?? "Malware detected",
-                    telegramMessage: message,
-                    cancellationToken: cancellationToken);
+                    new MalwareViolationIntent
+                    {
+                        User = UserIdentity.From(message.From!),
+                        Chat = ChatIdentity.From(message.Chat),
+                        MessageId = message.MessageId,
+                        Executor = Actor.AutoDetection,
+                        Reason = "Malware detected in file",
+                        MalwareDetails = malwareResult.Details ?? "Malware detected",
+                        TelegramMessage = message
+                    },
+                    cancellationToken);
 
                 return;
             }
@@ -161,13 +170,16 @@ public class DetectionActionService(
                     openAIResult.Confidence);
 
                 await moderationOrchestrator.MarkAsSpamAndBanAsync(
-                    messageId: message.MessageId,
-                    userId: message.From!.Id,
-                    chatId: message.Chat.Id,
-                    executor: Actor.AutoDetection,
-                    reason: $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}%, OpenAI: {openAIResult.Confidence}%)",
-                    telegramMessage: message,
-                    cancellationToken: cancellationToken);
+                    new SpamBanIntent
+                    {
+                        User = UserIdentity.From(message.From!),
+                        Chat = ChatIdentity.From(message.Chat),
+                        MessageId = message.MessageId,
+                        Executor = Actor.AutoDetection,
+                        Reason = $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}%, OpenAI: {openAIResult.Confidence}%)",
+                        TelegramMessage = message
+                    },
+                    cancellationToken);
             }
             else if (spamResult.NetConfidence > config.ReviewQueueThreshold)
             {
@@ -260,12 +272,17 @@ public class DetectionActionService(
             var moderationOrchestrator = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
 
             await moderationOrchestrator.HandleCriticalViolationAsync(
-                messageId: message.MessageId,
-                chatId: message.Chat.Id,
-                userId: message.From.Id,
-                violations: violations,
-                telegramMessage: message,
-                cancellationToken: cancellationToken);
+                new CriticalViolationIntent
+                {
+                    User = UserIdentity.From(message.From),
+                    Chat = ChatIdentity.From(message.Chat),
+                    MessageId = message.MessageId,
+                    Executor = Actor.AutoDetection,
+                    Reason = "Critical security policy violation",
+                    Violations = violations,
+                    TelegramMessage = message
+                },
+                cancellationToken);
         }
         catch (Exception ex)
         {

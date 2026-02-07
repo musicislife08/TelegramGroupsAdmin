@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -94,12 +97,15 @@ public class MuteCommand : IBotCommand
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(
-                userId: targetUser.Id,
-                messageId: message.ReplyToMessage.MessageId,
-                executor: executor,
-                reason: reason,
-                duration: duration,
-                cancellationToken: cancellationToken);
+                new RestrictIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = reason,
+                    Duration = duration
+                    // Chat = null → global restriction
+                },
+                cancellationToken);
 
             if (!result.Success)
             {

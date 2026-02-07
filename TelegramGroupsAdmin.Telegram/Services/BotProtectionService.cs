@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -107,11 +108,13 @@ public class BotProtectionService(
 
             // Ban the bot via moderation service (handles Telegram API + audit trail)
             var result = await moderationService.SyncBanToChatAsync(
-                bot,
-                chat,
-                $"Unauthorized bot: {reason}",
-                Actor.BotProtection,
-                triggeredByMessageId: null,
+                new SyncBanIntent
+                {
+                    User = UserIdentity.From(bot),
+                    Chat = ChatIdentity.From(chat),
+                    Executor = Actor.BotProtection,
+                    Reason = $"Unauthorized bot: {reason}"
+                },
                 cancellationToken);
 
             if (result.Success)

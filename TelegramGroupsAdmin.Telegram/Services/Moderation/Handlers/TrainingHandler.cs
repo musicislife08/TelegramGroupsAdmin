@@ -55,24 +55,35 @@ public class TrainingHandler : ITrainingHandler
         }
 
         // Create detection result for history (NOT for training - use training_labels instead)
+        // Guard: skip insert if a detection record already exists (e.g., from the automated pipeline)
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
-        var detectionResult = new DetectionResultRecord
+        var existingDetections = await _detectionResultsRepository.GetByMessageIdAsync(messageId, cancellationToken);
+        if (existingDetections.Count == 0)
         {
-            MessageId = messageId,
-            DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = "manual",
-            DetectionMethod = "Manual",
-            Confidence = 100,
-            Reason = "Marked as spam by moderator",
-            AddedBy = executor,
-            UserId = message.UserId,
-            UsedForTraining = false, // History only - training handled by training_labels table
-            NetConfidence = 100,
-            CheckResultsJson = null,
-            EditVersion = 0
-        };
+            var detectionResult = new DetectionResultRecord
+            {
+                MessageId = messageId,
+                DetectedAt = DateTimeOffset.UtcNow,
+                DetectionSource = "manual",
+                DetectionMethod = "Manual",
+                Confidence = 100,
+                Reason = "Marked as spam by moderator",
+                AddedBy = executor,
+                UserId = message.UserId,
+                UsedForTraining = false, // History only - training handled by training_labels table
+                NetConfidence = 100,
+                CheckResultsJson = null,
+                EditVersion = 0
+            };
 
-        await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+            await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "Detection record already exists for message {MessageId}, skipping insert",
+                messageId);
+        }
 
         // Create explicit training label for ML (spam)
         if (hasText)

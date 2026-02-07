@@ -5,7 +5,9 @@ using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -56,11 +58,14 @@ public class TempbanExpiryJob(
             {
                 // Unban user across all managed chats via moderation service
                 var result = await _moderationService.UnbanUserAsync(
-                    userId: payload.UserId,
-                    executor: Core.Models.Actor.TempbanExpiry,
-                    reason: $"Tempban expired (original reason: {payload.Reason})",
-                    restoreTrust: false,
-                    cancellationToken: cancellationToken);
+                    new UnbanIntent
+                    {
+                        User = UserIdentity.FromId(payload.UserId),
+                        Executor = Core.Models.Actor.TempbanExpiry,
+                        Reason = $"Tempban expired (original reason: {payload.Reason})",
+                        RestoreTrust = false
+                    },
+                    cancellationToken);
 
                 if (result.Success)
                 {

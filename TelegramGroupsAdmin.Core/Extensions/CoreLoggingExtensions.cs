@@ -9,6 +9,40 @@ namespace TelegramGroupsAdmin.Core.Extensions;
 public static class CoreLoggingExtensions
 {
     // ═══════════════════════════════════════════════════════════════════════════
+    // Identity Type Extensions (UserIdentity / ChatIdentity)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    extension(UserIdentity? identity)
+    {
+        /// <summary>
+        /// Format user identity for INFO logs (name only, no ID).
+        /// </summary>
+        public string ToLogInfo()
+            => LogDisplayName.UserInfo(identity?.FirstName, identity?.LastName, identity?.Username, identity?.Id ?? 0);
+
+        /// <summary>
+        /// Format user identity for DEBUG/WARNING/ERROR logs (name + ID).
+        /// </summary>
+        public string ToLogDebug()
+            => LogDisplayName.UserDebug(identity?.FirstName, identity?.LastName, identity?.Username, identity?.Id ?? 0);
+    }
+
+    extension(ChatIdentity? identity)
+    {
+        /// <summary>
+        /// Format chat identity for INFO logs (name only, no ID).
+        /// </summary>
+        public string ToLogInfo()
+            => LogDisplayName.ChatInfo(identity?.ChatName, identity?.Id ?? 0);
+
+        /// <summary>
+        /// Format chat identity for DEBUG/WARNING/ERROR logs (name + ID).
+        /// </summary>
+        public string ToLogDebug()
+            => LogDisplayName.ChatDebug(identity?.ChatName, identity?.Id ?? 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Web User Extensions (UserRecord)
     // ═══════════════════════════════════════════════════════════════════════════
 

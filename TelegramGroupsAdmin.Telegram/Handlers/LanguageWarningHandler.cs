@@ -6,10 +6,12 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -89,12 +91,15 @@ public class LanguageWarningHandler
             // Issue warning using moderation system
             var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             await moderationService.WarnUserAsync(
-                userId: message.From.Id,
-                messageId: message.MessageId,
-                executor: Actor.LanguageWarning,
-                reason: $"Non-English message ({translation.DetectedLanguage})",
-                chatId: message.Chat.Id,
-                cancellationToken: cancellationToken);
+                new WarnIntent
+                {
+                    User = UserIdentity.From(message.From!),
+                    Chat = ChatIdentity.From(message.Chat),
+                    Executor = Actor.LanguageWarning,
+                    Reason = $"Non-English message ({translation.DetectedLanguage})",
+                    MessageId = message.MessageId
+                },
+                cancellationToken);
 
             // Send warning to user via DM with chat fallback
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();

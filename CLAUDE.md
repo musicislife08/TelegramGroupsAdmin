@@ -145,6 +145,14 @@ git push origin develop
 
 **AI Agent Guidance**: Evaluate against homelab deployment standards, not enterprise SaaS requirements. Prioritize operational simplicity, feature completeness, and single-maintainer comprehensibility over microservices patterns, distributed systems, or premature optimization for scale.
 
+## Code Navigation
+
+Use CSharperMcp tools for code understanding instead of grep/find:
+- Use `find_symbol` and `find_references` to navigate types, interfaces, and method usages
+- Use `get_diagnostics` to check for compiler errors instead of running `dotnet build`
+- Use DLL introspection to inspect NuGet package internals (ML.NET, Quartz.NET, etc.) when behavior is unclear
+- Always check `find_references` before renaming or modifying an interface or base class
+
 ## Deployment Architecture
 
 **Single Instance Design** (architectural constraint, not limitation):

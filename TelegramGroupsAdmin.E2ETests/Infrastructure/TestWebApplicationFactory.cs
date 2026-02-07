@@ -170,21 +170,19 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _mockBotModerationService = Substitute.For<IBotModerationService>();
         var successResult = new ModerationResult { Success = true, ChatsAffected = 1 };
         _mockBotModerationService.RestoreUserPermissionsAsync(
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                Arg.Any<RestorePermissionsIntent>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
         _mockBotModerationService.KickUserFromChatAsync(
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
         _mockBotModerationService.BanUserAsync(
-                Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
         _mockBotModerationService.MarkAsSpamAndBanAsync(
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<string>(),
-                Arg.Any<global::Telegram.Bot.Types.Message?>(), Arg.Any<CancellationToken>())
+                Arg.Any<SpamBanIntent>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
         _mockBotModerationService.WarnUserAsync(
-                Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long>(),
-                Arg.Any<CancellationToken>())
+                Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
 
         // Mock IJobScheduler - returns predictable job IDs and tracks cancellations

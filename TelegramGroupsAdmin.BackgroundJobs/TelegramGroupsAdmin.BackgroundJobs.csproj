@@ -12,11 +12,11 @@
     <PackageReference Include="AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL" Version="0.5.1" />
     <PackageReference Include="HumanCron" Version="0.5.0" />
     <PackageReference Include="HumanCron.Quartz" Version="0.5.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
     <PackageReference Include="Quartz" Version="3.15.1" />
     <PackageReference Include="Quartz.AspNetCore" Version="3.15.1" />
     <PackageReference Include="Quartz.Extensions.DependencyInjection" Version="3.15.1" />

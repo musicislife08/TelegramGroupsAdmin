@@ -38,7 +38,7 @@ public class TrustHandlerTests
         var executor = Actor.FromSystem("test");
 
         // Act
-        var result = await _handler.TrustAsync(userId, executor, "Verified user");
+        var result = await _handler.TrustAsync(UserIdentity.FromId(userId), executor, "Verified user");
 
         // Assert
         Assert.Multiple(() =>
@@ -62,7 +62,7 @@ public class TrustHandlerTests
         var executor = Actor.FromTelegramUser(999, "Admin");
 
         // Act
-        var result = await _handler.TrustAsync(userId, executor, reason: null);
+        var result = await _handler.TrustAsync(UserIdentity.FromId(userId), executor, reason: null);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -82,7 +82,7 @@ public class TrustHandlerTests
             .ThrowsAsync(new Exception("Database connection failed"));
 
         // Act
-        var result = await _handler.TrustAsync(userId, executor, "Test reason");
+        var result = await _handler.TrustAsync(UserIdentity.FromId(userId), executor, "Test reason");
 
         // Assert
         Assert.Multiple(() =>
@@ -107,7 +107,7 @@ public class TrustHandlerTests
         // Act & Assert
         foreach (var executor in executors)
         {
-            var result = await _handler.TrustAsync(userId, executor, "Test");
+            var result = await _handler.TrustAsync(UserIdentity.FromId(userId), executor, "Test");
             Assert.That(result.Success, Is.True, $"Failed for executor type: {executor.Type}");
         }
     }
@@ -124,7 +124,7 @@ public class TrustHandlerTests
         var executor = Actor.FromSystem("test");
 
         // Act
-        var result = await _handler.UntrustAsync(userId, executor, "Trust revoked due to ban");
+        var result = await _handler.UntrustAsync(UserIdentity.FromId(userId), executor, "Trust revoked due to ban");
 
         // Assert
         Assert.Multiple(() =>
@@ -148,7 +148,7 @@ public class TrustHandlerTests
         var executor = Actor.FromSystem("AutoBan");
 
         // Act
-        var result = await _handler.UntrustAsync(userId, executor, reason: null);
+        var result = await _handler.UntrustAsync(UserIdentity.FromId(userId), executor, reason: null);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -168,7 +168,7 @@ public class TrustHandlerTests
             .ThrowsAsync(new InvalidOperationException("User not found"));
 
         // Act
-        var result = await _handler.UntrustAsync(userId, executor, "Test reason");
+        var result = await _handler.UntrustAsync(UserIdentity.FromId(userId), executor, "Test reason");
 
         // Assert
         Assert.Multiple(() =>
@@ -186,7 +186,7 @@ public class TrustHandlerTests
         var executor = Actor.AutoBan;
 
         // Act
-        var result = await _handler.UntrustAsync(userId, executor, "Exceeded warning threshold");
+        var result = await _handler.UntrustAsync(UserIdentity.FromId(userId), executor, "Exceeded warning threshold");
 
         // Assert
         Assert.That(result.Success, Is.True);

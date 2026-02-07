@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -31,7 +32,6 @@ public class NotificationHandler : INotificationHandler
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly INotificationService _notificationService;
     private readonly IManagedChatsRepository _managedChatsRepository;
-    private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
     private readonly IBotDmService _dmDeliveryService;
@@ -43,7 +43,6 @@ public class NotificationHandler : INotificationHandler
         INotificationOrchestrator notificationOrchestrator,
         INotificationService notificationService,
         IManagedChatsRepository managedChatsRepository,
-        ITelegramUserRepository telegramUserRepository,
         IChatAdminsRepository chatAdminsRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
         IBotDmService dmDeliveryService,
@@ -54,7 +53,6 @@ public class NotificationHandler : INotificationHandler
         _notificationOrchestrator = notificationOrchestrator;
         _notificationService = notificationService;
         _managedChatsRepository = managedChatsRepository;
-        _telegramUserRepository = telegramUserRepository;
         _chatAdminsRepository = chatAdminsRepository;
         _telegramUserMappingRepository = telegramUserMappingRepository;
         _dmDeliveryService = dmDeliveryService;
@@ -65,15 +63,11 @@ public class NotificationHandler : INotificationHandler
 
     /// <inheritdoc />
     public async Task<NotificationResult> NotifyUserWarningAsync(
-        long userId,
+        UserIdentity user,
         int warningCount,
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        // User must exist - they sent a message to trigger this warning
-        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken)
-            ?? throw new InvalidOperationException($"User {userId} not found in database. This indicates a bug in the moderation pipeline.");
-
         try
         {
             var success = await SendWarningNotificationAsync(user, warningCount, reason, cancellationToken);
@@ -92,16 +86,12 @@ public class NotificationHandler : INotificationHandler
 
     /// <inheritdoc />
     public async Task<NotificationResult> NotifyUserTempBanAsync(
-        long userId,
+        UserIdentity user,
         TimeSpan duration,
         DateTimeOffset expiresAt,
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        // User must exist - they sent a message to trigger this temp ban
-        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken)
-            ?? throw new InvalidOperationException($"User {userId} not found in database. This indicates a bug in the moderation pipeline.");
-
         try
         {
             var success = await SendTempBanNotificationAsync(user, duration, expiresAt, reason, cancellationToken);
@@ -120,15 +110,11 @@ public class NotificationHandler : INotificationHandler
 
     /// <inheritdoc />
     public async Task<NotificationResult> NotifyAdminsBanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        // User must exist - they sent a message to trigger this ban
-        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken)
-            ?? throw new InvalidOperationException($"User {userId} not found in database. This indicates a bug in the moderation pipeline.");
-
         try
         {
             await SendBanAdminNotificationAsync(user, executor, reason, cancellationToken);
@@ -147,7 +133,7 @@ public class NotificationHandler : INotificationHandler
     /// Send warning DM to the user.
     /// </summary>
     /// <returns>True if the notification was sent successfully.</returns>
-    private async Task<bool> SendWarningNotificationAsync(TelegramUser user, int warningCount, string? reason, CancellationToken cancellationToken)
+    private async Task<bool> SendWarningNotificationAsync(UserIdentity user, int warningCount, string? reason, CancellationToken cancellationToken)
     {
         var message = $"⚠️ <b>Warning Issued</b>\n\n" +
                       $"You have received a warning.\n\n" +
@@ -157,7 +143,7 @@ public class NotificationHandler : INotificationHandler
                       $"💡 Use /mystatus to check your current status.";
 
         var notification = new Notification("warning", message);
-        var result = await _notificationOrchestrator.SendTelegramDmAsync(user.TelegramUserId, notification, cancellationToken);
+        var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
         if (result.Success)
         {
@@ -179,7 +165,7 @@ public class NotificationHandler : INotificationHandler
     /// Send temp ban DM to the user with rejoin links.
     /// </summary>
     /// <returns>True if the notification was sent successfully.</returns>
-    private async Task<bool> SendTempBanNotificationAsync(TelegramUser user, TimeSpan duration, DateTimeOffset expiresAt, string? reason, CancellationToken cancellationToken)
+    private async Task<bool> SendTempBanNotificationAsync(UserIdentity user, TimeSpan duration, DateTimeOffset expiresAt, string? reason, CancellationToken cancellationToken)
     {
         // Get all active managed chats for rejoin links
         var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken: cancellationToken);
@@ -200,7 +186,7 @@ public class NotificationHandler : INotificationHandler
         }
 
         var notification = new Notification("tempban", notificationMessage);
-        var result = await _notificationOrchestrator.SendTelegramDmAsync(user.TelegramUserId, notification, cancellationToken);
+        var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
         if (result.Success)
         {
@@ -221,12 +207,10 @@ public class NotificationHandler : INotificationHandler
     /// <summary>
     /// Send ban notification to admins subscribed to UserBanned events.
     /// </summary>
-    private async Task SendBanAdminNotificationAsync(TelegramUser user, Actor executor, string? reason, CancellationToken cancellationToken)
+    private async Task SendBanAdminNotificationAsync(UserIdentity user, Actor executor, string? reason, CancellationToken cancellationToken)
     {
-        var userInfo = TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.TelegramUserId);
-
         var subject = "User Banned";
-        var message = $"User {userInfo} has been banned.\n\n" +
+        var message = $"User {user.DisplayName} has been banned.\n\n" +
                       $"Reason: {reason}\n" +
                       $"Banned by: {executor.GetDisplayText()}";
 
@@ -345,9 +329,17 @@ public class NotificationHandler : INotificationHandler
                 actionSummary.AppendLine($"✅ Message deleted \\(ID: {msg.MessageId}\\)");
             }
 
+            // Build dynamic title based on who initiated the ban
+            var title = detection?.AddedBy?.Type switch
+            {
+                ActorType.TelegramUser or ActorType.WebUser =>
+                    $"🚫 *Spam Banned by {TelegramTextUtilities.EscapeMarkdownV2(detection!.AddedBy.GetDisplayText())}*",
+                _ => "🚫 *Spam Auto\\-Banned*"
+            };
+
             // Build consolidated message
             var consolidatedMessage =
-                $"🚫 *Spam Auto\\-Banned*\n\n" +
+                $"{title}\n\n" +
                 $"*User:* {userDisplay}\n" +
                 $"*Chat:* {chatTitle}\n\n" +
                 $"📝 *Message:*\n{messageTextPreview}\n\n" +
@@ -406,14 +398,10 @@ public class NotificationHandler : INotificationHandler
 
     /// <inheritdoc />
     public async Task<NotificationResult> NotifyUserCriticalViolationAsync(
-        long userId,
-        List<string> violations,
+        UserIdentity user,
+        IReadOnlyList<string> violations,
         CancellationToken cancellationToken = default)
     {
-        // User must exist - they sent a message to trigger this violation
-        var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken)
-            ?? throw new InvalidOperationException($"User {userId} not found in database. This indicates a bug in the moderation pipeline.");
-
         try
         {
             // Build violation list
@@ -426,7 +414,7 @@ public class NotificationHandler : INotificationHandler
                           $"💡 If you believe this was a mistake, please contact an admin.";
 
             var notification = new Notification("critical_violation", message);
-            var result = await _notificationOrchestrator.SendTelegramDmAsync(user.TelegramUserId, notification, cancellationToken);
+            var result = await _notificationOrchestrator.SendTelegramDmAsync(user.Id, notification, cancellationToken);
 
             if (result.Success)
             {

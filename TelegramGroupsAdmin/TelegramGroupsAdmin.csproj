@@ -16,7 +16,7 @@
     <ItemGroup>
         <PackageReference Include="AngleSharp" Version="1.4.0" />
         <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
-        <PackageReference Include="Blazor-ApexCharts" Version="6.0.2" />
+        <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
         <PackageReference Include="ByteSize" Version="2.1.2" />
         <PackageReference Include="CsvHelper" Version="33.1.0" />
         <PackageReference Include="Dapper" Version="2.1.66" />
@@ -26,7 +26,7 @@
         <PackageReference Include="Lib.Net.Http.WebPush" Version="3.3.1" />
         <PackageReference Include="Markdig" Version="0.44.0" />
         <PackageReference Include="Markdown.ColorCode" Version="3.0.1" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
         <PackageReference Include="Microsoft.Build.Tasks.Core" Version="18.0.2" />
         <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
         <!-- WORKAROUND: Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in Microsoft.EntityFrameworkCore.Design transitive deps
@@ -35,19 +35,19 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
           <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.1.0" />
-        <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.1.0" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.2.0" />
+        <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
         <PackageReference Include="MudBlazor" Version="8.15.0" />
         <PackageReference Include="Npgsql" Version="10.0.1" />
         <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.1" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
         <PackageReference Include="Npgsql.OpenTelemetry" Version="10.0.1" />
-        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.11.0-beta.1" />
-        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.0" />
         <PackageReference Include="Otp.NET" Version="1.4.1" />
         <PackageReference Include="QRCoder" Version="1.7.0" />
         <PackageReference Include="SendGrid" Version="9.29.3" />

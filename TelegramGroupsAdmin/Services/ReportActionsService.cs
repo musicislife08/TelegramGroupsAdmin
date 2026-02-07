@@ -1,12 +1,13 @@
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -60,12 +61,15 @@ public class ReportActionsService : IReportActionsService
 
         // Execute spam + ban action via ModerationActionService
         var result = await _moderationService.MarkAsSpamAndBanAsync(
-            messageId: report.MessageId,
-            userId: message.UserId,
-            chatId: report.ChatId,
-            executor: executor,
-            reason: $"Report #{reportId} - spam/abuse",
-            cancellationToken: cancellationToken);
+            new SpamBanIntent
+            {
+                User = UserIdentity.FromId(message.UserId),
+                Chat = ChatIdentity.FromId(report.ChatId),
+                MessageId = report.MessageId,
+                Executor = executor,
+                Reason = $"Report #{reportId} - spam/abuse"
+            },
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -116,11 +120,14 @@ public class ReportActionsService : IReportActionsService
 
         // Execute ban action via ModerationActionService
         var result = await _moderationService.BanUserAsync(
-            userId: message.UserId,
-            messageId: report.MessageId,
-            executor: executor,
-            reason: $"Report #{reportId} - spam/abuse",
-            cancellationToken: cancellationToken);
+            new BanIntent
+            {
+                User = UserIdentity.FromId(message.UserId),
+                Executor = executor,
+                Reason = $"Report #{reportId} - spam/abuse",
+                MessageId = report.MessageId
+            },
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -187,12 +194,15 @@ public class ReportActionsService : IReportActionsService
 
         // Execute warn action via ModerationActionService
         var result = await _moderationService.WarnUserAsync(
-            userId: message.UserId,
-            messageId: report.MessageId,
-            executor: executor,
-            reason: $"Report #{reportId} - inappropriate behavior",
-            chatId: message.ChatId,
-            cancellationToken: cancellationToken);
+            new WarnIntent
+            {
+                User = UserIdentity.FromId(message.UserId),
+                Chat = ChatIdentity.FromId(message.ChatId),
+                Executor = executor,
+                Reason = $"Report #{reportId} - inappropriate behavior",
+                MessageId = report.MessageId
+            },
+            cancellationToken);
 
         if (!result.Success)
         {

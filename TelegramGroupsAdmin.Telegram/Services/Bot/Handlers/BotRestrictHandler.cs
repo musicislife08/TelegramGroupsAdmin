@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Constants;
 
@@ -12,51 +10,39 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 /// <summary>
 /// Low-level handler for restriction/mute operations.
 /// Used by welcome flow and future restriction features.
-/// Supports both single-chat (chatId > 0) and global (chatId = 0) restrictions.
+/// Supports both single-chat (chat provided) and global (chat null) restrictions.
 /// This is the ONLY layer that should touch ITelegramBotClientFactory for restrict operations.
 /// </summary>
 public class BotRestrictHandler : IBotRestrictHandler
 {
     private readonly IBotChatService _chatService;
     private readonly ITelegramBotClientFactory _botClientFactory;
-    private readonly ITelegramUserRepository _userRepository;
-    private readonly IManagedChatsRepository _chatsRepository;
     private readonly ILogger<BotRestrictHandler> _logger;
 
     public BotRestrictHandler(
         IBotChatService chatService,
         ITelegramBotClientFactory botClientFactory,
-        ITelegramUserRepository userRepository,
-        IManagedChatsRepository chatsRepository,
         ILogger<BotRestrictHandler> logger)
     {
         _chatService = chatService;
         _botClientFactory = botClientFactory;
-        _userRepository = userRepository;
-        _chatsRepository = chatsRepository;
         _logger = logger;
     }
 
     /// <inheritdoc />
     public async Task<RestrictResult> RestrictAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity? chat,
         Actor executor,
         TimeSpan duration,
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-        var chat = chatId != ModerationConstants.GlobalChatId
-            ? await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken)
-            : null;
-
-        var isGlobal = chatId == ModerationConstants.GlobalChatId;
+        var isGlobal = chat is null;
         _logger.LogDebug(
             "Executing {Scope} restriction for user {User} for {Duration} by {Executor}",
-            isGlobal ? "global" : $"chat-specific ({chat.ToLogDebug(chatId)})",
-            user.ToLogDebug(userId), duration, executor.GetDisplayText());
+            isGlobal ? "global" : $"chat-specific ({chat!.ToLogDebug()})",
+            user.ToLogDebug(), duration, executor.GetDisplayText());
 
         try
         {
@@ -65,16 +51,16 @@ public class BotRestrictHandler : IBotRestrictHandler
 
             if (isGlobal)
             {
-                return await ExecuteGlobalRestrictionAsync(user, userId, mutePermissions, expiresAt, cancellationToken);
+                return await ExecuteGlobalRestrictionAsync(user, mutePermissions, expiresAt, cancellationToken);
             }
             else
             {
-                return await ExecuteSingleChatRestrictionAsync(user, userId, chat, chatId, mutePermissions, expiresAt, cancellationToken);
+                return await ExecuteSingleChatRestrictionAsync(user, chat!, mutePermissions, expiresAt, cancellationToken);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute restriction for user {User}", user.ToLogDebug(userId));
+            _logger.LogError(ex, "Failed to execute restriction for user {User}", user.ToLogDebug());
             return RestrictResult.Failed(ex.Message);
         }
     }
@@ -83,8 +69,7 @@ public class BotRestrictHandler : IBotRestrictHandler
     /// Execute restriction across all managed chats (global mode).
     /// </summary>
     private async Task<RestrictResult> ExecuteGlobalRestrictionAsync(
-        TelegramUser? user,
-        long userId,
+        UserIdentity user,
         ChatPermissions permissions,
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken)
@@ -101,7 +86,7 @@ public class BotRestrictHandler : IBotRestrictHandler
             {
                 await apiClient.RestrictChatMemberAsync(
                     chatId: targetChatId,
-                    userId: userId,
+                    userId: user.Id,
                     permissions: permissions,
                     untilDate: expiresAt.UtcDateTime,
                     ct: ct);
@@ -109,14 +94,14 @@ public class BotRestrictHandler : IBotRestrictHandler
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to restrict user {UserId} in chat {ChatId}", userId, targetChatId);
+                _logger.LogWarning(ex, "Failed to restrict user {UserId} in chat {ChatId}", user.Id, targetChatId);
                 Interlocked.Increment(ref failCount);
             }
         });
 
         _logger.LogInformation(
             "Global restriction completed for {User}: {Success} succeeded, {Failed} failed. Expires at {ExpiresAt}",
-            user.ToLogInfo(userId), successCount, failCount, expiresAt);
+            user.ToLogInfo(), successCount, failCount, expiresAt);
 
         return RestrictResult.Succeeded(successCount, expiresAt, failCount);
     }
@@ -125,10 +110,8 @@ public class BotRestrictHandler : IBotRestrictHandler
     /// Execute restriction in a single specific chat.
     /// </summary>
     private async Task<RestrictResult> ExecuteSingleChatRestrictionAsync(
-        TelegramUser? user,
-        long userId,
-        ManagedChatRecord? chat,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         ChatPermissions permissions,
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken)
@@ -136,57 +119,53 @@ public class BotRestrictHandler : IBotRestrictHandler
         var apiClient = await _botClientFactory.GetApiClientAsync();
 
         await apiClient.RestrictChatMemberAsync(
-            chatId: chatId,
-            userId: userId,
+            chatId: chat.Id,
+            userId: user.Id,
             permissions: permissions,
             untilDate: expiresAt.UtcDateTime,
             ct: cancellationToken);
 
         _logger.LogInformation(
             "Single-chat restriction completed for {User} in {Chat}. Expires at {ExpiresAt}",
-            user.ToLogInfo(userId), chat.ToLogInfo(chatId), expiresAt);
+            user.ToLogInfo(), chat.ToLogInfo(), expiresAt);
 
         return RestrictResult.Succeeded(chatsAffected: ModerationConstants.SingleChatSuccess, expiresAt, chatsFailed: ModerationConstants.NoFailures);
     }
 
     /// <inheritdoc />
     public async Task<RestrictResult> RestorePermissionsAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-
         _logger.LogDebug(
             "Restoring permissions for user {User} in {Chat} by {Executor}",
-            user.ToLogDebug(userId), chat.ToLogDebug(chatId), executor.GetDisplayText());
+            user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
 
         try
         {
             var apiClient = await _botClientFactory.GetApiClientAsync();
 
             // Get the chat's default permissions
-            var chatDetails = await apiClient.GetChatAsync(chatId, cancellationToken);
+            var chatDetails = await apiClient.GetChatAsync(chat.Id, cancellationToken);
             var defaultPermissions = chatDetails.Permissions ?? CreateDefaultPermissions();
 
             _logger.LogDebug(
                 "Restoring {User} to {Chat} default permissions: Messages={CanSendMessages}, Media={CanSendPhotos}",
-                user.ToLogDebug(userId), chat.ToLogDebug(chatId),
+                user.ToLogDebug(), chat.ToLogDebug(),
                 defaultPermissions.CanSendMessages, defaultPermissions.CanSendPhotos);
 
             await apiClient.RestrictChatMemberAsync(
-                chatId: chatId,
-                userId: userId,
+                chatId: chat.Id,
+                userId: user.Id,
                 permissions: defaultPermissions,
                 ct: cancellationToken);
 
             _logger.LogInformation(
                 "Restored permissions for {User} in {Chat}",
-                user.ToLogInfo(userId), chat.ToLogInfo(chatId));
+                user.ToLogInfo(), chat.ToLogInfo());
 
             return RestrictResult.Succeeded(
                 chatsAffected: ModerationConstants.SingleChatSuccess,
@@ -196,7 +175,7 @@ public class BotRestrictHandler : IBotRestrictHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to restore permissions for user {User} in {Chat}",
-                user.ToLogDebug(userId), chat.ToLogDebug(chatId));
+                user.ToLogDebug(), chat.ToLogDebug());
             return RestrictResult.Failed(ex.Message);
         }
     }

@@ -196,10 +196,13 @@ public class WelcomeService(
                     // Ban user using moderationService (triggers ban celebrations)
                     var reason = $"CAS banned: {casResult.Reason ?? "Listed in CAS database"}";
                     await moderationService.BanUserAsync(
-                        userId: user.Id,
-                        messageId: null,
-                        executor: Actor.Cas,
-                        reason: reason,
+                        new BanIntent
+                        {
+                            User = UserIdentity.From(user),
+                            Executor = Actor.Cas,
+                            Reason = reason,
+                            Chat = ChatIdentity.From(chatMemberUpdate.Chat)
+                        },
                         cancellationToken);
 
                     logger.LogInformation(
@@ -306,11 +309,14 @@ public class WelcomeService(
 
                 // Restore user permissions via moderation service
                 await moderationService.RestoreUserPermissionsAsync(
-                    userId: user.Id,
-                    chatId: chatMemberUpdate.Chat.Id,
-                    executor: Actor.WelcomeFlow,
-                    reason: ReasonSecurityPassed,
-                    cancellationToken: cancellationToken);
+                    new RestorePermissionsIntent
+                    {
+                        User = UserIdentity.From(user),
+                        Chat = ChatIdentity.From(chatMemberUpdate.Chat),
+                        Executor = Actor.WelcomeFlow,
+                        Reason = ReasonSecurityPassed
+                    },
+                    cancellationToken);
 
                 // Mark user as active (security passed, no welcome flow)
                 await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
@@ -676,13 +682,15 @@ public class WelcomeService(
         {
             // Use a long duration (365 days) - the welcome timeout job controls the actual timeout
             var result = await moderationService.RestrictUserAsync(
-                userId: user.Id,
-                messageId: null,
-                executor: Actor.WelcomeFlow,
-                reason: ReasonPendingVerification,
-                duration: TimeSpan.FromDays(365),
-                chatId: chat.Id,
-                cancellationToken: cancellationToken);
+                new RestrictIntent
+                {
+                    User = UserIdentity.From(user),
+                    Executor = Actor.WelcomeFlow,
+                    Reason = ReasonPendingVerification,
+                    Duration = TimeSpan.FromDays(365),
+                    Chat = ChatIdentity.From(chat)
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
@@ -720,11 +728,14 @@ public class WelcomeService(
         try
         {
             var result = await moderationService.KickUserFromChatAsync(
-                userId: user.Id,
-                chatId: chat.Id,
-                executor: Actor.WelcomeFlow,
-                reason: reason,
-                cancellationToken: cancellationToken);
+                new KickIntent
+                {
+                    User = UserIdentity.From(user),
+                    Chat = ChatIdentity.From(chat),
+                    Executor = Actor.WelcomeFlow,
+                    Reason = reason
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
@@ -790,11 +801,14 @@ public class WelcomeService(
 
         // Step 4: Restore user permissions via moderation service (audit trail)
         var restoreResult = await moderationService.RestoreUserPermissionsAsync(
-            userId: user.Id,
-            chatId: chat.Id,
-            executor: Actor.WelcomeFlow,
-            reason: ReasonCompletedWelcome,
-            cancellationToken: cancellationToken);
+            new RestorePermissionsIntent
+            {
+                User = UserIdentity.From(user),
+                Chat = ChatIdentity.From(chat),
+                Executor = Actor.WelcomeFlow,
+                Reason = ReasonCompletedWelcome
+            },
+            cancellationToken);
 
         if (!restoreResult.Success)
         {
@@ -948,11 +962,14 @@ public class WelcomeService(
 
         // Step 4: Restore user permissions in group via moderation service (audit trail)
         var restoreResult = await moderationService.RestoreUserPermissionsAsync(
-            userId: user.Id,
-            chatId: groupChat.Id,
-            executor: Actor.WelcomeFlow,
-            reason: ReasonCompletedWelcomeDm,
-            cancellationToken: cancellationToken);
+            new RestorePermissionsIntent
+            {
+                User = UserIdentity.From(user),
+                Chat = ChatIdentity.From(groupChat),
+                Executor = Actor.WelcomeFlow,
+                Reason = ReasonCompletedWelcomeDm
+            },
+            cancellationToken);
 
         if (!restoreResult.Success)
         {

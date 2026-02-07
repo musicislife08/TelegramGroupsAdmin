@@ -14,8 +14,10 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -250,11 +252,15 @@ public partial class MessageProcessingService(
                             joiningUser.ToLogInfo(), message.Chat.ToLogInfo());
 
                         await moderationService.SyncBanToChatAsync(
-                            joiningUser,
-                            message.Chat,
-                            "Lazy ban sync: User was globally banned before this chat was added",
-                            triggeredByMessageId: message.MessageId,
-                            cancellationToken: cancellationToken);
+                            new SyncBanIntent
+                            {
+                                User = UserIdentity.From(joiningUser),
+                                Chat = ChatIdentity.From(message.Chat),
+                                Executor = Core.Models.Actor.AutoDetection,
+                                Reason = "Lazy ban sync: User was globally banned before this chat was added",
+                                TriggeredByMessageId = message.MessageId
+                            },
+                            cancellationToken);
                     }
                 }
             }
@@ -614,21 +620,28 @@ public partial class MessageProcessingService(
 
                 var moderationService = messageScope.ServiceProvider.GetRequiredService<IBotModerationService>();
                 await moderationService.DeleteMessageAsync(
-                    messageId: message.MessageId,
-                    chatId: message.Chat.Id,
-                    userId: message.From.Id,
-                    deletedBy: Core.Models.Actor.AutoDetection,
-                    reason: "User banned during message processing (multi-message spam campaign)",
-                    cancellationToken: cancellationToken);
+                    new DeleteMessageIntent
+                    {
+                        MessageId = message.MessageId,
+                        Chat = ChatIdentity.From(message.Chat),
+                        User = UserIdentity.From(message.From!),
+                        Executor = Core.Models.Actor.AutoDetection,
+                        Reason = "User banned during message processing (multi-message spam campaign)"
+                    },
+                    cancellationToken);
 
                 // Lazy sync: Apply Telegram-level ban to this chat
                 // (User may have joined this chat before it was added to the bot's managed chats)
                 await moderationService.SyncBanToChatAsync(
-                    message.From,
-                    message.Chat,
-                    "Lazy ban sync: User was globally banned before this chat was added",
-                    triggeredByMessageId: message.MessageId,
-                    cancellationToken: cancellationToken);
+                    new SyncBanIntent
+                    {
+                        User = UserIdentity.From(message.From!),
+                        Chat = ChatIdentity.From(message.Chat),
+                        Executor = Core.Models.Actor.AutoDetection,
+                        Reason = "Lazy ban sync: User was globally banned before this chat was added",
+                        TriggeredByMessageId = message.MessageId
+                    },
+                    cancellationToken);
 
                 // Don't process this message further (no spam detection, no user photo fetch, etc.)
                 return;

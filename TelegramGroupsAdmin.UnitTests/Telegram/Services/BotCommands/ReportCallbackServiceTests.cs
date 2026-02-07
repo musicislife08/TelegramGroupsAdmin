@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using ReportBase = TelegramGroupsAdmin.Core.Models.ReportBase;
 using ReportStatus = TelegramGroupsAdmin.Core.Models.ReportStatus;
 using ReportType = TelegramGroupsAdmin.Core.Models.ReportType;
@@ -324,8 +325,7 @@ public class ReportCallbackServiceTests
 
         // Assert - Moderation should NOT be called for already-reviewed reports
         await _mockModerationService.DidNotReceive()
-            .BanUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>());
 
         // Context should still be cleaned up
         await _mockCallbackContextRepo.Received(1)
@@ -417,10 +417,7 @@ public class ReportCallbackServiceTests
         SetupTargetUser();
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
 
@@ -434,10 +431,9 @@ public class ReportCallbackServiceTests
 
         // Assert - ban was called
         await _mockModerationService.Received(1).BanUserAsync(
-            TestUserId,
-            TestMessageId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains("spam")),
+            Arg.Is<BanIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.Reason.Contains("spam")),
             Arg.Any<CancellationToken>());
 
         // Report status updated
@@ -460,10 +456,7 @@ public class ReportCallbackServiceTests
         SetupTargetUser();
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("User is admin"));
 
@@ -498,11 +491,7 @@ public class ReportCallbackServiceTests
         SetupTargetUser();
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, WarningCount = 2 });
 
@@ -516,11 +505,10 @@ public class ReportCallbackServiceTests
 
         // Assert
         await _mockModerationService.Received(1).WarnUserAsync(
-            TestUserId,
-            TestMessageId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains("report")),
-            TestChatId,
+            Arg.Is<WarnIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.Chat.Id == TestChatId &&
+                i.Reason.Contains("report")),
             Arg.Any<CancellationToken>());
 
         await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
@@ -542,11 +530,7 @@ public class ReportCallbackServiceTests
         SetupTargetUser();
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Database error"));
 
@@ -576,11 +560,7 @@ public class ReportCallbackServiceTests
         SetupTargetUser();
 
         _mockModerationService.TempBanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<TimeSpan>(),
+                Arg.Any<TempBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
@@ -594,11 +574,9 @@ public class ReportCallbackServiceTests
 
         // Assert
         await _mockModerationService.Received(1).TempBanUserAsync(
-            TestUserId,
-            TestMessageId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains("report")),
-            Arg.Any<TimeSpan>(),
+            Arg.Is<TempBanIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.Reason.Contains("report")),
             Arg.Any<CancellationToken>());
 
         await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
@@ -620,11 +598,7 @@ public class ReportCallbackServiceTests
         SetupTargetUser();
 
         _mockModerationService.TempBanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<TimeSpan>(),
+                Arg.Any<TempBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Rate limited"));
 
@@ -662,14 +636,11 @@ public class ReportCallbackServiceTests
 
         // Assert - no moderation action called
         await _mockModerationService.DidNotReceive()
-            .BanUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>());
         await _mockModerationService.DidNotReceive()
-            .WarnUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+            .WarnUserAsync(Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>());
         await _mockModerationService.DidNotReceive()
-            .TempBanUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
+            .TempBanUserAsync(Arg.Any<TempBanIntent>(), Arg.Any<CancellationToken>());
 
         // Report status still updated
         await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
@@ -932,10 +903,7 @@ public class ReportCallbackServiceTests
         SetupTargetUser();
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Unexpected error"));
 

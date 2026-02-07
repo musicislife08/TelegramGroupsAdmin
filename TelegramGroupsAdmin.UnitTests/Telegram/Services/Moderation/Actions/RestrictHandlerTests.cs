@@ -4,7 +4,6 @@ using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -22,8 +21,6 @@ public class RestrictHandlerTests
     private IBotChatService _mockBotChatService = null!;
     private ITelegramBotClientFactory _mockBotClientFactory = null!;
     private ITelegramApiClient _mockApiClient = null!;
-    private ITelegramUserRepository _mockUserRepository = null!;
-    private IManagedChatsRepository _mockChatsRepository = null!;
     private ILogger<BotRestrictHandler> _mockLogger = null!;
     private BotRestrictHandler _handler = null!;
 
@@ -37,15 +34,11 @@ public class RestrictHandlerTests
         _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
         _mockApiClient = Substitute.For<ITelegramApiClient>();
         _mockBotClientFactory.GetApiClientAsync().Returns(_mockApiClient);
-        _mockUserRepository = Substitute.For<ITelegramUserRepository>();
-        _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockLogger = Substitute.For<ILogger<BotRestrictHandler>>();
 
         _handler = new BotRestrictHandler(
             _mockBotChatService,
             _mockBotClientFactory,
-            _mockUserRepository,
-            _mockChatsRepository,
             _mockLogger);
     }
 
@@ -67,7 +60,7 @@ public class RestrictHandlerTests
         var duration = TimeSpan.FromHours(1);
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, duration, "Test mute");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, duration, "Test mute");
 
         // Assert
         Assert.Multiple(() =>
@@ -99,7 +92,7 @@ public class RestrictHandlerTests
         var expectedExpiryUpper = DateTimeOffset.UtcNow.AddMinutes(31);
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, duration, "Timeout");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, duration, "Timeout");
 
         // Assert
         Assert.Multiple(() =>
@@ -127,7 +120,7 @@ public class RestrictHandlerTests
             .ThrowsAsync(new Exception("User not found in chat"));
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
         Assert.Multiple(() =>
@@ -147,7 +140,7 @@ public class RestrictHandlerTests
         var executor = Actor.FromSystem("test");
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromMinutes(15), reason: null);
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, TimeSpan.FromMinutes(15), reason: null);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -162,7 +155,6 @@ public class RestrictHandlerTests
     {
         // Arrange
         const long userId = 12345L;
-        const long chatId = 0; // Global sentinel (ModerationConstants.GlobalChatId)
         var executor = Actor.FromSystem("test");
         var duration = TimeSpan.FromHours(2);
 
@@ -170,7 +162,7 @@ public class RestrictHandlerTests
         _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, duration, "Global mute");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, duration, "Global mute");
 
         // Assert
         Assert.Multiple(() =>
@@ -194,7 +186,6 @@ public class RestrictHandlerTests
     {
         // Arrange
         const long userId = 12345L;
-        const long chatId = 0;
         var executor = Actor.FromTelegramUser(888, "Admin");
 
         // Setup 5 healthy chats, but make 2 fail
@@ -206,7 +197,7 @@ public class RestrictHandlerTests
             .ThrowsAsync(new Exception("Chat error 2"));
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Spam");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Spam");
 
         // Assert
         Assert.Multiple(() =>
@@ -222,7 +213,6 @@ public class RestrictHandlerTests
     {
         // Arrange
         const long userId = 12345L;
-        const long chatId = 0;
         var executor = Actor.FromSystem("test");
 
         // Make getting healthy chats fail
@@ -230,7 +220,7 @@ public class RestrictHandlerTests
             .Returns(_ => throw new InvalidOperationException("No managed chats available"));
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
         Assert.Multiple(() =>
@@ -245,13 +235,12 @@ public class RestrictHandlerTests
     {
         // Arrange - No healthy chats available
         const long userId = 12345L;
-        const long chatId = 0;
         var executor = Actor.FromSystem("test");
 
         _mockBotChatService.GetHealthyChatIds().Returns(new List<long>().AsReadOnly());
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
         Assert.Multiple(() =>
@@ -292,7 +281,7 @@ public class RestrictHandlerTests
             .Returns(Task.CompletedTask);
 
         // Act
-        await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, TimeSpan.FromHours(1), "Test");
 
         // Assert - All permissions should be false (full mute)
         Assert.That(capturedPermissions, Is.Not.Null);

@@ -18,13 +18,13 @@ public interface IBotModerationMessageHandler
     /// Call this before operations that require the message to exist (e.g., training data creation).
     /// </summary>
     /// <param name="messageId">The message ID to ensure exists.</param>
-    /// <param name="chatId">The chat the message belongs to.</param>
+    /// <param name="chat">The chat the message belongs to.</param>
     /// <param name="telegramMessage">Optional Telegram message object for backfill if not in DB.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating whether message exists (either already or after backfill).</returns>
     Task<BackfillResult> EnsureExistsAsync(
         long messageId,
-        long chatId,
+        ChatIdentity chat,
         Message? telegramMessage = null,
         CancellationToken cancellationToken = default);
 
@@ -32,7 +32,7 @@ public interface IBotModerationMessageHandler
     /// Delete message from Telegram and mark as deleted in database.
     /// </summary>
     Task<DeleteResult> DeleteAsync(
-        long chatId,
+        ChatIdentity chat,
         long messageId,
         Actor executor,
         CancellationToken cancellationToken = default);

@@ -4,7 +4,6 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -27,7 +26,6 @@ public class MessageHandlerTests
     private IMessageQueryService _mockMessageQueryService = null!;
     private IMessageBackfillService _mockMessageBackfillService = null!;
     private IBotMessageService _mockBotMessageService = null!;
-    private IManagedChatsRepository _mockChatsRepository = null!;
     private IJobScheduler _mockJobScheduler = null!;
     private ILogger<BotModerationMessageHandler> _mockLogger = null!;
     private BotModerationMessageHandler _handler = null!;
@@ -39,7 +37,6 @@ public class MessageHandlerTests
         _mockMessageQueryService = Substitute.For<IMessageQueryService>();
         _mockMessageBackfillService = Substitute.For<IMessageBackfillService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
-        _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockJobScheduler = Substitute.For<IJobScheduler>();
         _mockLogger = Substitute.For<ILogger<BotModerationMessageHandler>>();
 
@@ -48,7 +45,6 @@ public class MessageHandlerTests
             _mockMessageQueryService,
             _mockMessageBackfillService,
             _mockBotMessageService,
-            _mockChatsRepository,
             _mockJobScheduler,
             _mockLogger);
     }
@@ -66,7 +62,7 @@ public class MessageHandlerTests
             .Returns(CreateTestMessageRecord(messageId, chatId));
 
         // Act
-        var result = await _handler.EnsureExistsAsync(messageId, chatId);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId));
 
         // Assert
         Assert.Multiple(() =>
@@ -99,7 +95,7 @@ public class MessageHandlerTests
             .Returns(true);
 
         // Act
-        var result = await _handler.EnsureExistsAsync(messageId, chatId, telegramMessage);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage);
 
         // Assert
         Assert.Multiple(() =>
@@ -124,7 +120,7 @@ public class MessageHandlerTests
             .Returns((MessageRecord?)null);
 
         // Act - No telegramMessage provided
-        var result = await _handler.EnsureExistsAsync(messageId, chatId, telegramMessage: null);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage: null);
 
         // Assert
         Assert.Multiple(() =>
@@ -151,7 +147,7 @@ public class MessageHandlerTests
             .Returns(false); // Backfill failed
 
         // Act
-        var result = await _handler.EnsureExistsAsync(messageId, chatId, telegramMessage);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage);
 
         // Assert
         Assert.Multiple(() =>
@@ -174,7 +170,7 @@ public class MessageHandlerTests
         var executor = Actor.FromSystem("SpamDetection");
 
         // Act
-        var result = await _handler.DeleteAsync(chatId, messageId, executor);
+        var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
 
         // Assert
         Assert.Multiple(() =>
@@ -204,7 +200,7 @@ public class MessageHandlerTests
             .ThrowsAsync(new Exception("Message not found"));
 
         // Act
-        var result = await _handler.DeleteAsync(chatId, messageId, executor);
+        var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
 
         // Assert - Worker reports failure, boss decides what to do
         Assert.Multiple(() =>
@@ -231,7 +227,7 @@ public class MessageHandlerTests
         // Act & Assert
         foreach (var executor in executors)
         {
-            var result = await _handler.DeleteAsync(chatId, messageId, executor);
+            var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
             Assert.That(result.Success, Is.True, $"Delete should succeed for {executor.Type}");
         }
     }

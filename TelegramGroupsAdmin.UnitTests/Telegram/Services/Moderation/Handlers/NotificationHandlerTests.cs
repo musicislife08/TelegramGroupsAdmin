@@ -20,7 +20,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// - Handles user DM notifications (warnings, temp bans, critical violations)
 /// - Handles admin notifications (bans, spam bans)
 ///
-/// Test Coverage (9 tests):
+/// Test Coverage (8 tests):
 /// - NotifyUserCriticalViolationAsync: User notification for security policy violations
 /// - NotifyAdminsSpamBanAsync: Rich admin notification with message context
 ///
@@ -35,7 +35,6 @@ public class NotificationHandlerTests
     private INotificationOrchestrator _mockNotificationOrchestrator = null!;
     private INotificationService _mockNotificationService = null!;
     private IManagedChatsRepository _mockManagedChatsRepository = null!;
-    private ITelegramUserRepository _mockTelegramUserRepository = null!;
     private IChatAdminsRepository _mockChatAdminsRepository = null!;
     private ITelegramUserMappingRepository _mockTelegramUserMappingRepository = null!;
     private IBotDmService _mockDmDeliveryService = null!;
@@ -50,7 +49,6 @@ public class NotificationHandlerTests
         _mockNotificationOrchestrator = Substitute.For<INotificationOrchestrator>();
         _mockNotificationService = Substitute.For<INotificationService>();
         _mockManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
-        _mockTelegramUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockChatAdminsRepository = Substitute.For<IChatAdminsRepository>();
         _mockTelegramUserMappingRepository = Substitute.For<ITelegramUserMappingRepository>();
         _mockDmDeliveryService = Substitute.For<IBotDmService>();
@@ -62,38 +60,12 @@ public class NotificationHandlerTests
             _mockNotificationOrchestrator,
             _mockNotificationService,
             _mockManagedChatsRepository,
-            _mockTelegramUserRepository,
             _mockChatAdminsRepository,
             _mockTelegramUserMappingRepository,
             _mockDmDeliveryService,
             _mockChatService,
             _mockChatCache,
             _mockLogger);
-    }
-
-    /// <summary>
-    /// Creates a test TelegramUser with specified properties.
-    /// </summary>
-    private static TelegramUser CreateTestUser(long telegramUserId, string? username = null)
-    {
-        return new TelegramUser(
-            TelegramUserId: telegramUserId,
-            Username: username ?? "test_user",
-            FirstName: "Test",
-            LastName: "User",
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: false,
-            IsTrusted: false,
-            IsBanned: false,
-            BotDmEnabled: false,
-            FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-30),
-            LastSeenAt: DateTimeOffset.UtcNow,
-            CreatedAt: DateTimeOffset.UtcNow.AddDays(-30),
-            UpdatedAt: DateTimeOffset.UtcNow,
-            IsActive: true
-        );
     }
 
     /// <summary>
@@ -139,10 +111,7 @@ public class NotificationHandlerTests
         // Arrange
         const long userId = 12345;
         var violations = new List<string> { "Blocked URL detected" };
-        var user = CreateTestUser(userId);
 
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(user);
         _mockNotificationOrchestrator.SendTelegramDmAsync(
                 userId,
                 Arg.Any<Notification>(),
@@ -150,7 +119,7 @@ public class NotificationHandlerTests
             .Returns(new DeliveryResult(true));
 
         // Act
-        var result = await _handler.NotifyUserCriticalViolationAsync(userId, violations);
+        var result = await _handler.NotifyUserCriticalViolationAsync(UserIdentity.FromId(userId), violations);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -171,10 +140,7 @@ public class NotificationHandlerTests
             "Malware signature found",
             "Phishing link blocked"
         };
-        var user = CreateTestUser(userId);
 
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(user);
         _mockNotificationOrchestrator.SendTelegramDmAsync(
                 userId,
                 Arg.Any<Notification>(),
@@ -182,7 +148,7 @@ public class NotificationHandlerTests
             .Returns(new DeliveryResult(true));
 
         // Act
-        var result = await _handler.NotifyUserCriticalViolationAsync(userId, violations);
+        var result = await _handler.NotifyUserCriticalViolationAsync(UserIdentity.FromId(userId), violations);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -196,30 +162,12 @@ public class NotificationHandlerTests
     }
 
     [Test]
-    public void NotifyUserCriticalViolationAsync_UserNotFound_ThrowsException()
-    {
-        // Arrange
-        const long userId = 99999;
-        var violations = new List<string> { "Some violation" };
-
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns((TelegramUser?)null);
-
-        // Act & Assert
-        Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _handler.NotifyUserCriticalViolationAsync(userId, violations));
-    }
-
-    [Test]
     public async Task NotifyUserCriticalViolationAsync_DeliveryFails_ReturnsFailedResult()
     {
         // Arrange
         const long userId = 12345;
         var violations = new List<string> { "Blocked URL detected" };
-        var user = CreateTestUser(userId);
 
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(user);
         _mockNotificationOrchestrator.SendTelegramDmAsync(
                 userId,
                 Arg.Any<Notification>(),
@@ -227,7 +175,7 @@ public class NotificationHandlerTests
             .Returns(new DeliveryResult(false, "User has blocked the bot"));
 
         // Act
-        var result = await _handler.NotifyUserCriticalViolationAsync(userId, violations);
+        var result = await _handler.NotifyUserCriticalViolationAsync(UserIdentity.FromId(userId), violations);
 
         // Assert
         Assert.Multiple(() =>

@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
@@ -405,10 +406,12 @@
                 case "confirm":
                     // Ban the suspected impersonator globally
                     var banResult = await ModerationOrchestrator.BanUserAsync(
-                        userId: args.Alert.SuspectedUserId,
-                        messageId: null,
-                        executor: executor,
-                        reason: $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetDisplayName}");
+                        new BanIntent
+                        {
+                            User = UserIdentity.FromId(args.Alert.SuspectedUserId),
+                            Executor = executor,
+                            Reason = $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetDisplayName}"
+                        });
 
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
@@ -435,9 +438,12 @@
                 case "trust":
                     // Trust the suspected user (they're legitimate)
                     await ModerationOrchestrator.TrustUserAsync(
-                        args.Alert.SuspectedUserId,
-                        executor,
-                        $"Trusted after impersonation review #{args.Alert.Id}");
+                        new TrustIntent
+                        {
+                            User = UserIdentity.FromId(args.Alert.SuspectedUserId),
+                            Executor = executor,
+                            Reason = $"Trusted after impersonation review #{args.Alert.Id}"
+                        });
 
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,

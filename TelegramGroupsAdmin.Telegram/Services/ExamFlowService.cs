@@ -713,11 +713,14 @@ public class ExamFlowService : IExamFlowService
 
         // 1. Restore user permissions via orchestrator (audit trail for both flows)
         var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
-            userId: userId,
-            chatId: chatId,
-            executor: executor,
-            reason: reason,
-            cancellationToken: cancellationToken);
+            new RestorePermissionsIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(chatId),
+                Executor = executor,
+                Reason = reason
+            },
+            cancellationToken);
 
         if (!restoreResult.Success)
         {
@@ -743,12 +746,15 @@ public class ExamFlowService : IExamFlowService
         {
             // Delete teaser message via orchestrator (audit trail)
             await orchestrator.DeleteMessageAsync(
-                messageId: welcomeResponse.WelcomeMessageId,
-                chatId: chatId,
-                userId: userId,
-                deletedBy: executor,
-                reason: "Exam teaser cleanup after approval",
-                cancellationToken: cancellationToken);
+                new DeleteMessageIntent
+                {
+                    MessageId = welcomeResponse.WelcomeMessageId,
+                    Chat = ChatIdentity.FromId(chatId),
+                    User = UserIdentity.FromId(userId),
+                    Executor = executor,
+                    Reason = "Exam teaser cleanup after approval"
+                },
+                cancellationToken);
 
             // Update welcome response to accepted
             await welcomeResponsesRepo.UpdateResponseAsync(
@@ -875,12 +881,15 @@ public class ExamFlowService : IExamFlowService
         {
             // Delete teaser message via orchestrator (audit trail)
             await orchestrator.DeleteMessageAsync(
-                messageId: welcomeResponse.WelcomeMessageId,
-                chatId: chatId,
-                userId: userId,
-                deletedBy: executor,
-                reason: "Exam teaser cleanup after denial",
-                cancellationToken: cancellationToken);
+                new DeleteMessageIntent
+                {
+                    MessageId = welcomeResponse.WelcomeMessageId,
+                    Chat = ChatIdentity.FromId(chatId),
+                    User = UserIdentity.FromId(userId),
+                    Executor = executor,
+                    Reason = "Exam teaser cleanup after denial"
+                },
+                cancellationToken);
 
             // Update welcome response to denied
             await welcomeResponsesRepo.UpdateResponseAsync(
@@ -896,11 +905,13 @@ public class ExamFlowService : IExamFlowService
         {
             // Global ban (no specific message triggered it)
             var banResult = await orchestrator.BanUserAsync(
-                userId: userId,
-                messageId: null, // No triggering message - exam failure
-                executor: executor,
-                reason: "Exam failed - banned to prevent repeat join spam",
-                cancellationToken: cancellationToken);
+                new BanIntent
+                {
+                    User = UserIdentity.FromId(userId),
+                    Executor = executor,
+                    Reason = "Exam failed - banned to prevent repeat join spam"
+                },
+                cancellationToken);
 
             if (!banResult.Success)
             {
@@ -911,11 +922,14 @@ public class ExamFlowService : IExamFlowService
         {
             // Kick from this chat only (user can rejoin)
             var kickResult = await orchestrator.KickUserFromChatAsync(
-                userId: userId,
-                chatId: chatId,
-                executor: executor,
-                reason: "Exam denied - kicked from chat",
-                cancellationToken: cancellationToken);
+                new KickIntent
+                {
+                    User = UserIdentity.FromId(userId),
+                    Chat = ChatIdentity.FromId(chatId),
+                    Executor = executor,
+                    Reason = "Exam denied - kicked from chat"
+                },
+                cancellationToken);
 
             if (!kickResult.Success)
             {
