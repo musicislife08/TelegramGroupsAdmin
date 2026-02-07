@@ -140,7 +140,7 @@ public class BotModerationService : IBotModerationService
                     intent.Chat.ChatName ?? intent.Chat.Id.ToString(),
                     intent.User.Id,
                     intent.User.DisplayName,
-                    isAutoBan: intent.Executor.Type == ActorType.System, cancellationToken);
+                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken);
             },
             $"Send ban celebration for user {intent.User.Id} in chat {intent.Chat.Id}");
 
@@ -217,7 +217,7 @@ public class BotModerationService : IBotModerationService
                     celebrationChat.ChatName ?? celebrationChat.Id.ToString(),
                     intent.User.Id,
                     intent.User.DisplayName,
-                    isAutoBan: intent.Executor.Type == ActorType.System, cancellationToken);
+                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken);
             }, $"Send ban celebration for user {intent.User.Id} in chat {celebrationChat.Id}");
         }
 
