@@ -310,6 +310,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.UrlBlocklist => config.UrlBlocklist.Enabled && request.Urls.Any(),
             CheckName.ImageSpam => config.ImageSpam.Enabled && (request.ImageData != null || !string.IsNullOrEmpty(request.PhotoFileId) || !string.IsNullOrEmpty(request.PhotoLocalPath)),
             CheckName.VideoSpam => config.VideoSpam.Enabled && !string.IsNullOrEmpty(request.VideoLocalPath),
+            CheckName.ChannelReply => config.ChannelReply.Enabled && request.Metadata.IsReplyToChannelPost,
             _ => false
         };
 
@@ -429,6 +430,15 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null,
                 ConfidenceThreshold = 80,
+                CancellationToken = cancellationToken
+            },
+
+            CheckName.ChannelReply => new ChannelReplyCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
                 CancellationToken = cancellationToken
             },
 

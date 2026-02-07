@@ -18,5 +18,6 @@ public enum CheckName
     SeoScraping,
     ImageSpam,
     VideoSpam,
-    FileScanning
+    FileScanning,
+    ChannelReply
 }

@@ -93,6 +93,12 @@ public static class ScoringConstants
     /// </summary>
     public const float SimilarityThreshold60 = 0.60f;
 
+    // Channel reply check scores
+    /// <summary>
+    /// Score for message replying to a channel post (linked channel or anonymous admin)
+    /// </summary>
+    public const double ScoreChannelReply = 0.8;
+
     // Score values for similarity thresholds
     /// <summary>
     /// Score for ML similarity >= 95%
