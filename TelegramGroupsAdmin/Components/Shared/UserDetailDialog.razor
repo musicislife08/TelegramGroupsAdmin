@@ -1,6 +1,8 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Helpers
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Telegram.Services.Bot
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @inject ITelegramUserManagementService UserManagementService
 @inject IBotModerationService ModerationService
 @inject IAdminNotesRepository AdminNotesRepository
@@ -527,10 +529,12 @@
 
             // Call moderation service to ban the user
             var banResult = await ModerationService.BanUserAsync(
-                _userDetail.TelegramUserId,
-                null, // No specific message ID
-                executor,
-                "Banned from user detail dialog");
+                new BanIntent
+                {
+                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    Executor = executor,
+                    Reason = "Banned from user detail dialog"
+                });
 
             if (banResult.Success)
             {
@@ -578,10 +582,13 @@
 
             // Unban the user
             var result = await ModerationService.UnbanUserAsync(
-                _userDetail.TelegramUserId,
-                executor,
-                "Unbanned from user detail dialog",
-                restoreTrust: false);
+                new UnbanIntent
+                {
+                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    Executor = executor,
+                    Reason = "Unbanned from user detail dialog",
+                    RestoreTrust = false
+                });
 
             if (result.Success)
             {
@@ -639,11 +646,13 @@
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
-                _userDetail.TelegramUserId,
-                null, // No specific message ID
-                executor,
-                tempBanResult.Reason,
-                tempBanResult.Duration);
+                new TempBanIntent
+                {
+                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    Executor = executor,
+                    Reason = tempBanResult.Reason,
+                    Duration = tempBanResult.Duration
+                });
 
             if (banResult.Success)
             {
@@ -709,11 +718,13 @@
 
             // Call moderation service to warn the user
             var warnResultFromService = await ModerationService.WarnUserAsync(
-                _userDetail.TelegramUserId,
-                null, // No specific message ID
-                executor,
-                warnResult.Reason ?? "Warning issued via UI",
-                chatId);
+                new WarnIntent
+                {
+                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    Executor = executor,
+                    Reason = warnResult.Reason ?? "Warning issued via UI",
+                    Chat = ChatIdentity.FromId(chatId)
+                });
 
             if (warnResultFromService.Success)
             {

@@ -9,39 +9,37 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 /// </summary>
 public interface IAuditHandler
 {
-    Task LogBanAsync(long userId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogBanAsync(UserIdentity user, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
-    Task LogTempBanAsync(long userId, Actor executor, TimeSpan duration, string? reason, CancellationToken cancellationToken = default);
+    Task LogTempBanAsync(UserIdentity user, Actor executor, TimeSpan duration, string? reason, CancellationToken cancellationToken = default);
 
-    Task LogUnbanAsync(long userId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogUnbanAsync(UserIdentity user, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Log warning to audit trail. Does NOT insert warning record (WarnHandler does that).
     /// </summary>
-    Task LogWarnAsync(long userId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogWarnAsync(UserIdentity user, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
-    Task LogTrustAsync(long userId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogTrustAsync(UserIdentity user, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
-    Task LogUntrustAsync(long userId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogUntrustAsync(UserIdentity user, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Log message deletion to audit trail.
-    /// userId is required for FK constraint to telegram_users.
     /// </summary>
-    // NOTE: Parameter naming inconsistency - see issue #156 (standardize 'ct' → 'cancellationToken')
-    Task LogDeleteAsync(long messageId, long chatId, long userId, Actor executor, CancellationToken cancellationToken = default);
+    Task LogDeleteAsync(long messageId, ChatIdentity chat, UserIdentity user, Actor executor, CancellationToken cancellationToken = default);
 
-    Task LogRestrictAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogRestrictAsync(UserIdentity user, ChatIdentity? chat, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Log permission restoration to audit trail.
     /// Called when user permissions are restored to chat defaults (e.g., exam pass, welcome accept).
     /// </summary>
-    Task LogRestorePermissionsAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogRestorePermissionsAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Log kick to audit trail.
     /// Called when user is kicked from a specific chat (ban then immediate unban).
     /// </summary>
-    Task LogKickAsync(long userId, long chatId, Actor executor, string? reason, CancellationToken cancellationToken = default);
+    Task LogKickAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default);
 }

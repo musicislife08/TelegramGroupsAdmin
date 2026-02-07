@@ -77,12 +77,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.MarkAsSpamAndBanAsync(
-                TestMessageId,
-                TestUserId,
-                TestChatId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<Message?>(),
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
 
@@ -91,12 +86,11 @@ public class ReportActionsServiceTests
 
         // Assert
         await _mockModerationService.Received(1).MarkAsSpamAndBanAsync(
-            TestMessageId,
-            TestUserId,
-            TestChatId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains($"Report #{TestReportId}")),
-            Arg.Any<Message?>(),
+            Arg.Is<SpamBanIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.MessageId == TestMessageId &&
+                i.Chat.Id == TestChatId &&
+                i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
@@ -146,12 +140,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.MarkAsSpamAndBanAsync(
-                TestMessageId,
-                TestUserId,
-                TestChatId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<Message?>(),
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("User is admin"));
 
@@ -212,10 +201,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
@@ -224,10 +210,10 @@ public class ReportActionsServiceTests
 
         // Assert
         await _mockModerationService.Received(1).BanUserAsync(
-            TestUserId,
-            TestMessageId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains($"Report #{TestReportId}")),
+            Arg.Is<BanIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.MessageId == TestMessageId &&
+                i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
@@ -246,10 +232,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Rate limited"));
 
@@ -268,10 +251,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
@@ -308,11 +288,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, WarningCount = 2 });
 
@@ -321,11 +297,11 @@ public class ReportActionsServiceTests
 
         // Assert
         await _mockModerationService.Received(1).WarnUserAsync(
-            TestUserId,
-            TestMessageId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains($"Report #{TestReportId}")),
-            TestChatId,
+            Arg.Is<WarnIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.MessageId == TestMessageId &&
+                i.Chat.Id == TestChatId &&
+                i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
@@ -346,11 +322,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("User not found"));
 
@@ -369,11 +341,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, WarningCount = 3 });
 
@@ -406,11 +374,9 @@ public class ReportActionsServiceTests
 
         // Assert - no moderation action
         await _mockModerationService.DidNotReceive()
-            .BanUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>());
         await _mockModerationService.DidNotReceive()
-            .WarnUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+            .WarnUserAsync(Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>());
 
         // Report updated to dismissed
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
@@ -582,12 +548,7 @@ public class ReportActionsServiceTests
     private void SetupSuccessfulModeration()
     {
         _mockModerationService.MarkAsSpamAndBanAsync(
-                Arg.Any<long>(),
-                Arg.Any<long>(),
-                Arg.Any<long>(),
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<Message?>(),
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
     }

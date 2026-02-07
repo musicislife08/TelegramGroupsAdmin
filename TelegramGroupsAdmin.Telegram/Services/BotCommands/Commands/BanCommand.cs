@@ -2,10 +2,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -188,11 +191,15 @@ public class BanCommand : IBotCommand
 
             // Execute ban via BotModerationService
             var result = await _moderationService.BanUserAsync(
-                userId: targetUser.Id,
-                messageId: triggerMessageId,
-                executor: executor,
-                reason: ModerationConstants.DefaultBanReason,
-                cancellationToken: cancellationToken);
+                new BanIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = ModerationConstants.DefaultBanReason,
+                    MessageId = triggerMessageId,
+                    Chat = ChatIdentity.From(message.Chat)
+                },
+                cancellationToken);
 
             if (!result.Success)
             {

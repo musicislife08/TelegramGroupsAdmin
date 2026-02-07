@@ -16,6 +16,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -252,10 +253,13 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
                 var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
-                    userId: result.SuspectedUser.Id,
-                    messageId: null,
-                    executor: executor,
-                    reason: reason);
+                    new BanIntent
+                    {
+                        User = UserIdentity.From(result.SuspectedUser),
+                        Executor = executor,
+                        Reason = reason,
+                        Chat = ChatIdentity.From(result.DetectionChat) // Enables ban celebration
+                    });
 
                 if (banResult.Success)
                 {

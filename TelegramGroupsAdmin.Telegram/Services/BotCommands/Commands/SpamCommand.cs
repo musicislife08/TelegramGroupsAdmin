@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -82,13 +85,16 @@ public class SpamCommand : IBotCommand
         // Execute spam and ban action via centralized service
         var reason = $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}";
         var result = await _moderationService.MarkAsSpamAndBanAsync(
-            messageId: spamMessage.MessageId,
-            userId: spamUserId.Value,
-            chatId: message.Chat.Id,
-            executor: executor,
-            reason: reason,
-            telegramMessage: spamMessage, // Pass for backfill if message not in database
-            cancellationToken: cancellationToken);
+            new SpamBanIntent
+            {
+                User = UserIdentity.From(spamMessage.From!),
+                Chat = ChatIdentity.From(message.Chat),
+                MessageId = spamMessage.MessageId,
+                Executor = executor,
+                Reason = reason,
+                TelegramMessage = spamMessage // Pass for backfill if message not in database
+            },
+            cancellationToken);
 
         if (!result.Success)
         {

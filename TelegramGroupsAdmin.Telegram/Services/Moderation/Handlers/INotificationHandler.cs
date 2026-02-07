@@ -15,7 +15,7 @@ public interface INotificationHandler
     /// Notify user about a warning they received.
     /// </summary>
     Task<NotificationResult> NotifyUserWarningAsync(
-        long userId,
+        UserIdentity user,
         int warningCount,
         string? reason,
         CancellationToken cancellationToken = default);
@@ -24,7 +24,7 @@ public interface INotificationHandler
     /// Notify user about a temporary ban with expected unban time.
     /// </summary>
     Task<NotificationResult> NotifyUserTempBanAsync(
-        long userId,
+        UserIdentity user,
         TimeSpan duration,
         DateTimeOffset expiresAt,
         string? reason,
@@ -34,7 +34,7 @@ public interface INotificationHandler
     /// Notify admins about a ban action (for audit/awareness).
     /// </summary>
     Task<NotificationResult> NotifyAdminsBanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default);
@@ -57,11 +57,11 @@ public interface INotificationHandler
     /// Notify user about a critical check violation (trusted users get explanation, not ban).
     /// Critical checks (URL filtering, file scanning) bypass trust status.
     /// </summary>
-    /// <param name="userId">The Telegram user ID to notify.</param>
+    /// <param name="user">Identity of the user to notify.</param>
     /// <param name="violations">List of violations that caused the message deletion.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<NotificationResult> NotifyUserCriticalViolationAsync(
-        long userId,
+        UserIdentity user,
         List<string> violations,
         CancellationToken cancellationToken = default);
 }

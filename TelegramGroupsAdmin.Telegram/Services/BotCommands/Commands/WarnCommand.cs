@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -78,13 +81,15 @@ public class WarnCommand : IBotCommand
 
             // Execute warn action using service
             var result = await _moderationService.WarnUserAsync(
-                userId: targetUser.Id,
-                messageId: message.ReplyToMessage.MessageId,
-                executor: executor,
-                reason: reason,
-                chatId: message.Chat.Id,
-                cancellationToken: cancellationToken
-            );
+                new WarnIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Chat = ChatIdentity.From(message.Chat),
+                    Executor = executor,
+                    Reason = reason,
+                    MessageId = message.ReplyToMessage.MessageId
+                },
+                cancellationToken);
 
             if (!result.Success)
             {

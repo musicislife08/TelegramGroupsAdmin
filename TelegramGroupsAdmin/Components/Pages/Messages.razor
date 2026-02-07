@@ -8,6 +8,7 @@
 @using TelegramGroupsAdmin.Core.BackgroundJobs
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Core.Utilities
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
@@ -922,11 +923,14 @@
 
             // Call moderation service (deletes message, bans user globally, creates detection result)
             var result = await ModerationService.MarkAsSpamAndBanAsync(
-                message.MessageId,
-                message.UserId,
-                message.ChatId,
-                executor,
-                "Manually marked as spam by admin via UI");
+                new SpamBanIntent
+                {
+                    User = UserIdentity.FromId(message.UserId),
+                    MessageId = message.MessageId,
+                    Chat = ChatIdentity.FromId(message.ChatId),
+                    Executor = executor,
+                    Reason = "Manually marked as spam by admin via UI"
+                });
 
             if (result.Success)
             {
@@ -1010,10 +1014,13 @@
             if (wasPreviouslySpam)
             {
                 var unbanResult = await ModerationService.UnbanUserAsync(
-                    message.UserId,
-                    executor,
-                    "False positive correction - message marked as ham by admin via UI",
-                    restoreTrust: true); // Restore trust to bypass future spam checks
+                    new UnbanIntent
+                    {
+                        User = UserIdentity.FromId(message.UserId),
+                        Executor = executor,
+                        Reason = "False positive correction - message marked as ham by admin via UI",
+                        RestoreTrust = true // Restore trust to bypass future spam checks
+                    });
 
                 if (unbanResult.Success)
                 {
@@ -1163,11 +1170,14 @@
 
             // Call moderation service to delete the message (service handles bot client internally)
             var result = await ModerationService.DeleteMessageAsync(
-                messageId: message.MessageId,
-                chatId: message.ChatId,
-                userId: message.UserId,
-                deletedBy: executor,
-                reason: "Manual deletion from Messages UI");
+                new DeleteMessageIntent
+                {
+                    User = UserIdentity.FromId(message.UserId),
+                    MessageId = message.MessageId,
+                    Chat = ChatIdentity.FromId(message.ChatId),
+                    Executor = executor,
+                    Reason = "Manual deletion from Messages UI"
+                });
 
             if (result.Success)
             {
@@ -1254,11 +1264,14 @@
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
-                message.UserId,
-                message.MessageId,
-                executor,
-                tempBanResult.Reason,
-                tempBanResult.Duration);
+                new TempBanIntent
+                {
+                    User = UserIdentity.FromId(message.UserId),
+                    Executor = executor,
+                    Reason = tempBanResult.Reason,
+                    Duration = tempBanResult.Duration,
+                    MessageId = message.MessageId
+                });
 
             if (banResult.Success)
             {
@@ -1339,11 +1352,14 @@
 
             // Call moderation service to warn the user
             var warnServiceResult = await ModerationService.WarnUserAsync(
-                message.UserId,
-                message.MessageId,
-                executor,
-                warnResult.Reason ?? "Warning issued via UI",
-                message.ChatId);
+                new WarnIntent
+                {
+                    User = UserIdentity.FromId(message.UserId),
+                    Executor = executor,
+                    Reason = warnResult.Reason ?? "Warning issued via UI",
+                    Chat = ChatIdentity.FromId(message.ChatId),
+                    MessageId = message.MessageId
+                });
 
             if (warnServiceResult.Success)
             {

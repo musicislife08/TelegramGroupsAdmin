@@ -1,4 +1,3 @@
-using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
@@ -16,7 +15,7 @@ public interface IBotBanHandler
     /// Ban user globally across all managed chats.
     /// </summary>
     Task<BanResult> BanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         long? triggeredByMessageId = null,
@@ -24,10 +23,11 @@ public interface IBotBanHandler
 
     /// <summary>
     /// Ban user in a single specific chat (lazy sync for chats added after global ban).
+    /// Also used by BotProtectionService to ban unauthorized bots in a single chat.
     /// </summary>
-    Task<BanResult> BanAsync(
-        User user,
-        Chat chat,
+    Task<BanResult> BanInChatAsync(
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         string? reason,
         long? triggeredByMessageId = null,
@@ -37,7 +37,7 @@ public interface IBotBanHandler
     /// Temporarily ban user globally with automatic unban after duration.
     /// </summary>
     Task<TempBanResult> TempBanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         TimeSpan duration,
         string? reason,
@@ -48,7 +48,7 @@ public interface IBotBanHandler
     /// Unban user globally across all managed chats.
     /// </summary>
     Task<UnbanResult> UnbanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default);
@@ -58,15 +58,9 @@ public interface IBotBanHandler
     /// Does not affect other chats or create permanent ban record.
     /// Used for welcome flow denials and exam failures.
     /// </summary>
-    /// <param name="userId">Telegram user ID to kick.</param>
-    /// <param name="chatId">Chat to kick the user from.</param>
-    /// <param name="executor">Who initiated the kick.</param>
-    /// <param name="reason">Reason for the kick (for logging).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Result with success status.</returns>
     Task<BanResult> KickFromChatAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default);

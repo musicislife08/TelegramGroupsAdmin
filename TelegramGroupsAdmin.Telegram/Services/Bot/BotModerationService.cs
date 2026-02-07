@@ -1,12 +1,10 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -43,10 +41,6 @@ public class BotModerationService : IBotModerationService
     private readonly INotificationHandler _notificationHandler;
     private readonly ITrainingHandler _trainingHandler;
 
-    // Repositories for logging
-    private readonly ITelegramUserRepository _userRepository;
-    private readonly IManagedChatsRepository _managedChatsRepository;
-
     // Services
     private readonly IBanCelebrationService _banCelebrationService;
     private readonly IReportService _reportService;
@@ -65,8 +59,6 @@ public class BotModerationService : IBotModerationService
         IAuditHandler auditHandler,
         INotificationHandler notificationHandler,
         ITrainingHandler trainingHandler,
-        ITelegramUserRepository userRepository,
-        IManagedChatsRepository managedChatsRepository,
         IBanCelebrationService banCelebrationService,
         IReportService reportService,
         INotificationService notificationService,
@@ -81,8 +73,6 @@ public class BotModerationService : IBotModerationService
         _auditHandler = auditHandler;
         _notificationHandler = notificationHandler;
         _trainingHandler = trainingHandler;
-        _userRepository = userRepository;
-        _managedChatsRepository = managedChatsRepository;
         _banCelebrationService = banCelebrationService;
         _reportService = reportService;
         _notificationService = notificationService;
@@ -92,31 +82,26 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> MarkAsSpamAndBanAsync(
-        long messageId,
-        long userId,
-        long chatId,
-        Actor executor,
-        string reason,
-        global::Telegram.Bot.Types.Message? telegramMessage = null,
+        SpamBanIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
         // Step 1: Ensure message exists in database (backfill if needed for training data)
-        await _messageHandler.EnsureExistsAsync(messageId, chatId, telegramMessage, cancellationToken);
+        await _messageHandler.EnsureExistsAsync(intent.MessageId, intent.Chat, intent.TelegramMessage, cancellationToken);
 
         // Step 2: Delete message (best effort - may already be deleted)
-        var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, executor, cancellationToken);
+        var deleteResult = await _messageHandler.DeleteAsync(intent.Chat, intent.MessageId, intent.Executor, cancellationToken);
         if (deleteResult.MessageDeleted)
         {
             await SafeAuditAsync(
-                () => _auditHandler.LogDeleteAsync(messageId, chatId, userId, executor, cancellationToken),
-                "message deletion", userId, chatId);
+                () => _auditHandler.LogDeleteAsync(intent.MessageId, intent.Chat, intent.User, intent.Executor, cancellationToken),
+                "message deletion", intent.User, intent.Chat);
         }
 
         // Step 3: Ban user globally (inline - don't call BanUserAsync to control notification)
-        var banResult = await _banHandler.BanAsync(userId, executor, reason, messageId, cancellationToken);
+        var banResult = await _banHandler.BanAsync(intent.User, intent.Executor, intent.Reason, intent.MessageId, cancellationToken);
 
         if (!banResult.Success)
         {
@@ -130,56 +115,50 @@ public class BotModerationService : IBotModerationService
 
         // Audit successful ban
         await SafeAuditAsync(
-            () => _auditHandler.LogBanAsync(userId, executor, reason, cancellationToken),
-            "ban", userId);
+            () => _auditHandler.LogBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            "ban", intent.User);
 
         // Business rule: Bans always revoke trust
-        var untrustReason = string.IsNullOrWhiteSpace(reason)
+        var untrustReason = string.IsNullOrWhiteSpace(intent.Reason)
             ? "Trust revoked due to ban"
-            : $"Trust revoked due to ban: {reason}";
-        var untrustResult = await _trustHandler.UntrustAsync(userId, executor, untrustReason, cancellationToken);
+            : $"Trust revoked due to ban: {intent.Reason}";
+        var untrustResult = await _trustHandler.UntrustAsync(intent.User, intent.Executor, untrustReason, cancellationToken);
 
         if (untrustResult.Success)
         {
             await SafeAuditAsync(
-                () => _auditHandler.LogUntrustAsync(userId, executor, untrustReason, cancellationToken),
-                "untrust (from ban)", userId);
+                () => _auditHandler.LogUntrustAsync(intent.User, intent.Executor, untrustReason, cancellationToken),
+                "untrust (from ban)", intent.User);
         }
 
         // Schedule cleanup of user's messages
         await SafeExecuteAsync(
-            () => _messageHandler.ScheduleUserMessagesCleanupAsync(userId, cancellationToken),
-            $"Schedule messages cleanup for user {userId}");
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+            $"Schedule messages cleanup for user {intent.User.Id}");
 
         // Step 4: Create training data (non-critical - failure doesn't affect ban success)
         await SafeExecuteAsync(
-            () => _trainingHandler.CreateSpamSampleAsync(messageId, executor, cancellationToken),
-            $"Create training data for message {messageId}");
+            () => _trainingHandler.CreateSpamSampleAsync(intent.MessageId, intent.Executor, cancellationToken),
+            $"Create training data for message {intent.MessageId}");
 
         // Step 5: Send ban celebration (non-critical - failure doesn't affect ban success)
         await SafeExecuteAsync(
             async () =>
             {
-                // Get chat name for celebration
-                var chat = await _managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-                var chatName = chat?.ChatName ?? chatId.ToString();
-
-                // Get user display name
-                var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-                var userName = user != null
-                    ? TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, userId)
-                    : userId.ToString();
-
                 await _banCelebrationService.SendBanCelebrationAsync(
-                    chatId, chatName, userId, userName, isAutoBan: false, cancellationToken);
+                    intent.Chat.Id,
+                    intent.Chat.ChatName ?? intent.Chat.Id.ToString(),
+                    intent.User.Id,
+                    intent.User.DisplayName,
+                    isAutoBan: false, cancellationToken);
             },
-            $"Send ban celebration for user {userId} in chat {chatId}");
+            $"Send ban celebration for user {intent.User.Id} in chat {intent.Chat.Id}");
 
         // Step 6: Rich admin notification (replaces simple notification from BanUserAsync)
         await SafeExecuteAsync(
             async () =>
             {
-                var enrichedMessage = await _messageHandler.GetEnrichedAsync(messageId, cancellationToken);
+                var enrichedMessage = await _messageHandler.GetEnrichedAsync(intent.MessageId, cancellationToken);
                 if (enrichedMessage != null)
                 {
                     await _notificationHandler.NotifyAdminsSpamBanAsync(
@@ -191,10 +170,10 @@ public class BotModerationService : IBotModerationService
                 else
                 {
                     // Fallback if message not found (shouldn't happen, but defensive)
-                    await _notificationHandler.NotifyAdminsBanAsync(userId, executor, reason, cancellationToken);
+                    await _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
                 }
             },
-            $"Rich spam notification for user {userId}");
+            $"Rich spam notification for user {intent.User.Id}");
 
         return new ModerationResult
         {
@@ -207,47 +186,59 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> BanUserAsync(
-        long userId,
-        long? messageId,
-        Actor executor,
-        string reason,
+        BanIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
         // Primary action: Ban globally
-        var banResult = await _banHandler.BanAsync(userId, executor, reason, messageId, cancellationToken);
+        var banResult = await _banHandler.BanAsync(intent.User, intent.Executor, intent.Reason, intent.MessageId, cancellationToken);
 
         if (!banResult.Success)
             return ModerationResult.Failed(banResult.ErrorMessage ?? "Ban failed");
 
         // Audit successful ban (separate from BanHandler's state tracking record)
         await SafeAuditAsync(
-            () => _auditHandler.LogBanAsync(userId, executor, reason, cancellationToken),
-            "ban", userId);
+            () => _auditHandler.LogBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            "ban", intent.User);
 
         // Business rule: Bans always revoke trust
-        var untrustReason = string.IsNullOrWhiteSpace(reason)
+        var untrustReason = string.IsNullOrWhiteSpace(intent.Reason)
             ? "Trust revoked due to ban"
-            : $"Trust revoked due to ban: {reason}";
+            : $"Trust revoked due to ban: {intent.Reason}";
         var untrustResult = await _trustHandler.UntrustAsync(
-            userId, executor, untrustReason, cancellationToken);
+            intent.User, intent.Executor, untrustReason, cancellationToken);
 
         if (untrustResult.Success)
         {
             await SafeAuditAsync(
-                () => _auditHandler.LogUntrustAsync(userId, executor, untrustReason, cancellationToken),
-                "untrust (from ban)", userId);
+                () => _auditHandler.LogUntrustAsync(intent.User, intent.Executor, untrustReason, cancellationToken),
+                "untrust (from ban)", intent.User);
         }
 
         // Notify admins
-        await _notificationHandler.NotifyAdminsBanAsync(userId, executor, reason, cancellationToken);
+        await _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
 
         // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
         await SafeExecuteAsync(
-            () => _messageHandler.ScheduleUserMessagesCleanupAsync(userId, cancellationToken),
-            $"Schedule messages cleanup for user {userId}");
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+            $"Schedule messages cleanup for user {intent.User.Id}");
+
+        // Bug 3 fix: Ban celebration when chat context is provided
+        // (enables celebrations for CAS/Impersonation bans that carry the originating chat)
+        if (intent.Chat is { } celebrationChat)
+        {
+            await SafeExecuteAsync(async () =>
+            {
+                await _banCelebrationService.SendBanCelebrationAsync(
+                    celebrationChat.Id,
+                    celebrationChat.ChatName ?? celebrationChat.Id.ToString(),
+                    intent.User.Id,
+                    intent.User.DisplayName,
+                    isAutoBan: intent.Executor.Type == ActorType.System, cancellationToken);
+            }, $"Send ban celebration for user {intent.User.Id} in chat {celebrationChat.Id}");
+        }
 
         return new ModerationResult
         {
@@ -259,32 +250,25 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> WarnUserAsync(
-        long userId,
-        long? messageId,
-        Actor executor,
-        string reason,
-        long chatId,
+        WarnIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-
         // Primary action: Issue warning (writes to warnings table)
-        var warnResult = await _warnHandler.WarnAsync(userId, executor, reason, chatId, messageId, cancellationToken);
+        var warnResult = await _warnHandler.WarnAsync(intent.User, intent.Executor, intent.Reason, intent.Chat.Id, intent.MessageId, cancellationToken);
 
         if (!warnResult.Success)
             return new ModerationResult { Success = false, ErrorMessage = warnResult.ErrorMessage };
 
         // Audit successful warning
         await SafeAuditAsync(
-            () => _auditHandler.LogWarnAsync(userId, executor, reason, cancellationToken),
-            "warning", userId, chatId);
+            () => _auditHandler.LogWarnAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            "warning", intent.User, intent.Chat);
 
         // Notify user about warning
-        await _notificationHandler.NotifyUserWarningAsync(userId, warnResult.WarningCount, reason, cancellationToken);
+        await _notificationHandler.NotifyUserWarningAsync(intent.User, warnResult.WarningCount, intent.Reason, cancellationToken);
 
         var result = new ModerationResult
         {
@@ -294,7 +278,7 @@ public class BotModerationService : IBotModerationService
 
         // Business rule: Check warning threshold for auto-ban
         var warningConfig = await _configService.GetEffectiveAsync<WarningSystemConfig>(
-            ConfigType.Moderation, chatId) ?? WarningSystemConfig.Default;
+            ConfigType.Moderation, intent.Chat.Id) ?? WarningSystemConfig.Default;
 
         if (warningConfig.AutoBanEnabled &&
             warningConfig.AutoBanThreshold > 0 &&
@@ -302,7 +286,7 @@ public class BotModerationService : IBotModerationService
         {
             _logger.LogWarning(
                 "Auto-ban triggered: {User} has {WarnCount} warnings (threshold: {Threshold})",
-                user.ToLogDebug(userId), warnResult.WarningCount, warningConfig.AutoBanThreshold);
+                intent.User.ToLogDebug(), warnResult.WarningCount, warningConfig.AutoBanThreshold);
 
             // Use configured auto-ban reason with {count} placeholder support
             var autoBanReason = !string.IsNullOrWhiteSpace(warningConfig.AutoBanReason)
@@ -310,32 +294,32 @@ public class BotModerationService : IBotModerationService
                 : $"Exceeded warning threshold ({warnResult.WarningCount}/{warningConfig.AutoBanThreshold} warnings)";
 
             // Auto-ban: Call handlers directly (don't call BanUserAsync to avoid nested orchestrator calls)
-            var banResult = await _banHandler.BanAsync(userId, Actor.AutoBan, autoBanReason, messageId, cancellationToken);
+            var banResult = await _banHandler.BanAsync(intent.User, Actor.AutoBan, autoBanReason, intent.MessageId, cancellationToken);
 
             if (banResult.Success)
             {
                 // Audit successful auto-ban
                 await SafeAuditAsync(
-                    () => _auditHandler.LogBanAsync(userId, Actor.AutoBan, autoBanReason, cancellationToken),
-                    "auto-ban (from warnings)", userId, chatId);
+                    () => _auditHandler.LogBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken),
+                    "auto-ban (from warnings)", intent.User, intent.Chat);
 
                 // Business rule: Bans always revoke trust
                 var untrustReason = $"Trust revoked: {autoBanReason}";
-                var untrustResult = await _trustHandler.UntrustAsync(userId, Actor.AutoBan, untrustReason, cancellationToken);
+                var untrustResult = await _trustHandler.UntrustAsync(intent.User, Actor.AutoBan, untrustReason, cancellationToken);
                 if (untrustResult.Success)
                 {
                     await SafeAuditAsync(
-                        () => _auditHandler.LogUntrustAsync(userId, Actor.AutoBan, untrustReason, cancellationToken),
-                        "untrust (from auto-ban)", userId, chatId);
+                        () => _auditHandler.LogUntrustAsync(intent.User, Actor.AutoBan, untrustReason, cancellationToken),
+                        "untrust (from auto-ban)", intent.User, intent.Chat);
                 }
 
                 // Notify admins (simple notification - no detection context for warning-based bans)
-                await _notificationHandler.NotifyAdminsBanAsync(userId, Actor.AutoBan, autoBanReason, cancellationToken);
+                await _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken);
 
                 // Schedule cleanup of user's messages
                 await SafeExecuteAsync(
-                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(userId, cancellationToken),
-                    $"Schedule messages cleanup for user {userId}");
+                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+                    $"Schedule messages cleanup for user {intent.User.Id}");
 
                 result = result with
                 {
@@ -348,7 +332,7 @@ public class BotModerationService : IBotModerationService
             {
                 _logger.LogError(
                     "Auto-ban failed for {User}: {Error}",
-                    user.ToLogDebug(userId), banResult.ErrorMessage);
+                    intent.User.ToLogDebug(), banResult.ErrorMessage);
             }
         }
 
@@ -357,61 +341,54 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> TrustUserAsync(
-        long userId,
-        Actor executor,
-        string reason,
+        TrustIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var trustResult = await _trustHandler.TrustAsync(userId, executor, reason, cancellationToken);
+        var trustResult = await _trustHandler.TrustAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
 
         if (!trustResult.Success)
             return new ModerationResult { Success = false, ErrorMessage = trustResult.ErrorMessage };
 
         // Audit successful trust
         await SafeAuditAsync(
-            () => _auditHandler.LogTrustAsync(userId, executor, reason, cancellationToken),
-            "trust", userId);
+            () => _auditHandler.LogTrustAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            "trust", intent.User);
 
         return new ModerationResult { Success = true };
     }
 
     /// <inheritdoc/>
     public async Task<ModerationResult> UntrustUserAsync(
-        long userId,
-        Actor executor,
-        string reason,
+        UntrustIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var untrustResult = await _trustHandler.UntrustAsync(userId, executor, reason, cancellationToken);
+        var untrustResult = await _trustHandler.UntrustAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
 
         if (!untrustResult.Success)
             return new ModerationResult { Success = false, ErrorMessage = untrustResult.ErrorMessage };
 
         // Audit successful untrust
         await SafeAuditAsync(
-            () => _auditHandler.LogUntrustAsync(userId, executor, reason, cancellationToken),
-            "untrust", userId);
+            () => _auditHandler.LogUntrustAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            "untrust", intent.User);
 
         return new ModerationResult { Success = true };
     }
 
     /// <inheritdoc/>
     public async Task<ModerationResult> UnbanUserAsync(
-        long userId,
-        Actor executor,
-        string reason,
-        bool restoreTrust = false,
+        UnbanIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var unbanResult = await _banHandler.UnbanAsync(userId, executor, reason, cancellationToken);
+        var unbanResult = await _banHandler.UnbanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
 
         if (!unbanResult.Success)
             return new ModerationResult { Success = false, ErrorMessage = unbanResult.ErrorMessage };
 
         // Audit successful unban
         await SafeAuditAsync(
-            () => _auditHandler.LogUnbanAsync(userId, executor, reason, cancellationToken),
-            "unban", userId);
+            () => _auditHandler.LogUnbanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            "unban", intent.User);
 
         var result = new ModerationResult
         {
@@ -420,11 +397,15 @@ public class BotModerationService : IBotModerationService
         };
 
         // Handle trust restoration as follow-up
-        if (restoreTrust)
+        if (intent.RestoreTrust)
         {
             var trustResult = await TrustUserAsync(
-                userId, executor,
-                "Trust restored after unban (false positive correction)", cancellationToken);
+                new TrustIntent
+                {
+                    User = intent.User,
+                    Executor = intent.Executor,
+                    Reason = "Trust restored after unban (false positive correction)"
+                }, cancellationToken);
             result = result with { TrustRestored = trustResult.Success };
         }
 
@@ -433,19 +414,15 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> DeleteMessageAsync(
-        long messageId,
-        long chatId,
-        long userId,
-        Actor deletedBy,
-        string? reason = null,
+        DeleteMessageIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, deletedBy, cancellationToken);
+        var deleteResult = await _messageHandler.DeleteAsync(intent.Chat, intent.MessageId, intent.Executor, cancellationToken);
 
         // Audit the deletion attempt (even if message was already deleted)
         await SafeAuditAsync(
-            () => _auditHandler.LogDeleteAsync(messageId, chatId, userId, deletedBy, cancellationToken),
-            "message deletion", userId, chatId);
+            () => _auditHandler.LogDeleteAsync(intent.MessageId, intent.Chat, intent.User, intent.Executor, cancellationToken),
+            "message deletion", intent.User, intent.Chat);
 
         return new ModerationResult
         {
@@ -456,28 +433,24 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> TempBanUserAsync(
-        long userId,
-        long? messageId,
-        Actor executor,
-        string reason,
-        TimeSpan duration,
+        TempBanIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
-        var tempBanResult = await _banHandler.TempBanAsync(userId, executor, duration, reason, messageId, cancellationToken);
+        var tempBanResult = await _banHandler.TempBanAsync(intent.User, intent.Executor, intent.Duration, intent.Reason, intent.MessageId, cancellationToken);
 
         if (!tempBanResult.Success)
             return new ModerationResult { Success = false, ErrorMessage = tempBanResult.ErrorMessage };
 
         // Audit successful temp ban (separate from BanHandler's state tracking record)
         await SafeAuditAsync(
-            () => _auditHandler.LogTempBanAsync(userId, executor, duration, reason, cancellationToken),
-            "temp ban", userId);
+            () => _auditHandler.LogTempBanAsync(intent.User, intent.Executor, intent.Duration, intent.Reason, cancellationToken),
+            "temp ban", intent.User);
 
         // Notify user about temp ban with rejoin info
-        await _notificationHandler.NotifyUserTempBanAsync(userId, duration, tempBanResult.ExpiresAt, reason, cancellationToken);
+        await _notificationHandler.NotifyUserTempBanAsync(intent.User, intent.Duration, tempBanResult.ExpiresAt, intent.Reason, cancellationToken);
 
         return new ModerationResult
         {
@@ -488,27 +461,22 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> RestrictUserAsync(
-        long userId,
-        long? messageId,
-        Actor executor,
-        string reason,
-        TimeSpan duration,
-        long? chatId = null,
+        RestrictIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
         var restrictResult = await _restrictHandler.RestrictAsync(
-            userId, chatId ?? 0, executor, duration, reason, cancellationToken);
+            intent.User, intent.Chat, intent.Executor, intent.Duration, intent.Reason, cancellationToken);
 
         if (!restrictResult.Success)
             return new ModerationResult { Success = false, ErrorMessage = restrictResult.ErrorMessage };
 
         // Audit successful restriction
         await SafeAuditAsync(
-            () => _auditHandler.LogRestrictAsync(userId, chatId ?? 0, executor, reason, cancellationToken),
-            "restriction", userId, chatId);
+            () => _auditHandler.LogRestrictAsync(intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken),
+            "restriction", intent.User, intent.Chat);
 
         return new ModerationResult
         {
@@ -519,29 +487,22 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> SyncBanToChatAsync(
-        User user,
-        Chat chat,
-        string reason,
-        Actor? executor = null,
-        long? triggeredByMessageId = null,
+        SyncBanIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(user.Id, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
-        // Use provided executor or default to AutoDetection for backward compatibility
-        var actor = executor ?? Actor.AutoDetection;
-
-        var banResult = await _banHandler.BanAsync(
-            user, chat, actor, reason, triggeredByMessageId, cancellationToken);
+        var banResult = await _banHandler.BanInChatAsync(
+            intent.User, intent.Chat, intent.Executor, intent.Reason, intent.TriggeredByMessageId, cancellationToken);
 
         if (!banResult.Success)
             return ModerationResult.Failed(banResult.ErrorMessage ?? "Ban sync failed");
 
         // Audit successful ban sync
         await SafeAuditAsync(
-            () => _auditHandler.LogBanAsync(user.Id, actor, reason, cancellationToken),
-            "ban sync", user.Id, chat.Id);
+            () => _auditHandler.LogBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            "ban sync", intent.User, intent.Chat);
 
         return new ModerationResult
         {
@@ -552,25 +513,22 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> RestoreUserPermissionsAsync(
-        long userId,
-        long chatId,
-        Actor executor,
-        string reason,
+        RestorePermissionsIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
         var restrictResult = await _restrictHandler.RestorePermissionsAsync(
-            userId, chatId, executor, reason, cancellationToken);
+            intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken);
 
         if (!restrictResult.Success)
             return ModerationResult.Failed(restrictResult.ErrorMessage ?? "Failed to restore permissions");
 
         // Audit successful permission restoration
         await SafeAuditAsync(
-            () => _auditHandler.LogRestorePermissionsAsync(userId, chatId, executor, reason, cancellationToken),
-            "restore permissions", userId, chatId);
+            () => _auditHandler.LogRestorePermissionsAsync(intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken),
+            "restore permissions", intent.User, intent.Chat);
 
         return new ModerationResult
         {
@@ -581,25 +539,22 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> KickUserFromChatAsync(
-        long userId,
-        long chatId,
-        Actor executor,
-        string reason,
+        KickIntent intent,
         CancellationToken cancellationToken = default)
     {
-        var protectionResult = await CheckServiceAccountProtectionAsync(userId, cancellationToken);
+        var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
         var kickResult = await _banHandler.KickFromChatAsync(
-            userId, chatId, executor, reason, cancellationToken);
+            intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken);
 
         if (!kickResult.Success)
             return ModerationResult.Failed(kickResult.ErrorMessage ?? "Failed to kick user");
 
         // Audit successful kick
         await SafeAuditAsync(
-            () => _auditHandler.LogKickAsync(userId, chatId, executor, reason, cancellationToken),
-            "kick", userId, chatId);
+            () => _auditHandler.LogKickAsync(intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken),
+            "kick", intent.User, intent.Chat);
 
         return new ModerationResult
         {
@@ -610,38 +565,30 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> HandleMalwareViolationAsync(
-        long messageId,
-        long chatId,
-        long userId,
-        string malwareDetails,
-        Message? telegramMessage = null,
+        MalwareViolationIntent intent,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-        var chat = await _managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-
         _logger.LogWarning(
             "Handling malware violation for message {MessageId} from {User} in {Chat}: {Details}",
-            messageId, user.ToLogDebug(userId), chat.ToLogDebug(chatId), malwareDetails);
+            intent.MessageId, intent.User.ToLogDebug(), intent.Chat.ToLogDebug(), intent.MalwareDetails);
 
         // Step 1: Ensure message exists in database (for audit trail)
-        await _messageHandler.EnsureExistsAsync(messageId, chatId, telegramMessage, cancellationToken);
+        await _messageHandler.EnsureExistsAsync(intent.MessageId, intent.Chat, intent.TelegramMessage, cancellationToken);
 
         // Step 2: Delete the malware message
-        var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, Actor.FileScanner, cancellationToken);
+        var deleteResult = await _messageHandler.DeleteAsync(intent.Chat, intent.MessageId, Actor.FileScanner, cancellationToken);
 
         await SafeAuditAsync(
-            () => _auditHandler.LogDeleteAsync(messageId, chatId, userId, Actor.FileScanner, cancellationToken),
-            "malware deletion", userId, chatId);
+            () => _auditHandler.LogDeleteAsync(intent.MessageId, intent.Chat, intent.User, Actor.FileScanner, cancellationToken),
+            "malware deletion", intent.User, intent.Chat);
 
         // Step 3: Create admin report for review
         await SafeExecuteAsync(async () =>
         {
             var report = new Report(
                 Id: 0, // Assigned by database
-                MessageId: (int)messageId,
-                ChatId: chatId,
+                MessageId: (int)intent.MessageId,
+                ChatId: intent.Chat.Id,
                 ReportCommandMessageId: null,
                 ReportedByUserId: null,
                 ReportedByUserName: "File Scanner",
@@ -650,33 +597,30 @@ public class BotModerationService : IBotModerationService
                 ReviewedBy: null,
                 ReviewedAt: null,
                 ActionTaken: null,
-                AdminNotes: $"MALWARE DETECTED: {malwareDetails}\n\nUser was NOT auto-banned (malware upload may be accidental).",
+                AdminNotes: $"MALWARE DETECTED: {intent.MalwareDetails}\n\nUser was NOT auto-banned (malware upload may be accidental).",
                 WebUserId: null);
 
-            await _reportService.CreateReportAsync(report, telegramMessage, isAutomated: true, cancellationToken);
+            await _reportService.CreateReportAsync(report, intent.TelegramMessage, isAutomated: true, cancellationToken);
         }, "Create malware report");
 
         // Step 4: Notify admins via system notification
         await SafeExecuteAsync(async () =>
         {
-            var chatName = chat?.ChatName ?? chatId.ToString();
-            var userName = user != null
-                ? TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, userId)
-                : userId.ToString();
+            var chatName = intent.Chat.ChatName ?? intent.Chat.Id.ToString();
 
             await _notificationService.SendSystemNotificationAsync(
                 NotificationEventType.MalwareDetected,
                 "Malware Detected and Removed",
                 $"Malware was detected in chat '{chatName}' and the message was deleted.\n\n" +
-                $"User: {userName}\n" +
-                $"Detection: {malwareDetails}\n\n" +
+                $"User: {intent.User.DisplayName}\n" +
+                $"Detection: {intent.MalwareDetails}\n\n" +
                 $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
                 cancellationToken);
         }, "Malware notification");
 
         _logger.LogInformation(
             "Malware violation handled: deleted message {MessageId}, created report, notified admins (no ban)",
-            messageId);
+            intent.MessageId);
 
         return new ModerationResult
         {
@@ -687,36 +631,28 @@ public class BotModerationService : IBotModerationService
 
     /// <inheritdoc/>
     public async Task<ModerationResult> HandleCriticalViolationAsync(
-        long messageId,
-        long chatId,
-        long userId,
-        List<string> violations,
-        Message? telegramMessage = null,
+        CriticalViolationIntent intent,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-        var chat = await _managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-
         _logger.LogWarning(
             "Handling critical violation for message {MessageId} from {User} in {Chat}: {Violations}",
-            messageId, user.ToLogDebug(userId), chat.ToLogDebug(chatId), string.Join("; ", violations));
+            intent.MessageId, intent.User.ToLogDebug(), intent.Chat.ToLogDebug(), string.Join("; ", intent.Violations));
 
         // Step 1: Delete the violating message
-        var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, Actor.AutoDetection, cancellationToken);
+        var deleteResult = await _messageHandler.DeleteAsync(intent.Chat, intent.MessageId, Actor.AutoDetection, cancellationToken);
 
         await SafeAuditAsync(
-            () => _auditHandler.LogDeleteAsync(messageId, chatId, userId, Actor.AutoDetection, cancellationToken),
-            "critical violation deletion", userId, chatId);
+            () => _auditHandler.LogDeleteAsync(intent.MessageId, intent.Chat, intent.User, Actor.AutoDetection, cancellationToken),
+            "critical violation deletion", intent.User, intent.Chat);
 
         // Step 2: Notify user via DM (trusted users get an explanation, not a ban)
         await SafeExecuteAsync(
-            () => _notificationHandler.NotifyUserCriticalViolationAsync(userId, violations, cancellationToken),
-            $"Critical violation notification for user {userId}");
+            () => _notificationHandler.NotifyUserCriticalViolationAsync(intent.User, intent.Violations, cancellationToken),
+            $"Critical violation notification for user {intent.User.Id}");
 
         _logger.LogInformation(
             "Critical violation handled: deleted message {MessageId}, notified user (no ban/warning for trusted user)",
-            messageId);
+            intent.MessageId);
 
         return new ModerationResult
         {
@@ -728,14 +664,13 @@ public class BotModerationService : IBotModerationService
     /// <summary>
     /// Checks if user is a Telegram system account (777000, 1087968824, etc.) and returns error if moderation is attempted.
     /// </summary>
-    private async Task<ModerationResult?> CheckServiceAccountProtectionAsync(long userId, CancellationToken cancellationToken)
+    private ModerationResult? CheckServiceAccountProtection(UserIdentity user)
     {
-        if (TelegramConstants.IsSystemUser(userId))
+        if (TelegramConstants.IsSystemUser(user.Id))
         {
-            var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
             _logger.LogWarning(
                 "Moderation action blocked for Telegram system account ({User})",
-                user.ToLogDebug(userId));
+                user.ToLogDebug());
 
             return ModerationResult.SystemAccountBlocked();
         }
@@ -747,7 +682,7 @@ public class BotModerationService : IBotModerationService
     /// Safely executes an audit operation, logging any failures without blocking the main operation.
     /// Telegram operations are the primary job; audit/tracking is secondary.
     /// </summary>
-    private async Task SafeAuditAsync(Func<Task> auditAction, string operationName, long userId, long? chatId = null)
+    private async Task SafeAuditAsync(Func<Task> auditAction, string operationName, UserIdentity user, ChatIdentity? chat = null)
     {
         try
         {
@@ -756,8 +691,8 @@ public class BotModerationService : IBotModerationService
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "Failed to audit {Operation} (user: {UserId}, chat: {ChatId}) - Telegram operation succeeded",
-                operationName, userId, chatId);
+                "Failed to audit {Operation} (user: {User}, chat: {Chat}) - Telegram operation succeeded",
+                operationName, user.ToLogDebug(), chat?.ToLogDebug());
         }
     }
 

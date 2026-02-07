@@ -1,11 +1,9 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
@@ -41,18 +39,15 @@ public class BotBanHandler : IBotBanHandler
 
     /// <inheritdoc />
     public async Task<BanResult> BanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         long? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-
         _logger.LogDebug(
             "Executing ban for user {User} by {Executor}",
-            user.ToLogDebug(userId), executor.GetDisplayText());
+            user.ToLogDebug(), executor.GetDisplayText());
 
         try
         {
@@ -66,36 +61,36 @@ public class BotBanHandler : IBotBanHandler
             {
                 try
                 {
-                    await apiClient.BanChatMemberAsync(chatId, userId, ct: ct);
+                    await apiClient.BanChatMemberAsync(chatId, user.Id, ct: ct);
                     Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to ban user {UserId} in chat {ChatId}", userId, chatId);
+                    _logger.LogWarning(ex, "Failed to ban user {UserId} in chat {ChatId}", user.Id, chatId);
                     Interlocked.Increment(ref failCount);
                 }
             });
 
             // Update source of truth: is_banned column on telegram_users
-            await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: null, cancellationToken);
+            await _userRepository.SetBanStatusAsync(user.Id, isBanned: true, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
                 "Ban completed for {User}: {Success} succeeded, {Failed} failed",
-                user.ToLogInfo(userId), successCount, failCount);
+                user.ToLogInfo(), successCount, failCount);
 
             return BanResult.Succeeded(successCount, failCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute ban for user {User}", user.ToLogDebug(userId));
+            _logger.LogError(ex, "Failed to execute ban for user {User}", user.ToLogDebug());
             return BanResult.Failed(ex.Message);
         }
     }
 
     /// <inheritdoc />
-    public async Task<BanResult> BanAsync(
-        User user,
-        Chat chat,
+    public async Task<BanResult> BanInChatAsync(
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         string? reason,
         long? triggeredByMessageId = null,
@@ -129,19 +124,16 @@ public class BotBanHandler : IBotBanHandler
 
     /// <inheritdoc />
     public async Task<TempBanResult> TempBanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         TimeSpan duration,
         string? reason,
         long? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-
         _logger.LogDebug(
             "Executing temp ban for user {User} for {Duration} by {Executor}",
-            user.ToLogDebug(userId), duration, executor.GetDisplayText());
+            user.ToLogDebug(), duration, executor.GetDisplayText());
 
         try
         {
@@ -158,22 +150,22 @@ public class BotBanHandler : IBotBanHandler
             {
                 try
                 {
-                    await apiClient.BanChatMemberAsync(chatId, userId, ct: ct);
+                    await apiClient.BanChatMemberAsync(chatId, user.Id, ct: ct);
                     Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to temp ban user {UserId} in chat {ChatId}", userId, chatId);
+                    _logger.LogWarning(ex, "Failed to temp ban user {UserId} in chat {ChatId}", user.Id, chatId);
                     Interlocked.Increment(ref failCount);
                 }
             });
 
             // Update source of truth: is_banned column with expiry
-            await _userRepository.SetBanStatusAsync(userId, isBanned: true, expiresAt: expiresAt, cancellationToken);
+            await _userRepository.SetBanStatusAsync(user.Id, isBanned: true, expiresAt: expiresAt, cancellationToken);
 
             // Schedule automatic unban via Quartz.NET
             var payload = new TempbanExpiryJobPayload(
-                UserId: userId,
+                UserId: user.Id,
                 Reason: reason ?? "Temporary ban",
                 ExpiresAt: expiresAt);
 
@@ -188,30 +180,27 @@ public class BotBanHandler : IBotBanHandler
             _logger.LogInformation(
                 "Temp ban completed for {User}: {Success} succeeded, {Failed} failed. " +
                 "Expires at {ExpiresAt} (JobId: {JobId})",
-                user.ToLogInfo(userId), successCount, failCount, expiresAt, jobId);
+                user.ToLogInfo(), successCount, failCount, expiresAt, jobId);
 
             return TempBanResult.Succeeded(successCount, expiresAt, failCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute temp ban for user {User}", user.ToLogDebug(userId));
+            _logger.LogError(ex, "Failed to execute temp ban for user {User}", user.ToLogDebug());
             return TempBanResult.Failed(ex.Message);
         }
     }
 
     /// <inheritdoc />
     public async Task<UnbanResult> UnbanAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-
         _logger.LogDebug(
             "Executing unban for user {User} by {Executor}",
-            user.ToLogDebug(userId), executor.GetDisplayText());
+            user.ToLogDebug(), executor.GetDisplayText());
 
         try
         {
@@ -226,66 +215,63 @@ public class BotBanHandler : IBotBanHandler
             {
                 try
                 {
-                    await apiClient.UnbanChatMemberAsync(chatId, userId, onlyIfBanned: true, ct: ct);
+                    await apiClient.UnbanChatMemberAsync(chatId, user.Id, onlyIfBanned: true, ct: ct);
                     Interlocked.Increment(ref successCount);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to unban user {UserId} in chat {ChatId}", userId, chatId);
+                    _logger.LogWarning(ex, "Failed to unban user {UserId} in chat {ChatId}", user.Id, chatId);
                     Interlocked.Increment(ref failCount);
                 }
             });
 
             // Update source of truth: clear is_banned flag
-            await _userRepository.SetBanStatusAsync(userId, isBanned: false, expiresAt: null, cancellationToken);
+            await _userRepository.SetBanStatusAsync(user.Id, isBanned: false, expiresAt: null, cancellationToken);
 
             _logger.LogInformation(
                 "Unban completed for {User}: {Success} succeeded, {Failed} failed",
-                user.ToLogInfo(userId), successCount, failCount);
+                user.ToLogInfo(), successCount, failCount);
 
             return UnbanResult.Succeeded(successCount, failCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute unban for user {User}", user.ToLogDebug(userId));
+            _logger.LogError(ex, "Failed to execute unban for user {User}", user.ToLogDebug());
             return UnbanResult.Failed(ex.Message);
         }
     }
 
     /// <inheritdoc />
     public async Task<BanResult> KickFromChatAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var user = await _userRepository.GetByTelegramIdAsync(userId, cancellationToken);
-
         _logger.LogDebug(
-            "Executing kick for user {User} from chat {ChatId} by {Executor}",
-            user.ToLogDebug(userId), chatId, executor.GetDisplayText());
+            "Executing kick for user {User} from chat {Chat} by {Executor}",
+            user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
 
         try
         {
             var apiClient = await _botClientFactory.GetApiClientAsync();
 
             // Ban then immediately unban (removes user from chat without permanent ban)
-            await apiClient.BanChatMemberAsync(chatId, userId, ct: cancellationToken);
-            await apiClient.UnbanChatMemberAsync(chatId, userId, onlyIfBanned: true, ct: cancellationToken);
+            await apiClient.BanChatMemberAsync(chat.Id, user.Id, ct: cancellationToken);
+            await apiClient.UnbanChatMemberAsync(chat.Id, user.Id, onlyIfBanned: true, ct: cancellationToken);
 
             _logger.LogInformation(
-                "Kicked {User} from chat {ChatId}",
-                user.ToLogInfo(userId), chatId);
+                "Kicked {User} from chat {Chat}",
+                user.ToLogInfo(), chat.ToLogInfo());
 
             // NOTE: No database state change - kick is a one-time action, not a persistent ban
             return BanResult.Succeeded(chatsAffected: 1);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to kick user {User} from chat {ChatId}",
-                user.ToLogDebug(userId), chatId);
+            _logger.LogError(ex, "Failed to kick user {User} from chat {Chat}",
+                user.ToLogDebug(), chat.ToLogDebug());
             return BanResult.Failed(ex.Message);
         }
     }

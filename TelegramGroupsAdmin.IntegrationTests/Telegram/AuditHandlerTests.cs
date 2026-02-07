@@ -145,7 +145,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatId, ValidUserId, executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(ValidUserId), executor);
         }
 
         // Assert - Verify record was inserted with FK intact
@@ -174,7 +174,7 @@ public class AuditHandlerTests
         {
             using var scope = _serviceProvider!.CreateScope();
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(TestMessageId, ChatId, NonExistentUserId, executor);
+            await auditHandler.LogDeleteAsync(TestMessageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(NonExistentUserId), executor);
         });
 
         // Verify it's specifically an FK constraint violation
@@ -196,7 +196,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatId, 0L, executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(0L), executor);
         }
 
         // Assert - Verify record was inserted
@@ -227,7 +227,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogBanAsync(ValidUserId, executor, "Test ban reason");
+            await auditHandler.LogBanAsync(UserIdentity.FromId(ValidUserId), executor, "Test ban reason");
         }
 
         // Assert
@@ -253,7 +253,7 @@ public class AuditHandlerTests
         {
             using var scope = _serviceProvider!.CreateScope();
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogBanAsync(NonExistentUserId, executor, "Test ban");
+            await auditHandler.LogBanAsync(UserIdentity.FromId(NonExistentUserId), executor, "Test ban");
         });
 
         Assert.That(ex!.InnerException?.Message, Does.Contain("foreign key").Or.Contain("violates").IgnoreCase);
@@ -275,7 +275,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogWarnAsync(ValidUserId, executor, "Test warning");
+            await auditHandler.LogWarnAsync(UserIdentity.FromId(ValidUserId), executor, "Test warning");
         }
 
         // Assert
@@ -301,7 +301,7 @@ public class AuditHandlerTests
         {
             using var scope = _serviceProvider!.CreateScope();
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogWarnAsync(NonExistentUserId, executor, "Test warning");
+            await auditHandler.LogWarnAsync(UserIdentity.FromId(NonExistentUserId), executor, "Test warning");
         });
     }
 
@@ -322,7 +322,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatId, ValidUserId, executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(ValidUserId), executor);
         }
 
         // Assert - Verify exclusive arc: only system_identifier is set

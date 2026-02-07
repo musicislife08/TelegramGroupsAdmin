@@ -3,9 +3,9 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
-using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
@@ -24,7 +24,6 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
     private readonly IMessageQueryService _messageQueryService;
     private readonly IMessageBackfillService _messageBackfillService;
     private readonly IBotMessageService _botMessageService;
-    private readonly IManagedChatsRepository _chatsRepository;
     private readonly IJobScheduler _jobScheduler;
     private readonly ILogger<BotModerationMessageHandler> _logger;
 
@@ -33,7 +32,6 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
         IMessageQueryService messageQueryService,
         IMessageBackfillService messageBackfillService,
         IBotMessageService botMessageService,
-        IManagedChatsRepository chatsRepository,
         IJobScheduler jobScheduler,
         ILogger<BotModerationMessageHandler> logger)
     {
@@ -41,7 +39,6 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
         _messageQueryService = messageQueryService;
         _messageBackfillService = messageBackfillService;
         _botMessageService = botMessageService;
-        _chatsRepository = chatsRepository;
         _jobScheduler = jobScheduler;
         _logger = logger;
     }
@@ -49,16 +46,13 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
     /// <inheritdoc />
     public async Task<BackfillResult> EnsureExistsAsync(
         long messageId,
-        long chatId,
+        ChatIdentity chat,
         Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-
         _logger.LogDebug(
             "Ensuring message {MessageId} exists in database for {Chat}",
-            messageId, chat.ToLogDebug(chatId));
+            messageId, chat.ToLogDebug());
 
         // Check if message already exists
         var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
@@ -72,7 +66,7 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
         if (telegramMessage != null)
         {
             var backfilled = await _messageBackfillService.BackfillIfMissingAsync(
-                messageId, chatId, telegramMessage, cancellationToken);
+                messageId, chat.Id, telegramMessage, cancellationToken);
 
             if (backfilled)
             {
@@ -94,29 +88,26 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
 
     /// <inheritdoc />
     public async Task<DeleteResult> DeleteAsync(
-        long chatId,
+        ChatIdentity chat,
         long messageId,
         Actor executor,
         CancellationToken cancellationToken = default)
     {
-        // Fetch once for logging
-        var chat = await _chatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-
         _logger.LogDebug(
             "Deleting message {MessageId} from {Chat} by {Executor}",
-            messageId, chat.ToLogDebug(chatId), executor.GetDisplayText());
+            messageId, chat.ToLogDebug(), executor.GetDisplayText());
 
         try
         {
             await _botMessageService.DeleteAndMarkMessageAsync(
-                chatId,
+                chat.Id,
                 (int)messageId,
                 deletionSource: "moderation_action",
                 cancellationToken);
 
             _logger.LogInformation(
                 "Deleted message {MessageId} from {Chat}",
-                messageId, chat.ToLogInfo(chatId));
+                messageId, chat.ToLogInfo());
 
             return DeleteResult.Succeeded(messageDeleted: true);
         }
@@ -126,7 +117,7 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
             // (message may already be deleted, API error, etc.)
             _logger.LogWarning(ex,
                 "Failed to delete message {MessageId} in {Chat}",
-                messageId, chat.ToLogDebug(chatId));
+                messageId, chat.ToLogDebug());
 
             return DeleteResult.Failed(ex.Message);
         }

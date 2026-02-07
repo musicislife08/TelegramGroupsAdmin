@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -237,13 +238,14 @@ public class ReportCallbackService : IReportCallbackService
         TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        var messageId = report.MessageId ?? 0;
-
         var result = await moderationService.BanUserAsync(
-            userId,
-            messageId,
-            executor,
-            "Marked as spam via report review",
+            new BanIntent
+            {
+                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
+                Executor = executor,
+                Reason = "Marked as spam via report review",
+                MessageId = report.MessageId
+            },
             cancellationToken);
 
         if (result.Success)
@@ -268,15 +270,15 @@ public class ReportCallbackService : IReportCallbackService
         TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        var messageId = report.MessageId ?? 0;
-        var chatId = report.ChatId;
-
         var result = await moderationService.WarnUserAsync(
-            userId,
-            messageId,
-            executor,
-            "Warning issued via report review",
-            chatId,
+            new WarnIntent
+            {
+                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(report.ChatId),
+                Executor = executor,
+                Reason = "Warning issued via report review",
+                MessageId = report.MessageId
+            },
             cancellationToken);
 
         if (result.Success)
@@ -301,15 +303,17 @@ public class ReportCallbackService : IReportCallbackService
         TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
-        var messageId = report.MessageId ?? 0;
         var duration = CommandConstants.DefaultTempBanDuration;
 
         var result = await moderationService.TempBanUserAsync(
-            userId,
-            messageId,
-            executor,
-            "Temp banned via report review",
-            duration,
+            new TempBanIntent
+            {
+                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
+                Executor = executor,
+                Reason = "Temp banned via report review",
+                MessageId = report.MessageId,
+                Duration = duration
+            },
             cancellationToken);
 
         if (result.Success)
@@ -376,10 +380,12 @@ public class ReportCallbackService : IReportCallbackService
     {
         // Ban the impersonator globally
         var result = await moderationService.BanUserAsync(
-            userId,
-            0, // No specific message
-            executor,
-            "Confirmed impersonation scam",
+            new BanIntent
+            {
+                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
+                Executor = executor,
+                Reason = "Confirmed impersonation scam"
+            },
             cancellationToken);
 
         if (result.Success)

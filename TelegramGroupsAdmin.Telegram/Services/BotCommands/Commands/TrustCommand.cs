@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -94,10 +97,13 @@ public class TrustCommand : IBotCommand
             var reason = $"Untrusted by admin in chat {chatName}";
 
             var result = await _moderationService.UntrustUserAsync(
-                userId: targetUser.Id,
-                executor: executor,
-                reason: reason,
-                cancellationToken: cancellationToken);
+                new UntrustIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = reason
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
@@ -122,10 +128,13 @@ public class TrustCommand : IBotCommand
             var reason = $"Trusted by admin in chat {chatName}";
 
             var result = await _moderationService.TrustUserAsync(
-                userId: targetUser.Id,
-                executor: executor,
-                reason: reason,
-                cancellationToken: cancellationToken);
+                new TrustIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = reason
+                },
+                cancellationToken);
 
             if (!result.Success)
             {

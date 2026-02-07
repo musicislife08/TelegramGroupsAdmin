@@ -5,7 +5,9 @@ using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -80,11 +82,14 @@ public class WelcomeTimeoutJob(
             try
             {
                 await _moderationService.KickUserFromChatAsync(
-                    userId: payload.UserId,
-                    chatId: payload.ChatId,
-                    executor: Core.Models.Actor.WelcomeFlow,
-                    reason: "Welcome timeout",
-                    cancellationToken: cancellationToken);
+                    new KickIntent
+                    {
+                        User = UserIdentity.FromId(payload.UserId),
+                        Chat = ChatIdentity.FromId(payload.ChatId),
+                        Executor = Core.Models.Actor.WelcomeFlow,
+                        Reason = "Welcome timeout"
+                    },
+                    cancellationToken);
 
                 _logger.LogInformation(
                     "Kicked user {UserId} from chat {ChatId} due to welcome timeout",

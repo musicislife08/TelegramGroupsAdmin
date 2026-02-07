@@ -71,7 +71,7 @@ public class BanHandlerTests
         _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
 
         // Act
-        var result = await _handler.BanAsync(userId, executor, "Spam violation");
+        var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Spam violation");
 
         // Assert
         Assert.Multiple(() =>
@@ -100,7 +100,7 @@ public class BanHandlerTests
             .ThrowsAsync(new Exception("Chat error 2"));
 
         // Act
-        var result = await _handler.BanAsync(userId, executor, "Repeated violations", 100L);
+        var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Repeated violations", 100L);
 
         // Assert
         Assert.Multiple(() =>
@@ -123,7 +123,7 @@ public class BanHandlerTests
             .Returns(_ => throw new InvalidOperationException("Network error"));
 
         // Act
-        var result = await _handler.BanAsync(userId, executor, "Test reason");
+        var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Test reason");
 
         // Assert
         Assert.Multiple(() =>
@@ -144,7 +144,7 @@ public class BanHandlerTests
         _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002 }.AsReadOnly());
 
         // Act
-        var result = await _handler.BanAsync(userId, executor, reason: null);
+        var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, reason: null);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -160,7 +160,7 @@ public class BanHandlerTests
         _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
 
         // Act
-        await _handler.BanAsync(userId, executor, "Spam violation", 42L);
+        await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Spam violation", 42L);
 
         // Assert - Verify ban status was set on user (source of truth)
         await _mockUserRepository.Received(1).SetBanStatusAsync(
@@ -193,7 +193,7 @@ public class BanHandlerTests
             .Returns("job-123");
 
         // Act
-        var result = await _handler.TempBanAsync(userId, executor, duration, "Timeout for spam");
+        var result = await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, duration, "Timeout for spam");
 
         // Assert
         Assert.Multiple(() =>
@@ -232,7 +232,7 @@ public class BanHandlerTests
             .Returns("job-123");
 
         // Act
-        await _handler.TempBanAsync(userId, executor, duration, "Timeout", 42L);
+        await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, duration, "Timeout", 42L);
 
         // Assert - Verify ban status was set WITH expiry
         await _mockUserRepository.Received(1).SetBanStatusAsync(
@@ -264,7 +264,7 @@ public class BanHandlerTests
             .Returns("job-456");
 
         // Act
-        var result = await _handler.TempBanAsync(userId, executor, duration, reason: null);
+        var result = await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, duration, reason: null);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -289,7 +289,7 @@ public class BanHandlerTests
             .Returns(_ => throw new Exception("Telegram API error"));
 
         // Act
-        var result = await _handler.TempBanAsync(userId, executor, TimeSpan.FromHours(1), "Test");
+        var result = await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
         Assert.Multiple(() =>
@@ -313,7 +313,7 @@ public class BanHandlerTests
         _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003, -100004 }.AsReadOnly());
 
         // Act
-        var result = await _handler.UnbanAsync(userId, executor, "False positive");
+        var result = await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "False positive");
 
         // Assert
         Assert.Multiple(() =>
@@ -345,7 +345,7 @@ public class BanHandlerTests
             .ThrowsAsync(new Exception("Chat error"));
 
         // Act
-        var result = await _handler.UnbanAsync(userId, executor, "Appeal approved");
+        var result = await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "Appeal approved");
 
         // Assert
         Assert.Multiple(() =>
@@ -367,7 +367,7 @@ public class BanHandlerTests
             .Returns(_ => throw new Exception("Telegram API error"));
 
         // Act
-        var result = await _handler.UnbanAsync(userId, executor, "Test");
+        var result = await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "Test");
 
         // Assert
         Assert.Multiple(() =>
@@ -406,7 +406,7 @@ public class BanHandlerTests
             });
 
         // Act
-        await _handler.UnbanAsync(userId, executor, "Test");
+        await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "Test");
 
         // Assert - Telegram unban should happen before DB update
         Assert.That(callOrder, Is.EqualTo(new[] { "TelegramUnban", "SetBanStatus" }));
@@ -414,10 +414,10 @@ public class BanHandlerTests
 
     #endregion
 
-    #region BanAsync (Single-Chat Overload) Tests
+    #region BanInChatAsync Tests
 
     [Test]
-    public async Task BanAsync_SingleChat_SuccessfulBan_ReturnsSuccessWithOneChat()
+    public async Task BanInChatAsync_SingleChat_SuccessfulBan_ReturnsSuccessWithOneChat()
     {
         // Arrange
         var user = new User { Id = 12345, FirstName = "Spammer" };
@@ -425,7 +425,7 @@ public class BanHandlerTests
         var executor = Actor.AutoDetection;
 
         // Act
-        var result = await _handler.BanAsync(user, chat, executor, "Lazy ban sync");
+        var result = await _handler.BanInChatAsync(UserIdentity.FromId(user.Id), ChatIdentity.FromId(chat.Id), executor, "Lazy ban sync");
 
         // Assert
         Assert.Multiple(() =>
@@ -444,7 +444,7 @@ public class BanHandlerTests
     }
 
     [Test]
-    public async Task BanAsync_SingleChat_TelegramApiFails_ReturnsFailure()
+    public async Task BanInChatAsync_SingleChat_TelegramApiFails_ReturnsFailure()
     {
         // Arrange
         var user = new User { Id = 12345, FirstName = "Test" };
@@ -455,7 +455,7 @@ public class BanHandlerTests
             .ThrowsAsync(new Exception("User is admin"));
 
         // Act
-        var result = await _handler.BanAsync(user, chat, executor, "Test");
+        var result = await _handler.BanInChatAsync(UserIdentity.FromId(user.Id), ChatIdentity.FromId(chat.Id), executor, "Test");
 
         // Assert
         Assert.Multiple(() =>
@@ -466,14 +466,14 @@ public class BanHandlerTests
     }
 
     [Test]
-    public async Task BanAsync_SingleChat_NullReason_StillSucceeds()
+    public async Task BanInChatAsync_SingleChat_NullReason_StillSucceeds()
     {
         // Arrange
         var user = new User { Id = 12345, FirstName = "Test" };
         var chat = new Chat { Id = -100123456789, Title = "Test Group" };
 
         // Act
-        var result = await _handler.BanAsync(user, chat, Actor.AutoDetection, reason: null);
+        var result = await _handler.BanInChatAsync(UserIdentity.FromId(user.Id), ChatIdentity.FromId(chat.Id), Actor.AutoDetection, reason: null);
 
         // Assert
         Assert.That(result.Success, Is.True);

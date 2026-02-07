@@ -1,11 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -120,11 +122,14 @@ public class BanCallbackService : IBanCallbackService
             // Execute ban (resolve from scope since BotModerationService is Scoped)
             var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             var result = await moderationService.BanUserAsync(
-                userId: targetUserId,
-                messageId: null, // No trigger message for fuzzy search bans
-                executor: executor,
-                reason: ModerationConstants.DefaultBanReason,
-                cancellationToken: cancellationToken);
+                new BanIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = ModerationConstants.DefaultBanReason
+                    // No trigger message or chat for fuzzy search bans
+                },
+                cancellationToken);
 
             if (result.Success)
             {
