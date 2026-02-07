@@ -965,7 +965,7 @@ public class WelcomeService(
             new RestorePermissionsIntent
             {
                 User = UserIdentity.From(user),
-                Chat = new ChatIdentity(groupChat.Id, groupChat.Title),
+                Chat = ChatIdentity.From(groupChat),
                 Executor = Actor.WelcomeFlow,
                 Reason = ReasonCompletedWelcomeDm
             },

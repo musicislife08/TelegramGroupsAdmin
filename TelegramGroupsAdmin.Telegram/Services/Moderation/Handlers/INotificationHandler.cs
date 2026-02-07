@@ -62,6 +62,6 @@ public interface INotificationHandler
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<NotificationResult> NotifyUserCriticalViolationAsync(
         UserIdentity user,
-        List<string> violations,
+        IReadOnlyList<string> violations,
         CancellationToken cancellationToken = default);
 }

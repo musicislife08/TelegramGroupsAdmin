@@ -399,7 +399,7 @@ public class NotificationHandler : INotificationHandler
     /// <inheritdoc />
     public async Task<NotificationResult> NotifyUserCriticalViolationAsync(
         UserIdentity user,
-        List<string> violations,
+        IReadOnlyList<string> violations,
         CancellationToken cancellationToken = default)
     {
         try

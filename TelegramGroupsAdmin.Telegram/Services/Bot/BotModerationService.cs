@@ -119,17 +119,7 @@ public class BotModerationService : IBotModerationService
             "ban", intent.User);
 
         // Business rule: Bans always revoke trust
-        var untrustReason = string.IsNullOrWhiteSpace(intent.Reason)
-            ? "Trust revoked due to ban"
-            : $"Trust revoked due to ban: {intent.Reason}";
-        var untrustResult = await _trustHandler.UntrustAsync(intent.User, intent.Executor, untrustReason, cancellationToken);
-
-        if (untrustResult.Success)
-        {
-            await SafeAuditAsync(
-                () => _auditHandler.LogUntrustAsync(intent.User, intent.Executor, untrustReason, cancellationToken),
-                "untrust (from ban)", intent.User);
-        }
+        var trustRevoked = await RevokeTrustOnBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
 
         // Schedule cleanup of user's messages
         await SafeExecuteAsync(
@@ -180,7 +170,7 @@ public class BotModerationService : IBotModerationService
             Success = true,
             ChatsAffected = banResult.ChatsAffected,
             MessageDeleted = deleteResult.MessageDeleted,
-            TrustRemoved = untrustResult.Success
+            TrustRemoved = trustRevoked
         };
     }
 
@@ -204,21 +194,12 @@ public class BotModerationService : IBotModerationService
             "ban", intent.User);
 
         // Business rule: Bans always revoke trust
-        var untrustReason = string.IsNullOrWhiteSpace(intent.Reason)
-            ? "Trust revoked due to ban"
-            : $"Trust revoked due to ban: {intent.Reason}";
-        var untrustResult = await _trustHandler.UntrustAsync(
-            intent.User, intent.Executor, untrustReason, cancellationToken);
-
-        if (untrustResult.Success)
-        {
-            await SafeAuditAsync(
-                () => _auditHandler.LogUntrustAsync(intent.User, intent.Executor, untrustReason, cancellationToken),
-                "untrust (from ban)", intent.User);
-        }
+        var trustRevoked = await RevokeTrustOnBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
 
         // Notify admins
-        await _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
+        await SafeExecuteAsync(
+            () => _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            $"Ban notification for user {intent.User.Id}");
 
         // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
         await SafeExecuteAsync(
@@ -244,7 +225,7 @@ public class BotModerationService : IBotModerationService
         {
             Success = true,
             ChatsAffected = banResult.ChatsAffected,
-            TrustRemoved = untrustResult.Success
+            TrustRemoved = trustRevoked
         };
     }
 
@@ -268,7 +249,9 @@ public class BotModerationService : IBotModerationService
             "warning", intent.User, intent.Chat);
 
         // Notify user about warning
-        await _notificationHandler.NotifyUserWarningAsync(intent.User, warnResult.WarningCount, intent.Reason, cancellationToken);
+        await SafeExecuteAsync(
+            () => _notificationHandler.NotifyUserWarningAsync(intent.User, warnResult.WarningCount, intent.Reason, cancellationToken),
+            $"Warning notification for user {intent.User.Id}");
 
         var result = new ModerationResult
         {
@@ -304,17 +287,12 @@ public class BotModerationService : IBotModerationService
                     "auto-ban (from warnings)", intent.User, intent.Chat);
 
                 // Business rule: Bans always revoke trust
-                var untrustReason = $"Trust revoked: {autoBanReason}";
-                var untrustResult = await _trustHandler.UntrustAsync(intent.User, Actor.AutoBan, untrustReason, cancellationToken);
-                if (untrustResult.Success)
-                {
-                    await SafeAuditAsync(
-                        () => _auditHandler.LogUntrustAsync(intent.User, Actor.AutoBan, untrustReason, cancellationToken),
-                        "untrust (from auto-ban)", intent.User, intent.Chat);
-                }
+                var trustRevoked = await RevokeTrustOnBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken);
 
                 // Notify admins (simple notification - no detection context for warning-based bans)
-                await _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken);
+                await SafeExecuteAsync(
+                    () => _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken),
+                    $"Auto-ban notification for user {intent.User.Id}");
 
                 // Schedule cleanup of user's messages
                 await SafeExecuteAsync(
@@ -325,7 +303,7 @@ public class BotModerationService : IBotModerationService
                 {
                     AutoBanTriggered = true,
                     ChatsAffected = banResult.ChatsAffected,
-                    TrustRemoved = untrustResult.Success
+                    TrustRemoved = trustRevoked
                 };
             }
             else
@@ -450,7 +428,9 @@ public class BotModerationService : IBotModerationService
             "temp ban", intent.User);
 
         // Notify user about temp ban with rejoin info
-        await _notificationHandler.NotifyUserTempBanAsync(intent.User, intent.Duration, tempBanResult.ExpiresAt, intent.Reason, cancellationToken);
+        await SafeExecuteAsync(
+            () => _notificationHandler.NotifyUserTempBanAsync(intent.User, intent.Duration, tempBanResult.ExpiresAt, intent.Reason, cancellationToken),
+            $"Temp-ban notification for user {intent.User.Id}");
 
         return new ModerationResult
         {
@@ -676,6 +656,28 @@ public class BotModerationService : IBotModerationService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Business rule: Bans always revoke trust. Handles the untrust call and its audit entry.
+    /// Returns true if trust was successfully revoked.
+    /// </summary>
+    private async Task<bool> RevokeTrustOnBanAsync(
+        UserIdentity user, Actor executor, string? banReason, CancellationToken cancellationToken)
+    {
+        var untrustReason = string.IsNullOrWhiteSpace(banReason)
+            ? "Trust revoked due to ban"
+            : $"Trust revoked due to ban: {banReason}";
+        var untrustResult = await _trustHandler.UntrustAsync(user, executor, untrustReason, cancellationToken);
+
+        if (untrustResult.Success)
+        {
+            await SafeAuditAsync(
+                () => _auditHandler.LogUntrustAsync(user, executor, untrustReason, cancellationToken),
+                "untrust (from ban)", user);
+        }
+
+        return untrustResult.Success;
     }
 
     /// <summary>

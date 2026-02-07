@@ -30,7 +30,7 @@ public abstract record ModerationIntent
 // Spam / Ban Intents
 // ═══════════════════════════════════════════════════════════════════════════════
 
-public record SpamBanIntent : ModerationIntent
+public sealed record SpamBanIntent : ModerationIntent
 {
     public required long MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
@@ -41,7 +41,7 @@ public record SpamBanIntent : ModerationIntent
     public Message? TelegramMessage { get; init; }
 }
 
-public record BanIntent : ModerationIntent
+public sealed record BanIntent : ModerationIntent
 {
     public long? MessageId { get; init; }
 
@@ -51,19 +51,19 @@ public record BanIntent : ModerationIntent
     public ChatIdentity? Chat { get; init; }
 }
 
-public record SyncBanIntent : ModerationIntent
+public sealed record SyncBanIntent : ModerationIntent
 {
     public required ChatIdentity Chat { get; init; }
     public long? TriggeredByMessageId { get; init; }
 }
 
-public record TempBanIntent : ModerationIntent
+public sealed record TempBanIntent : ModerationIntent
 {
     public long? MessageId { get; init; }
     public required TimeSpan Duration { get; init; }
 }
 
-public record UnbanIntent : ModerationIntent
+public sealed record UnbanIntent : ModerationIntent
 {
     public bool RestoreTrust { get; init; }
 }
@@ -72,27 +72,27 @@ public record UnbanIntent : ModerationIntent
 // Warning / Trust Intents
 // ═══════════════════════════════════════════════════════════════════════════════
 
-public record WarnIntent : ModerationIntent
+public sealed record WarnIntent : ModerationIntent
 {
     public long? MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
 }
 
-public record TrustIntent : ModerationIntent;
+public sealed record TrustIntent : ModerationIntent;
 
-public record UntrustIntent : ModerationIntent;
+public sealed record UntrustIntent : ModerationIntent;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Message / Restriction Intents
 // ═══════════════════════════════════════════════════════════════════════════════
 
-public record DeleteMessageIntent : ModerationIntent
+public sealed record DeleteMessageIntent : ModerationIntent
 {
     public required long MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
 }
 
-public record RestrictIntent : ModerationIntent
+public sealed record RestrictIntent : ModerationIntent
 {
     public long? MessageId { get; init; }
     public required TimeSpan Duration { get; init; }
@@ -103,12 +103,12 @@ public record RestrictIntent : ModerationIntent
 // Chat Management Intents
 // ═══════════════════════════════════════════════════════════════════════════════
 
-public record RestorePermissionsIntent : ModerationIntent
+public sealed record RestorePermissionsIntent : ModerationIntent
 {
     public required ChatIdentity Chat { get; init; }
 }
 
-public record KickIntent : ModerationIntent
+public sealed record KickIntent : ModerationIntent
 {
     public required ChatIdentity Chat { get; init; }
 }
@@ -117,7 +117,7 @@ public record KickIntent : ModerationIntent
 // Violation Intents (automated detection)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-public record MalwareViolationIntent : ModerationIntent
+public sealed record MalwareViolationIntent : ModerationIntent
 {
     public required long MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
@@ -129,11 +129,11 @@ public record MalwareViolationIntent : ModerationIntent
     public Message? TelegramMessage { get; init; }
 }
 
-public record CriticalViolationIntent : ModerationIntent
+public sealed record CriticalViolationIntent : ModerationIntent
 {
     public required long MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
-    public required List<string> Violations { get; init; }
+    public required IReadOnlyList<string> Violations { get; init; }
 
     /// <summary>
     /// Optional Telegram Message object for rich notification content.
