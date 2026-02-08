@@ -364,13 +364,6 @@ public class WelcomeService(
 
             var welcomeMessageId = verifyingMessageId.Value;
 
-            // Save message to database for FK constraint satisfaction
-            await messageService.SaveBotMessageAsync(
-                chatMemberUpdate.Chat.Id,
-                welcomeMessageId,
-                messageText,
-                cancellationToken);
-
             logger.LogDebug(
                 "Updated verifying message to welcome for {User} in {Chat} (mode: {Mode})",
                 user.ToLogDebug(),

@@ -137,6 +137,20 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         ImpersonationCheckResult? bestMatch = null;
         int highestScore = 0;
 
+        // Pre-compute user's photo hash ONCE before the loop to avoid N+1
+        byte[]? userPhotoHash = null;
+        if (!string.IsNullOrWhiteSpace(photoPath) && allAdmins.Any(a => !string.IsNullOrWhiteSpace(a.UserPhotoPath)))
+        {
+            try
+            {
+                userPhotoHash = await _photoHashService.ComputePhotoHashAsync(photoPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to compute photo hash for {User}", user.ToLogDebug());
+            }
+        }
+
         foreach (var admin in allAdmins)
         {
             // Skip self-match (user can't impersonate themselves)
@@ -166,7 +180,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             }
 
             // Check photo similarity (50 points)
-            var (isPhotoMatch, photoSim) = await ComparePhotosAsync(photoPath, admin.UserPhotoPath);
+            var (isPhotoMatch, photoSim) = await ComparePhotosAsync(photoPath, admin.UserPhotoPath, userPhotoHash);
             photoSimilarity = photoSim;
 
             if (isPhotoMatch)
