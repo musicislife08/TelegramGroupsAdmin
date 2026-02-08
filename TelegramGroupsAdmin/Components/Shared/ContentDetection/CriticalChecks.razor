@@ -198,7 +198,8 @@
                 new() { CheckName = "Translation", DisplayName = "Multi-Language", Description = "Detect excessive language mixing", Category = "Spam", Enabled = _config.Translation.Enabled, AlwaysRun = _config.Translation.AlwaysRun },
                 new() { CheckName = "Spacing", DisplayName = "Spacing Check", Description = "Detect excessive spacing/formatting abuse", Category = "Spam", Enabled = _config.Spacing.Enabled, AlwaysRun = _config.Spacing.AlwaysRun },
                 new() { CheckName = "InvisibleChars", DisplayName = "Invisible Characters", Description = "Detect hidden Unicode characters", Category = "Spam", Enabled = _config.InvisibleChars.Enabled, AlwaysRun = _config.InvisibleChars.AlwaysRun },
-                new() { CheckName = "SeoScraping", DisplayName = "SEO Scraping", Description = "Detect SEO spam and scraping patterns", Category = "Spam", Enabled = _config.SeoScraping.Enabled, AlwaysRun = _config.SeoScraping.AlwaysRun }
+                new() { CheckName = "SeoScraping", DisplayName = "SEO Scraping", Description = "Detect SEO spam and scraping patterns", Category = "Spam", Enabled = _config.SeoScraping.Enabled, AlwaysRun = _config.SeoScraping.AlwaysRun },
+                new() { CheckName = "ChannelReply", DisplayName = "Channel Reply", Description = "Boost score for replies to channel posts", Category = "Spam", Enabled = _config.ChannelReply.Enabled, AlwaysRun = _config.ChannelReply.AlwaysRun }
             ];
         }
         catch (Exception ex)
@@ -231,6 +232,7 @@
             case "Spacing": _config.Spacing.AlwaysRun = newValue; break;
             case "InvisibleChars": _config.InvisibleChars.AlwaysRun = newValue; break;
             case "SeoScraping": _config.SeoScraping.AlwaysRun = newValue; break;
+            case "ChannelReply": _config.ChannelReply.AlwaysRun = newValue; break;
         }
 
         StateHasChanged();

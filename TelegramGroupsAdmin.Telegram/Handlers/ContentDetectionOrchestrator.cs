@@ -90,7 +90,11 @@ public class ContentDetectionOrchestrator
                 UserName = message.From.ToLogDebug(),
                 ChatId = message.Chat.Id,
                 ChatName = message.Chat.ToLogDebug(),
-                PhotoLocalPath = photoFullPath // Pass full for ImageSpamCheck layers
+                PhotoLocalPath = photoFullPath, // Pass full for ImageSpamCheck layers
+                Metadata = new ContentCheckMetadata
+                {
+                    IsReplyToChannelPost = message.ReplyToMessage?.SenderChat is not null
+                }
             };
 
             var result = await coordinator.CheckAsync(request, cancellationToken);

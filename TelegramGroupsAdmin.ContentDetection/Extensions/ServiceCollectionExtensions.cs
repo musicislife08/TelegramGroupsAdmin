@@ -117,6 +117,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IContentCheckV2, Checks.ImageContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.VideoContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.FileScanningCheckV2>();  // Phase 4.17: File scanning (always_run=true)
+            services.AddScoped<IContentCheckV2, Checks.ChannelReplyContentCheckV2>();
 
             // Register HTTP client for external API calls
             services.AddHttpClient();

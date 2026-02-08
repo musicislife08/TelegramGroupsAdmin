@@ -132,4 +132,10 @@ public class ContentDetectionConfig
     /// Infrastructure settings (ClamAV, VirusTotal connection) remain in FileScanningConfig.
     /// </summary>
     public FileScanningDetectionConfig FileScanning { get; set; } = new();
+
+    /// <summary>
+    /// Channel reply spam signal configuration.
+    /// Adds confidence boost when message replies to a channel post.
+    /// </summary>
+    public ChannelReplyConfig ChannelReply { get; set; } = new();
 }
