@@ -69,6 +69,11 @@ public class UpdateRouterTests
         _mockScopeServiceProvider.GetService(typeof(IBotMessageService)).Returns(_mockMessageService);
         _mockScopeServiceProvider.GetService(typeof(IChatHealthRefreshOrchestrator)).Returns(_mockHealthOrchestrator);
 
+        // Wire up IBotUserService for bot message filtering (bot ID 999 won't match test user ID 456)
+        var mockBotUserService = Substitute.For<IBotUserService>();
+        mockBotUserService.GetBotIdAsync(Arg.Any<CancellationToken>()).Returns(999L);
+        _mockScopeServiceProvider.GetService(typeof(IBotUserService)).Returns(mockBotUserService);
+
         // Callback services return false by default (routes to welcome service)
         _mockBanCallbackService.CanHandle(Arg.Any<string>()).Returns(false);
         _mockReportCallbackService.CanHandle(Arg.Any<string>()).Returns(false);

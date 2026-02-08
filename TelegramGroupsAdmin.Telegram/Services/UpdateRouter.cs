@@ -97,6 +97,15 @@ public class UpdateRouter(
         // Handle new messages
         if (update.Message is { } message)
         {
+            // Skip bot's own messages - already saved when sent via BotMessageService
+            var userService = services.GetRequiredService<IBotUserService>();
+            var botId = await userService.GetBotIdAsync(cancellationToken);
+            if (message.From?.Id == botId)
+            {
+                logger.LogTrace("Skipping bot's own message {MessageId}", message.MessageId);
+                return;
+            }
+
             logger.LogDebug(
                 "Routing new message {MessageId} from chat {Chat}",
                 message.MessageId,
@@ -108,6 +117,15 @@ public class UpdateRouter(
         // Handle edited messages
         if (update.EditedMessage is { } editedMessage)
         {
+            // Skip bot's own edited messages - already saved via BotMessageService.EditAndUpdateMessageAsync
+            var userService = services.GetRequiredService<IBotUserService>();
+            var botId = await userService.GetBotIdAsync(cancellationToken);
+            if (editedMessage.From?.Id == botId)
+            {
+                logger.LogTrace("Skipping bot's own edited message {MessageId}", editedMessage.MessageId);
+                return;
+            }
+
             logger.LogDebug(
                 "Routing edited message {MessageId} from chat {Chat}",
                 editedMessage.MessageId,
