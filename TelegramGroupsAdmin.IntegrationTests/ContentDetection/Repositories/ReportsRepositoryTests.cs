@@ -182,7 +182,7 @@ public class ReportsRepositoryTests
             reportId,
             ReportStatus.Dismissed,
             reviewedBy: "moderator@example.com",
-            actionTaken: "FalsePositive",
+            actionTaken: "Dismiss",
             notes: "Not spam, legitimate message");
 
         // Assert
@@ -190,7 +190,7 @@ public class ReportsRepositoryTests
         Assert.That(updated, Is.Not.Null);
         Assert.That(updated!.Status, Is.EqualTo(ReportStatus.Dismissed));
         Assert.That(updated.ReviewedBy, Is.EqualTo("moderator@example.com"));
-        Assert.That(updated.ActionTaken, Is.EqualTo("FalsePositive"));
+        Assert.That(updated.ActionTaken, Is.EqualTo("Dismiss"));
         Assert.That(updated.AdminNotes, Is.EqualTo("Not spam, legitimate message"));
         Assert.That(updated.ReviewedAt, Is.Not.Null);
         Assert.That(updated.ReviewedAt!.Value, Is.GreaterThanOrEqualTo(beforeUpdate));
@@ -384,6 +384,8 @@ public class ReportsRepositoryTests
         {
             ChatId = chatId,
             UserId = userId,
+            User = new UserIdentity(userId, "Test", "User", null),
+            Chat = new ChatIdentity(chatId, "Test Chat"),
             McAnswers = mcAnswers ?? new Dictionary<int, string>
             {
                 { 0, "A" },
@@ -658,7 +660,7 @@ public class ReportsRepositoryTests
             id,
             ReportStatus.Reviewed,
             reviewedBy: "admin@test.com",
-            actionTaken: "ConfirmScam");
+            actionTaken: "Confirm");
 
         // Act
         var hasPending = await _repository.HasPendingImpersonationAlertAsync(suspectedUserId);

@@ -10,6 +10,7 @@
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Reports
+@using TelegramGroupsAdmin.Telegram.Constants
 @using TelegramGroupsAdmin.Core.Repositories
 @inject IReportsRepository ReportsRepository
 @inject IReportActionsService ReportActionsService
@@ -257,7 +258,7 @@
                     ExamFailure = examFailure,
                     DisplayTitle = "Exam Review",
                     UserId = examFailure.UserId,
-                    UserName = examFailure.UserName
+                    UserName = examFailure.User.Username
                 });
             }
 
@@ -355,35 +356,31 @@
         return (int)(200 - age); // Higher base priority than reports
     }
 
-    private async Task HandleSpamAction((Report Report, string Action) args)
+    private async Task HandleSpamAction((Report Report, ReportAction Action) args)
     {
         try
         {
             switch (args.Action)
             {
-                case "spam":
+                case ReportAction.Spam:
                     await ReportActionsService.HandleSpamActionAsync(args.Report.Id, _currentUserId);
                     Snackbar.Add($"Report #{args.Report.Id} processed: Message deleted as spam", Severity.Success);
                     break;
 
-                case "ban":
+                case ReportAction.Ban:
                     await ReportActionsService.HandleBanActionAsync(args.Report.Id, _currentUserId);
                     Snackbar.Add($"Report #{args.Report.Id} processed: User banned", Severity.Success);
                     break;
 
-                case "warn":
+                case ReportAction.Warn:
                     await ReportActionsService.HandleWarnActionAsync(args.Report.Id, _currentUserId);
                     Snackbar.Add($"Report #{args.Report.Id} processed: Warning issued", Severity.Success);
                     break;
 
-                case "dismiss":
+                case ReportAction.Dismiss:
                     await ReportActionsService.HandleDismissActionAsync(args.Report.Id, _currentUserId);
                     Snackbar.Add($"Report #{args.Report.Id} dismissed", Severity.Info);
                     break;
-
-                default:
-                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
-                    return;
             }
 
             await LoadReportsAsync();
@@ -395,7 +392,7 @@
         }
     }
 
-    private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, string Action) args)
+    private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, ImpersonationAction Action) args)
     {
         try
         {
@@ -403,7 +400,7 @@
 
             switch (args.Action)
             {
-                case "confirm":
+                case ImpersonationAction.Confirm:
                     // Ban the suspected impersonator globally
                     var banResult = await ModerationOrchestrator.BanUserAsync(
                         new BanIntent
@@ -417,25 +414,25 @@
                         args.Alert.Id,
                         ReportStatus.Reviewed,
                         _currentUserDisplayName,
-                        "confirm_scam",
+                        "confirm",
                         $"Confirmed impersonation, banned from {banResult.ChatsAffected} chats");
 
                     Snackbar.Add($"Impersonation confirmed: User banned from {banResult.ChatsAffected} chats", Severity.Success);
                     break;
 
-                case "dismiss":
+                case ImpersonationAction.Dismiss:
                     // Mark as false positive
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
                         _currentUserDisplayName,
-                        "false_positive",
-                        "Marked as false positive");
+                        "dismiss",
+                        "Dismissed as false positive");
 
-                    Snackbar.Add("Alert dismissed as false positive", Severity.Info);
+                    Snackbar.Add("Alert dismissed", Severity.Info);
                     break;
 
-                case "trust":
+                case ImpersonationAction.Trust:
                     // Trust the suspected user (they're legitimate)
                     await ModerationOrchestrator.TrustUserAsync(
                         new TrustIntent
@@ -454,10 +451,6 @@
 
                     Snackbar.Add("User marked as trusted", Severity.Success);
                     break;
-
-                default:
-                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
-                    return;
             }
 
             await LoadReportsAsync();
@@ -469,7 +462,7 @@
         }
     }
 
-    private async Task HandleExamAction((ExamFailureRecord ExamFailure, string Action) args)
+    private async Task HandleExamAction((ExamFailureRecord ExamFailure, ExamAction Action) args)
     {
         Logger.LogInformation("HandleExamAction called: Action={Action}, ExamFailureId={Id}, UserId={UserId}",
             args.Action, args.ExamFailure.Id, args.ExamFailure.UserId);
@@ -480,13 +473,13 @@
 
             switch (args.Action)
             {
-                case "approve":
+                case ExamAction.Approve:
                     // Approve via service (restores permissions, deletes teaser, updates welcome response)
                     var approveResult = await ExamFlowService.ApproveExamFailureAsync(
-                        userId: args.ExamFailure.UserId,
-                        chatId: args.ExamFailure.ChatId,
-                        examFailureId: args.ExamFailure.Id,
-                        executor: executor);
+                        args.ExamFailure.User,
+                        args.ExamFailure.Chat,
+                        args.ExamFailure.Id,
+                        executor);
 
                     if (!approveResult.Success)
                     {
@@ -504,12 +497,12 @@
                     Snackbar.Add("User approved - permissions restored", Severity.Success);
                     break;
 
-                case "deny":
+                case ExamAction.Deny:
                     // Deny via service (deletes teaser, updates welcome response, kicks user, sends DM)
                     var denyResult = await ExamFlowService.DenyExamFailureAsync(
-                        userId: args.ExamFailure.UserId,
-                        chatId: args.ExamFailure.ChatId,
-                        executor: executor);
+                        args.ExamFailure.User,
+                        args.ExamFailure.Chat,
+                        executor);
 
                     if (!denyResult.Success)
                     {
@@ -527,12 +520,12 @@
                     Snackbar.Add("User denied - they can re-join to try again", Severity.Warning);
                     break;
 
-                case "deny_ban":
+                case ExamAction.DenyAndBan:
                     // Deny and ban via service (deletes teaser, updates welcome response, bans globally, sends DM)
                     var denyBanResult = await ExamFlowService.DenyAndBanExamFailureAsync(
-                        userId: args.ExamFailure.UserId,
-                        chatId: args.ExamFailure.ChatId,
-                        executor: executor);
+                        args.ExamFailure.User,
+                        args.ExamFailure.Chat,
+                        executor);
 
                     if (!denyBanResult.Success)
                     {
@@ -549,10 +542,6 @@
 
                     Snackbar.Add("User denied and banned globally", Severity.Error);
                     break;
-
-                default:
-                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
-                    return;
             }
 
             await LoadReportsAsync();

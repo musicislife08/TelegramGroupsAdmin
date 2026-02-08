@@ -723,8 +723,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         // Verify alert exists
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Click Confirm Scam - NO CONFIRMATION DIALOG
-        await _reportsPage.ClickConfirmScamAsync();
+        // Click Confirm - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickConfirmAsync();
 
         // Assert - snackbar confirms action
         var snackbarText = await _reportsPage.WaitForSnackbarAsync();
@@ -786,10 +786,10 @@ public class ReportsTests : SharedAuthenticatedTestBase
     }
 
     /// <summary>
-    /// Tests that the False Positive action on an impersonation alert executes immediately.
+    /// Tests that the Dismiss action on an impersonation alert executes immediately.
     /// </summary>
     [Test]
-    public async Task ImpersonationAlert_FalsePositive_ProcessesImmediately()
+    public async Task ImpersonationAlert_Dismiss_ProcessesImmediately()
     {
         // Arrange
         await LoginAsOwnerAsync();
@@ -827,8 +827,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         // Verify alert exists
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Click False Positive - NO CONFIRMATION DIALOG
-        await _reportsPage.ClickFalsePositiveAsync();
+        // Click Dismiss - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickDismissAsync();
 
         // Assert - snackbar confirms action
         var snackbarText = await _reportsPage.WaitForSnackbarAsync();

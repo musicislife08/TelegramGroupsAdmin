@@ -379,15 +379,15 @@ public class UpdateRouterTests
     public async Task RouteUpdateAsync_WithReportCallback_RoutesToReportCallbackService()
     {
         // Arrange
-        _mockReportCallbackService.CanHandle("rpt:12345:0").Returns(true);
-        var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
+        _mockReportCallbackService.CanHandle("rev:12345:0").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "rev:12345:0");
 
         // Act
         await _sut.RouteUpdateAsync(update);
 
         // Assert
         await _mockReportCallbackService.Received(1).HandleCallbackAsync(
-            Arg.Is<CallbackQuery>(q => q.Data == "rpt:12345:0"),
+            Arg.Is<CallbackQuery>(q => q.Data == "rev:12345:0"),
             Arg.Any<CancellationToken>());
     }
 
@@ -395,8 +395,8 @@ public class UpdateRouterTests
     public async Task RouteUpdateAsync_WithReportCallback_DoesNotRouteToWelcomeService()
     {
         // Arrange - report service claims the callback
-        _mockReportCallbackService.CanHandle("rpt:12345:0").Returns(true);
-        var update = CreateCallbackQueryUpdate(data: "rpt:12345:0");
+        _mockReportCallbackService.CanHandle("rev:12345:0").Returns(true);
+        var update = CreateCallbackQueryUpdate(data: "rev:12345:0");
 
         // Act
         await _sut.RouteUpdateAsync(update);

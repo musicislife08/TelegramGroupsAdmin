@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -20,7 +21,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Application-level service for handling report moderation callback queries from inline buttons in DMs.
 /// Orchestrates the report review workflow, calling bot services for Telegram operations
 /// and routing to type-specific handlers based on ReportType.
-/// Callback format: rev:{contextId}:{actionInt} (or legacy rpt:{contextId}:{actionInt})
+/// Callback format: rev:{contextId}:{actionInt}
 /// </summary>
 /// <remarks>
 /// Registered as Singleton - creates scopes internally for scoped services.
@@ -40,10 +41,7 @@ public class ReportCallbackService : IReportCallbackService
 
     public bool CanHandle(string callbackData)
     {
-        // Support both new 'rev:' and legacy 'rpt:' prefixes
-        // TODO: Remove ReportActionPrefix after 2026-02-01 (see GitHub issue #281)
-        return callbackData.StartsWith(CallbackConstants.ReviewActionPrefix) ||
-               callbackData.StartsWith(CallbackConstants.ReportActionPrefix);
+        return callbackData.StartsWith(CallbackConstants.ReviewActionPrefix);
     }
 
     public async Task HandleCallbackAsync(CallbackQuery callbackQuery, CancellationToken cancellationToken = default)
@@ -55,24 +53,8 @@ public class ReportCallbackService : IReportCallbackService
             return;
         }
 
-        // Determine prefix and parse payload
-        string prefix;
-        if (data.StartsWith(CallbackConstants.ReviewActionPrefix))
-        {
-            prefix = CallbackConstants.ReviewActionPrefix;
-        }
-        else if (data.StartsWith(CallbackConstants.ReportActionPrefix))
-        {
-            prefix = CallbackConstants.ReportActionPrefix;
-        }
-        else
-        {
-            _logger.LogWarning("Unknown callback prefix: {Data}", data);
-            return;
-        }
-
-        // Parse: {prefix}{contextId}:{action}
-        var payload = data[prefix.Length..];
+        // Parse: rev:{contextId}:{action}
+        var payload = data[CallbackConstants.ReviewActionPrefix.Length..];
         var parts = payload.Split(':');
         if (parts.Length != 2 ||
             !long.TryParse(parts[0], out var contextId) ||
@@ -127,8 +109,15 @@ public class ReportCallbackService : IReportCallbackService
             return;
         }
 
-        // Get target user info for logging
+        // Get target user info and build identity for threading through handler chain
         var targetUser = await userRepo.GetByTelegramIdAsync(userId, cancellationToken);
+        var userIdentity = targetUser != null
+            ? UserIdentity.From(targetUser)
+            : UserIdentity.FromId(userId);
+
+        // Build chat identity from DB (avoids Telegram API call)
+        var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+        var chatIdentity = await ChatIdentity.FromAsync(chatId, managedChatsRepo, cancellationToken);
 
         // Create executor actor
         var executor = Core.Models.Actor.FromTelegramUser(
@@ -144,11 +133,11 @@ public class ReportCallbackService : IReportCallbackService
             result = reportType switch
             {
                 ReportType.ContentReport => await HandleReportActionAsync(
-                    moderationService, reportsRepo, report, userId, actionInt, executor, targetUser, cancellationToken),
+                    moderationService, report, userIdentity, chatIdentity, actionInt, executor, cancellationToken),
                 ReportType.ImpersonationAlert => await HandleImpersonationActionAsync(
-                    moderationService, reportsRepo, report, userId, actionInt, executor, targetUser, cancellationToken),
+                    moderationService, report, userIdentity, actionInt, executor, cancellationToken),
                 ReportType.ExamFailure => await HandleExamActionAsync(
-                    moderationService, examFlowService, reportsRepo, report, chatId, userId, actionInt, executor, targetUser, cancellationToken),
+                    examFlowService, report, userIdentity, chatIdentity, actionInt, executor, cancellationToken),
                 _ => new ReviewActionResult(Success: false, Message: $"Unknown review type: {reportType}")
             };
         }
@@ -200,12 +189,11 @@ public class ReportCallbackService : IReportCallbackService
 
     private async Task<ReviewActionResult> HandleReportActionAsync(
         IBotModerationService moderationService,
-        IReportsRepository reportsRepo,
         ReportBase report,
-        long userId,
+        UserIdentity user,
+        ChatIdentity chat,
         int actionInt,
         Core.Models.Actor executor,
-        TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
         // Validate action enum
@@ -220,11 +208,11 @@ public class ReportCallbackService : IReportCallbackService
         return action switch
         {
             ReportAction.Spam => await HandleSpamActionAsync(
-                moderationService, report, userId, executor, targetUser, cancellationToken),
+                moderationService, report, user, chat, executor, cancellationToken),
+            ReportAction.Ban => await HandleBanActionAsync(
+                moderationService, report, user, chat, executor, cancellationToken),
             ReportAction.Warn => await HandleWarnActionAsync(
-                moderationService, report, userId, executor, targetUser, cancellationToken),
-            ReportAction.TempBan => await HandleTempBanActionAsync(
-                moderationService, report, userId, executor, targetUser, cancellationToken),
+                moderationService, report, user, chat, executor, cancellationToken),
             ReportAction.Dismiss => HandleDismissAction(report.Id, executor),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
         };
@@ -233,17 +221,69 @@ public class ReportCallbackService : IReportCallbackService
     private async Task<ReviewActionResult> HandleSpamActionAsync(
         IBotModerationService moderationService,
         ReportBase report,
-        long userId,
+        UserIdentity user,
+        ChatIdentity chat,
         Core.Models.Actor executor,
-        TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
+        if (!report.MessageId.HasValue)
+            return new ReviewActionResult(Success: false, Message: "Cannot mark as spam: no message ID");
+
+        var result = await moderationService.MarkAsSpamAndBanAsync(
+            new SpamBanIntent
+            {
+                User = user,
+                Chat = chat,
+                Executor = executor,
+                Reason = "Marked as spam via report review",
+                MessageId = report.MessageId.Value
+            },
+            cancellationToken);
+
+        if (result.Success)
+        {
+            _logger.LogInformation(
+                "Review {ReviewId}: User {User} marked as spam by {Executor}",
+                report.Id, user.ToLogInfo(), executor.DisplayName);
+            return new ReviewActionResult(
+                Success: true,
+                Message: $"Marked as spam - user banned from {result.ChatsAffected} chat(s)",
+                ActionName: "Spam");
+        }
+
+        return new ReviewActionResult(Success: false, Message: $"Spam action failed: {result.ErrorMessage}");
+    }
+
+    private async Task<ReviewActionResult> HandleBanActionAsync(
+        IBotModerationService moderationService,
+        ReportBase report,
+        UserIdentity user,
+        ChatIdentity chat,
+        Core.Models.Actor executor,
+        CancellationToken cancellationToken)
+    {
+        // Delete the offending message first (if present)
+        if (report.MessageId.HasValue)
+        {
+            await moderationService.DeleteMessageAsync(
+                new DeleteMessageIntent
+                {
+                    User = user,
+                    Chat = chat,
+                    Executor = executor,
+                    Reason = "Deleted via report review (ban)",
+                    MessageId = report.MessageId.Value
+                },
+                cancellationToken);
+        }
+
+        // Ban user globally
         var result = await moderationService.BanUserAsync(
             new BanIntent
             {
-                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
+                User = user,
                 Executor = executor,
-                Reason = "Marked as spam via report review",
+                Reason = "Banned via report review",
                 MessageId = report.MessageId
             },
             cancellationToken);
@@ -251,12 +291,12 @@ public class ReportCallbackService : IReportCallbackService
         if (result.Success)
         {
             _logger.LogInformation(
-                "Review {ReviewId}: User {User} banned as spam by {Executor}",
-                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
+                "Review {ReviewId}: User {User} banned by {Executor}",
+                report.Id, user.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
                 Success: true,
-                Message: $"Marked as spam - user banned from {result.ChatsAffected} chat(s)",
-                ActionName: "Spam");
+                Message: $"User banned from {result.ChatsAffected} chat(s)",
+                ActionName: "Ban");
         }
 
         return new ReviewActionResult(Success: false, Message: $"Ban failed: {result.ErrorMessage}");
@@ -265,16 +305,16 @@ public class ReportCallbackService : IReportCallbackService
     private async Task<ReviewActionResult> HandleWarnActionAsync(
         IBotModerationService moderationService,
         ReportBase report,
-        long userId,
+        UserIdentity user,
+        ChatIdentity chat,
         Core.Models.Actor executor,
-        TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
         var result = await moderationService.WarnUserAsync(
             new WarnIntent
             {
-                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
-                Chat = ChatIdentity.FromId(report.ChatId),
+                User = user,
+                Chat = chat,
                 Executor = executor,
                 Reason = "Warning issued via report review",
                 MessageId = report.MessageId
@@ -285,7 +325,7 @@ public class ReportCallbackService : IReportCallbackService
         {
             _logger.LogInformation(
                 "Review {ReviewId}: User {User} warned by {Executor} (count: {Count})",
-                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName, result.WarningCount);
+                report.Id, user.ToLogInfo(), executor.DisplayName, result.WarningCount);
             return new ReviewActionResult(
                 Success: true,
                 Message: $"Warning issued (warning #{result.WarningCount})",
@@ -293,41 +333,6 @@ public class ReportCallbackService : IReportCallbackService
         }
 
         return new ReviewActionResult(Success: false, Message: $"Warning failed: {result.ErrorMessage}");
-    }
-
-    private async Task<ReviewActionResult> HandleTempBanActionAsync(
-        IBotModerationService moderationService,
-        ReportBase report,
-        long userId,
-        Core.Models.Actor executor,
-        TelegramUser? targetUser,
-        CancellationToken cancellationToken)
-    {
-        var duration = CommandConstants.DefaultTempBanDuration;
-
-        var result = await moderationService.TempBanUserAsync(
-            new TempBanIntent
-            {
-                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
-                Executor = executor,
-                Reason = "Temp banned via report review",
-                MessageId = report.MessageId,
-                Duration = duration
-            },
-            cancellationToken);
-
-        if (result.Success)
-        {
-            _logger.LogInformation(
-                "Review {ReviewId}: User {User} temp banned for {Duration} by {Executor}",
-                report.Id, targetUser.ToLogInfo(userId), duration, executor.DisplayName);
-            return new ReviewActionResult(
-                Success: true,
-                Message: $"Temp banned for {TimeSpanUtilities.FormatDuration(duration)} from {result.ChatsAffected} chat(s)",
-                ActionName: "TempBan");
-        }
-
-        return new ReviewActionResult(Success: false, Message: $"Temp ban failed: {result.ErrorMessage}");
     }
 
     private ReviewActionResult HandleDismissAction(long reviewId, Core.Models.Actor executor)
@@ -342,16 +347,14 @@ public class ReportCallbackService : IReportCallbackService
 
     private async Task<ReviewActionResult> HandleImpersonationActionAsync(
         IBotModerationService moderationService,
-        IReportsRepository reportsRepo,
         ReportBase report,
-        long userId,
+        UserIdentity user,
         int actionInt,
         Core.Models.Actor executor,
-        TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
         // Validate action enum
-        if (actionInt < 0 || actionInt > (int)ImpersonationAction.Whitelist)
+        if (actionInt < 0 || actionInt > (int)ImpersonationAction.Trust)
         {
             _logger.LogWarning("Invalid impersonation action value: {ActionInt}", actionInt);
             return new ReviewActionResult(Success: false, Message: "Invalid action");
@@ -361,28 +364,27 @@ public class ReportCallbackService : IReportCallbackService
 
         return action switch
         {
-            ImpersonationAction.ConfirmScam => await HandleConfirmScamAsync(
-                moderationService, report, userId, executor, targetUser, cancellationToken),
-            ImpersonationAction.FalsePositive => HandleFalsePositiveAction(report.Id, executor),
-            ImpersonationAction.Whitelist => await HandleWhitelistActionAsync(
-                reportsRepo, report, userId, executor, cancellationToken),
+            ImpersonationAction.Confirm => await HandleConfirmAsync(
+                moderationService, report, user, executor, cancellationToken),
+            ImpersonationAction.Dismiss => HandleImpersonationDismissAction(report.Id, executor),
+            ImpersonationAction.Trust => await HandleTrustActionAsync(
+                moderationService, report, user, executor, cancellationToken),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
         };
     }
 
-    private async Task<ReviewActionResult> HandleConfirmScamAsync(
+    private async Task<ReviewActionResult> HandleConfirmAsync(
         IBotModerationService moderationService,
         ReportBase report,
-        long userId,
+        UserIdentity user,
         Core.Models.Actor executor,
-        TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
         // Ban the impersonator globally
         var result = await moderationService.BanUserAsync(
             new BanIntent
             {
-                User = targetUser != null ? UserIdentity.From(targetUser) : UserIdentity.FromId(userId),
+                User = user,
                 Executor = executor,
                 Reason = "Confirmed impersonation scam"
             },
@@ -392,44 +394,55 @@ public class ReportCallbackService : IReportCallbackService
         {
             _logger.LogInformation(
                 "Impersonation review {ReviewId}: User {User} banned as scammer by {Executor}",
-                report.Id, targetUser.ToLogInfo(userId), executor.DisplayName);
+                report.Id, user.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
                 Success: true,
                 Message: $"Confirmed scam - user banned from {result.ChatsAffected} chat(s)",
-                ActionName: "ConfirmScam");
+                ActionName: "Confirm");
         }
 
         return new ReviewActionResult(Success: false, Message: $"Ban failed: {result.ErrorMessage}");
     }
 
-    private ReviewActionResult HandleFalsePositiveAction(long reviewId, Core.Models.Actor executor)
+    private ReviewActionResult HandleImpersonationDismissAction(long reviewId, Core.Models.Actor executor)
     {
         _logger.LogInformation(
-            "Impersonation review {ReviewId} marked as false positive by {Executor}",
+            "Impersonation review {ReviewId} dismissed by {Executor}",
             reviewId, executor.DisplayName);
         return new ReviewActionResult(
             Success: true,
-            Message: "Marked as false positive",
-            ActionName: "FalsePositive");
+            Message: "Alert dismissed",
+            ActionName: "Dismiss");
     }
 
-    private async Task<ReviewActionResult> HandleWhitelistActionAsync(
-        IReportsRepository reportsRepo,
+    private async Task<ReviewActionResult> HandleTrustActionAsync(
+        IBotModerationService moderationService,
         ReportBase report,
-        long userId,
+        UserIdentity user,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
-        // Mark user as trusted to prevent future impersonation alerts
-        // TODO: Implement whitelist logic when TelegramUserRepository.MarkAsTrustedAsync is available
-        _logger.LogInformation(
-            "Impersonation review {ReviewId}: User {UserId} whitelisted by {Executor}",
-            report.Id, userId, executor.DisplayName);
+        var result = await moderationService.TrustUserAsync(
+            new TrustIntent
+            {
+                User = user,
+                Executor = executor,
+                Reason = $"Trusted after impersonation review #{report.Id}"
+            },
+            cancellationToken);
 
-        return new ReviewActionResult(
-            Success: true,
-            Message: "User whitelisted for impersonation checks",
-            ActionName: "Whitelist");
+        if (result.Success)
+        {
+            _logger.LogInformation(
+                "Impersonation review {ReviewId}: User {User} trusted by {Executor}",
+                report.Id, user.ToLogInfo(), executor.DisplayName);
+            return new ReviewActionResult(
+                Success: true,
+                Message: "User trusted - future impersonation alerts suppressed",
+                ActionName: "Trust");
+        }
+
+        return new ReviewActionResult(Success: false, Message: $"Trust failed: {result.ErrorMessage}");
     }
 
     #endregion
@@ -437,15 +450,12 @@ public class ReportCallbackService : IReportCallbackService
     #region Exam Actions
 
     private async Task<ReviewActionResult> HandleExamActionAsync(
-        IBotModerationService moderationService,
         IExamFlowService examFlowService,
-        IReportsRepository reportsRepo,
         ReportBase report,
-        long chatId,
-        long userId,
+        UserIdentity user,
+        ChatIdentity chat,
         int actionInt,
         Core.Models.Actor executor,
-        TelegramUser? targetUser,
         CancellationToken cancellationToken)
     {
         // Validate action enum
@@ -460,11 +470,11 @@ public class ReportCallbackService : IReportCallbackService
         return action switch
         {
             ExamAction.Approve => await HandleExamApproveAsync(
-                examFlowService, report, chatId, userId, executor, cancellationToken),
+                examFlowService, report, user, chat, executor, cancellationToken),
             ExamAction.Deny => await HandleExamDenyAsync(
-                examFlowService, report, chatId, userId, executor, cancellationToken),
+                examFlowService, report, user, chat, executor, cancellationToken),
             ExamAction.DenyAndBan => await HandleExamDenyAndBanAsync(
-                examFlowService, report, chatId, userId, executor, cancellationToken),
+                examFlowService, report, user, chat, executor, cancellationToken),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
         };
     }
@@ -472,18 +482,14 @@ public class ReportCallbackService : IReportCallbackService
     private async Task<ReviewActionResult> HandleExamApproveAsync(
         IExamFlowService examFlowService,
         ReportBase report,
-        long chatId,
-        long userId,
+        UserIdentity user,
+        ChatIdentity chat,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
-        // Use exam flow service which handles:
-        // - Permission restoration
-        // - Teaser message deletion
-        // - Welcome response update to "Accepted"
         var result = await examFlowService.ApproveExamFailureAsync(
-            userId,
-            chatId,
+            user,
+            chat,
             report.Id,
             executor,
             cancellationToken);
@@ -491,8 +497,8 @@ public class ReportCallbackService : IReportCallbackService
         if (result.Success)
         {
             _logger.LogInformation(
-                "Exam review {ReviewId}: User {UserId} approved by {Executor}, permissions restored",
-                report.Id, userId, executor.DisplayName);
+                "Exam review {ReviewId}: User {User} approved by {Executor}, permissions restored",
+                report.Id, user.ToLogInfo(), executor.DisplayName);
 
             return new ReviewActionResult(
                 Success: true,
@@ -506,27 +512,22 @@ public class ReportCallbackService : IReportCallbackService
     private async Task<ReviewActionResult> HandleExamDenyAsync(
         IExamFlowService examFlowService,
         ReportBase report,
-        long chatId,
-        long userId,
+        UserIdentity user,
+        ChatIdentity chat,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
-        // Use exam flow service which handles:
-        // - Teaser message deletion
-        // - Welcome response update to "Denied"
-        // - User kick from chat
-        // - DM notification to user
         var result = await examFlowService.DenyExamFailureAsync(
-            userId,
-            chatId,
+            user,
+            chat,
             executor,
             cancellationToken);
 
         if (result.Success)
         {
             _logger.LogInformation(
-                "Exam review {ReviewId}: User {UserId} denied (kicked) by {Executor}",
-                report.Id, userId, executor.DisplayName);
+                "Exam review {ReviewId}: User {User} denied (kicked) by {Executor}",
+                report.Id, user.ToLogInfo(), executor.DisplayName);
 
             return new ReviewActionResult(
                 Success: true,
@@ -540,27 +541,22 @@ public class ReportCallbackService : IReportCallbackService
     private async Task<ReviewActionResult> HandleExamDenyAndBanAsync(
         IExamFlowService examFlowService,
         ReportBase report,
-        long chatId,
-        long userId,
+        UserIdentity user,
+        ChatIdentity chat,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
-        // Use exam flow service which handles:
-        // - Teaser message deletion
-        // - Welcome response update to "Denied"
-        // - Global ban (propagates to all managed chats)
-        // - DM notification to user
         var result = await examFlowService.DenyAndBanExamFailureAsync(
-            userId,
-            chatId,
+            user,
+            chat,
             executor,
             cancellationToken);
 
         if (result.Success)
         {
             _logger.LogInformation(
-                "Exam review {ReviewId}: User {UserId} denied and banned by {Executor}",
-                report.Id, userId, executor.DisplayName);
+                "Exam review {ReviewId}: User {User} denied and banned by {Executor}",
+                report.Id, user.ToLogInfo(), executor.DisplayName);
 
             return new ReviewActionResult(
                 Success: true,
@@ -574,56 +570,6 @@ public class ReportCallbackService : IReportCallbackService
     #endregion
 
     #region Helpers
-
-    /// <summary>
-    /// Gets the chat name for use in user notifications.
-    /// Checks database first (faster), falls back to Telegram API, then to chat ID.
-    /// </summary>
-    private async Task<string> GetChatNameForNotificationAsync(
-        long chatId,
-        CancellationToken cancellationToken)
-    {
-        // Try database first (faster, no API call)
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var chatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-        var cachedChat = await chatsRepo.GetByChatIdAsync(chatId, cancellationToken);
-
-        if (!string.IsNullOrEmpty(cachedChat?.ChatName))
-            return cachedChat.ChatName;
-
-        // Fallback to Telegram API
-        try
-        {
-            var chatService = scope.ServiceProvider.GetRequiredService<IBotChatService>();
-            var chatInfo = await chatService.GetChatAsync(chatId, cancellationToken);
-            return chatInfo.Title ?? chatId.ToString();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not retrieve chat name for {ChatId}, using ID as fallback", chatId);
-            return chatId.ToString();
-        }
-    }
-
-    /// <summary>
-    /// Sends a DM notification to a user. Failures are logged but don't block the calling operation.
-    /// </summary>
-    private async Task TrySendUserNotificationAsync(
-        long userId,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var dmService = scope.ServiceProvider.GetRequiredService<IBotDmService>();
-            await dmService.SendDmAsync(userId, message, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to send notification DM to user {UserId}", userId);
-        }
-    }
 
     private async Task CleanupAfterReportAsync(
         ReportBase report,

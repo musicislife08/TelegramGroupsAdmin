@@ -384,19 +384,32 @@ public class NotificationService : INotificationService
                     InlineKeyboardButton.WithCallbackData("🚫 Deny & Ban", $"rev:{contextId}:{(int)ExamAction.DenyAndBan}")
                 }
             }),
-            _ => new InlineKeyboardMarkup(new[]
+            ReportType.ContentReport => new InlineKeyboardMarkup(new[]
             {
                 new[]
                 {
                     InlineKeyboardButton.WithCallbackData("🚫 Spam", $"rev:{contextId}:{(int)ReportAction.Spam}"),
-                    InlineKeyboardButton.WithCallbackData("⚠️ Warn", $"rev:{contextId}:{(int)ReportAction.Warn}")
+                    InlineKeyboardButton.WithCallbackData("⛔ Ban", $"rev:{contextId}:{(int)ReportAction.Ban}")
                 },
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData("⏱️ TempBan", $"rev:{contextId}:{(int)ReportAction.TempBan}"),
+                    InlineKeyboardButton.WithCallbackData("⚠️ Warn", $"rev:{contextId}:{(int)ReportAction.Warn}"),
                     InlineKeyboardButton.WithCallbackData("✓ Dismiss", $"rev:{contextId}:{(int)ReportAction.Dismiss}")
                 }
-            })
+            }),
+            ReportType.ImpersonationAlert => new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("🚫 Confirm", $"rev:{contextId}:{(int)ImpersonationAction.Confirm}"),
+                    InlineKeyboardButton.WithCallbackData("✓ Dismiss", $"rev:{contextId}:{(int)ImpersonationAction.Dismiss}")
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("🤝 Trust User", $"rev:{contextId}:{(int)ImpersonationAction.Trust}")
+                }
+            }),
+            _ => throw new ArgumentOutOfRangeException(nameof(reportType), reportType, "Unknown report type")
         };
     }
 

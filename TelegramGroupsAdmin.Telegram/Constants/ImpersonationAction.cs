@@ -7,11 +7,11 @@ namespace TelegramGroupsAdmin.Telegram.Constants;
 public enum ImpersonationAction
 {
     /// <summary>Confirm as scammer, ban user</summary>
-    ConfirmScam = 0,
+    Confirm = 0,
 
-    /// <summary>Mark as false positive, restore permissions</summary>
-    FalsePositive = 1,
+    /// <summary>Dismiss alert as false positive, no action</summary>
+    Dismiss = 1,
 
-    /// <summary>Add user to whitelist for this target</summary>
-    Whitelist = 2
+    /// <summary>Trust user (prevents future impersonation alerts)</summary>
+    Trust = 2
 }

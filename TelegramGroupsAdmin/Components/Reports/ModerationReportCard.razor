@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Constants
 
 @inject IMessageHistoryRepository MessageRepository
 @inject ITelegramUserRepository TelegramUserRepository
@@ -145,7 +146,7 @@
     public EventCallback OnActionCompleted { get; set; }
 
     [Parameter]
-    public EventCallback<(Report Report, string Action)> OnAction { get; set; }
+    public EventCallback<(Report Report, ReportAction Action)> OnAction { get; set; }
 
     private MessageRecord? _message;
     private TelegramUser? _reportedUser;
@@ -197,28 +198,28 @@
     private async Task OnMarkSpam()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, "spam"));
+        await OnAction.InvokeAsync((Report, ReportAction.Spam));
         _actionInProgress = false;
     }
 
     private async Task OnBan()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, "ban"));
+        await OnAction.InvokeAsync((Report, ReportAction.Ban));
         _actionInProgress = false;
     }
 
     private async Task OnWarn()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, "warn"));
+        await OnAction.InvokeAsync((Report, ReportAction.Warn));
         _actionInProgress = false;
     }
 
     private async Task OnDismiss()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, "dismiss"));
+        await OnAction.InvokeAsync((Report, ReportAction.Dismiss));
         _actionInProgress = false;
     }
 
