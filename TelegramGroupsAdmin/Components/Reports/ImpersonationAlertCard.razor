@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Constants
 
 @inject ITelegramUserRepository TelegramUserRepository
 @inject IMessageHistoryRepository MessageRepository
@@ -214,17 +215,17 @@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.Block"
-                       OnClick="@OnConfirmScam"
+                       OnClick="@OnConfirm"
                        Disabled="@_actionInProgress">
-                Confirm Scam
+                Confirm
             </MudButton>
 
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Default"
                        StartIcon="@Icons.Material.Filled.Close"
-                       OnClick="@OnFalsePositive"
+                       OnClick="@OnDismiss"
                        Disabled="@_actionInProgress">
-                False Positive
+                Dismiss
             </MudButton>
 
             <MudButton Variant="Variant.Filled"
@@ -249,7 +250,7 @@
     public required ImpersonationAlertRecord Alert { get; set; }
 
     [Parameter]
-    public EventCallback<(ImpersonationAlertRecord Alert, string Action)> OnAction { get; set; }
+    public EventCallback<(ImpersonationAlertRecord Alert, ImpersonationAction Action)> OnAction { get; set; }
 
     private bool _actionInProgress;
     private TelegramUser? _suspectedUser;
@@ -334,24 +335,24 @@
         return $"/api/photos/{fileName}";
     }
 
-    private async Task OnConfirmScam()
+    private async Task OnConfirm()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, "confirm"));
+        await OnAction.InvokeAsync((Alert, ImpersonationAction.Confirm));
         _actionInProgress = false;
     }
 
-    private async Task OnFalsePositive()
+    private async Task OnDismiss()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, "dismiss"));
+        await OnAction.InvokeAsync((Alert, ImpersonationAction.Dismiss));
         _actionInProgress = false;
     }
 
     private async Task OnTrust()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, "trust"));
+        await OnAction.InvokeAsync((Alert, ImpersonationAction.Trust));
         _actionInProgress = false;
     }
 }

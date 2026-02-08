@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -302,9 +303,9 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
         var cut = Render<ImpersonationAlertCard>(p => p
             .Add(x => x.Alert, CreateAlert(reviewedAt: null)));
 
-        // Assert - Component shows: Confirm Scam, False Positive, Trust
-        Assert.That(cut.Markup, Does.Contain("Confirm Scam"));
-        Assert.That(cut.Markup, Does.Contain("False Positive"));
+        // Assert - Component shows: Confirm, Dismiss, Trust
+        Assert.That(cut.Markup, Does.Contain("Confirm"));
+        Assert.That(cut.Markup, Does.Contain("Dismiss"));
         Assert.That(cut.Markup, Does.Contain("Trust"));
     }
 
@@ -319,8 +320,8 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
                 verdict: ImpersonationVerdict.ConfirmedScam)));
 
         // Assert - Action buttons hidden when already reviewed
-        Assert.That(cut.Markup, Does.Not.Contain("Confirm Scam"));
-        Assert.That(cut.Markup, Does.Not.Contain(">False Positive<")); // Not in button form
+        Assert.That(cut.Markup, Does.Not.Contain(">Confirm<")); // Not in button form
+        Assert.That(cut.Markup, Does.Not.Contain(">Dismiss<")); // Not in button form
         Assert.That(cut.Markup, Does.Not.Contain(">Trust<")); // Not in button form
     }
 
@@ -359,24 +360,24 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
     #region Event Callback Tests
 
     [Test]
-    public async Task InvokesOnAction_WhenConfirmScamClicked()
+    public async Task InvokesOnAction_WhenConfirmClicked()
     {
         // Arrange
-        (ImpersonationAlertRecord alert, string action)? receivedAction = null;
+        (ImpersonationAlertRecord alert, ImpersonationAction action)? receivedAction = null;
         var alert = CreateAlert(reviewedAt: null);
 
         var cut = Render<ImpersonationAlertCard>(p => p
             .Add(x => x.Alert, alert)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, ImpersonationAction)>(
                 this, args => receivedAction = args)));
 
         // Act
-        var confirmButton = cut.FindAll("button").First(b => b.TextContent.Contains("Confirm Scam"));
+        var confirmButton = cut.FindAll("button").First(b => b.TextContent.Contains("Confirm"));
         await confirmButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("confirm"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ImpersonationAction.Confirm));
         Assert.That(receivedAction!.Value.alert.Id, Is.EqualTo(alert.Id));
     }
 
@@ -384,12 +385,12 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
     public async Task InvokesOnAction_WhenTrustClicked()
     {
         // Arrange
-        (ImpersonationAlertRecord alert, string action)? receivedAction = null;
+        (ImpersonationAlertRecord alert, ImpersonationAction action)? receivedAction = null;
         var alert = CreateAlert(reviewedAt: null);
 
         var cut = Render<ImpersonationAlertCard>(p => p
             .Add(x => x.Alert, alert)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, ImpersonationAction)>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -398,28 +399,28 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("trust"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ImpersonationAction.Trust));
     }
 
     [Test]
-    public async Task InvokesOnAction_WhenFalsePositiveClicked()
+    public async Task InvokesOnAction_WhenDismissClicked()
     {
         // Arrange
-        (ImpersonationAlertRecord alert, string action)? receivedAction = null;
+        (ImpersonationAlertRecord alert, ImpersonationAction action)? receivedAction = null;
         var alert = CreateAlert(reviewedAt: null);
 
         var cut = Render<ImpersonationAlertCard>(p => p
             .Add(x => x.Alert, alert)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ImpersonationAlertRecord, ImpersonationAction)>(
                 this, args => receivedAction = args)));
 
         // Act
-        var falsePositiveButton = cut.FindAll("button").First(b => b.TextContent.Contains("False Positive"));
-        await falsePositiveButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        var dismissButton = cut.FindAll("button").First(b => b.TextContent.Contains("Dismiss"));
+        await dismissButton.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("dismiss"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ImpersonationAction.Dismiss));
     }
 
     #endregion

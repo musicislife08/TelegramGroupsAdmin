@@ -131,15 +131,15 @@ public interface IExamFlowService
     /// Approve an exam failure after admin review.
     /// Restores user permissions, deletes teaser message, updates welcome response.
     /// </summary>
-    /// <param name="userId">Telegram user ID</param>
-    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="user">Identity of the user being approved</param>
+    /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="examFailureId">ID of the exam failure record</param>
     /// <param name="executor">Actor performing the approval</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> ApproveExamFailureAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         long examFailureId,
         Actor executor,
         CancellationToken cancellationToken = default);
@@ -148,14 +148,14 @@ public interface IExamFlowService
     /// Deny an exam failure after admin review (kick user, allow rejoin).
     /// Kicks user from chat, deletes teaser message, updates welcome response, sends notification.
     /// </summary>
-    /// <param name="userId">Telegram user ID</param>
-    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="user">Identity of the user being denied</param>
+    /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="executor">Actor performing the denial</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> DenyExamFailureAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         CancellationToken cancellationToken = default);
 
@@ -163,14 +163,14 @@ public interface IExamFlowService
     /// Deny an exam failure after admin review and ban the user globally.
     /// Bans user from all managed chats, deletes teaser message, updates welcome response, sends notification.
     /// </summary>
-    /// <param name="userId">Telegram user ID</param>
-    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="user">Identity of the user being denied and banned</param>
+    /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="executor">Actor performing the denial</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> DenyAndBanExamFailureAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         CancellationToken cancellationToken = default);
 }

@@ -247,12 +247,10 @@ public class TestExamFailureBuilder
             ReviewedAt = _reviewedAt,
             ActionTaken = _actionTaken,
             AdminNotes = _adminNotes,
-            // Denormalized display fields
-            UserName = _userName,
-            UserFirstName = _userFirstName,
-            UserLastName = _userLastName,
-            UserPhotoPath = _userPhotoPath,
-            ChatName = _chatName
+            // Identity objects
+            User = new UserIdentity(_userId, _userFirstName, _userLastName, _userName),
+            Chat = new ChatIdentity(_chatId, _chatName),
+            UserPhotoPath = _userPhotoPath
         };
 
         var id = await reportsRepository.InsertExamFailureAsync(examFailure, cancellationToken);

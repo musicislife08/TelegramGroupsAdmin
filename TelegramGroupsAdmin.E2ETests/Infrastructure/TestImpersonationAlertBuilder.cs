@@ -192,9 +192,9 @@ public class TestImpersonationAlertBuilder
     }
 
     /// <summary>
-    /// Marks as false positive.
+    /// Marks as dismissed.
     /// </summary>
-    public TestImpersonationAlertBuilder AsFalsePositive(string reviewedByUserId)
+    public TestImpersonationAlertBuilder AsDismissed(string reviewedByUserId)
     {
         return AsReviewed(reviewedByUserId, ImpersonationVerdict.FalsePositive);
     }

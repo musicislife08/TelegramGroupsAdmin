@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramModels = TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -571,7 +572,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     public async Task InvokesOnAction_WhenSpamButtonClicked()
     {
         // Arrange
-        (Report report, string action)? receivedAction = null;
+        (Report report, ReportAction action)? receivedAction = null;
         var report = CreateReport(status: ReportStatus.Pending);
         var message = CreateSpamMessage();
 
@@ -582,7 +583,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(Report, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(Report, ReportAction)>(
                 this, args => receivedAction = args)));
 
         // Wait for component to load before finding button
@@ -594,7 +595,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("spam"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ReportAction.Spam));
         Assert.That(receivedAction!.Value.report.Id, Is.EqualTo(report.Id));
     }
 
@@ -602,7 +603,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     public async Task InvokesOnAction_WhenDismissButtonClicked()
     {
         // Arrange
-        (Report report, string action)? receivedAction = null;
+        (Report report, ReportAction action)? receivedAction = null;
         var report = CreateReport(status: ReportStatus.Pending);
         var message = CreateSpamMessage();
 
@@ -613,7 +614,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         var cut = Render<ModerationReportCard>(p => p
             .Add(x => x.Report, report)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(Report, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(Report, ReportAction)>(
                 this, args => receivedAction = args)));
 
         // Wait for component to load before finding button
@@ -625,7 +626,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("dismiss"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ReportAction.Dismiss));
     }
 
     #endregion

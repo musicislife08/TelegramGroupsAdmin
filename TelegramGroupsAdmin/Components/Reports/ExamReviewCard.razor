@@ -5,6 +5,7 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Constants
 
 @inject IConfigService ConfigService
 @inject ITelegramUserRepository TelegramUserRepository
@@ -51,9 +52,9 @@
                     </MudAvatar>
                 }
                 <MudStack Spacing="1">
-                    <MudText Typo="Typo.h6">@GetUserDisplayName()</MudText>
+                    <MudText Typo="Typo.h6">@ExamFailure.User.DisplayName</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @(ExamFailure.UserName != null ? $"@{ExamFailure.UserName}" : "No username") · ID: @ExamFailure.UserId
+                        @(ExamFailure.User.Username != null ? $"@{ExamFailure.User.Username}" : "No username") · ID: @ExamFailure.UserId
                     </MudText>
                     @if (_user != null)
                     {
@@ -105,7 +106,7 @@
                     @* Chat *@
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
-                        <MudText Typo="Typo.body2">Chat: @(ExamFailure.ChatName ?? "Unknown")</MudText>
+                        <MudText Typo="Typo.body2">Chat: @(ExamFailure.Chat.ChatName ?? "Unknown")</MudText>
                     </MudStack>
                 </MudStack>
             </MudPaper>
@@ -278,7 +279,7 @@
     public required ExamFailureRecord ExamFailure { get; set; }
 
     [Parameter]
-    public EventCallback<(ExamFailureRecord ExamFailure, string Action)> OnAction { get; set; }
+    public EventCallback<(ExamFailureRecord ExamFailure, ExamAction Action)> OnAction { get; set; }
 
     private bool _actionInProgress;
     private TelegramUser? _user;
@@ -406,15 +407,6 @@
         return (isCorrect, answerLetter, selectedText, correctLetter, correctText);
     }
 
-    private string GetUserDisplayName()
-    {
-        return TelegramDisplayName.Format(
-            ExamFailure.UserFirstName,
-            ExamFailure.UserLastName,
-            ExamFailure.UserName,
-            ExamFailure.UserId);
-    }
-
     private string GetCardStyle()
     {
         if (!ExamFailure.ReviewedAt.HasValue)
@@ -438,21 +430,21 @@
     private async Task OnApprove()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, "approve"));
+        await OnAction.InvokeAsync((ExamFailure, ExamAction.Approve));
         _actionInProgress = false;
     }
 
     private async Task OnDeny()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, "deny"));
+        await OnAction.InvokeAsync((ExamFailure, ExamAction.Deny));
         _actionInProgress = false;
     }
 
     private async Task OnDenyAndBan()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, "deny_ban"));
+        await OnAction.InvokeAsync((ExamFailure, ExamAction.DenyAndBan));
         _actionInProgress = false;
     }
 }

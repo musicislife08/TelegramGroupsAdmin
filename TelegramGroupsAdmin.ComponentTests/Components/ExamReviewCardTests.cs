@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -144,10 +145,8 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
             ReviewedBy = reviewedBy,
             ReviewedAt = reviewedAt,
             ActionTaken = actionTaken,
-            UserName = userName,
-            UserFirstName = userFirstName,
-            UserLastName = userLastName,
-            ChatName = chatName
+            User = new UserIdentity(userId, userFirstName, userLastName, userName),
+            Chat = new ChatIdentity(chatId, chatName)
         };
     }
 
@@ -467,12 +466,12 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public async Task InvokesOnAction_WhenApproveClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, string action)? receivedAction = null;
+        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
         var failure = CreateExamFailure(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -481,7 +480,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("approve"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Approve));
         Assert.That(receivedAction!.Value.failure.Id, Is.EqualTo(failure.Id));
     }
 
@@ -489,12 +488,12 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public async Task InvokesOnAction_WhenDenyClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, string action)? receivedAction = null;
+        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
         var failure = CreateExamFailure(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -504,19 +503,19 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("deny"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Deny));
     }
 
     [Test]
     public async Task InvokesOnAction_WhenDenyAndBanClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, string action)? receivedAction = null;
+        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
         var failure = CreateExamFailure(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -525,7 +524,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("deny_ban"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.DenyAndBan));
     }
 
     #endregion

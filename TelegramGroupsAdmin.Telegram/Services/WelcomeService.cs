@@ -129,19 +129,8 @@ public class WelcomeService(
                 return;
             }
 
-            // Step 2: Restrict user permissions (mute immediately - no spam window)
-            await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
-
-            // Step 3: Send verifying message
-            var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
-            var verifyingText = WelcomeMessageBuilder.FormatVerifyingMessage(username);
-            var verifyingMessage = await messageService.SendAndSaveMessageAsync(
-                chatId: chatMemberUpdate.Chat.Id,
-                text: verifyingText,
-                cancellationToken: cancellationToken);
-            verifyingMessageId = verifyingMessage.MessageId;
-
-            // Step 4: Create user record if not exists
+            // Step 2: Create user record if not exists (MUST happen before any moderation
+            // actions, because audit logging has a FK constraint on telegram_users)
             var existingUser = await telegramUserRepository.GetByTelegramIdAsync(user.Id, cancellationToken);
 
             if (existingUser == null)
@@ -172,6 +161,18 @@ public class WelcomeService(
                     "Created inactive user record for {User} on join",
                     user.ToLogDebug());
             }
+
+            // Step 3: Restrict user permissions (mute immediately - no spam window)
+            await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
+
+            // Step 4: Send verifying message
+            var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+            var verifyingText = WelcomeMessageBuilder.FormatVerifyingMessage(username);
+            var verifyingMessage = await messageService.SendAndSaveMessageAsync(
+                chatId: chatMemberUpdate.Chat.Id,
+                text: verifyingText,
+                cancellationToken: cancellationToken);
+            verifyingMessageId = verifyingMessage.MessageId;
 
             // ═══════════════════════════════════════════════════════════════════
             // SECURITY CHECKS (always run regardless of config.Enabled)

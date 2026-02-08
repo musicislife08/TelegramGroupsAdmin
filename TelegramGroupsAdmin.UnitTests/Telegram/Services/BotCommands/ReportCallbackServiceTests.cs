@@ -53,6 +53,7 @@ public class ReportCallbackServiceTests
     private IExamFlowService _mockExamFlowService = null!;
     private IBotDmService _mockDmService = null!;
     private IBotMessageService _mockMessageService = null!;
+    private IManagedChatsRepository _mockManagedChatsRepo = null!;
 
     private ReportCallbackService _service = null!;
 
@@ -72,6 +73,7 @@ public class ReportCallbackServiceTests
         _mockExamFlowService = Substitute.For<IExamFlowService>();
         _mockDmService = Substitute.For<IBotDmService>();
         _mockMessageService = Substitute.For<IBotMessageService>();
+        _mockManagedChatsRepo = Substitute.For<IManagedChatsRepository>();
 
         // Wire up scope factory → scope → service provider
         _mockScopeFactory.CreateScope().Returns(_mockScope);
@@ -93,6 +95,8 @@ public class ReportCallbackServiceTests
             .Returns(_mockDmService);
         _mockServiceProvider.GetService(typeof(IBotMessageService))
             .Returns(_mockMessageService);
+        _mockServiceProvider.GetService(typeof(IManagedChatsRepository))
+            .Returns(_mockManagedChatsRepo);
 
         _service = new ReportCallbackService(
             _mockLogger,
@@ -108,22 +112,10 @@ public class ReportCallbackServiceTests
     #region CanHandle Tests
 
     [Test]
-    public void CanHandle_ReportActionPrefix_ReturnsTrue()
-    {
-        // Arrange - callback data with report action prefix
-        var callbackData = "rpt:123:0";
-
-        // Act
-        var result = _service.CanHandle(callbackData);
-
-        // Assert
-        Assert.That(result, Is.True);
-    }
-
-    [Test]
     [TestCase("ban_select:123:456")]
     [TestCase("ban_cancel:456")]
     [TestCase("welcome:123")]
+    [TestCase("rpt:123:0")] // Legacy prefix no longer handled
     [TestCase("other:data")]
     [TestCase("")]
     public void CanHandle_NonReportPrefix_ReturnsFalse(string callbackData)
@@ -408,7 +400,7 @@ public class ReportCallbackServiceTests
     #region Spam Action Tests
 
     [Test]
-    public async Task HandleCallbackAsync_SpamAction_BansUserAndUpdatesReport()
+    public async Task HandleCallbackAsync_SpamAction_MarksAsSpamAndBansUser()
     {
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0"); // Spam = 0
@@ -416,8 +408,8 @@ public class ReportCallbackServiceTests
         SetupPendingReview();
         SetupTargetUser();
 
-        _mockModerationService.BanUserAsync(
-                Arg.Any<BanIntent>(),
+        _mockModerationService.MarkAsSpamAndBanAsync(
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
 
@@ -429,10 +421,12 @@ public class ReportCallbackServiceTests
         // Act
         await _service.HandleCallbackAsync(callbackQuery);
 
-        // Assert - ban was called
-        await _mockModerationService.Received(1).BanUserAsync(
-            Arg.Is<BanIntent>(i =>
+        // Assert - MarkAsSpamAndBanAsync called (delete + ban + spam flag)
+        await _mockModerationService.Received(1).MarkAsSpamAndBanAsync(
+            Arg.Is<SpamBanIntent>(i =>
                 i.User.Id == TestUserId &&
+                i.Chat.Id == TestChatId &&
+                i.MessageId == TestMessageId &&
                 i.Reason.Contains("spam")),
             Arg.Any<CancellationToken>());
 
@@ -447,7 +441,7 @@ public class ReportCallbackServiceTests
     }
 
     [Test]
-    public async Task HandleCallbackAsync_SpamAction_BanFails_ReportsFailure()
+    public async Task HandleCallbackAsync_SpamAction_Fails_ReportsFailure()
     {
         // Arrange
         var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:0");
@@ -455,8 +449,8 @@ public class ReportCallbackServiceTests
         SetupPendingReview();
         SetupTargetUser();
 
-        _mockModerationService.BanUserAsync(
-                Arg.Any<BanIntent>(),
+        _mockModerationService.MarkAsSpamAndBanAsync(
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("User is admin"));
 
@@ -485,7 +479,7 @@ public class ReportCallbackServiceTests
     public async Task HandleCallbackAsync_WarnAction_WarnsUserAndUpdatesReport()
     {
         // Arrange
-        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1"); // Warn = 1
+        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2"); // Warn = 2
         SetupValidContext();
         SetupPendingReview();
         SetupTargetUser();
@@ -524,7 +518,7 @@ public class ReportCallbackServiceTests
     public async Task HandleCallbackAsync_WarnAction_WarnFails_ReportsFailure()
     {
         // Arrange
-        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1");
+        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2");
         SetupValidContext();
         SetupPendingReview();
         SetupTargetUser();
@@ -548,19 +542,19 @@ public class ReportCallbackServiceTests
 
     #endregion
 
-    #region TempBan Action Tests
+    #region Ban Action Tests
 
     [Test]
-    public async Task HandleCallbackAsync_TempBanAction_TempBansUserAndUpdatesReport()
+    public async Task HandleCallbackAsync_BanAction_DeletesMessageAndBansUser()
     {
         // Arrange
-        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2"); // TempBan = 2
+        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1"); // Ban = 1
         SetupValidContext();
         SetupPendingReview();
         SetupTargetUser();
 
-        _mockModerationService.TempBanUserAsync(
-                Arg.Any<TempBanIntent>(),
+        _mockModerationService.BanUserAsync(
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
@@ -572,9 +566,17 @@ public class ReportCallbackServiceTests
         // Act
         await _service.HandleCallbackAsync(callbackQuery);
 
-        // Assert
-        await _mockModerationService.Received(1).TempBanUserAsync(
-            Arg.Is<TempBanIntent>(i =>
+        // Assert - message deleted first
+        await _mockModerationService.Received(1).DeleteMessageAsync(
+            Arg.Is<DeleteMessageIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.Chat.Id == TestChatId &&
+                i.MessageId == TestMessageId),
+            Arg.Any<CancellationToken>());
+
+        // Then ban
+        await _mockModerationService.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(i =>
                 i.User.Id == TestUserId &&
                 i.Reason.Contains("report")),
             Arg.Any<CancellationToken>());
@@ -583,22 +585,22 @@ public class ReportCallbackServiceTests
             TestReportId,
             ReportStatus.Reviewed,
             Arg.Any<string>(),
-            "TempBan",
+            "Ban",
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task HandleCallbackAsync_TempBanAction_TempBanFails_ReportsFailure()
+    public async Task HandleCallbackAsync_BanAction_BanFails_ReportsFailure()
     {
         // Arrange
-        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:2");
+        var callbackQuery = CreateCallbackQuery(data: $"rpt:{TestContextId}:1");
         SetupValidContext();
         SetupPendingReview();
         SetupTargetUser();
 
-        _mockModerationService.TempBanUserAsync(
-                Arg.Any<TempBanIntent>(),
+        _mockModerationService.BanUserAsync(
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Rate limited"));
 
@@ -902,8 +904,8 @@ public class ReportCallbackServiceTests
         SetupPendingReview();
         SetupTargetUser();
 
-        _mockModerationService.BanUserAsync(
-                Arg.Any<BanIntent>(),
+        _mockModerationService.MarkAsSpamAndBanAsync(
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Unexpected error"));
 
@@ -936,7 +938,7 @@ public class ReportCallbackServiceTests
         SetupPendingExamReview();
 
         _mockExamFlowService.DenyExamFailureAsync(
-                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
@@ -949,8 +951,8 @@ public class ReportCallbackServiceTests
 
         // Assert - ExamFlowService.DenyExamFailureAsync called (handles teaser deletion, kick, DM)
         await _mockExamFlowService.Received(1).DenyExamFailureAsync(
-            TestUserId,
-            TestChatId,
+            Arg.Is<UserIdentity>(u => u.Id == TestUserId),
+            Arg.Is<ChatIdentity>(c => c.Id == TestChatId),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
     }
@@ -964,7 +966,7 @@ public class ReportCallbackServiceTests
         SetupPendingExamReview();
 
         _mockExamFlowService.DenyAndBanExamFailureAsync(
-                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
@@ -977,8 +979,8 @@ public class ReportCallbackServiceTests
 
         // Assert - ExamFlowService.DenyAndBanExamFailureAsync called (handles teaser deletion, global ban, DM)
         await _mockExamFlowService.Received(1).DenyAndBanExamFailureAsync(
-            TestUserId,
-            TestChatId,
+            Arg.Is<UserIdentity>(u => u.Id == TestUserId),
+            Arg.Is<ChatIdentity>(c => c.Id == TestChatId),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
     }
@@ -993,7 +995,7 @@ public class ReportCallbackServiceTests
 
         // ExamFlowService succeeds (handles DM internally, even if it fails)
         _mockExamFlowService.DenyExamFailureAsync(
-                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
@@ -1023,7 +1025,7 @@ public class ReportCallbackServiceTests
         SetupPendingExamReview();
 
         _mockExamFlowService.DenyExamFailureAsync(
-                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
         _mockReportsRepo.TryUpdateStatusAsync(
@@ -1036,8 +1038,8 @@ public class ReportCallbackServiceTests
 
         // Assert - Correct parameters passed (flow service handles chat name lookup internally)
         await _mockExamFlowService.Received(1).DenyExamFailureAsync(
-            TestUserId,    // User to kick
-            TestChatId,    // Chat they failed exam in
+            Arg.Is<UserIdentity>(u => u.Id == TestUserId),    // User to kick
+            Arg.Is<ChatIdentity>(c => c.Id == TestChatId),    // Chat they failed exam in
             Arg.Is<Actor>(a => a.TelegramUserId == 999), // Executor from CreateCallbackQuery
             Arg.Any<CancellationToken>());
     }
@@ -1051,7 +1053,7 @@ public class ReportCallbackServiceTests
         SetupPendingExamReview();
 
         _mockExamFlowService.DenyExamFailureAsync(
-                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = false, ErrorMessage = "Failed to kick user" });
 
         // Act
@@ -1072,7 +1074,7 @@ public class ReportCallbackServiceTests
         SetupPendingExamReview();
 
         _mockExamFlowService.DenyAndBanExamFailureAsync(
-                TestUserId, TestChatId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = false, ErrorMessage = "Failed to ban user" });
 
         // Act

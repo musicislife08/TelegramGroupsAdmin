@@ -439,9 +439,9 @@ public class ReportsPage
     }
 
     /// <summary>
-    /// Clicks the "Dismiss" button on a moderation report card.
+    /// Clicks the "Dismiss" button on a report card.
     /// This is a NO-CONFIRMATION action that immediately dismisses the report.
-    /// Note: For impersonation alerts, use ClickFalsePositiveAsync instead.
+    /// Works for both moderation reports and impersonation alerts.
     /// </summary>
     public async Task ClickDismissAsync()
     {
@@ -454,26 +454,12 @@ public class ReportsPage
     }
 
     /// <summary>
-    /// Clicks the "Confirm Scam" button on an impersonation alert card.
+    /// Clicks the "Confirm" button on an impersonation alert card.
     /// This is a NO-CONFIRMATION action.
     /// </summary>
-    public async Task ClickConfirmScamAsync()
+    public async Task ClickConfirmAsync()
     {
-        var button = _page.Locator("button:has-text('Confirm Scam')").First;
-
-        // Wait for Blazor SignalR circuit to be fully established before clicking
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-
-        await button.ClickAsync();
-    }
-
-    /// <summary>
-    /// Clicks the "False Positive" button on an impersonation alert card.
-    /// This is a NO-CONFIRMATION action that dismisses the alert.
-    /// </summary>
-    public async Task ClickFalsePositiveAsync()
-    {
-        var button = _page.Locator("button:has-text('False Positive')").First;
+        var button = _page.Locator("button:has-text('Confirm')").First;
 
         // Wait for Blazor SignalR circuit to be fully established before clicking
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);

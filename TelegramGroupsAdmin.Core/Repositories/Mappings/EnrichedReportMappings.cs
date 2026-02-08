@@ -114,11 +114,9 @@ internal static class EnrichedReportMappings
             AiEvaluation = examContext.AiEvaluation,
 
             // From view joins (no more N+1!)
-            UserName = view.ExamUsername,
-            UserFirstName = view.ExamFirstName,
-            UserLastName = view.ExamLastName,
-            UserPhotoPath = view.ExamPhotoPath,
-            ChatName = view.ChatName
+            User = new UserIdentity(examContext.UserId, view.ExamFirstName, view.ExamLastName, view.ExamUsername),
+            Chat = new ChatIdentity(view.ChatId, view.ChatName),
+            UserPhotoPath = view.ExamPhotoPath
         };
     }
 
