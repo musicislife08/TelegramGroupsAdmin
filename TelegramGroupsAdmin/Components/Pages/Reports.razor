@@ -399,7 +399,7 @@
     {
         try
         {
-            var executor = Actor.FromWebUser(_currentUserId);
+            var executor = Actor.FromWebUser(_currentUserId, _currentUserDisplayName);
 
             switch (args.Action)
             {
@@ -428,7 +428,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
-                        _currentUserId,
+                        _currentUserDisplayName,
                         "false_positive",
                         "Marked as false positive");
 
@@ -448,7 +448,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
-                        _currentUserId,
+                        _currentUserDisplayName,
                         "trust",
                         "User trusted - not impersonation");
 
@@ -476,7 +476,7 @@
 
         try
         {
-            var executor = Actor.FromWebUser(_currentUserId);
+            var executor = Actor.FromWebUser(_currentUserId, _currentUserDisplayName);
 
             switch (args.Action)
             {

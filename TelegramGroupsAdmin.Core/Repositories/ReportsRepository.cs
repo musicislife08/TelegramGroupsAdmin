@@ -145,7 +145,7 @@ public class ReportsRepository : IReportsRepository
             _logger.LogInformation(
                 "Updated report {ReportId} (type={Type}) to status {Status} by {ReviewedBy} (action: {ActionTaken})",
                 reportId,
-                entity.Type,
+                (ReportType)entity.Type,
                 status,
                 reviewedBy,
                 actionTaken);
