@@ -29,7 +29,7 @@ public class SpacingContentCheckV2(ILogger<SpacingContentCheckV2> logger) : ICon
         {
             logger.LogDebug(
                 "Skipping Spacing check for user {UserId}: User is {UserType}",
-                request.UserId,
+                request.User.Id,
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }

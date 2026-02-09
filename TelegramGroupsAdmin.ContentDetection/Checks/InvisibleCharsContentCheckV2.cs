@@ -30,7 +30,7 @@ public class InvisibleCharsContentCheckV2(ILogger<InvisibleCharsContentCheckV2> 
         {
             logger.LogDebug(
                 "Skipping InvisibleChars check for user {UserId}: User is {UserType}",
-                request.UserId,
+                request.User.Id,
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }

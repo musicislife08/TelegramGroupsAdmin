@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Extensions;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
@@ -56,8 +57,8 @@ public partial class ThreatIntelContentCheckV2(
                     var virusTotalResult = await CheckVirusTotalAsync(url, req.VirusTotalApiKey, req.CancellationToken);
                     if (virusTotalResult.IsThreat)
                     {
-                        logger.LogDebug("ThreatIntel check for user {UserId}: VirusTotal flagged {Url}",
-                            req.UserId, url);
+                        logger.LogDebug("ThreatIntel check for {User}: VirusTotal flagged {Url}",
+                            req.User.ToLogDebug(), url);
 
                         return new ContentCheckResponseV2
                         {
@@ -71,8 +72,8 @@ public partial class ThreatIntelContentCheckV2(
                 }
             }
 
-            logger.LogDebug("ThreatIntel check for user {UserId}: No threats found for {UrlCount} URLs",
-                req.UserId, req.Urls.Count);
+            logger.LogDebug("ThreatIntel check for {User}: No threats found for {UrlCount} URLs",
+                req.User.ToLogDebug(), req.Urls.Count);
 
             return new ContentCheckResponseV2
             {
@@ -85,7 +86,7 @@ public partial class ThreatIntelContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "ThreatIntel check failed for user {UserId}", req.UserId);
+            logger.LogError(ex, "ThreatIntel check failed for {User}", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,

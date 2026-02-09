@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
@@ -7,8 +9,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 public abstract class ContentCheckRequestBase
 {
     public required string Message { get; init; }
-    public required long UserId { get; init; }
-    public required string? UserName { get; init; }
-    public required long ChatId { get; init; }
+    public required UserIdentity User { get; init; }
+    public required ChatIdentity Chat { get; init; }
     public required CancellationToken CancellationToken { get; init; }
 }

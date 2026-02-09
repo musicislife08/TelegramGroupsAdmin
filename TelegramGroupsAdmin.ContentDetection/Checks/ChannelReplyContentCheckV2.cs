@@ -27,7 +27,7 @@ public class ChannelReplyContentCheckV2(ILogger<ChannelReplyContentCheckV2> logg
         {
             logger.LogDebug(
                 "Skipping ChannelReply check for user {UserId}: User is {UserType}",
-                request.UserId,
+                request.User.Id,
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }

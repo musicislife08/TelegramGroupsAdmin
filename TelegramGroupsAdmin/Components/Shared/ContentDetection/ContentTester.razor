@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Abstractions
 @using TelegramGroupsAdmin.ContentDetection.Constants
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Handlers
 @inject IContentCheckCoordinator ContentCheckCoordinator
@@ -561,9 +562,8 @@
             var request = new ContentCheckRequest
             {
                 Message = translationResult.TextForDetection, // Use translated text if available
-                UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
-                UserName = _userName,
-                ChatId = _selectedChatId ?? 0, // 0 = global config
+                User = UserIdentity.FromId(string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId)),
+                Chat = ChatIdentity.FromId(_selectedChatId ?? 0), // 0 = global config
                 ImageData = isVideo ? null : imageStream, // Only for images
                 ImageFileName = isVideo ? null : imageFileName,
                 PhotoLocalPath = tempImagePath, // ML-5: Enable OCR + hash similarity layers
@@ -672,9 +672,8 @@
             var scanRequest = new FileScanCheckRequest
             {
                 Message = $"File attachment: {_selectedFile.Name}",
-                UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
-                UserName = _userName,
-                ChatId = _selectedChatId ?? 0,
+                User = UserIdentity.FromId(string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId)),
+                Chat = ChatIdentity.FromId(_selectedChatId ?? 0),
                 FilePath = tempFilePath,
                 FileName = _selectedFile.Name,
                 FileSize = _selectedFile.Size,

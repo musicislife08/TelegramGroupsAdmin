@@ -114,9 +114,8 @@ public class FileScanJob(
                 var scanRequest = new FileScanCheckRequest
                 {
                     Message = $"File attachment: {payload.FileName ?? "unknown"}",
-                    UserId = payload.User.Id,
-                    UserName = payload.User.DisplayName,
-                    ChatId = payload.Chat.Id,
+                    User = payload.User,
+                    Chat = payload.Chat,
                     FilePath = tempFilePath,
                     FileName = payload.FileName ?? "unknown",
                     FileSize = payload.FileSize,

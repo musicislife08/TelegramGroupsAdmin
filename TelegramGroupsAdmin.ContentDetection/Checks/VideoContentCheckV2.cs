@@ -12,6 +12,8 @@ using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 
@@ -91,7 +93,7 @@ public class VideoContentCheckV2(
             }
 
             // Load config
-            var config = await configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
+            var config = await configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
             var videoConfig = config.VideoSpam;
 
             // Extract keyframes from video
@@ -161,7 +163,7 @@ public class VideoContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in VideoSpamCheckV2 for user {UserId}", req.UserId);
+            logger.LogError(ex, "Error in VideoSpamCheckV2 for {User}", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -338,9 +340,8 @@ public class VideoContentCheckV2(
             var ocrRequest = new ContentCheckRequest
             {
                 Message = allText,
-                UserId = req.UserId,
-                UserName = req.UserName,
-                ChatId = req.ChatId,
+                User = req.User,
+                Chat = req.Chat,
                 // Use defaults for properties not on VideoCheckRequest
                 Metadata = new ContentCheckMetadata(),
                 CheckOnly = false,
@@ -451,7 +452,7 @@ public class VideoContentCheckV2(
 
             var prompt = BuildVideoPrompt(req.CustomPrompt);
 
-            logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for user {UserId}", req.UserId);
+            logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for {User}", req.User.ToLogDebug());
 
             // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
@@ -468,7 +469,7 @@ public class VideoContentCheckV2(
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
-                logger.LogWarning("Empty response from AI Vision for user {UserId}", req.UserId);
+                logger.LogWarning("Empty response from AI Vision for {User}", req.User.ToLogDebug());
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -480,7 +481,7 @@ public class VideoContentCheckV2(
                 };
             }
 
-            return ParseSpamResponse(result.Content, req.UserId, startTimestamp);
+            return ParseSpamResponse(result.Content, req.User, startTimestamp);
         }
         catch (Exception ex)
         {
@@ -538,7 +539,7 @@ public class VideoContentCheckV2(
     /// <summary>
     /// Parse AI Vision response and create spam check result
     /// </summary>
-    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
+    private ContentCheckResponseV2 ParseSpamResponse(string content, UserIdentity user, long startTimestamp)
     {
         try
         {
@@ -556,8 +557,8 @@ public class VideoContentCheckV2(
 
             if (response == null)
             {
-                logger.LogWarning("Failed to deserialize AI Vision response for user {UserId}: {Content}",
-                    userId, content);
+                logger.LogWarning("Failed to deserialize AI Vision response for {User}: {Content}",
+                    user.ToLogDebug(), content);
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -569,8 +570,8 @@ public class VideoContentCheckV2(
                 };
             }
 
-            logger.LogDebug("AI Vision analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
-                userId, response.Spam, response.Confidence, response.Reason);
+            logger.LogDebug("AI Vision analysis for {User}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
+                user.ToLogDebug(), response.Spam, response.Confidence, response.Reason);
 
             var details = response.Reason ?? "No reason provided";
             if (response.PatternsDetected?.Length > 0)
@@ -605,8 +606,8 @@ public class VideoContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error parsing AI Vision response for user {UserId}: {Content}",
-                userId, content);
+            logger.LogError(ex, "Error parsing AI Vision response for {User}: {Content}",
+                user.ToLogDebug(), content);
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,

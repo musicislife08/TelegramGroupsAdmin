@@ -12,7 +12,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Extensions;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -59,7 +59,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     {
         try
         {
-            return await _configRepository.GetEffectiveConfigAsync(request.ChatId, cancellationToken);
+            return await _configRepository.GetEffectiveConfigAsync(request.Chat.Id, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -71,8 +71,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     public async Task<ContentDetectionResult> CheckMessageAsync(ContentCheckRequest request, CancellationToken cancellationToken = default)
     {
         using var activity = TelemetryConstants.SpamDetection.StartActivity("spam_detection.check_message_v2");
-        activity?.SetTag("user_id", request.UserId);
-        activity?.SetTag("chat_id", request.ChatId);
+        activity?.SetTag("user_id", request.User.Id);
+        activity?.SetTag("chat_id", request.Chat.Id);
         activity?.SetTag("engine_version", "v2");
 
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -83,13 +83,13 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         // Phase 4.13: URL Pre-Filter - Check for hard-blocked domains FIRST
         if (!string.IsNullOrWhiteSpace(request.Message))
         {
-            var hardBlock = await _preFilterService.CheckHardBlockAsync(request.Message, request.ChatId, cancellationToken);
+            var hardBlock = await _preFilterService.CheckHardBlockAsync(request.Message, request.Chat, cancellationToken);
 
             if (hardBlock.ShouldBlock)
             {
                 _logger.LogWarning(
-                    "Hard block triggered for {User} in chat {ChatId}: {Reason}",
-                    LogDisplayName.UserDebug(request.UserName, request.UserId), request.ChatId, hardBlock.Reason);
+                    "Hard block triggered for {User} in {Chat}: {Reason}",
+                    request.User.ToLogDebug(), request.Chat.ToLogDebug(), hardBlock.Reason);
 
                 var hardBlockResult = new ContentDetectionResult
                 {
@@ -148,11 +148,11 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             if (aiVetoCheck != null)
             {
                 // Fetch custom prompt from prompt_versions table (null = use default prompt)
-                var activePrompt = await _promptVersionRepo.GetActiveVersionAsync(request.ChatId, cancellationToken);
+                var activePrompt = await _promptVersionRepo.GetActiveVersionAsync(request.Chat.Id, cancellationToken);
                 var systemPrompt = activePrompt?.PromptText;
 
                 _logger.LogDebug("Running AI veto check for {User} (custom prompt: {HasCustom})",
-                    request.UserName ?? $"User {request.UserId}", systemPrompt != null);
+                    request.User.ToLogDebug(), systemPrompt != null);
 
                 var vetoRequest = request with { HasSpamFlags = true };
                 var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, pipelineResult.VisionAnalysisText, cancellationToken);
@@ -175,7 +175,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 if (vetoResultV2.Abstained)
                 {
                     _logger.LogWarning("AI veto abstained for {User} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
-                        LogDisplayName.UserDebug(request.UserName, request.UserId), vetoResultV2.Details, pipelineResult.NetConfidence);
+                        request.User.ToLogDebug(), vetoResultV2.Details, pipelineResult.NetConfidence);
 
                     // Return pipeline result with AI check appended for visibility
                     var deferredResult = pipelineResult with { CheckResults = updatedCheckResults };
@@ -187,7 +187,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 if (vetoResultV2.Score == 0.0)
                 {
                     _logger.LogInformation("AI vetoed spam detection for {User} (clean result with 0.0 score)",
-                        request.UserName ?? $"User {request.UserId}");
+                        request.User.ToLogInfo());
                     var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoCheckResult);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;
@@ -195,7 +195,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
                 // AI confirmed spam - add score to total
                 _logger.LogDebug("AI confirmed spam for {User} with score {Score}",
-                    request.UserName ?? $"User {request.UserId}", vetoResultV2.Score);
+                    request.User.ToLogDebug(), vetoResultV2.Score);
 
                 var newTotalScore = (pipelineResult.NetConfidence / 20.0) + vetoResultV2.Score;
 
@@ -249,7 +249,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error running {CheckName} for {User}", check.CheckName, LogDisplayName.UserDebug(request.UserName, request.UserId));
+                _logger.LogError(ex, "Error running {CheckName} for {User}", check.CheckName, request.User.ToLogDebug());
                 // Continue with other checks
             }
         }
@@ -332,9 +332,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.StopWords => new StopWordsCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 ConfidenceThreshold = config.StopWords.ConfidenceThreshold,
                 CancellationToken = cancellationToken
             },
@@ -342,9 +341,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.Bayes => new BayesCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 MinMessageLength = config.MinMessageLength,
                 MinSpamProbability = (int)config.Bayes.MinSpamProbability,
                 CancellationToken = cancellationToken
@@ -355,9 +353,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.Similarity => new SimilarityCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 MinMessageLength = config.MinMessageLength,
                 SimilarityThreshold = config.Similarity.Threshold,
                 CancellationToken = cancellationToken
@@ -366,9 +363,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.Spacing => new SpacingCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 ConfidenceThreshold = 70,
                 SuspiciousRatioThreshold = config.Spacing.ShortWordRatioThreshold,
                 CancellationToken = cancellationToken
@@ -377,9 +373,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.InvisibleChars => new InvisibleCharsCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 ConfidenceThreshold = 80,
                 CancellationToken = cancellationToken
             },
@@ -387,9 +382,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.ThreatIntel => new ThreatIntelCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 Urls = originalRequest.Urls ?? [],
                 VirusTotalApiKey = _spamDetectionOptions.ApiKey,
                 ConfidenceThreshold = 85,
@@ -399,9 +393,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.UrlBlocklist => new UrlBlocklistCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 Urls = originalRequest.Urls ?? [],
                 ConfidenceThreshold = 90,
                 CancellationToken = cancellationToken
@@ -410,9 +403,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.ImageSpam => new ImageCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 PhotoFileId = originalRequest.PhotoFileId ?? "",
                 PhotoUrl = originalRequest.PhotoUrl,
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
@@ -424,9 +416,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.VideoSpam => new VideoCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null,
                 ConfidenceThreshold = 80,
@@ -436,9 +427,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckName.ChannelReply => new ChannelReplyCheckRequest
             {
                 Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
+                User = originalRequest.User,
+                Chat = originalRequest.Chat,
                 CancellationToken = cancellationToken
             },
 
@@ -458,9 +448,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         return new AIVetoCheckRequest
         {
             Message = originalRequest.Message ?? "",
-            UserId = originalRequest.UserId,
-            UserName = originalRequest.UserName,
-            ChatId = originalRequest.ChatId,
+            User = originalRequest.User,
+            Chat = originalRequest.Chat,
             SystemPrompt = systemPrompt, // From prompt_versions table (null = use default)
             HasSpamFlags = originalRequest.HasSpamFlags,
             MinMessageLength = config.MinMessageLength,

@@ -3,6 +3,8 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -23,7 +25,7 @@ public class UrlPreFilterService : IUrlPreFilterService
         _logger = logger;
     }
 
-    public async Task<HardBlockResult> CheckHardBlockAsync(string messageText, long chatId, CancellationToken cancellationToken = default)
+    public async Task<HardBlockResult> CheckHardBlockAsync(string messageText, ChatIdentity chat, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(messageText))
         {
@@ -37,12 +39,12 @@ public class UrlPreFilterService : IUrlPreFilterService
             return new HardBlockResult(ShouldBlock: false, Reason: null, BlockedDomain: null);
         }
 
-        _logger.LogDebug("Checking {Count} URLs for hard blocks in chat {ChatId}", urls.Count, chatId);
+        _logger.LogDebug("Checking {Count} URLs for hard blocks in {Chat}", urls.Count, chat.ToLogDebug());
 
         // Check whitelist first (whitelist always wins)
         // Use GetEffectiveAsync to fetch only enabled whitelists (optimized query with index)
         var whitelistFilters = await _filtersRepo.GetEffectiveAsync(
-            chatId,
+            chat.Id,
             DomainFilterType.Whitelist,
             blockMode: null,
             cancellationToken);
@@ -66,15 +68,15 @@ public class UrlPreFilterService : IUrlPreFilterService
         // Check hard block cache (blocklists + manual filters with BlockMode = Hard)
         foreach (var domain in domains)
         {
-            var blockedDomain = await _cacheRepo.FindHardBlockAsync(domain!, chatId, cancellationToken);
+            var blockedDomain = await _cacheRepo.FindHardBlockAsync(domain!, chat.Id, cancellationToken);
             if (blockedDomain != null)
             {
                 var reason = blockedDomain.SourceSubscriptionId.HasValue
                     ? $"Domain {domain} is on hard block list (subscription ID: {blockedDomain.SourceSubscriptionId})"
                     : $"Domain {domain} is on manual hard block list";
 
-                _logger.LogWarning("Hard block triggered for domain {Domain} in chat {ChatId}: {Reason}",
-                    domain, chatId, reason);
+                _logger.LogWarning("Hard block triggered for domain {Domain} in {Chat}: {Reason}",
+                    domain, chat.ToLogDebug(), reason);
 
                 return new HardBlockResult(
                     ShouldBlock: true,

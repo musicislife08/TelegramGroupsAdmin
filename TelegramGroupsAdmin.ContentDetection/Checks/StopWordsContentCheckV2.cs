@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
@@ -35,8 +36,8 @@ public class StopWordsContentCheckV2(
         if (request.IsUserTrusted || request.IsUserAdmin)
         {
             logger.LogDebug(
-                "Skipping StopWords check for user {UserId}: User is {UserType}",
-                request.UserId,
+                "Skipping StopWords check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }
@@ -79,17 +80,17 @@ public class StopWordsContentCheckV2(
             var messageMatches = CheckTextForStopWords(processedMessage, stopWordsSet, "message");
             foundMatches.AddRange(messageMatches);
 
-            // Check username
-            if (!string.IsNullOrWhiteSpace(req.UserName))
+            // Check username (display name)
+            if (!string.IsNullOrWhiteSpace(req.User.DisplayName))
             {
-                var usernameMatches = CheckTextForStopWords(req.UserName, stopWordsSet, "username");
+                var usernameMatches = CheckTextForStopWords(req.User.DisplayName, stopWordsSet, "username");
                 foundMatches.AddRange(usernameMatches);
             }
 
             // Check userID
-            if (req.UserId != 0)
+            if (req.User.Id != 0)
             {
-                var userIdMatches = CheckTextForStopWords(req.UserId.ToString(), stopWordsSet, "userID");
+                var userIdMatches = CheckTextForStopWords(req.User.Id.ToString(), stopWordsSet, "userID");
                 foundMatches.AddRange(userIdMatches);
             }
 
@@ -123,7 +124,7 @@ public class StopWordsContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in StopWordsSpamCheckV2 for user {UserId}", req.UserId);
+            logger.LogError(ex, "Error in StopWordsSpamCheckV2 for {User}", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,

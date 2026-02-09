@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -105,8 +106,8 @@ public class SystemAccountBypassTests
         // Arrange: Create a content check request from a system account
         var request = new ContentCheckRequest
         {
-            UserId = systemUserId,
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(systemUserId),
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "This message should never be checked for spam"
         };
 
@@ -135,8 +136,8 @@ public class SystemAccountBypassTests
         // Arrange: Anonymous admin post with content that would trigger spam detection
         var request = new ContentCheckRequest
         {
-            UserId = TelegramConstants.GroupAnonymousBotUserId, // 1087968824
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(TelegramConstants.GroupAnonymousBotUserId), // 1087968824
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "FREE BITCOIN! Click here: https://scam-site.com BUY NOW!!!"
         };
 
@@ -164,8 +165,8 @@ public class SystemAccountBypassTests
         // Arrange: Regular user (not a system account)
         var request = new ContentCheckRequest
         {
-            UserId = 12345, // Regular user
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(12345), // Regular user
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "Hello world"
         };
 
@@ -189,8 +190,8 @@ public class SystemAccountBypassTests
         // Arrange
         var request = new ContentCheckRequest
         {
-            UserId = systemUserId,
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(systemUserId),
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "System account message"
         };
 
@@ -218,7 +219,7 @@ public class SystemAccountBypassTests
             CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException(
-                $"ContentDetectionEngine.CheckMessageAsync should not be called for system account {request.UserId}. " +
+                $"ContentDetectionEngine.CheckMessageAsync should not be called for system account {request.User.Id}. " +
                 "System accounts should bypass all detection.");
         }
 
@@ -227,7 +228,7 @@ public class SystemAccountBypassTests
             CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException(
-                $"ContentDetectionEngine.RunPipelineChecksAsync should not be called for system account {request.UserId}. " +
+                $"ContentDetectionEngine.RunPipelineChecksAsync should not be called for system account {request.User.Id}. " +
                 "System accounts should bypass all detection.");
         }
     }

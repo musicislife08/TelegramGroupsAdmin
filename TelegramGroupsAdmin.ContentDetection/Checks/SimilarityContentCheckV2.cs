@@ -33,7 +33,7 @@ public class SimilarityContentCheckV2(
         {
             logger.LogDebug(
                 "Skipping Similarity check for user {UserId}: User is {UserType}",
-                request.UserId,
+                request.User.Id,
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }

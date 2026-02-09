@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.ContentDetection.Checks;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
@@ -67,8 +68,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = false
         };
@@ -87,8 +88,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "   \n\t  ",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = false
         };
@@ -107,8 +108,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "Test message",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = true,
             IsUserAdmin = false
         };
@@ -127,8 +128,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "Test message",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = true
         };
@@ -147,8 +148,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "Test message",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = false
         };
@@ -171,9 +172,8 @@ public class AIContentCheckTests
         var request = new AIVetoCheckRequest
         {
             Message = "Hi",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = false,
             MinMessageLength = 10,
@@ -202,9 +202,8 @@ public class AIContentCheckTests
         var request = new AIVetoCheckRequest
         {
             Message = "Hi",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,  // AI veto requires spam flags from other checks
             MinMessageLength = 10,
@@ -235,9 +234,8 @@ public class AIContentCheckTests
         var request = new AIVetoCheckRequest
         {
             Message = "This is a test message",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = false,
             MinMessageLength = 10,
@@ -266,9 +264,8 @@ public class AIContentCheckTests
         var request = new AIVetoCheckRequest
         {
             Message = "This is a test message",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,
             MinMessageLength = 10,
@@ -742,9 +739,8 @@ public class AIContentCheckTests
         return new AIVetoCheckRequest
         {
             Message = message,
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,
             MinMessageLength = 10,
@@ -763,9 +759,8 @@ public class AIContentCheckTests
         return new AIVetoCheckRequest
         {
             Message = "This is a test message that is long enough to be checked",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,  // AI veto requires spam flags from other checks
             MinMessageLength = 10,

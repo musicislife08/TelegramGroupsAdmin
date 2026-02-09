@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
@@ -68,13 +69,13 @@ public partial class UrlBlocklistContentCheckV2(
                 };
             }
 
-            logger.LogDebug("URL filter check for user {UserId}: Checking {DomainCount} domains in chat {ChatId}",
-                req.UserId, domains.Count, req.ChatId);
+            logger.LogDebug("URL filter check for {User}: Checking {DomainCount} domains in chat {ChatId}",
+                req.User.ToLogDebug(), domains.Count, req.Chat.Id);
 
             // Check whitelist first (whitelist bypasses all filters)
             // Use GetEffectiveAsync to fetch only enabled whitelists (optimized query with index)
             var whitelistFilters = await filtersRepo.GetEffectiveAsync(
-                req.ChatId,
+                req.Chat.Id,
                 DomainFilterType.Whitelist,
                 blockMode: null,
                 req.CancellationToken);
@@ -93,15 +94,15 @@ public partial class UrlBlocklistContentCheckV2(
                 }
 
                 // Check soft block cache (BlockMode = Soft)
-                var blockedDomain = await cacheRepo.GetByDomainAsync(normalized, req.ChatId, BlockMode.Soft, req.CancellationToken);
+                var blockedDomain = await cacheRepo.GetByDomainAsync(normalized, req.Chat.Id, BlockMode.Soft, req.CancellationToken);
                 if (blockedDomain != null)
                 {
                     var source = blockedDomain.SourceSubscriptionId.HasValue
                         ? $"blocklist subscription ID {blockedDomain.SourceSubscriptionId}"
                         : "manual filter";
 
-                    logger.LogInformation("URL filter match for user {UserId}: Domain {Domain} on soft block list (source: {Source})",
-                        req.UserId, normalized, source);
+                    logger.LogInformation("URL filter match for {User}: Domain {Domain} on soft block list (source: {Source})",
+                        req.User.ToLogInfo(), normalized, source);
 
                     return new ContentCheckResponseV2
                     {
@@ -114,8 +115,8 @@ public partial class UrlBlocklistContentCheckV2(
                 }
             }
 
-            logger.LogDebug("URL filter check for user {UserId}: No soft blocks found for {DomainCount} domains",
-                req.UserId, domains.Count);
+            logger.LogDebug("URL filter check for {User}: No soft blocks found for {DomainCount} domains",
+                req.User.ToLogDebug(), domains.Count);
 
             return new ContentCheckResponseV2
             {
@@ -128,7 +129,7 @@ public partial class UrlBlocklistContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "URL filter check failed for user {UserId}", req.UserId);
+            logger.LogError(ex, "URL filter check failed for {User}", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
