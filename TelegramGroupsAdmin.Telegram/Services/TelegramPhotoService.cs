@@ -233,6 +233,11 @@ public class TelegramPhotoService
                 user.ToLogDebug(userId));
             return null;
         }
+        catch (ApiRequestException ex) when (ex.Message.Contains("user not found", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug("User photo fetch skipped: user not found for {User}", user.ToLogDebug(userId));
+            return null;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fetch user photo for {User}", user.ToLogDebug(userId));

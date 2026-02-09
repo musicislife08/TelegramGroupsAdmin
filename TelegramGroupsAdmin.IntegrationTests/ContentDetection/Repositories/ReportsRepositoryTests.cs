@@ -79,7 +79,7 @@ public class ReportsRepositoryTests
         return new Report(
             Id: id,
             MessageId: messageId,
-            ChatId: chatId,
+            Chat: new ChatIdentity(chatId, "TestChat"),
             ReportCommandMessageId: 99999,
             ReportedByUserId: reportedByUserId,
             ReportedByUserName: "TestUser",
@@ -300,7 +300,7 @@ public class ReportsRepositoryTests
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.Id, Is.EqualTo(reportId));
         Assert.That(retrieved.MessageId, Is.EqualTo(54321));
-        Assert.That(retrieved.ChatId, Is.EqualTo(-1009876543210));
+        Assert.That(retrieved.Chat.Id, Is.EqualTo(-1009876543210));
         Assert.That(retrieved.ReportedByUserId, Is.EqualTo(111222333));
         Assert.That(retrieved.Status, Is.EqualTo(ReportStatus.Pending));
     }
@@ -382,8 +382,6 @@ public class ReportsRepositoryTests
     {
         return new ExamFailureRecord
         {
-            ChatId = chatId,
-            UserId = userId,
             User = new UserIdentity(userId, "Test", "User", null),
             Chat = new ChatIdentity(chatId, "Test Chat"),
             McAnswers = mcAnswers ?? new Dictionary<int, string>
@@ -437,8 +435,8 @@ public class ReportsRepositoryTests
         // Assert
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.Id, Is.EqualTo(id));
-        Assert.That(retrieved.ChatId, Is.EqualTo(-1009876543210));
-        Assert.That(retrieved.UserId, Is.EqualTo(111222333));
+        Assert.That(retrieved.Chat.Id, Is.EqualTo(-1009876543210));
+        Assert.That(retrieved.User.Id, Is.EqualTo(111222333));
         Assert.That(retrieved.Score, Is.EqualTo(60));
         Assert.That(retrieved.PassingThreshold, Is.EqualTo(80));
         Assert.That(retrieved.OpenEndedAnswer, Is.EqualTo("I want to learn about crypto trading"));
@@ -507,7 +505,7 @@ public class ReportsRepositoryTests
 
         // Assert - only the unreviewed one
         Assert.That(pending, Has.Count.EqualTo(1));
-        Assert.That(pending[0].UserId, Is.EqualTo(2));
+        Assert.That(pending[0].User.Id, Is.EqualTo(2));
     }
 
     [Test]
@@ -549,7 +547,7 @@ public class ReportsRepositoryTests
 
         // Assert
         Assert.That(pending, Has.Count.EqualTo(2));
-        Assert.That(pending.All(p => p.ChatId == targetChatId), Is.True);
+        Assert.That(pending.All(p => p.Chat.Id == targetChatId), Is.True);
     }
 
     #endregion
@@ -569,9 +567,9 @@ public class ReportsRepositoryTests
     {
         return new ImpersonationAlertRecord
         {
-            SuspectedUserId = suspectedUserId,
-            TargetUserId = targetUserId,
-            ChatId = chatId,
+            SuspectedUser = new UserIdentity(suspectedUserId, "Suspected", "User", null),
+            TargetUser = new UserIdentity(targetUserId, "Target", "Admin", null),
+            Chat = new ChatIdentity(chatId, "Test Chat"),
             TotalScore = totalScore,
             RiskLevel = riskLevel,
             NameMatch = nameMatch,
@@ -612,8 +610,8 @@ public class ReportsRepositoryTests
         // Assert
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.Id, Is.EqualTo((int)id));
-        Assert.That(retrieved.SuspectedUserId, Is.EqualTo(333333333));
-        Assert.That(retrieved.TargetUserId, Is.EqualTo(444444444));
+        Assert.That(retrieved.SuspectedUser.Id, Is.EqualTo(333333333));
+        Assert.That(retrieved.TargetUser.Id, Is.EqualTo(444444444));
         Assert.That(retrieved.TotalScore, Is.EqualTo(75));
         Assert.That(retrieved.RiskLevel, Is.EqualTo(ImpersonationRiskLevel.Medium));
     }
@@ -688,7 +686,7 @@ public class ReportsRepositoryTests
 
         // Assert
         Assert.That(history, Has.Count.EqualTo(2));
-        Assert.That(history.All(h => h.SuspectedUserId == suspectedUserId), Is.True);
+        Assert.That(history.All(h => h.SuspectedUser.Id == suspectedUserId), Is.True);
     }
 
     [Test]

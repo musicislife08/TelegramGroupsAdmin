@@ -34,7 +34,7 @@ public class ReportService(
         logger.LogInformation(
             "Report {ReportId} created: ChatId={ChatId}, MessageId={MessageId}, IsAutomated={IsAutomated}, ReportedBy={ReportedBy}",
             reportId,
-            report.ChatId,
+            report.Chat.Id,
             report.MessageId,
             isAutomated,
             report.ReportedByUserName ?? "Auto-Detection");
@@ -58,11 +58,11 @@ public class ReportService(
             AuditEventType.ReportCreated,
             actor,
             target,
-            value: $"Report #{reportId} for message {report.MessageId} in chat {report.ChatId}",
+            value: $"Report #{reportId} for message {report.MessageId} in chat {report.Chat.Id}",
             cancellationToken: cancellationToken);
 
         // 3. Send notification via INotificationService (respects user preferences)
-        var chatName = originalMessage?.Chat.Title ?? $"Chat {report.ChatId}";
+        var chatName = report.Chat.ChatName ?? $"Chat {report.Chat.Id}";
         var messagePreview = GetMessagePreview(originalMessage, report);
         var reportedUserName = GetReportedUserName(originalMessage, report);
 
@@ -89,7 +89,7 @@ public class ReportService(
         // Send notification via Quartz job (reliable delivery instead of fire-and-forget)
         // Now includes report metadata for action buttons and photo for DM with image
         var notificationPayload = new SendChatNotificationPayload(
-            ChatId: report.ChatId,
+            Chat: report.Chat,
             EventType: NotificationEventType.MessageReported,
             Subject: notificationSubject,
             Message: notificationMessage,

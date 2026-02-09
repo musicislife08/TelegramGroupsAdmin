@@ -8,7 +8,7 @@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
     @* User profile photo (clickable to view user details) *@
-    <div class="tg-avatar-container" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" style="cursor: pointer;" title="View user details">
+    <div class="tg-avatar-container" @onclick="() => OnViewUserDetail.InvokeAsync(Message.User.Id)" @onclick:stopPropagation="true" style="cursor: pointer;" title="View user details">
         @if (!string.IsNullOrEmpty(Message.UserPhotoPath))
         {
             <img src="@GetImagePath(Message.UserPhotoPath)" alt="@GetUserDisplayName()" class="tg-avatar" loading="lazy" />
@@ -28,7 +28,7 @@
         <div class="tg-bubble-inner">
             @* Telegram-style Header: User name + timestamp + badges *@
             <div class="tg-header">
-                <span class="tg-user-name" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" title="View user details">
+                <span class="tg-user-name" @onclick="() => OnViewUserDetail.InvokeAsync(Message.User.Id)" @onclick:stopPropagation="true" title="View user details">
                     @GetUserDisplayName()
                 </span>
                 <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
@@ -501,7 +501,7 @@
         var parameters = new DialogParameters
         {
             { nameof(UserNotesDialog.Notes), UserNotes },
-            { nameof(UserNotesDialog.UserName), Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}" }
+            { nameof(UserNotesDialog.UserName), Message.User.DisplayName }
         };
 
         var options = new DialogOptions
@@ -777,11 +777,11 @@
     private string GetUserDisplayName()
     {
         return TelegramDisplayName.Format(
-            Message.FirstName,
-            Message.LastName,
-            Message.UserName,
-            Message.UserId,
-            Message.ChatName);
+            Message.User.FirstName,
+            Message.User.LastName,
+            Message.User.Username,
+            Message.User.Id,
+            Message.Chat.ChatName);
     }
 
     /// <summary>

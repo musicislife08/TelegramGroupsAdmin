@@ -26,11 +26,8 @@ public class DetectionHistoryDialogTests : DialogTestContext
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "testuser",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: 111222,
+            User: new UserIdentity(userId, "Test", "User", "testuser"),
+            Chat: new ChatIdentity(111222, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow.AddHours(-1),
             MessageText: messageText,
             PhotoFileId: null,
@@ -38,7 +35,6 @@ public class DetectionHistoryDialogTests : DialogTestContext
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

@@ -301,14 +301,14 @@
             // User filter
             if (!string.IsNullOrEmpty(UserName))
             {
-                if (message.UserName?.Contains(UserName, StringComparison.OrdinalIgnoreCase) != true)
+                if (message.User.Username?.Contains(UserName, StringComparison.OrdinalIgnoreCase) != true)
                     return false;
             }
 
             // Chat filter
             if (!string.IsNullOrEmpty(ChatName))
             {
-                if (message.ChatName?.Contains(ChatName, StringComparison.OrdinalIgnoreCase) != true)
+                if (message.Chat.ChatName?.Contains(ChatName, StringComparison.OrdinalIgnoreCase) != true)
                     return false;
             }
 

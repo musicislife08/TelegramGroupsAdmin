@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
@@ -41,8 +42,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Inserted message {MessageId} from user {UserId} (photo: {HasPhoto})",
-            message.MessageId, message.UserId, message.PhotoFileId != null);
+            "Inserted message {MessageId} from user {User} (photo: {HasPhoto})",
+            message.MessageId, message.User.ToLogDebug(), message.PhotoFileId != null);
     }
 
 

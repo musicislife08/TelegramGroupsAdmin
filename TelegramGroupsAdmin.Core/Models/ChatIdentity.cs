@@ -7,6 +7,8 @@ namespace TelegramGroupsAdmin.Core.Models;
 /// </summary>
 public record ChatIdentity(long Id, string? ChatName)
 {
+    public string DisplayName => ChatName ?? $"Chat {Id}";
+
     /// <summary>
     /// Creates an ID-only identity. Internal fallback used by FromAsync when chat isn't in DB.
     /// </summary>

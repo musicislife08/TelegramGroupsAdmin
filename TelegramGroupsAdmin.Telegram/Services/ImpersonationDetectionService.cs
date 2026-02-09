@@ -242,9 +242,9 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             // 1. Create alert record
             var alert = new ImpersonationAlertRecord
             {
-                SuspectedUserId = result.SuspectedUser.Id,
-                TargetUserId = result.TargetUserId,
-                ChatId = result.DetectionChat.Id,
+                SuspectedUser = UserIdentity.From(result.SuspectedUser),
+                TargetUser = UserIdentity.FromId(result.TargetUserId),
+                Chat = ChatIdentity.From(result.DetectionChat),
                 TotalScore = result.TotalScore,
                 RiskLevel = result.RiskLevel,
                 NameMatch = result.NameMatch,

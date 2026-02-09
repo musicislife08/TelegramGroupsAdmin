@@ -54,7 +54,7 @@
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.h6">@ExamFailure.User.DisplayName</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @(ExamFailure.User.Username != null ? $"@{ExamFailure.User.Username}" : "No username") · ID: @ExamFailure.UserId
+                        @(ExamFailure.User.Username != null ? $"@{ExamFailure.User.Username}" : "No username") · ID: @ExamFailure.User.Id
                     </MudText>
                     @if (_user != null)
                     {
@@ -292,10 +292,10 @@
     protected override async Task OnParametersSetAsync()
     {
         // Load user details
-        _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamFailure.UserId);
+        _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamFailure.User.Id);
 
         // Load exam config for question details
-        var welcomeConfig = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ExamFailure.ChatId);
+        var welcomeConfig = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ExamFailure.Chat.Id);
         _examConfig = welcomeConfig?.ExamConfig;
 
         // Calculate correct answers
@@ -356,10 +356,10 @@
     {
         try
         {
-            var userMessages = await MessageRepository.GetUserMessagesAsync(ExamFailure.UserId);
+            var userMessages = await MessageRepository.GetUserMessagesAsync(ExamFailure.User.Id);
             var distinctChatIds = userMessages
                 .Select(m => m.ChatId)
-                .Where(chatId => chatId != ExamFailure.ChatId)
+                .Where(chatId => chatId != ExamFailure.Chat.Id)
                 .Distinct()
                 .ToList();
 

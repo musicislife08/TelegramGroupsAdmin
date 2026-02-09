@@ -29,11 +29,8 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     {
         return new MessageRecord(
             MessageId: 123,
-            UserId: 456,
-            UserName: userName,
-            FirstName: firstName,
-            LastName: lastName,
-            ChatId: 789,
+            User: new UserIdentity(456, firstName, lastName, userName),
+            Chat: new ChatIdentity(789, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: messageText,
             PhotoFileId: null,
@@ -41,7 +38,6 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
             Urls: null,
             EditDate: editDate,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

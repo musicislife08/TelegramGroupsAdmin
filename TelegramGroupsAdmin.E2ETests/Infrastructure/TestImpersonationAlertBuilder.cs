@@ -218,9 +218,9 @@ public class TestImpersonationAlertBuilder
         var alert = new ImpersonationAlertRecord
         {
             Id = 0, // Will be assigned by database
-            SuspectedUserId = _suspectedUserId,
-            TargetUserId = _targetUserId,
-            ChatId = _chatId,
+            SuspectedUser = new UserIdentity(_suspectedUserId, _suspectedFirstName, _suspectedLastName, _suspectedUserName),
+            TargetUser = new UserIdentity(_targetUserId, _targetFirstName, _targetLastName, _targetUserName),
+            Chat = new ChatIdentity(_chatId, _chatName),
             TotalScore = _totalScore,
             RiskLevel = _riskLevel,
             NameMatch = _nameMatch,
@@ -230,15 +230,7 @@ public class TestImpersonationAlertBuilder
             AutoBanned = _autoBanned,
             ReviewedByUserId = _reviewedByUserId,
             ReviewedAt = _reviewedAt,
-            Verdict = _verdict,
-            // Denormalized display fields
-            SuspectedUserName = _suspectedUserName,
-            SuspectedFirstName = _suspectedFirstName,
-            SuspectedLastName = _suspectedLastName,
-            TargetUserName = _targetUserName,
-            TargetFirstName = _targetFirstName,
-            TargetLastName = _targetLastName,
-            ChatName = _chatName
+            Verdict = _verdict
         };
 
         var id = await reviewsRepository.InsertImpersonationAlertAsync(alert, cancellationToken);

@@ -292,7 +292,7 @@ public class NotificationHandler : INotificationHandler
         {
             // Build user display (escaped for MarkdownV2)
             var userDisplay = TelegramTextUtilities.EscapeMarkdownV2(
-                TelegramDisplayName.FormatMention(msg.FirstName, msg.LastName, msg.UserName, msg.UserId));
+                TelegramDisplayName.FormatMention(msg.User));
 
             // Build message preview (use translated text if available)
             var messageContent = msg.Translation?.TranslatedText ?? msg.MessageText;
@@ -301,7 +301,7 @@ public class NotificationHandler : INotificationHandler
                 : messageContent ?? "[No text]";
             messageTextPreview = TelegramTextUtilities.EscapeMarkdownV2(messageTextPreview);
 
-            var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(msg.ChatName ?? msg.ChatId.ToString());
+            var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(msg.Chat.ChatName ?? msg.Chat.Id.ToString());
 
             // Build detection details from DetectionResultRecord
             var detectionDetails = new StringBuilder();
@@ -361,7 +361,7 @@ public class NotificationHandler : INotificationHandler
             }
 
             // Send to all chat admins
-            var chatAdmins = await _chatAdminsRepository.GetChatAdminsAsync(msg.ChatId, cancellationToken);
+            var chatAdmins = await _chatAdminsRepository.GetChatAdminsAsync(msg.Chat.Id, cancellationToken);
             var sentCount = 0;
 
             foreach (var admin in chatAdmins)

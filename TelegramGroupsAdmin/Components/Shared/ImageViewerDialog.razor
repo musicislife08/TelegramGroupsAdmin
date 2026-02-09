@@ -9,7 +9,7 @@
                     </MudAvatar>
                     <MudStack Spacing="0">
                         <MudText Typo="Typo.body2" Style="font-weight: 600;">
-                            @(Message.UserName ?? $"User {Message.UserId}")
+                            @(Message.User.DisplayName)
                         </MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                             <span class="local-timestamp" data-utc="@Message.Timestamp.ToString("o")">@Message.Timestamp.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
@@ -52,7 +52,7 @@
                         <b>Message ID:</b> @Message.MessageId
                     </MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        <b>Chat:</b> @(Message.ChatName ?? $"Chat {Message.ChatId}")
+                        <b>Chat:</b> @(Message.Chat.ChatName ?? $"Chat {Message.Chat.Id}")
                     </MudText>
                     @if (Message.PhotoFileSize.HasValue)
                     {
@@ -80,7 +80,7 @@
 
     private string GetUserInitials()
     {
-        var name = Message.UserName ?? $"U{Message.UserId}";
+        var name = Message.User.Username ?? $"U{Message.User.Id}";
         var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length >= 2)
             return $"{parts[0][0]}{parts[1][0]}".ToUpper();

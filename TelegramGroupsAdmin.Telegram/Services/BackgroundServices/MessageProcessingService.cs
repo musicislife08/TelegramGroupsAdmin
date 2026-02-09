@@ -197,11 +197,8 @@ public partial class MessageProcessingService(
             {
                 var serviceMessageRecord = new MessageRecord(
                     message.MessageId,
-                    message.From.Id,
-                    message.From.Username,
-                    message.From.FirstName,
-                    message.From.LastName,
-                    message.Chat.Id,
+                    User: new Core.Models.UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                    Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                     DateTimeOffset.UtcNow,
                     serviceMessageText,
                     PhotoFileId: null,
@@ -209,7 +206,6 @@ public partial class MessageProcessingService(
                     Urls: null,
                     EditDate: null,
                     ContentHash: null,
-                    ChatName: message.Chat.Title ?? message.Chat.Username,
                     PhotoLocalPath: null,
                     PhotoThumbnailPath: null,
                     ChatIconPath: null,
@@ -550,11 +546,8 @@ public partial class MessageProcessingService(
             // User photo will be fetched asynchronously after message save (non-blocking)
             var messageRecord = new MessageRecord(
                 message.MessageId,
-                message.From!.Id,
-                message.From.Username,
-                message.From.FirstName,
-                message.From.LastName,
-                message.Chat.Id,
+                User: new Core.Models.UserIdentity(message.From!.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                 now,
                 text,
                 photoFileId,
@@ -562,7 +555,6 @@ public partial class MessageProcessingService(
                 urlsJson != "" ? urlsJson : null,
                 EditDate: message.EditDate.HasValue ? new DateTimeOffset(message.EditDate.Value, TimeSpan.Zero) : null,
                 ContentHash: contentHash,
-                ChatName: message.Chat.Title ?? message.Chat.Username,
                 PhotoLocalPath: photoLocalPath,
                 PhotoThumbnailPath: photoThumbnailPath,
                 ChatIconPath: chatIconPath,

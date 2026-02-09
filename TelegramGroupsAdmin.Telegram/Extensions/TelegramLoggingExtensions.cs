@@ -146,7 +146,7 @@ public static class TelegramLoggingExtensions
         public string ToLogInfo()
             => message == null
                 ? "null"
-                : $"Message {message.MessageId} in {message.ChatName ?? $"chat {message.ChatId}"}";
+                : $"Message {message.MessageId} in {message.Chat.ChatName ?? $"chat {message.Chat.Id}"}";
 
         /// <summary>
         /// Format message record for DEBUG/WARNING/ERROR logs (message ID + chat ID + user).
@@ -154,7 +154,7 @@ public static class TelegramLoggingExtensions
         public string ToLogDebug()
             => message == null
                 ? "null"
-                : $"Message {message.MessageId} in {message.ChatName ?? "unknown"} ({message.ChatId}) from {message.DisplayName}";
+                : $"Message {message.MessageId} in {message.Chat.ChatName ?? "unknown"} ({message.Chat.Id}) from {message.User.DisplayName}";
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

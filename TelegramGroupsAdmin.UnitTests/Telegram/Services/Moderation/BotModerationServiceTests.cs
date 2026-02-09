@@ -1602,7 +1602,7 @@ public class BotModerationServiceTests
 
         // Assert - Report was created with isAutomated=true
         await _mockReportService.Received(1).CreateReportAsync(
-            Arg.Is<Report>(r => r.MessageId == (int)messageId && r.ChatId == chatId),
+            Arg.Is<Report>(r => r.MessageId == (int)messageId && r.Chat.Id == chatId),
             null,
             true,
             Arg.Any<CancellationToken>());

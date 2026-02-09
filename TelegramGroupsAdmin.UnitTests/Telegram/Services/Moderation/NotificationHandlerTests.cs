@@ -110,11 +110,8 @@ public class NotificationHandlerTests
     {
         var message = new MessageRecord(
             MessageId: 456L,
-            UserId: 789L,
-            UserName: "spammer",
-            FirstName: "Spam",
-            LastName: "User",
-            ChatId: TestChatId,
+            User: new UserIdentity(789L, "Spam", "User", "spammer"),
+            Chat: new ChatIdentity(TestChatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
             MessageText: "Buy cheap watches now!",
             PhotoFileId: null,
@@ -122,7 +119,6 @@ public class NotificationHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

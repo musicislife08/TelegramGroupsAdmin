@@ -161,7 +161,7 @@ public class ExamFlowService : IExamFlowService
                 groupChatId);
 
             // Send exam intro (MainWelcomeMessage) first - rules/guidelines without buttons
-            var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+            var username = TelegramDisplayName.FormatMention(user);
             var chatInfo = await _chatService.GetChatAsync(groupChatId, cancellationToken);
             var chatName = chatInfo.Title ?? "the group";
 
@@ -507,8 +507,6 @@ public class ExamFlowService : IExamFlowService
         // Create exam failure review (include shuffle state for review display)
         var examFailure = new ExamFailureRecord
         {
-            ChatId = session.ChatId,
-            UserId = user.Id,
             User = UserIdentity.From(user),
             Chat = ChatIdentity.FromId(session.ChatId),
             McAnswers = session.McAnswers,
@@ -583,7 +581,7 @@ public class ExamFlowService : IExamFlowService
         int totalQuestions,
         CancellationToken cancellationToken)
     {
-        var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+        var username = TelegramDisplayName.FormatMention(user);
         var text = ExamMessageBuilder.FormatMcQuestion(username, questionIndex + 1, totalQuestions, question.Question);
 
         // Build keyboard with shuffled answers
@@ -610,7 +608,7 @@ public class ExamFlowService : IExamFlowService
         ExamConfig examConfig,
         CancellationToken cancellationToken)
     {
-        var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+        var username = TelegramDisplayName.FormatMention(user);
         var text = ExamMessageBuilder.FormatOpenEndedQuestion(username, examConfig.OpenEndedQuestion!);
 
         // Exam questions are always sent to DMs (no keyboard for open-ended)

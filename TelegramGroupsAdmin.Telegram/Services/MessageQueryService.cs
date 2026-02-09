@@ -389,7 +389,7 @@ public class MessageQueryService : IMessageQueryService
 
         var result = await context.EnrichedMessages
             .AsNoTracking()
-            .Where(m => m.ChatId == message.ChatId && m.MessageId == message.MessageId)
+            .Where(m => m.ChatId == message.Chat.Id && m.MessageId == message.MessageId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (result == null)

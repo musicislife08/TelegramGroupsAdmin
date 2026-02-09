@@ -319,7 +319,7 @@ public class BotChatService(
                 }
 
                 // Phase 5.2: Notify owners about admin promotion
-                var displayName = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+                var displayName = TelegramDisplayName.FormatMention(user);
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatAdminChanged,
                     subject: $"New Admin Promoted: {chat.Title ?? "Unknown Chat"}",
@@ -341,7 +341,7 @@ public class BotChatService(
                     LogDisplayName.ChatInfo(chat.Title, chat.Id));
 
                 // Phase 5.2: Notify owners about admin demotion
-                var displayName = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+                var displayName = TelegramDisplayName.FormatMention(user);
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatAdminChanged,
                     subject: $"Admin Demoted: {chat.Title ?? "Unknown Chat"}",

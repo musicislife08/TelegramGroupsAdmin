@@ -170,9 +170,9 @@ public class BotMessageServiceTests
         {
             Assert.That(savedMessage!.MessageId, Is.EqualTo(messageId));
             Assert.That(savedMessage.MessageText, Is.EqualTo(text));
-            Assert.That(savedMessage.ChatId, Is.EqualTo(TestChatId));
-            Assert.That(savedMessage.UserId, Is.EqualTo(TestBotId));
-            Assert.That(savedMessage.UserName, Is.EqualTo(TestBotUsername));
+            Assert.That(savedMessage.Chat.Id, Is.EqualTo(TestChatId));
+            Assert.That(savedMessage.User.Id, Is.EqualTo(TestBotId));
+            Assert.That(savedMessage.User.Username, Is.EqualTo(TestBotUsername));
         });
     }
 

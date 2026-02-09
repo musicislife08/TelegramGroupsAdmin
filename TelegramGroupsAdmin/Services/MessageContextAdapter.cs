@@ -34,8 +34,8 @@ public class MessageContextAdapter : ContentDetectionServices.IMessageContextPro
             // Convert to spam library's HistoryMessage format
             return messages.Select(m => new ContentDetectionServices.HistoryMessage
             {
-                UserId = m.Message.UserId.ToString(),
-                UserName = m.Message.UserName ?? "Unknown",
+                UserId = m.Message.User.Id.ToString(),
+                UserName = m.Message.User.Username ?? "Unknown",
                 Message = m.Message.MessageText ?? string.Empty,
                 Timestamp = m.Message.Timestamp.UtcDateTime,
                 WasSpam = m.DetectionResults.Any(dr => dr.IsSpam)

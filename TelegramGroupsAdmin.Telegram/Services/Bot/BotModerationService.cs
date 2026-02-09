@@ -123,7 +123,7 @@ public class BotModerationService : IBotModerationService
 
         // Schedule cleanup of user's messages
         await SafeExecuteAsync(
-            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
             $"Schedule messages cleanup for user {intent.User.Id}");
 
         // Step 4: Create training data (non-critical - failure doesn't affect ban success)
@@ -203,7 +203,7 @@ public class BotModerationService : IBotModerationService
 
         // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
         await SafeExecuteAsync(
-            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
             $"Schedule messages cleanup for user {intent.User.Id}");
 
         // Bug 3 fix: Ban celebration when chat context is provided
@@ -296,7 +296,7 @@ public class BotModerationService : IBotModerationService
 
                 // Schedule cleanup of user's messages
                 await SafeExecuteAsync(
-                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
                     $"Schedule messages cleanup for user {intent.User.Id}");
 
                 result = result with
@@ -568,7 +568,7 @@ public class BotModerationService : IBotModerationService
             var report = new Report(
                 Id: 0, // Assigned by database
                 MessageId: (int)intent.MessageId,
-                ChatId: intent.Chat.Id,
+                Chat: intent.Chat,
                 ReportCommandMessageId: null,
                 ReportedByUserId: null,
                 ReportedByUserName: "File Scanner",

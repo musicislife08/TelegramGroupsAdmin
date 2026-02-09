@@ -234,8 +234,6 @@ public class TestExamFailureBuilder
         var examFailure = new ExamFailureRecord
         {
             Id = 0, // Will be assigned by database
-            ChatId = _chatId,
-            UserId = _userId,
             McAnswers = _mcAnswers,
             ShuffleState = _shuffleState,
             OpenEndedAnswer = _openEndedAnswer,

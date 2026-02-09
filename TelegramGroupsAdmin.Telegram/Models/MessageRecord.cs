@@ -1,5 +1,4 @@
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
@@ -10,11 +9,8 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// </summary>
 public record MessageRecord(
     long MessageId,
-    long UserId,
-    string? UserName,
-    string? FirstName,
-    string? LastName,
-    long ChatId,
+    UserIdentity User,
+    ChatIdentity Chat,
     DateTimeOffset Timestamp,
     string? MessageText,
     string? PhotoFileId,
@@ -22,7 +18,6 @@ public record MessageRecord(
     string? Urls,
     DateTimeOffset? EditDate,
     string? ContentHash,
-    string? ChatName,
     string? PhotoLocalPath,
     string? PhotoThumbnailPath,
     string? ChatIconPath,
@@ -46,9 +41,4 @@ public record MessageRecord(
     ContentCheckSkipReason ContentCheckSkipReason // Reason content check was skipped (NotSkipped, UserTrusted, UserAdmin)
 )
 {
-    /// <summary>
-    /// Formatted display name for the message author.
-    /// Priority: Service Account (ChatName) → FullName (First + Last) → Username → User {id}
-    /// </summary>
-    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, UserName, UserId, ChatName);
 }

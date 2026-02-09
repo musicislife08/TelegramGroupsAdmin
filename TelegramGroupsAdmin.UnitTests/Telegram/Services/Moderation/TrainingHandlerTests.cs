@@ -170,11 +170,8 @@ public class TrainingHandlerTests
     {
         return new MessageRecord(
             MessageId: TestMessageId,
-            UserId: TestUserId,
-            UserName: "spammer",
-            FirstName: "Spam",
-            LastName: "User",
-            ChatId: -100123456789L,
+            User: new UserIdentity(TestUserId, "Spam", "User", "spammer"),
+            Chat: new ChatIdentity(-100123456789L, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
             MessageText: messageText,
             PhotoFileId: null,
@@ -182,7 +179,6 @@ public class TrainingHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

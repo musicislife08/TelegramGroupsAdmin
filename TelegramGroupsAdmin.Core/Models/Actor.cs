@@ -67,6 +67,12 @@ public record Actor
     }
 
     /// <summary>
+    /// Create actor from a UserIdentity (carries full name info)
+    /// </summary>
+    public static Actor FromUserIdentity(UserIdentity user)
+        => FromTelegramUser(user.Id, user.Username, user.FirstName, user.LastName);
+
+    /// <summary>
     /// Create actor from Telegram user
     /// </summary>
     public static Actor FromTelegramUser(long telegramUserId, string? username = null, string? firstName = null, string? lastName = null)

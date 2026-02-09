@@ -59,17 +59,31 @@ public static class TelegramDisplayName
     /// Gets mention-style name for Telegram bot messages. Uses @username when available.
     /// Priority: @Username → FullName (First + Last) → User {id}
     /// </summary>
-    /// <param name="firstName">User's first name from Telegram profile</param>
-    /// <param name="lastName">User's last name from Telegram profile</param>
-    /// <param name="username">User's username (without @ prefix)</param>
-    /// <param name="userId">User's Telegram ID for fallback display</param>
+    /// <param name="user">Telegram User object (nullable)</param>
     /// <returns>Formatted name suitable for Telegram bot messages (with @ prefix when username available)</returns>
     /// <remarks>
     /// Use this for bot command responses where @username creates a clickable mention.
     /// For guaranteed clickable mentions (even without username), use HTML text mentions:
     /// &lt;a href="tg://user?id=123"&gt;DisplayName&lt;/a&gt;
     /// </remarks>
-    public static string FormatMention(string? firstName, string? lastName, string? username, long? userId = null)
+    public static string FormatMention(User? user)
+    {
+        if (user == null) return "Unknown User";
+        return FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+    }
+
+    /// <summary>
+    /// Gets mention-style name for Telegram bot messages. Uses @username when available.
+    /// Priority: @Username → FullName (First + Last) → User {id}
+    /// </summary>
+    public static string FormatMention(Models.UserIdentity user)
+        => FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+
+    /// <summary>
+    /// Gets mention-style name for Telegram bot messages (internal implementation).
+    /// Callers should use the UserIdentity or Telegram User overloads instead.
+    /// </summary>
+    private static string FormatMention(string? firstName, string? lastName, string? username, long? userId = null)
     {
         // @username creates clickable mention in Telegram
         if (!string.IsNullOrWhiteSpace(username))

@@ -205,7 +205,7 @@
                 limit: 100,
                 cancellationToken: _cts.Token);
 
-            foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.ChatId)))
+            foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.Chat.Id)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -225,7 +225,7 @@
             // Load all impersonation alerts (filter by status is done client-side in ApplyFilters)
             var alerts = await ReportsRepository.GetImpersonationAlertsAsync(
                 pendingOnly: false, cancellationToken: _cts.Token);
-            foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.ChatId)))
+            foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.Chat.Id)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -237,15 +237,15 @@
                     ImpersonationAlert = alert,
                     ExamFailure = null,
                     DisplayTitle = "Impersonation Alert",
-                    UserId = alert.SuspectedUserId,
-                    UserName = alert.SuspectedUserName
+                    UserId = alert.SuspectedUser.Id,
+                    UserName = alert.SuspectedUser.Username
                 });
             }
 
             // Load all exam failures (filter by status is done client-side in ApplyFilters)
             var examFailures = await ReportsRepository.GetExamFailuresAsync(
                 pendingOnly: false, cancellationToken: _cts.Token);
-            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.ChatId)))
+            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.Chat.Id)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -257,7 +257,7 @@
                     ImpersonationAlert = null,
                     ExamFailure = examFailure,
                     DisplayTitle = "Exam Review",
-                    UserId = examFailure.UserId,
+                    UserId = examFailure.User.Id,
                     UserName = examFailure.User.Username
                 });
             }
@@ -360,25 +360,27 @@
     {
         try
         {
+            var executor = Actor.FromWebUser(_currentUserId, _currentUserDisplayName);
+
             switch (args.Action)
             {
                 case ReportAction.Spam:
-                    await ReportActionsService.HandleSpamActionAsync(args.Report.Id, _currentUserId);
+                    await ReportActionsService.HandleSpamActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} processed: Message deleted as spam", Severity.Success);
                     break;
 
                 case ReportAction.Ban:
-                    await ReportActionsService.HandleBanActionAsync(args.Report.Id, _currentUserId);
+                    await ReportActionsService.HandleBanActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} processed: User banned", Severity.Success);
                     break;
 
                 case ReportAction.Warn:
-                    await ReportActionsService.HandleWarnActionAsync(args.Report.Id, _currentUserId);
+                    await ReportActionsService.HandleWarnActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} processed: Warning issued", Severity.Success);
                     break;
 
                 case ReportAction.Dismiss:
-                    await ReportActionsService.HandleDismissActionAsync(args.Report.Id, _currentUserId);
+                    await ReportActionsService.HandleDismissActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} dismissed", Severity.Info);
                     break;
             }
@@ -405,9 +407,9 @@
                     var banResult = await ModerationOrchestrator.BanUserAsync(
                         new BanIntent
                         {
-                            User = UserIdentity.FromId(args.Alert.SuspectedUserId),
+                            User = args.Alert.SuspectedUser,
                             Executor = executor,
-                            Reason = $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetDisplayName}"
+                            Reason = $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetUser.DisplayName}"
                         });
 
                     await ReportsRepository.UpdateStatusAsync(
@@ -437,7 +439,7 @@
                     await ModerationOrchestrator.TrustUserAsync(
                         new TrustIntent
                         {
-                            User = UserIdentity.FromId(args.Alert.SuspectedUserId),
+                            User = args.Alert.SuspectedUser,
                             Executor = executor,
                             Reason = $"Trusted after impersonation review #{args.Alert.Id}"
                         });
@@ -465,7 +467,7 @@
     private async Task HandleExamAction((ExamFailureRecord ExamFailure, ExamAction Action) args)
     {
         Logger.LogInformation("HandleExamAction called: Action={Action}, ExamFailureId={Id}, UserId={UserId}",
-            args.Action, args.ExamFailure.Id, args.ExamFailure.UserId);
+            args.Action, args.ExamFailure.Id, args.ExamFailure.User.Id);
 
         try
         {

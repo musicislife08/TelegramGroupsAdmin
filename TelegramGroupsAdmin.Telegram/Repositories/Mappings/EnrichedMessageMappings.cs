@@ -32,11 +32,8 @@ public static class EnrichedMessageMappings
 
             return new UiModels.MessageRecord(
                 MessageId: view.MessageId,
-                UserId: view.UserId,
-                UserName: view.UserName,
-                FirstName: view.FirstName,
-                LastName: view.LastName,
-                ChatId: view.ChatId,
+                User: new UserIdentity(view.UserId, view.FirstName, view.LastName, view.UserName),
+                Chat: new ChatIdentity(view.ChatId, view.ChatName),
                 Timestamp: view.Timestamp,
                 MessageText: view.MessageText,
                 PhotoFileId: view.PhotoFileId,
@@ -44,7 +41,6 @@ public static class EnrichedMessageMappings
                 Urls: view.Urls,
                 EditDate: view.EditDate,
                 ContentHash: view.ContentHash,
-                ChatName: view.ChatName,
                 PhotoLocalPath: view.PhotoLocalPath,
                 PhotoThumbnailPath: view.PhotoThumbnailPath,
                 ChatIconPath: view.ChatIconPath,

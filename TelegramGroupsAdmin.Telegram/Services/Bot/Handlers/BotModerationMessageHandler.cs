@@ -125,17 +125,17 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
 
     /// <inheritdoc />
     public async Task ScheduleUserMessagesCleanupAsync(
-        long userId,
+        UserIdentity user,
         CancellationToken cancellationToken = default)
     {
         await _jobScheduler.ScheduleJobAsync(
             BackgroundJobNames.DeleteUserMessages,
-            new DeleteUserMessagesPayload { TelegramUserId = userId },
+            new DeleteUserMessagesPayload { User = user },
             delaySeconds: SpamDetectionConstants.CleanupJobDelaySeconds,
-            deduplicationKey: DeleteUserMessages(userId),
+            deduplicationKey: DeleteUserMessages(user.Id),
             cancellationToken);
 
-        _logger.LogInformation("Scheduled messages cleanup job for user {UserId}", userId);
+        _logger.LogInformation("Scheduled messages cleanup job for user {User}", user.ToLogDebug());
     }
 
     /// <inheritdoc />

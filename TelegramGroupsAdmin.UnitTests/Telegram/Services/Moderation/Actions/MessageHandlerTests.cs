@@ -271,11 +271,8 @@ public class MessageHandlerTests
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: 12345L,
-            UserName: "testuser",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: chatId,
+            User: new UserIdentity(12345L, "Test", "User", "testuser"),
+            Chat: new ChatIdentity(chatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: "Test message",
             PhotoFileId: null,
@@ -283,7 +280,6 @@ public class MessageHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

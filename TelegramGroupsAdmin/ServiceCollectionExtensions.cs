@@ -131,7 +131,6 @@ public static class ServiceCollectionExtensions
             // Core services
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<IInviteService, InviteService>();
-            services.AddScoped<IMessageExportService, MessageExportService>();
             services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<IAuditService, AuditService>();
             services.AddScoped<IFeatureAvailabilityService, FeatureAvailabilityService>(); // FEATURE-5.3: Check external service configuration status

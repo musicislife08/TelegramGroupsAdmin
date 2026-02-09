@@ -39,17 +39,19 @@ public class SendChatNotificationJob(
         const string jobName = "SendChatNotification";
         var startTimestamp = Stopwatch.GetTimestamp();
         var success = false;
+        var chat = payload.Chat;
+        var chatDisplay = chat.ChatName ?? chat.Id.ToString();
 
         try
         {
             _logger.LogDebug(
-                "Sending {EventType} notification for chat {ChatId}: {Subject}",
+                "Sending {EventType} notification for chat {ChatDisplay} ({ChatId}): {Subject}",
                 payload.EventType,
-                payload.ChatId,
+                chatDisplay, chat.Id,
                 payload.Subject);
 
             var results = await _notificationService.SendChatNotificationAsync(
-                chatId: payload.ChatId,
+                chatId: chat.Id,
                 eventType: payload.EventType,
                 subject: payload.Subject,
                 message: payload.Message,
@@ -63,9 +65,9 @@ public class SendChatNotificationJob(
             var failureCount = results.Count(r => !r.Value);
 
             _logger.LogInformation(
-                "Sent {EventType} notification for chat {ChatId}: {SuccessCount} delivered, {FailureCount} failed",
+                "Sent {EventType} notification for chat {ChatDisplay} ({ChatId}): {SuccessCount} delivered, {FailureCount} failed",
                 payload.EventType,
-                payload.ChatId,
+                chatDisplay, chat.Id,
                 successCount,
                 failureCount);
 
@@ -75,9 +77,9 @@ public class SendChatNotificationJob(
         {
             _logger.LogError(
                 ex,
-                "Failed to send {EventType} notification for chat {ChatId}",
+                "Failed to send {EventType} notification for chat {ChatDisplay} ({ChatId})",
                 payload.EventType,
-                payload.ChatId);
+                chatDisplay, chat.Id);
             throw; // Re-throw for retry logic and exception recording
         }
         finally

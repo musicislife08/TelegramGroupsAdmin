@@ -165,7 +165,7 @@ public class BotBanHandler : IBotBanHandler
 
             // Schedule automatic unban via Quartz.NET
             var payload = new TempbanExpiryJobPayload(
-                UserId: user.Id,
+                User: user,
                 Reason: reason ?? "Temporary ban",
                 ExpiresAt: expiresAt);
 

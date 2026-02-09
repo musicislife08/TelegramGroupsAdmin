@@ -260,11 +260,8 @@ public class TestMessageBuilder
 
         var messageRecord = new MessageRecord(
             MessageId: messageId,
-            UserId: _userId,
-            UserName: _userName,
-            FirstName: _firstName,
-            LastName: _lastName,
-            ChatId: _chatId,
+            User: new UserIdentity(_userId, _firstName, _lastName, _userName),
+            Chat: new ChatIdentity(_chatId, _chatName),
             Timestamp: _timestamp,
             MessageText: _messageText,
             PhotoFileId: _photoFileId,
@@ -272,7 +269,6 @@ public class TestMessageBuilder
             Urls: _urls,
             EditDate: _editDate,
             ContentHash: _contentHash,
-            ChatName: _chatName,
             PhotoLocalPath: _photoLocalPath,
             PhotoThumbnailPath: _photoThumbnailPath,
             ChatIconPath: _chatIconPath,
@@ -305,8 +301,8 @@ public class TestMessageBuilder
 public record TestMessage(MessageRecord Record)
 {
     public long MessageId => Record.MessageId;
-    public long ChatId => Record.ChatId;
-    public long UserId => Record.UserId;
+    public long ChatId => Record.Chat.Id;
+    public long UserId => Record.User.Id;
     public string? Text => Record.MessageText;
     public DateTimeOffset Timestamp => Record.Timestamp;
 }

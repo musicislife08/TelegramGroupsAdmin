@@ -129,8 +129,6 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         return new ExamFailureRecord
         {
             Id = id,
-            ChatId = chatId,
-            UserId = userId,
             McAnswers = mcAnswers ?? new Dictionary<int, string> { { 0, "A" }, { 1, "B" } },
             ShuffleState = shuffleState ?? new Dictionary<int, int[]>
             {

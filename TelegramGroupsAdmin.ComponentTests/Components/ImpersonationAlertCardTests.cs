@@ -99,9 +99,9 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
         return new ImpersonationAlertRecord
         {
             Id = id,
-            SuspectedUserId = suspectedUserId,
-            TargetUserId = targetUserId,
-            ChatId = chatId,
+            SuspectedUser = new UserIdentity(suspectedUserId, suspectedFirstName, suspectedLastName, suspectedUserName),
+            TargetUser = new UserIdentity(targetUserId, targetFirstName, targetLastName, targetUserName),
+            Chat = new ChatIdentity(chatId, chatName),
             TotalScore = totalScore,
             RiskLevel = riskLevel,
             NameMatch = nameMatch,
@@ -112,15 +112,8 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
             ReviewedByUserId = reviewedByUserId,
             ReviewedAt = reviewedAt,
             Verdict = verdict,
-            SuspectedUserName = suspectedUserName,
-            SuspectedFirstName = suspectedFirstName,
-            SuspectedLastName = suspectedLastName,
             SuspectedPhotoPath = suspectedPhotoPath,
-            TargetUserName = targetUserName,
-            TargetFirstName = targetFirstName,
-            TargetLastName = targetLastName,
-            TargetPhotoPath = targetPhotoPath,
-            ChatName = chatName
+            TargetPhotoPath = targetPhotoPath
         };
     }
 

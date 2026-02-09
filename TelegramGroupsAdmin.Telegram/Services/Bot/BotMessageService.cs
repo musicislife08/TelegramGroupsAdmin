@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -73,11 +74,8 @@ public class BotMessageService(
         // Save to messages table (use bot info from cache, not sentMessage.From which may be null)
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            UserId: botInfo.Id,
-            UserName: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            ChatId: chatId,
+            User: new UserIdentity(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username),
+            Chat: new ChatIdentity(chatId, sentMessage.Chat.Title ?? sentMessage.Chat.Username),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
             PhotoFileId: null,
@@ -85,7 +83,6 @@ public class BotMessageService(
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: sentMessage.Chat.Title ?? sentMessage.Chat.Username,
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -280,11 +277,8 @@ public class BotMessageService(
         // Save to messages table
         var messageRecord = new MessageRecord(
             MessageId: messageId,
-            UserId: botInfo.Id,
-            UserName: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            ChatId: chatId,
+            User: new UserIdentity(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username),
+            Chat: new ChatIdentity(chatId, chatInfo.Title ?? chatInfo.Username),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
             PhotoFileId: null,
@@ -292,7 +286,6 @@ public class BotMessageService(
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: chatInfo.Title ?? chatInfo.Username,
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -383,11 +376,8 @@ public class BotMessageService(
         // Save to messages table with animation metadata
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            UserId: botInfo.Id,
-            UserName: botInfo.Username,
-            FirstName: botInfo.FirstName,
-            LastName: botInfo.LastName,
-            ChatId: chatId,
+            User: new UserIdentity(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username),
+            Chat: new ChatIdentity(chatId, sentMessage.Chat.Title ?? sentMessage.Chat.Username),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: caption, // Caption as message text
             PhotoFileId: null,
@@ -395,7 +385,6 @@ public class BotMessageService(
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: sentMessage.Chat.Title ?? sentMessage.Chat.Username,
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

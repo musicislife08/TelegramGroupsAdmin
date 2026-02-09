@@ -86,11 +86,8 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: userName,
-            FirstName: "John",
-            LastName: "Doe",
-            ChatId: -1001234567890,
+            User: new UserIdentity(userId, "John", "Doe", userName),
+            Chat: new ChatIdentity(-1001234567890, "Test Community Group"),
             Timestamp: DateTimeOffset.UtcNow.AddHours(-1),
             MessageText: messageText,
             PhotoFileId: null,
@@ -98,7 +95,6 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
             Urls: null,
             EditDate: null,
             ContentHash: "CCF638619BB83D56E788526C226A2C529318570431F2D285840E4DE1AE300D58",
-            ChatName: "Test Community Group",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: "chat_icons/1001234567890.jpg",
@@ -239,10 +235,10 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Act
         _ = OpenDialogAsync(message);
 
-        // Assert
+        // Assert - DisplayName prioritizes FirstName+LastName over Username (matches Telegram UI behavior)
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("testuser"));
+            Assert.That(provider.Markup, Does.Contain("John Doe"));
         });
     }
 

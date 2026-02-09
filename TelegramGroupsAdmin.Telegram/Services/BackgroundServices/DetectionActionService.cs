@@ -227,7 +227,7 @@ public class DetectionActionService(
         return new Report(
             Id: 0, // Will be assigned by database
             MessageId: message.MessageId,
-            ChatId: message.Chat.Id,
+            Chat: ChatIdentity.From(message.Chat),
             ReportCommandMessageId: null, // Auto-generated report (not from /report command)
             ReportedByUserId: null, // System-generated (not user-reported)
             ReportedByUserName: "Auto-Detection",

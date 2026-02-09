@@ -184,7 +184,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         var cutoffDate = DateTimeOffset.UtcNow.AddDays(-days);
 
         var entities = await context.TelegramUsers
-            .Where(u => u.LastSeenAt >= cutoffDate)
+            .Where(u => u.LastSeenAt >= cutoffDate && !u.IsBanned && u.IsActive)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 

@@ -58,11 +58,8 @@ public class MessageBackfillService : IMessageBackfillService
         {
             var messageRecord = new MessageRecord(
                 MessageId: messageId,
-                UserId: telegramMessage.From?.Id ?? 0,
-                UserName: telegramMessage.From?.Username,
-                FirstName: telegramMessage.From?.FirstName,
-                LastName: telegramMessage.From?.LastName,
-                ChatId: chatId,
+                User: new UserIdentity(telegramMessage.From?.Id ?? 0, telegramMessage.From?.FirstName, telegramMessage.From?.LastName, telegramMessage.From?.Username),
+                Chat: new ChatIdentity(chatId, null),
                 Timestamp: telegramMessage.Date,
                 MessageText: messageText,
                 PhotoFileId: null,
@@ -70,7 +67,6 @@ public class MessageBackfillService : IMessageBackfillService
                 Urls: null,
                 EditDate: null,
                 ContentHash: null,
-                ChatName: null,
                 PhotoLocalPath: null,
                 PhotoThumbnailPath: null,
                 ChatIconPath: null,

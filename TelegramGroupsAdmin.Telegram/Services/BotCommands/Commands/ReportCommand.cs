@@ -72,7 +72,7 @@ public class ReportCommand(
         var report = new Report(
             Id: 0, // Will be assigned by database
             MessageId: reportedMessage.MessageId,
-            ChatId: message.Chat.Id,
+            Chat: new ChatIdentity(message.Chat.Id, message.Chat.Title),
             ReportCommandMessageId: message.MessageId,
             ReportedByUserId: reporter.Id,
             ReportedByUserName: reporter.Username ?? reporter.FirstName,

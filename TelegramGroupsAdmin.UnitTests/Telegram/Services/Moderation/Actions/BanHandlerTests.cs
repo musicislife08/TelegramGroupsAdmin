@@ -206,7 +206,7 @@ public class BanHandlerTests
         // Verify job was scheduled
         await _mockJobScheduler.Received(1).ScheduleJobAsync(
             "TempbanExpiry",
-            Arg.Is<TempbanExpiryJobPayload>(p => p.UserId == userId),
+            Arg.Is<TempbanExpiryJobPayload>(p => p.User.Id == userId),
             Arg.Any<int>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());

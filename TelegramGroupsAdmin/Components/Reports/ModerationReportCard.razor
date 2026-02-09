@@ -30,9 +30,9 @@
             <MudStack Spacing="2">
                 <MudStack Row="true" Spacing="2">
                     <MudText Typo="Typo.body2"><b>User:</b> @GetReportedUserDisplay()</MudText>
-                    @if (_reportedUser?.Username != null || !string.IsNullOrEmpty(_message.UserName) || _reportedUser?.FirstName != null)
+                    @if (_reportedUser?.Username != null || !string.IsNullOrEmpty(_message.User.Username) || _reportedUser?.FirstName != null)
                     {
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @_message.UserId</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @_message.User.Id</MudText>
                     }
                 </MudStack>
 
@@ -160,7 +160,7 @@
         // Fetch user details if message exists
         if (_message != null)
         {
-            _reportedUser = await TelegramUserRepository.GetByTelegramIdAsync(_message.UserId);
+            _reportedUser = await TelegramUserRepository.GetByTelegramIdAsync(_message.User.Id);
         }
 
         _telegramLink = GetTelegramLink();
@@ -178,14 +178,14 @@
 
     private string GetMessagesLink()
     {
-        return $"/messages?chat={Report.ChatId}&highlight={Report.MessageId}";
+        return $"/messages?chat={Report.Chat.Id}&highlight={Report.MessageId}";
     }
 
     private string? GetTelegramLink()
     {
-        if (Report.ChatId < 0)
+        if (Report.Chat.Id < 0)
         {
-            var chatIdStr = Report.ChatId.ToString();
+            var chatIdStr = Report.Chat.Id.ToString();
             if (chatIdStr.StartsWith("-100"))
             {
                 var numericId = chatIdStr.Substring(4);
@@ -231,11 +231,11 @@
         // Use utility for consistent display name formatting
         // Priority: Service Account (chatName) → FullName (First + Last) → Username → User {id}
         return TelegramDisplayName.Format(
-            _reportedUser?.FirstName ?? _message.FirstName,
-            _reportedUser?.LastName ?? _message.LastName,
-            _reportedUser?.Username ?? _message.UserName,
-            _message.UserId,
-            _message.ChatName);
+            _reportedUser?.FirstName ?? _message.User.FirstName,
+            _reportedUser?.LastName ?? _message.User.LastName,
+            _reportedUser?.Username ?? _message.User.Username,
+            _message.User.Id,
+            _message.Chat.ChatName);
     }
 
     private string GetReporterDisplay()
