@@ -6,14 +6,15 @@ using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
-using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -171,7 +172,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -189,7 +190,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(result, Is.True);
@@ -207,7 +208,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -225,7 +226,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: false);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: false);
 
         // Assert
         Assert.That(result, Is.False);
@@ -240,7 +241,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: false);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: false);
 
         // Assert
         Assert.That(result, Is.True);
@@ -259,7 +260,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -275,7 +276,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -302,7 +303,7 @@ public class BanCelebrationServiceTests
 
         // Act
         await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(capturedCaption, Does.Contain(TestUserName));
@@ -326,7 +327,7 @@ public class BanCelebrationServiceTests
 
         // Act
         await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(capturedCaption, Does.Contain(TestChatName));
@@ -353,7 +354,7 @@ public class BanCelebrationServiceTests
 
         // Act
         await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert
         Assert.That(capturedCaption, Does.Contain("3"));
@@ -378,7 +379,7 @@ public class BanCelebrationServiceTests
 
         // Act
         await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - Check that file_id was cached
         var updatedGif = await _gifRepository.GetByIdAsync(gif.Id);
@@ -403,7 +404,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - Should fail gracefully
         Assert.That(result, Is.False);
@@ -430,7 +431,7 @@ public class BanCelebrationServiceTests
 
         // Act
         await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was attempted
         await _mockDmService!.Received(1).SendDmWithMediaAsync(
@@ -447,7 +448,7 @@ public class BanCelebrationServiceTests
 
         // Act
         await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted
         await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
@@ -465,7 +466,7 @@ public class BanCelebrationServiceTests
 
         // Act
         await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - DM delivery was NOT attempted (no DM mode enabled)
         await _mockDmService!.DidNotReceive().SendDmWithMediaAsync(
@@ -488,7 +489,7 @@ public class BanCelebrationServiceTests
 
         // Act
         var result = await _service!.SendBanCelebrationAsync(
-            TestChatId, TestChatName, TestUserId, TestUserName, isAutoBan: true);
+            new ChatIdentity(TestChatId, TestChatName), new UserIdentity(TestUserId, TestUserName, null, null), isAutoBan: true);
 
         // Assert - Chat message succeeded, DM failure doesn't affect result
         Assert.That(result, Is.True);

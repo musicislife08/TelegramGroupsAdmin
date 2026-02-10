@@ -133,15 +133,9 @@ public class BotModerationService : IBotModerationService
 
         // Step 5: Send ban celebration (non-critical - failure doesn't affect ban success)
         await SafeExecuteAsync(
-            async () =>
-            {
-                await _banCelebrationService.SendBanCelebrationAsync(
-                    intent.Chat.Id,
-                    intent.Chat.ChatName ?? intent.Chat.Id.ToString(),
-                    intent.User.Id,
-                    intent.User.DisplayName,
-                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken);
-            },
+            () => _banCelebrationService.SendBanCelebrationAsync(
+                    intent.Chat, intent.User,
+                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken),
             $"Send ban celebration for user {intent.User.Id} in chat {intent.Chat.Id}");
 
         // Step 6: Rich admin notification (replaces simple notification from BanUserAsync)
@@ -210,15 +204,11 @@ public class BotModerationService : IBotModerationService
         // (enables celebrations for CAS/Impersonation bans that carry the originating chat)
         if (intent.Chat is { } celebrationChat)
         {
-            await SafeExecuteAsync(async () =>
-            {
-                await _banCelebrationService.SendBanCelebrationAsync(
-                    celebrationChat.Id,
-                    celebrationChat.ChatName ?? celebrationChat.Id.ToString(),
-                    intent.User.Id,
-                    intent.User.DisplayName,
-                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken);
-            }, $"Send ban celebration for user {intent.User.Id} in chat {celebrationChat.Id}");
+            await SafeExecuteAsync(
+                () => _banCelebrationService.SendBanCelebrationAsync(
+                    celebrationChat, intent.User,
+                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken),
+                $"Send ban celebration for user {intent.User.Id} in chat {celebrationChat.Id}");
         }
 
         return new ModerationResult
