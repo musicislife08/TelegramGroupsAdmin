@@ -1077,9 +1077,9 @@ public class WelcomeService(
         try
         {
             // Cancel any active exam session
-            if (await examFlowService.HasActiveSessionAsync(chat.Id, user.Id, cancellationToken))
+            if (await examFlowService.HasActiveSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), cancellationToken))
             {
-                await examFlowService.CancelSessionAsync(chat.Id, user.Id, cancellationToken);
+                await examFlowService.CancelSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), cancellationToken);
                 logger.LogDebug(
                     "Cancelled exam session for {User} who left {Chat}",
                     user.ToLogDebug(),

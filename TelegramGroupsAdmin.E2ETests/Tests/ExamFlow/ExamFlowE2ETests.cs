@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -65,7 +66,7 @@ public class ExamFlowE2ETests : E2ETestBase
         // Start exam in DM (simulates user clicking deep link)
         var botUser = CreateTelegramUser(TestUserId, "testexamuser", "Test", "ExamUser");
         var startResult = await examFlowService.StartExamInDmAsync(
-            TestGroupChatId, botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
+            new ChatIdentity(TestGroupChatId, "Test Tech Group"), botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
 
         Assert.That(startResult.Success, Is.True, "Exam should start successfully");
 
@@ -138,7 +139,7 @@ public class ExamFlowE2ETests : E2ETestBase
         // Start exam in DM
         var botUser = CreateTelegramUser(TestUserId, "testexamuser", "Test", "ExamUser");
         await examFlowService.StartExamInDmAsync(
-            TestGroupChatId, botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
+            new ChatIdentity(TestGroupChatId, "Test Tech Group"), botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
 
         var session = await GetExamSessionAsync(TestGroupChatId, TestUserId);
 
@@ -209,7 +210,7 @@ public class ExamFlowE2ETests : E2ETestBase
         // Start exam in DM
         var botUser = CreateTelegramUser(TestUserId, "testexamuser", "Test", "ExamUser");
         await examFlowService.StartExamInDmAsync(
-            TestGroupChatId, botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
+            new ChatIdentity(TestGroupChatId, "Test Tech Group"), botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
 
         var session = await GetExamSessionAsync(TestGroupChatId, TestUserId);
 

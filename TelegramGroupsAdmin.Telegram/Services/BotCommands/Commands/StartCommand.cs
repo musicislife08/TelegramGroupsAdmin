@@ -5,6 +5,8 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -251,7 +253,7 @@ public class StartCommand : IBotCommand
         // Start exam in DM - questions will be sent to this private chat
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
         var result = await examFlowService.StartExamInDmAsync(
-            groupChatId: examPayload.ChatId,
+            chat: ChatIdentity.From(chat),
             user: message.From,
             dmChatId: message.Chat.Id,  // User's private chat with bot
             config: config,

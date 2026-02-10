@@ -103,7 +103,7 @@ public partial class MessageProcessingService(
                     using var scope = _scopeFactory.CreateScope();
                     var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
-                    var examContext = await examFlowService.GetActiveExamContextAsync(message.From.Id, cancellationToken);
+                    var examContext = await examFlowService.GetActiveExamContextAsync(UserIdentity.From(message.From), cancellationToken);
                     if (examContext?.AwaitingOpenEndedAnswer == true)
                     {
                         var result = await examFlowService.HandleOpenEndedAnswerAsync(
@@ -113,8 +113,8 @@ public partial class MessageProcessingService(
                             cancellationToken);
 
                         logger.LogInformation(
-                            "Processed open-ended exam answer for user {UserId}: Complete={Complete}, Passed={Passed}",
-                            message.From.Id, result.ExamComplete, result.Passed);
+                            "Processed open-ended exam answer for {User}: Complete={Complete}, Passed={Passed}",
+                            message.From.ToLogInfo(), result.ExamComplete, result.Passed);
 
                         // Cancel welcome timeout and update response if exam completed
                         if (result.ExamComplete && result.GroupChatId.HasValue)

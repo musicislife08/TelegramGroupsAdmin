@@ -7,6 +7,7 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -183,7 +184,7 @@ public class ExamFlowServiceTests
 
         // Act
         var result = await examFlowService.StartExamInDmAsync(
-            TestChatId, user, TestDmChatId, config);
+            new ChatIdentity(TestChatId, "Test Chat"), user, TestDmChatId, config);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -207,7 +208,7 @@ public class ExamFlowServiceTests
 
         // Act
         var result = await examFlowService.StartExamInDmAsync(
-            TestChatId, user, TestDmChatId, config);
+            new ChatIdentity(TestChatId, "Test Chat"), user, TestDmChatId, config);
 
         // Assert
         Assert.That(result.Success, Is.False);
@@ -229,7 +230,7 @@ public class ExamFlowServiceTests
         var config = CreateValidExamConfig();
 
         // Start exam to create session
-        await examFlowService.StartExamInDmAsync(TestChatId, user, TestDmChatId, config);
+        await examFlowService.StartExamInDmAsync(new ChatIdentity(TestChatId, "Test Chat"), user, TestDmChatId, config);
 
         var session = await sessionRepo.GetSessionAsync(TestChatId, TestUserId);
         Assert.That(session, Is.Not.Null);
@@ -326,7 +327,9 @@ public class ExamFlowServiceTests
         await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
 
         // Act
-        var hasSession = await examFlowService.HasActiveSessionAsync(TestChatId, TestUserId);
+        var hasSession = await examFlowService.HasActiveSessionAsync(
+            new ChatIdentity(TestChatId, "Test Chat"),
+            UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(hasSession, Is.True);
@@ -340,7 +343,9 @@ public class ExamFlowServiceTests
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
         // Act
-        var hasSession = await examFlowService.HasActiveSessionAsync(TestChatId, TestUserId);
+        var hasSession = await examFlowService.HasActiveSessionAsync(
+            new ChatIdentity(TestChatId, "Test Chat"),
+            UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(hasSession, Is.False);
@@ -362,7 +367,7 @@ public class ExamFlowServiceTests
         await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
 
         // Act
-        var context = await examFlowService.GetActiveExamContextAsync(TestUserId);
+        var context = await examFlowService.GetActiveExamContextAsync(UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(context, Is.Not.Null);
@@ -377,7 +382,7 @@ public class ExamFlowServiceTests
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
         // Act
-        var context = await examFlowService.GetActiveExamContextAsync(TestUserId);
+        var context = await examFlowService.GetActiveExamContextAsync(UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(context, Is.Null);
@@ -399,7 +404,9 @@ public class ExamFlowServiceTests
         await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
 
         // Act
-        await examFlowService.CancelSessionAsync(TestChatId, TestUserId);
+        await examFlowService.CancelSessionAsync(
+            new ChatIdentity(TestChatId, "Test Chat"),
+            UserIdentity.FromId(TestUserId));
 
         // Assert
         var session = await sessionRepo.GetSessionAsync(TestChatId, TestUserId);
@@ -415,7 +422,9 @@ public class ExamFlowServiceTests
 
         // Act & Assert - should not throw
         Assert.DoesNotThrowAsync(async () =>
-            await examFlowService.CancelSessionAsync(TestChatId, TestUserId));
+            await examFlowService.CancelSessionAsync(
+                new ChatIdentity(TestChatId, "Test Chat"),
+                UserIdentity.FromId(TestUserId)));
     }
 
     #endregion
