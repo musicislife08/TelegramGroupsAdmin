@@ -35,7 +35,7 @@ public interface IBotChatService
     /// <summary>
     /// Check if bot has required permissions in a chat.
     /// </summary>
-    Task<bool> CheckHealthAsync(long chatId, CancellationToken ct = default);
+    Task<bool> CheckHealthAsync(ChatIdentity chat, CancellationToken ct = default);
 
     /// <summary>
     /// Get identities of all active managed chats where the bot has confirmed permissions.
@@ -65,7 +65,7 @@ public interface IBotChatService
     /// Refresh admin list for a specific chat from Telegram API.
     /// Updates chat_admins table and auto-trusts new admins.
     /// </summary>
-    Task RefreshChatAdminsAsync(long chatId, CancellationToken ct = default);
+    Task RefreshChatAdminsAsync(ChatIdentity chat, CancellationToken ct = default);
 
     /// <summary>
     /// Refresh admin cache for all active managed chats.

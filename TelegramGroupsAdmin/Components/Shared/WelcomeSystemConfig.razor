@@ -1,7 +1,7 @@
 @using Humanizer
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.Welcome
-@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Models
 @inject IConfigService ConfigService
@@ -464,7 +464,7 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.Chat.Id ?? 0, _config, Chat?.Chat.ToLogInfo());
+            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.Chat ?? ChatIdentity.FromId(0), _config);
             Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.Chat.ToLogInfo()}" : "globally")}", Severity.Success);
 
             // Invoke callback if provided

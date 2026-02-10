@@ -8,7 +8,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Configuration.Repositories;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
@@ -520,7 +520,7 @@ public class BanCelebrationServiceTests
             SendToBannedUser = sendToBannedUser
         };
 
-        await _configService!.SaveAsync(ConfigType.BanCelebration, chatId, config);
+        await _configService!.SaveAsync(ConfigType.BanCelebration, ChatIdentity.FromId(chatId), config);
     }
 
     private async Task EnableDmWelcomeMode(long chatId)
@@ -537,7 +537,7 @@ public class BanCelebrationServiceTests
             DmButtonText = "Open DM"
         };
 
-        await _configService!.SaveAsync(ConfigType.Welcome, chatId, welcomeConfig);
+        await _configService!.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(chatId), welcomeConfig);
     }
 
     private async Task SeedBanActions(int count)

@@ -325,7 +325,7 @@
         try
         {
             _globalSpamConfig.UrlBlocklist = _urlBlocklistConfig;
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, 0, _globalSpamConfig);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, ChatIdentity.FromId(0), _globalSpamConfig);
             Snackbar.Add("URL blocklist configuration saved", Severity.Success);
         }
         catch (Exception ex)

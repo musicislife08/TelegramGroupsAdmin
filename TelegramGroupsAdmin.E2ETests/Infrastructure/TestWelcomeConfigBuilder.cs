@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
@@ -193,6 +194,6 @@ public class TestWelcomeConfigBuilder
             ExamConfig = _examConfig
         };
 
-        await configService.SaveAsync(ConfigType.Welcome, _chatId, welcomeConfig);
+        await configService.SaveAsync(ConfigType.Welcome, ChatIdentity.FromId(_chatId), welcomeConfig);
     }
 }

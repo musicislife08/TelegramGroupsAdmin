@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using ContentDetectionServices = TelegramGroupsAdmin.ContentDetection.Services;
@@ -22,14 +24,14 @@ public class MessageContextAdapter : ContentDetectionServices.IMessageContextPro
     }
 
     public async Task<IEnumerable<ContentDetectionServices.HistoryMessage>> GetRecentMessagesAsync(
-        long chatId,
+        ChatIdentity chat,
         int count = 10,
         CancellationToken cancellationToken = default)
     {
         try
         {
             // Get recent messages with detection history to determine spam status
-            var messages = await _queryService.GetMessagesWithDetectionHistoryAsync(chatId, count, cancellationToken: cancellationToken);
+            var messages = await _queryService.GetMessagesWithDetectionHistoryAsync(chat.Id, count, cancellationToken: cancellationToken);
 
             // Convert to spam library's HistoryMessage format
             return messages.Select(m => new ContentDetectionServices.HistoryMessage
@@ -43,7 +45,7 @@ public class MessageContextAdapter : ContentDetectionServices.IMessageContextPro
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get message history for chat {ChatId}", chatId);
+            _logger.LogError(ex, "Failed to get message history for {Chat}", chat.ToLogDebug());
             return [];
         }
     }

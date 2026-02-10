@@ -42,7 +42,7 @@ public class AIContentCheckTests
 
         // Setup message context provider to return empty list by default
         _mockMessageContextProvider
-            .GetRecentMessagesAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetRecentMessagesAsync(Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IEnumerable<HistoryMessage>>(new List<HistoryMessage>()));
 
         _check = new AIContentCheckV2(

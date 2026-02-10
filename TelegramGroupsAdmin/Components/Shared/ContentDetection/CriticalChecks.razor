@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.ContentDetection
-@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Auth
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
@@ -252,7 +252,7 @@
             StateHasChanged();
 
             // Save the entire config (which now includes AlwaysRun in each sub-config)
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, 0, _config);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, ChatIdentity.FromId(0), _config);
 
             Snackbar.Add("Critical checks configuration saved successfully", Severity.Success);
         }

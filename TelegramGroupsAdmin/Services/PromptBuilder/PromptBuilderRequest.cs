@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Services.PromptBuilder;
 
 /// <summary>
@@ -40,6 +42,11 @@ public class PromptBuilderRequest
     /// Number of recent messages to analyze for context (0-50)
     /// </summary>
     public int MessageHistoryCount { get; set; } = 20;
+
+    /// <summary>
+    /// Chat identity for logging context (nullable for test/UI scenarios)
+    /// </summary>
+    public ChatIdentity? Chat { get; set; }
 
     /// <summary>
     /// Chat ID to pull message history from

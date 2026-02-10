@@ -1,4 +1,5 @@
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -29,7 +30,7 @@ public interface IBotMediaService
     /// Get or fetch chat icon (group/channel photo).
     /// Returns relative web path or null if not available.
     /// </summary>
-    Task<string?> GetChatIconAsync(long chatId, CancellationToken ct = default);
+    Task<string?> GetChatIconAsync(ChatIdentity chat, CancellationToken ct = default);
 
     /// <summary>
     /// Get file information for downloading.

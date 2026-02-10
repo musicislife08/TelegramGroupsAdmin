@@ -77,7 +77,7 @@
 
             // Save via ConfigService (handles caching and proper persistence)
             var chatId = ChatId.HasValue && ChatId.Value != 0 ? ChatId.Value : 0;
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, chatId, config);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, ChatIdentity.FromId(chatId), config);
             Snackbar.Add(chatId == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
 
             MudDialog.Close(DialogResult.Ok(true));

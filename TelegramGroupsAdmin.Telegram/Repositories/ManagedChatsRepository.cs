@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
@@ -125,18 +126,18 @@ public class ManagedChatsRepository : IManagedChatsRepository
             .AnyAsync(mc => mc.ChatId == chatId && mc.IsActive == true && mc.IsAdmin == true && mc.IsDeleted == false, cancellationToken);
     }
 
-    public async Task MarkInactiveAsync(long chatId, CancellationToken cancellationToken = default)
+    public async Task MarkInactiveAsync(ChatIdentity chat, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.ManagedChats
-            .FirstOrDefaultAsync(mc => mc.ChatId == chatId, cancellationToken);
+            .FirstOrDefaultAsync(mc => mc.ChatId == chat.Id, cancellationToken);
 
         if (entity != null)
         {
             entity.IsActive = false;
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Marked chat {ChatId} as inactive", chatId);
+            _logger.LogInformation("Marked {Chat} as inactive", chat.ToLogInfo());
         }
     }
 

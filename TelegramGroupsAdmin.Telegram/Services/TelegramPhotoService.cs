@@ -4,7 +4,8 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -51,11 +52,11 @@ public class TelegramPhotoService
     /// Get or fetch chat icon (group/channel photo)
     /// Returns relative path from wwwroot/images or null if not available
     /// </summary>
-    public async Task<string?> GetChatIconAsync(long chatId, CancellationToken cancellationToken = default)
+    public async Task<string?> GetChatIconAsync(ChatIdentity chat, CancellationToken cancellationToken = default)
     {
         try
         {
-            var fileName = $"{Math.Abs(chatId)}.jpg"; // Use absolute value for filename
+            var fileName = $"{Math.Abs(chat.Id)}.jpg"; // Use absolute value for filename
             var localPath = Path.Combine(_chatIconsPath, fileName);
             var relativePath = $"chat_icons/{fileName}"; // Web path (served as /media/chat_icons/)
 
@@ -66,22 +67,21 @@ public class TelegramPhotoService
             }
 
             // Fetch from Telegram
-            var chat = await _chatService.GetChatAsync(chatId, cancellationToken);
-            var chatName = chat.Title ?? chat.Username;
+            var chatInfo = await _chatService.GetChatAsync(chat.Id, cancellationToken);
 
-            if (chat.Photo == null)
+            if (chatInfo.Photo == null)
             {
                 _logger.LogDebug("Chat {Chat} has no profile photo - skipping icon cache",
-                    LogDisplayName.ChatDebug(chatName, chatId));
+                    chat.ToLogDebug());
                 return null;
             }
 
             // Download the small version of the chat photo
-            var file = await _mediaService.GetFileAsync(chat.Photo.SmallFileId, cancellationToken);
+            var file = await _mediaService.GetFileAsync(chatInfo.Photo.SmallFileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for chat {Chat} photo",
-                    LogDisplayName.ChatDebug(chatName, chatId));
+                    chat.ToLogDebug());
                 return null;
             }
 
@@ -97,8 +97,7 @@ public class TelegramPhotoService
                 // Resize to 64x64 icon
                 await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
 
-                _logger.LogDebug("Cached chat icon for {Chat}",
-                    LogDisplayName.ChatDebug(chatName, chatId));
+                _logger.LogDebug("Cached chat icon for {Chat}", chat.ToLogDebug());
                 return relativePath;
             }
             finally
@@ -114,15 +113,14 @@ public class TelegramPhotoService
             // NOTE: This catch block should rarely execute - profile photos are typically small
             // Only catches edge cases where chat has extremely large profile photo (>20MB)
             _logger.LogWarning(
-                "Chat icon download failed: File exceeds Telegram Bot API 20MB limit for chat {Chat}. " +
+                "Chat icon download failed: File exceeds Telegram Bot API 20MB limit for {Chat}. " +
                 "Profile photos this large are extremely rare.",
-                LogDisplayName.ChatDebug(null, chatId));
+                chat.ToLogDebug());
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch chat icon for {Chat}",
-                LogDisplayName.ChatDebug(null, chatId));
+            _logger.LogWarning(ex, "Failed to fetch chat icon for {Chat}", chat.ToLogDebug());
             return null;
         }
     }

@@ -8,7 +8,7 @@
 @inject IChatAdminsRepository ChatAdminsRepository
 @inject ITelegramUserMappingRepository TelegramMappingsRepository
 @inject IUserManagementService UserManagementService
-@inject TelegramGroupsAdmin.Configuration.Services.IConfigService ConfigService
+@inject TelegramGroupsAdmin.Core.Services.IConfigService ConfigService
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 
 <MudDialog>
@@ -538,7 +538,7 @@
             if (!_useCustomWelcomeConfig && ChatInfo.HasCustomWelcomeConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.Welcome, ChatInfo.Chat.Chat.Id);
+                await ConfigService.DeleteAsync(ConfigType.Welcome, ChatInfo.Chat.Chat);
                 ChatInfo.HasCustomWelcomeConfig = false;
                 Snackbar.Add("Reverted to global welcome configuration", Severity.Success);
             }
@@ -598,7 +598,7 @@
             if (!_useCustomServiceMsgConfig && ChatInfo.HasCustomServiceMsgConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.ServiceMessageDeletion, ChatInfo.Chat.Chat.Id);
+                await ConfigService.DeleteAsync(ConfigType.ServiceMessageDeletion, ChatInfo.Chat.Chat);
                 ChatInfo.HasCustomServiceMsgConfig = false;
                 Snackbar.Add("Reverted to global service message deletion configuration", Severity.Success);
             }
@@ -658,7 +658,7 @@
             if (!_useCustomBanCelebrationConfig && ChatInfo.HasCustomBanCelebrationConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.BanCelebration, ChatInfo.Chat.Chat.Id);
+                await ConfigService.DeleteAsync(ConfigType.BanCelebration, ChatInfo.Chat.Chat);
                 ChatInfo.HasCustomBanCelebrationConfig = false;
                 Snackbar.Add("Reverted to global ban celebration configuration", Severity.Success);
             }

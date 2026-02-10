@@ -17,6 +17,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IAuditService, AuditService>();
 
+        // Unified configuration service (database-driven config with global/chat-specific merging)
+        services.AddScoped<IConfigService, ConfigService>();
+
         // AI services (Semantic Kernel multi-provider support)
         // IChatService is Scoped (matches ISystemConfigRepository), kernel cache is static
         services.AddScoped<IChatService, SemanticKernelChatService>();

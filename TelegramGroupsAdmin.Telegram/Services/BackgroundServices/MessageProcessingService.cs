@@ -6,7 +6,7 @@ using System.Text.Json;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -360,7 +360,7 @@ public partial class MessageProcessingService(
                     try
                     {
                         var chatService = messageScope.ServiceProvider.GetRequiredService<IBotChatService>();
-                        await chatService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
+                        await chatService.RefreshChatAdminsAsync(ChatIdentity.From(message.Chat), cancellationToken);
                     }
                     catch (Exception ex)
                     {

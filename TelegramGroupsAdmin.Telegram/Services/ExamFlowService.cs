@@ -205,7 +205,7 @@ public class ExamFlowService : IExamFlowService
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
         var session = await sessionRepo.GetByIdAsync(sessionId, cancellationToken);
         if (session == null)
@@ -321,7 +321,7 @@ public class ExamFlowService : IExamFlowService
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
         var session = await sessionRepo.GetSessionAsync(chatId, user.Id, cancellationToken);
         if (session == null)
@@ -372,7 +372,7 @@ public class ExamFlowService : IExamFlowService
     {
         await using var scope = _serviceProvider.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
         // Find any active session for this user
         var session = await sessionRepo.GetActiveSessionForUserAsync(user.Id, cancellationToken);

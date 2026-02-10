@@ -510,7 +510,7 @@
             _isSaving = true;
 
             var chatId = ChatId ?? 0;
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, chatId, _config);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, ChatIdentity.FromId(chatId), _config);
             Snackbar.Add(chatId == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
         }
         catch (Exception ex)

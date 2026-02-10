@@ -6,6 +6,7 @@ using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -217,7 +218,7 @@ public class UpdateRouterTests
 
         // Assert - health refresh triggered for the chat
         await _mockHealthOrchestrator.Received(1)
-            .RefreshHealthForChatAsync(12345, Arg.Any<CancellationToken>());
+            .RefreshHealthForChatAsync(Arg.Is<ChatIdentity>(c => c.Id == 12345), Arg.Any<CancellationToken>());
     }
 
     [Test]

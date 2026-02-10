@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -47,7 +49,7 @@ public class UpdateRouter(
             await chatService.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
 
             // Trigger immediate health check when bot status changes
-            await healthOrchestrator.RefreshHealthForChatAsync(myChatMember.Chat.Id, cancellationToken);
+            await healthOrchestrator.RefreshHealthForChatAsync(ChatIdentity.From(myChatMember.Chat), cancellationToken);
             return;
         }
 

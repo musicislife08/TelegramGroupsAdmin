@@ -82,17 +82,17 @@ public class BotChatService(
         await chatHandler.LeaveChatAsync(chatId, ct);
     }
 
-    public async Task<bool> CheckHealthAsync(long chatId, CancellationToken ct = default)
+    public async Task<bool> CheckHealthAsync(ChatIdentity chat, CancellationToken ct = default)
     {
         try
         {
             // Basic health check - can we get chat info?
-            var chat = await chatHandler.GetChatAsync(chatId, ct);
-            return chat != null;
+            var chatInfo = await chatHandler.GetChatAsync(chat.Id, ct);
+            return chatInfo != null;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Health check failed for chat {ChatId}", chatId);
+            logger.LogWarning(ex, "Health check failed for {Chat}", chat.ToLogDebug());
             return false;
         }
     }
@@ -186,11 +186,11 @@ public class BotChatService(
                     else
                     {
                         // User demoted from admin
-                        await chatAdminsRepo.DeactivateAsync(chat.Id, affectedUser.Id, ct);
+                        await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), UserIdentity.From(affectedUser), ct);
                         logger.LogInformation(
                             "❌ {User} demoted from admin in {Chat}",
-                            LogDisplayName.UserInfo(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
-                            LogDisplayName.ChatInfo(chat.Title, chat.Id));
+                            affectedUser.ToLogInfo(),
+                            chat.ToLogInfo());
                     }
                 }
             }
@@ -207,7 +207,7 @@ public class BotChatService(
                     LogDisplayName.ChatInfo(chatName, chat.Id));
 
                 // Refresh admin cache immediately instead of waiting for periodic health check (30min)
-                await RefreshChatAdminsAsync(chat.Id, ct);
+                await RefreshChatAdminsAsync(ChatIdentity.From(chat), ct);
             }
 
             if (isActive)
@@ -333,12 +333,12 @@ public class BotChatService(
             else
             {
                 // User demoted from admin
-                await chatAdminsRepo.DeactivateAsync(chat.Id, user.Id, ct);
+                await chatAdminsRepo.DeactivateAsync(ChatIdentity.From(chat), UserIdentity.From(user), ct);
 
                 logger.LogInformation(
                     "⬇️ INSTANT: {User} demoted from admin in {Chat}",
-                    LogDisplayName.UserInfo(user.FirstName, user.LastName, user.Username, user.Id),
-                    LogDisplayName.ChatInfo(chat.Title, chat.Id));
+                    user.ToLogInfo(),
+                    chat.ToLogInfo());
 
                 // Phase 5.2: Notify owners about admin demotion
                 var displayName = TelegramDisplayName.FormatMention(user);
@@ -405,28 +405,27 @@ public class BotChatService(
     /// Refresh admin list for a specific chat from Telegram API.
     /// Updates chat_admins table and auto-trusts new admins.
     /// </summary>
-    public async Task RefreshChatAdminsAsync(long chatId, CancellationToken ct = default)
+    public async Task RefreshChatAdminsAsync(ChatIdentity chat, CancellationToken ct = default)
     {
-        Chat? chat = null;
         try
         {
             // Check if this is a group chat (only groups/supergroups have administrators)
-            chat = await chatHandler.GetChatAsync(chatId, ct);
-            if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
+            var sdkChat = await chatHandler.GetChatAsync(chat.Id, ct);
+            if (sdkChat.Type != ChatType.Group && sdkChat.Type != ChatType.Supergroup)
             {
                 logger.LogDebug("Skipping admin refresh for non-group chat {Chat} (type: {Type})",
-                    LogDisplayName.ChatDebug(chat.Title, chatId), chat.Type);
+                    chat.ToLogDebug(), sdkChat.Type);
                 return;
             }
 
             // Get all administrators from Telegram
-            var admins = await chatHandler.GetChatAdministratorsAsync(chatId, ct);
+            var admins = await chatHandler.GetChatAdministratorsAsync(chat.Id, ct);
 
             // Get current admin IDs from Telegram
             var currentAdminIds = admins.Select(a => a.User.Id).ToHashSet();
 
             // Get cached admins from database
-            var cachedAdmins = await chatAdminsRepo.GetChatAdminsAsync(chatId, ct);
+            var cachedAdmins = await chatAdminsRepo.GetChatAdminsAsync(chat.Id, ct);
             var cachedAdminIds = cachedAdmins.Select(a => a.TelegramId).ToHashSet();
 
             // Find demoted admins (in cache but not in current list)
@@ -435,12 +434,13 @@ public class BotChatService(
             // Deactivate demoted admins
             foreach (var demotedId in demotedAdminIds)
             {
-                await chatAdminsRepo.DeactivateAsync(chatId, demotedId, ct);
                 var demotedAdmin = cachedAdmins.First(a => a.TelegramId == demotedId);
+                var demotedUser = new UserIdentity(demotedId, demotedAdmin.FirstName, demotedAdmin.LastName, demotedAdmin.Username);
+                await chatAdminsRepo.DeactivateAsync(chat, demotedUser, ct);
                 logger.LogInformation(
-                    "⬇️ {Admin} demoted in {Chat}",
-                    demotedAdmin.DisplayName,
-                    LogDisplayName.ChatInfo(chat.Title, chatId));
+                    "{Admin} demoted in {Chat}",
+                    demotedUser.ToLogInfo(),
+                    chat.ToLogInfo());
             }
 
             // Upsert current admins (add new, update existing)
@@ -454,17 +454,18 @@ public class BotChatService(
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 var wasNew = !cachedAdminIds.Contains(admin.User.Id);
 
-                await chatAdminsRepo.UpsertAsync(chatId, admin.User.Id, isCreator, ct);
+                await chatAdminsRepo.UpsertAsync(chat.Id, admin.User.Id, isCreator, ct);
 
                 var displayName = TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id);
                 adminNames.Add(displayName + (isCreator ? " (creator)" : ""));
 
                 if (wasNew)
                 {
+                    var adminUser = UserIdentity.From(admin.User);
                     logger.LogInformation(
-                        "⬆️ New admin {Admin} promoted in {Chat}",
-                        LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
-                        LogDisplayName.ChatInfo(chat.Title, chatId));
+                        "New admin {Admin} promoted in {Chat}",
+                        adminUser.ToLogInfo(),
+                        chat.ToLogInfo());
 
                     // AUTO-TRUST: Trust new admins globally
                     try
@@ -477,7 +478,7 @@ public class BotChatService(
                             IssuedBy: Actor.AutoTrust,
                             IssuedAt: DateTimeOffset.UtcNow,
                             ExpiresAt: null,
-                            Reason: $"Admin in chat {chatId}"
+                            Reason: $"Admin in chat {chat.Id}"
                         );
 
                         await userActionsRepo.InsertAsync(trustAction, ct);
@@ -485,27 +486,27 @@ public class BotChatService(
 
                         logger.LogInformation(
                             "Auto-trusted {User} - admin in {Chat}",
-                            LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
-                            LogDisplayName.ChatInfo(chat.Title, chatId));
+                            adminUser.ToLogInfo(),
+                            chat.ToLogInfo());
                     }
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Failed to auto-trust admin {User} in {Chat}",
-                            LogDisplayName.UserDebug(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
-                            LogDisplayName.ChatDebug(chat.Title, chatId));
+                            adminUser.ToLogDebug(),
+                            chat.ToLogDebug());
                     }
                 }
             }
 
             logger.LogDebug(
-                "✅ Synced {Count} admins for {Chat}: {Admins}",
+                "Synced {Count} admins for {Chat}: {Admins}",
                 admins.Length,
-                LogDisplayName.ChatDebug(chat.Title, chatId),
+                chat.ToLogDebug(),
                 string.Join(", ", adminNames));
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to refresh admins for {Chat}", chat?.ToLogDebug());
+            logger.LogWarning(ex, "Failed to refresh admins for {Chat}", chat.ToLogDebug());
             throw; // Re-throw so caller can track failures
         }
     }
@@ -527,7 +528,7 @@ public class BotChatService(
             {
                 try
                 {
-                    await RefreshChatAdminsAsync(chat.Chat.Id, ct);
+                    await RefreshChatAdminsAsync(chat.Chat, ct);
                     refreshedCount++;
                 }
                 catch (Exception ex)

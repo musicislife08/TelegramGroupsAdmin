@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 
@@ -16,7 +18,7 @@ public class MessageContextProvider(
     /// Get recent messages from a chat for context
     /// </summary>
     public async Task<IEnumerable<HistoryMessage>> GetRecentMessagesAsync(
-        long chatId,
+        ChatIdentity chat,
         int count = 10,
         CancellationToken cancellationToken = default)
     {
@@ -30,7 +32,7 @@ public class MessageContextProvider(
                 from m in context.Messages
                 join tu in context.TelegramUsers on m.UserId equals tu.TelegramUserId into userJoin
                 from tu in userJoin.DefaultIfEmpty()
-                where m.ChatId == chatId
+                where m.ChatId == chat.Id
                    && m.MessageText != null
                    && m.MessageText != string.Empty
                 select new
@@ -60,7 +62,7 @@ public class MessageContextProvider(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to retrieve message history for chat {ChatId}", chatId);
+            logger.LogError(ex, "Failed to retrieve message history for {Chat}", chat.ToLogDebug());
             return [];
         }
     }

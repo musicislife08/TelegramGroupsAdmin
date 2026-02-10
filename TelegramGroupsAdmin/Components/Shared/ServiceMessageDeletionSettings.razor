@@ -1,5 +1,5 @@
 @using TelegramGroupsAdmin.Configuration
-@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Core.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
@@ -172,7 +172,7 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync(ConfigType.ServiceMessageDeletion, ChatId, _config);
+            await ConfigService.SaveAsync(ConfigType.ServiceMessageDeletion, ChatIdentity.FromId(ChatId), _config);
             var scope = ChatId != 0 ? $"for chat {ChatId}" : "globally";
             Snackbar.Add($"Service message settings saved {scope}", Severity.Success);
 

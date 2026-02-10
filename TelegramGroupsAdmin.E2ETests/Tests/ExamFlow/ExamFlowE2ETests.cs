@@ -3,6 +3,7 @@ using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -58,7 +59,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
         // Get the exam config to know how many questions
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
             Configuration.ConfigType.Welcome, TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
@@ -131,7 +132,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var messageProcessingService = scope.ServiceProvider.GetRequiredService<IMessageProcessingService>();
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
             Configuration.ConfigType.Welcome, TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
@@ -202,7 +203,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var messageProcessingService = scope.ServiceProvider.GetRequiredService<IMessageProcessingService>();
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
             Configuration.ConfigType.Welcome, TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
