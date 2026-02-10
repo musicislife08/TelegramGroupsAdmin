@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -18,12 +19,12 @@ public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
     public ChatHealthStatus? GetCachedHealth(long chatId)
         => _healthCache.TryGetValue(chatId, out var health) ? health : null;
 
-    public HashSet<long> GetHealthyChatIds()
+    public IReadOnlyList<ChatIdentity> GetHealthyChatIdentities()
     {
-        var healthyChatIds = _healthCache
+        var healthyChats = _healthCache
             .Where(kvp => kvp.Value.Status == ChatHealthStatusType.Healthy)
-            .Select(kvp => kvp.Key)
-            .ToHashSet();
+            .Select(kvp => kvp.Value.Chat)
+            .ToList();
 
         if (_healthCache.Count == 0)
         {
@@ -31,7 +32,7 @@ public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
                 "Health cache is empty - health check may not have run yet. " +
                 "No chats will be excluded from moderation actions.");
         }
-        else if (healthyChatIds.Count == 0)
+        else if (healthyChats.Count == 0)
         {
             logger.LogWarning(
                 "No healthy chats found in cache ({TotalChats} total). " +
@@ -42,17 +43,11 @@ public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
         {
             logger.LogDebug(
                 "Health gate: {HealthyCount}/{TotalCount} chats are healthy and actionable",
-                healthyChatIds.Count,
+                healthyChats.Count,
                 _healthCache.Count);
         }
 
-        return healthyChatIds;
-    }
-
-    public List<long> FilterHealthyChats(IEnumerable<long> chatIds)
-    {
-        var healthyChatIds = GetHealthyChatIds();
-        return chatIds.Where(healthyChatIds.Contains).ToList();
+        return healthyChats;
     }
 
     public void SetHealth(long chatId, ChatHealthStatus status)

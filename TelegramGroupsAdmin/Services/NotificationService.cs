@@ -30,7 +30,6 @@ public class NotificationService : INotificationService
     private readonly IWebPushNotificationService _webPushService;
     private readonly ITelegramUserMappingRepository _telegramMappingRepo;
     private readonly IChatAdminsRepository _chatAdminsRepo;
-    private readonly IManagedChatsRepository _managedChatsRepo;
     private readonly IUserRepository _userRepo;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
     private readonly ILogger<NotificationService> _logger;
@@ -43,7 +42,6 @@ public class NotificationService : INotificationService
         IWebPushNotificationService webPushService,
         ITelegramUserMappingRepository telegramMappingRepo,
         IChatAdminsRepository chatAdminsRepo,
-        IManagedChatsRepository managedChatsRepo,
         IUserRepository userRepo,
         IReportCallbackContextRepository callbackContextRepo,
         ILogger<NotificationService> logger)
@@ -54,14 +52,13 @@ public class NotificationService : INotificationService
         _webPushService = webPushService;
         _telegramMappingRepo = telegramMappingRepo;
         _chatAdminsRepo = chatAdminsRepo;
-        _managedChatsRepo = managedChatsRepo;
         _userRepo = userRepo;
         _callbackContextRepo = callbackContextRepo;
         _logger = logger;
     }
 
     public async Task<Dictionary<string, bool>> SendChatNotificationAsync(
-        long chatId,
+        ChatIdentity chat,
         NotificationEventType eventType,
         string subject,
         string message,
@@ -71,18 +68,15 @@ public class NotificationService : INotificationService
         ReportType? reportType = null,
         CancellationToken cancellationToken = default)
     {
-        // Fetch chat once for logging (reuse for all logs in this method)
-        var chat = await _managedChatsRepo.GetByChatIdAsync(chatId, cancellationToken);
-
         try
         {
             // Get all active admins for this chat (includes LinkedWebUser via JOIN)
-            var chatAdmins = await _chatAdminsRepo.GetChatAdminsAsync(chatId, cancellationToken);
+            var chatAdmins = await _chatAdminsRepo.GetChatAdminsAsync(chat.Id, cancellationToken);
 
             if (chatAdmins.Count == 0)
             {
                 _logger.LogWarning("No admins found for {Chat}, cannot send notification",
-                    chat.ToLogDebug(chatId));
+                    chat.ToLogDebug());
                 return new Dictionary<string, bool>();
             }
 
@@ -96,13 +90,13 @@ public class NotificationService : INotificationService
             {
                 _logger.LogWarning(
                     "{Chat} has {AdminCount} admins, but none are linked to web accounts",
-                    chat.ToLogDebug(chatId), chatAdmins.Count);
+                    chat.ToLogDebug(), chatAdmins.Count);
                 return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation(
                 "Sending chat notification for {Chat} to {UserCount} linked admin(s)",
-                chat.ToLogInfo(chatId), linkedAdmins.Count);
+                chat.ToLogInfo(), linkedAdmins.Count);
 
             // Send notifications to all linked admins
             var results = new Dictionary<string, bool>();
@@ -110,7 +104,7 @@ public class NotificationService : INotificationService
             {
                 var success = await SendNotificationAsync(
                     user, eventType, subject, message,
-                    reportId, photoPath, reportedUserId, chatId, reportType,
+                    reportId, photoPath, reportedUserId, chat.Id, reportType,
                     cancellationToken);
                 results[user.Id] = success;
             }
@@ -120,7 +114,7 @@ public class NotificationService : INotificationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send chat notification for {Chat}, event {EventType}",
-                chat.ToLogDebug(chatId), eventType);
+                chat.ToLogDebug(), eventType);
             return new Dictionary<string, bool>();
         }
     }

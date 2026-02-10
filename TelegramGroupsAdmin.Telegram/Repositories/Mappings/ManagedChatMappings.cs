@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -11,8 +12,7 @@ public static class ManagedChatMappings
     extension(DataModels.ManagedChatRecordDto data)
     {
         public UiModels.ManagedChatRecord ToModel() => new(
-            ChatId: data.ChatId,
-            ChatName: data.ChatName,
+            Chat: new ChatIdentity(data.ChatId, data.ChatName),
             ChatType: (UiModels.ManagedChatType)data.ChatType,
             BotStatus: (UiModels.BotChatStatus)data.BotStatus,
             IsAdmin: data.IsAdmin,
@@ -29,8 +29,8 @@ public static class ManagedChatMappings
     {
         public DataModels.ManagedChatRecordDto ToDto() => new()
         {
-            ChatId = ui.ChatId,
-            ChatName = ui.ChatName,
+            ChatId = ui.Chat.Id,
+            ChatName = ui.Chat.ChatName,
             ChatType = (DataModels.ManagedChatType)(int)ui.ChatType,
             BotStatus = (DataModels.BotChatStatus)(int)ui.BotStatus,
             IsAdmin = ui.IsAdmin,

@@ -62,11 +62,11 @@
     <div class="telegram-main @(_selectedChatId.HasValue ? "active" : "")">
         @if (_selectedChatId.HasValue)
         {
-            var selectedChat = _managedChats.FirstOrDefault(c => c.ChatId == _selectedChatId.Value);
+            var selectedChat = _managedChats.FirstOrDefault(c => c.Chat.Id == _selectedChatId.Value);
             if (selectedChat != null)
             {
                 @* Chat Header *@
-                <ChatHeader ChatName="@selectedChat.ChatName"
+                <ChatHeader ChatName="@selectedChat.Chat.ChatName"
                             ChatIconPath="@selectedChat.ChatIconPath"
                             ChatDescription="@GetChatDescription(selectedChat)"
                             ShowBackButton="true"
@@ -587,7 +587,7 @@
         {
             var searchLower = _chatSearchText.ToLower();
             _filteredChats = _managedChats
-                .Where(c => c.ChatName?.ToLower().Contains(searchLower) == true)
+                .Where(c => c.Chat.ChatName?.ToLower().Contains(searchLower) == true)
                 .ToList();
         }
     }
@@ -599,24 +599,24 @@
             foreach (var chat in _managedChats)
             {
                 // Get total message count for this chat
-                var totalCount = await MessageRepository.GetMessageCountByChatIdAsync(chat.ChatId);
-                _chatMessageCounts[chat.ChatId] = totalCount;
+                var totalCount = await MessageRepository.GetMessageCountByChatIdAsync(chat.Chat.Id);
+                _chatMessageCounts[chat.Chat.Id] = totalCount;
 
                 // Get last message preview (only fetch 1 message for preview)
                 if (totalCount > 0)
                 {
-                    var lastMessages = await MessageQueryService.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
+                    var lastMessages = await MessageQueryService.GetMessagesByChatIdAsync(chat.Chat.Id, limit: 1);
                     if (lastMessages.Any())
                     {
                         var lastMessage = lastMessages.First();
                         var hasPhoto = !string.IsNullOrEmpty(lastMessage.PhotoFileId);
                         var preview = lastMessage.MessageText ?? (hasPhoto ? "📷 Photo" : "Message");
-                        _lastMessagePreviews[chat.ChatId] = preview;
+                        _lastMessagePreviews[chat.Chat.Id] = preview;
                     }
                 }
 
                 // TODO: Implement read tracking for unread counts
-                _chatUnreadCounts[chat.ChatId] = 0; // Placeholder
+                _chatUnreadCounts[chat.Chat.Id] = 0; // Placeholder
             }
         }
         catch (Exception ex)

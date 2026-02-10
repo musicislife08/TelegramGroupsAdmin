@@ -154,7 +154,7 @@
                     @if (_useCustomConfig)
                     {
                         <!-- Reusable DetectionOverview component for per-chat configuration -->
-                        <DetectionOverview ChatId="@ChatInfo.Chat.ChatId" />
+                        <DetectionOverview ChatId="@ChatInfo.Chat.Chat.Id" />
                     }
                     else
                     {
@@ -236,7 +236,7 @@
                     @if (_useCustomServiceMsgConfig)
                     {
                         <!-- Reusable ServiceMessageDeletionSettings component for per-chat configuration -->
-                        <ServiceMessageDeletionSettings @ref="_serviceMsgConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnServiceMsgConfigSaved" />
+                        <ServiceMessageDeletionSettings @ref="_serviceMsgConfigComponent" ChatId="@ChatInfo.Chat.Chat.Id" OnSaved="OnServiceMsgConfigSaved" />
 
                         <!-- Save Button -->
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -284,7 +284,7 @@
                     @if (_useCustomBanCelebrationConfig)
                     {
                         <!-- Reusable BanCelebrationChatSettings component for per-chat configuration -->
-                        <BanCelebrationChatSettings @ref="_banCelebrationConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnBanCelebrationConfigSaved" />
+                        <BanCelebrationChatSettings @ref="_banCelebrationConfigComponent" ChatId="@ChatInfo.Chat.Chat.Id" OnSaved="OnBanCelebrationConfigSaved" />
 
                         <!-- Save Button -->
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -443,7 +443,7 @@
         _loadingAdmins = true;
         try
         {
-            _admins = await ChatAdminsRepository.GetChatAdminsAsync(ChatInfo.Chat.ChatId);
+            _admins = await ChatAdminsRepository.GetChatAdminsAsync(ChatInfo.Chat.Chat.Id);
 
             // Load linkage information for each admin
             _adminLinkages.Clear();
@@ -477,7 +477,7 @@
             // User switched from custom to global - delete custom config
             try
             {
-                await SpamConfigRepository.DeleteChatConfigAsync(ChatInfo.Chat.ChatId);
+                await SpamConfigRepository.DeleteChatConfigAsync(ChatInfo.Chat.Chat.Id);
                 ChatInfo.HasCustomSpamConfig = false;
                 Snackbar.Add("Reverted to global spam detection configuration", Severity.Success);
             }
@@ -538,7 +538,7 @@
             if (!_useCustomWelcomeConfig && ChatInfo.HasCustomWelcomeConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.Welcome, ChatInfo.Chat.ChatId);
+                await ConfigService.DeleteAsync(ConfigType.Welcome, ChatInfo.Chat.Chat.Id);
                 ChatInfo.HasCustomWelcomeConfig = false;
                 Snackbar.Add("Reverted to global welcome configuration", Severity.Success);
             }
@@ -598,7 +598,7 @@
             if (!_useCustomServiceMsgConfig && ChatInfo.HasCustomServiceMsgConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.ServiceMessageDeletion, ChatInfo.Chat.ChatId);
+                await ConfigService.DeleteAsync(ConfigType.ServiceMessageDeletion, ChatInfo.Chat.Chat.Id);
                 ChatInfo.HasCustomServiceMsgConfig = false;
                 Snackbar.Add("Reverted to global service message deletion configuration", Severity.Success);
             }
@@ -658,7 +658,7 @@
             if (!_useCustomBanCelebrationConfig && ChatInfo.HasCustomBanCelebrationConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync(ConfigType.BanCelebration, ChatInfo.Chat.ChatId);
+                await ConfigService.DeleteAsync(ConfigType.BanCelebration, ChatInfo.Chat.Chat.Id);
                 ChatInfo.HasCustomBanCelebrationConfig = false;
                 Snackbar.Add("Reverted to global ban celebration configuration", Severity.Success);
             }
@@ -677,7 +677,7 @@
     {
         try
         {
-            var config = await ConfigRepository.GetByChatIdAsync(ChatInfo.Chat.ChatId);
+            var config = await ConfigRepository.GetByChatIdAsync(ChatInfo.Chat.Chat.Id);
             _cachedInviteLink = config?.InviteLink;
         }
         catch (Exception ex)
@@ -691,7 +691,7 @@
         _clearingLink = true;
         try
         {
-            await ConfigRepository.ClearInviteLinkAsync(ChatInfo.Chat.ChatId);
+            await ConfigRepository.ClearInviteLinkAsync(ChatInfo.Chat.Chat.Id);
             _cachedInviteLink = null;
             Snackbar.Add(
                 "Cleared cached invite link for this chat. The next health check will fetch a fresh link from Telegram.",

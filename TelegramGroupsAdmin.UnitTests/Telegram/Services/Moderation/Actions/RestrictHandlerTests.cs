@@ -24,8 +24,15 @@ public class RestrictHandlerTests
     private ILogger<BotRestrictHandler> _mockLogger = null!;
     private BotRestrictHandler _handler = null!;
 
-    // Test chat IDs for cross-chat operations
-    private static readonly long[] TestChatIds = [-100001, -100002, -100003, -100004, -100005];
+    // Test chat identities for cross-chat operations
+    private static readonly IReadOnlyList<ChatIdentity> TestChatIds = new List<ChatIdentity>
+    {
+        new(-100001, "Chat 1"),
+        new(-100002, "Chat 2"),
+        new(-100003, "Chat 3"),
+        new(-100004, "Chat 4"),
+        new(-100005, "Chat 5")
+    }.AsReadOnly();
 
     [SetUp]
     public void SetUp()
@@ -159,7 +166,7 @@ public class RestrictHandlerTests
         var duration = TimeSpan.FromHours(2);
 
         // Setup 5 healthy chats
-        _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(TestChatIds);
 
         // Act
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, duration, "Global mute");
@@ -189,11 +196,11 @@ public class RestrictHandlerTests
         var executor = Actor.FromTelegramUser(888, "Admin");
 
         // Setup 5 healthy chats, but make 2 fail
-        _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(TestChatIds);
 
-        _mockApiClient.RestrictChatMemberAsync(TestChatIds[1], userId, Arg.Any<ChatPermissions>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _mockApiClient.RestrictChatMemberAsync(TestChatIds[1].Id, userId, Arg.Any<ChatPermissions>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Chat error 1"));
-        _mockApiClient.RestrictChatMemberAsync(TestChatIds[3], userId, Arg.Any<ChatPermissions>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _mockApiClient.RestrictChatMemberAsync(TestChatIds[3].Id, userId, Arg.Any<ChatPermissions>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Chat error 2"));
 
         // Act
@@ -216,7 +223,7 @@ public class RestrictHandlerTests
         var executor = Actor.FromSystem("test");
 
         // Make getting healthy chats fail
-        _mockBotChatService.GetHealthyChatIds()
+        _mockBotChatService.GetHealthyChatIdentities()
             .Returns(_ => throw new InvalidOperationException("No managed chats available"));
 
         // Act
@@ -237,7 +244,7 @@ public class RestrictHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long>().AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity>().AsReadOnly());
 
         // Act
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Test");

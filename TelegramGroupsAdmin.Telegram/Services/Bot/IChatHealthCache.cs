@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -21,25 +22,16 @@ public interface IChatHealthCache
     ChatHealthStatus? GetCachedHealth(long chatId);
 
     /// <summary>
-    /// Get set of chat IDs where bot has healthy status (admin + required permissions).
+    /// Get identities of chats where bot has healthy status (admin + required permissions).
     /// Uses cached health data from most recent health check.
     /// Chats with Warning/Error/Unknown status are excluded to prevent action failures.
-    /// Returns HashSet for O(1) lookup performance when filtering large chat lists.
     ///
     /// Fail-Closed Behavior: If health cache is empty (cold start before first health check),
-    /// returns empty set, causing all moderation actions to be skipped. This prevents
+    /// returns empty list, causing all moderation actions to be skipped. This prevents
     /// permission errors until health status is confirmed.
     /// </summary>
-    /// <returns>HashSet of chat IDs with "Healthy" status</returns>
-    HashSet<long> GetHealthyChatIds();
-
-    /// <summary>
-    /// Filters a list of chat IDs to only include healthy chats (bot has admin permissions).
-    /// DRY helper to avoid repeating health gate pattern across multiple call sites.
-    /// </summary>
-    /// <param name="chatIds">Chat IDs to filter</param>
-    /// <returns>Only chat IDs that are in the healthy set</returns>
-    List<long> FilterHealthyChats(IEnumerable<long> chatIds);
+    /// <returns>Chat identities with "Healthy" status</returns>
+    IReadOnlyList<ChatIdentity> GetHealthyChatIdentities();
 
     /// <summary>
     /// Update health status for a chat.

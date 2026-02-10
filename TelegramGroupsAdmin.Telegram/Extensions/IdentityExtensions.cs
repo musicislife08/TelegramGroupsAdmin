@@ -61,11 +61,6 @@ public static class IdentityExtensions
         public static ChatIdentity From(Chat chat) => new(chat.Id, chat.Title);
 
         /// <summary>
-        /// Create identity from domain model.
-        /// </summary>
-        public static ChatIdentity From(ManagedChatRecord chat) => new(chat.ChatId, chat.ChatName);
-
-        /// <summary>
         /// Create identity by fetching chat info from the database.
         /// Single fetch at the call site — the identity then flows through the entire handler chain
         /// without any downstream handler needing to re-fetch for logging.
@@ -74,7 +69,7 @@ public static class IdentityExtensions
             long chatId, IManagedChatsRepository repo, CancellationToken ct = default)
         {
             var chat = await repo.GetByChatIdAsync(chatId, ct);
-            return chat != null ? ChatIdentity.From(chat) : ChatIdentity.FromId(chatId);
+            return chat?.Chat ?? ChatIdentity.FromId(chatId);
         }
     }
 }

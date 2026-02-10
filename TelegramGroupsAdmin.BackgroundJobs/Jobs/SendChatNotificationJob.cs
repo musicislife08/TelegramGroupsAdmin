@@ -51,7 +51,7 @@ public class SendChatNotificationJob(
                 payload.Subject);
 
             var results = await _notificationService.SendChatNotificationAsync(
-                chatId: chat.Id,
+                chat: chat,
                 eventType: payload.EventType,
                 subject: payload.Subject,
                 message: payload.Message,

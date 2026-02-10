@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -51,13 +52,13 @@ public class ChatHealthRefreshOrchestrator(
             {
                 var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
 
-                if (existingChat != null && existingChat.ChatName != chatName)
+                if (existingChat != null && existingChat.Chat.ChatName != chatName)
                 {
                     // Update with fresh chat name from Telegram
-                    var updatedChat = existingChat with { ChatName = chatName };
+                    var updatedChat = existingChat with { Chat = existingChat.Chat with { ChatName = chatName } };
                     await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
                     logger.LogDebug("Updated chat name: {OldName} -> {NewName} ({ChatId})",
-                        existingChat.ChatName, chatName, chatId);
+                        existingChat.Chat.ChatName, chatName, chatId);
                 }
             }
 
@@ -79,7 +80,7 @@ public class ChatHealthRefreshOrchestrator(
     {
         var health = new ChatHealthStatus
         {
-            ChatId = chatId,
+            Chat = ChatIdentity.FromId(chatId),
             IsReachable = false,
             Status = ChatHealthStatusType.Unknown
         };
@@ -90,6 +91,7 @@ public class ChatHealthRefreshOrchestrator(
             // Try to get chat info
             var chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
             health.IsReachable = true;
+            health.Chat = ChatIdentity.From(chat);
             chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
 
             // Cache SDK Chat for use by other services (e.g., NotificationHandler)
@@ -265,7 +267,7 @@ public class ChatHealthRefreshOrchestrator(
 
             foreach (var chat in chats)
             {
-                await RefreshHealthForChatAsync(chat.ChatId, cancellationToken);
+                await RefreshHealthForChatAsync(chat.Chat.Id, cancellationToken);
             }
 
             logger.LogDebug("Completed health check for {Count} chats", chats.Count);
@@ -286,7 +288,7 @@ public class ChatHealthRefreshOrchestrator(
             logger.LogInformation("Syncing linked channels for {Count} managed chats", chats.Count);
             foreach (var chat in chats)
             {
-                await FetchLinkedChannelAsync(chat.ChatId, cancellationToken);
+                await FetchLinkedChannelAsync(chat.Chat.Id, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -318,7 +320,7 @@ public class ChatHealthRefreshOrchestrator(
         try
         {
             logger.LogDebug("Refreshing single chat {Chat}",
-                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
+                (chat?.Chat ?? ChatIdentity.FromId(chatId)).ToLogDebug());
 
             // Refresh admin list
             await chatService.RefreshChatAdminsAsync(chatId, cancellationToken);
@@ -333,12 +335,12 @@ public class ChatHealthRefreshOrchestrator(
             }
 
             logger.LogDebug("✅ Single chat refresh completed for {Chat}",
-                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
+                (chat?.Chat ?? ChatIdentity.FromId(chatId)).ToLogDebug());
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to refresh single chat {Chat}",
-                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
+                (chat?.Chat ?? ChatIdentity.FromId(chatId)).ToLogDebug());
             throw;
         }
     }
@@ -352,7 +354,7 @@ public class ChatHealthRefreshOrchestrator(
         ManagedChatRecord chat,
         CancellationToken cancellationToken = default)
     {
-        var (chatId, chatName) = (chat.ChatId, chat.ChatName);
+        var (chatId, chatName) = (chat.Chat.Id, chat.Chat.ChatName);
         try
         {
             var iconPath = await photoService.GetChatIconAsync(chatId);

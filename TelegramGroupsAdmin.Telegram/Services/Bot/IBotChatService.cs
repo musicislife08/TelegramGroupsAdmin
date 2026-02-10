@@ -1,4 +1,5 @@
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -37,10 +38,10 @@ public interface IBotChatService
     Task<bool> CheckHealthAsync(long chatId, CancellationToken ct = default);
 
     /// <summary>
-    /// Get all active managed chats where the bot has confirmed permissions.
+    /// Get identities of all active managed chats where the bot has confirmed permissions.
     /// Used by moderation services for cross-chat operations.
     /// </summary>
-    IReadOnlyList<long> GetHealthyChatIds();
+    IReadOnlyList<ChatIdentity> GetHealthyChatIdentities();
 
     /// <summary>
     /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion).

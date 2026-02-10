@@ -29,8 +29,15 @@ public class BanHandlerTests
     private ILogger<BotBanHandler> _mockLogger = null!;
     private BotBanHandler _handler = null!;
 
-    // Test chat IDs for cross-chat operations
-    private static readonly long[] TestChatIds = [-100001, -100002, -100003, -100004, -100005];
+    // Test chat identities for cross-chat operations
+    private static readonly IReadOnlyList<ChatIdentity> TestChatIds = new List<ChatIdentity>
+    {
+        new(-100001, "Chat 1"),
+        new(-100002, "Chat 2"),
+        new(-100003, "Chat 3"),
+        new(-100004, "Chat 4"),
+        new(-100005, "Chat 5")
+    }.AsReadOnly();
 
     [SetUp]
     public void SetUp()
@@ -68,7 +75,7 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
 
         // Setup 5 healthy chats, all bans succeed
-        _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(TestChatIds);
 
         // Act
         var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Spam violation");
@@ -91,12 +98,12 @@ public class BanHandlerTests
         var executor = Actor.FromTelegramUser(999, "AdminUser");
 
         // Setup 5 healthy chats, but make 2 fail
-        _mockBotChatService.GetHealthyChatIds().Returns(TestChatIds.ToList().AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(TestChatIds);
 
         // Make specific chats fail
-        _mockApiClient.BanChatMemberAsync(TestChatIds[1], userId, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+        _mockApiClient.BanChatMemberAsync(TestChatIds[1].Id, userId, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Chat error 1"));
-        _mockApiClient.BanChatMemberAsync(TestChatIds[3], userId, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+        _mockApiClient.BanChatMemberAsync(TestChatIds[3].Id, userId, Arg.Any<DateTime?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Chat error 2"));
 
         // Act
@@ -119,7 +126,7 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
 
         // Make getting healthy chats fail
-        _mockBotChatService.GetHealthyChatIds()
+        _mockBotChatService.GetHealthyChatIdentities()
             .Returns(_ => throw new InvalidOperationException("Network error"));
 
         // Act
@@ -141,7 +148,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1"), new(-100002, "Chat 2") }.AsReadOnly());
 
         // Act
         var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, reason: null);
@@ -157,7 +164,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1"), new(-100002, "Chat 2"), new(-100003, "Chat 3") }.AsReadOnly());
 
         // Act
         await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Spam violation", 42L);
@@ -182,7 +189,7 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
         var duration = TimeSpan.FromHours(24);
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1"), new(-100002, "Chat 2"), new(-100003, "Chat 3") }.AsReadOnly());
 
         _mockJobScheduler.ScheduleJobAsync(
                 "TempbanExpiry",
@@ -221,7 +228,7 @@ public class BanHandlerTests
         var duration = TimeSpan.FromHours(2);
         var beforeCall = DateTimeOffset.UtcNow;
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1"), new(-100002, "Chat 2"), new(-100003, "Chat 3") }.AsReadOnly());
 
         _mockJobScheduler.ScheduleJobAsync(
                 Arg.Any<string>(),
@@ -253,7 +260,7 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
         var duration = TimeSpan.FromMinutes(30);
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1") }.AsReadOnly());
 
         _mockJobScheduler.ScheduleJobAsync(
                 Arg.Any<string>(),
@@ -285,7 +292,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockBotChatService.GetHealthyChatIds()
+        _mockBotChatService.GetHealthyChatIdentities()
             .Returns(_ => throw new Exception("Telegram API error"));
 
         // Act
@@ -310,7 +317,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003, -100004 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1"), new(-100002, "Chat 2"), new(-100003, "Chat 3"), new(-100004, "Chat 4") }.AsReadOnly());
 
         // Act
         var result = await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "False positive");
@@ -338,7 +345,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromTelegramUser(888, "Admin");
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001, -100002, -100003 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1"), new(-100002, "Chat 2"), new(-100003, "Chat 3") }.AsReadOnly());
 
         // Make one chat fail
         _mockApiClient.UnbanChatMemberAsync(-100002, userId, Arg.Any<bool>(), Arg.Any<CancellationToken>())
@@ -363,7 +370,7 @@ public class BanHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockBotChatService.GetHealthyChatIds()
+        _mockBotChatService.GetHealthyChatIdentities()
             .Returns(_ => throw new Exception("Telegram API error"));
 
         // Act
@@ -385,7 +392,7 @@ public class BanHandlerTests
         var executor = Actor.FromSystem("test");
         var callOrder = new List<string>();
 
-        _mockBotChatService.GetHealthyChatIds().Returns(new List<long> { -100001 }.AsReadOnly());
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1") }.AsReadOnly());
 
         _mockApiClient.UnbanChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>

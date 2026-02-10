@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -134,8 +135,8 @@ public class BotChatServiceTests
         Assert.That(managedChat, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(managedChat!.ChatId, Is.EqualTo(TestChatId));
-            Assert.That(managedChat.ChatName, Is.EqualTo(TestChatName));
+            Assert.That(managedChat!.Chat.Id, Is.EqualTo(TestChatId));
+            Assert.That(managedChat.Chat.ChatName, Is.EqualTo(TestChatName));
             Assert.That(managedChat.IsAdmin, Is.True);
             Assert.That(managedChat.IsActive, Is.True);
             Assert.That(managedChat.IsDeleted, Is.False);
@@ -322,20 +323,25 @@ public class BotChatServiceTests
 
     #endregion
 
-    #region GetHealthyChatIds Tests
+    #region GetHealthyChatIdentities Tests
 
     [Test]
-    public void GetHealthyChatIds_ReturnsFromHealthCache()
+    public void GetHealthyChatIdentities_ReturnsFromHealthCache()
     {
         // Arrange
-        var expectedChatIds = new HashSet<long> { -100001, -100002, -100003 };
-        _mockHealthCache.GetHealthyChatIds().Returns(expectedChatIds);
+        var expectedChatIdentities = new List<ChatIdentity>
+        {
+            new(-100001, "Chat 1"),
+            new(-100002, "Chat 2"),
+            new(-100003, "Chat 3")
+        }.AsReadOnly();
+        _mockHealthCache.GetHealthyChatIdentities().Returns(expectedChatIdentities);
 
         // Act
-        var result = _service!.GetHealthyChatIds();
+        var result = _service!.GetHealthyChatIdentities();
 
         // Assert
-        Assert.That(result, Is.EqualTo(expectedChatIds));
+        Assert.That(result, Is.EqualTo(expectedChatIdentities));
     }
 
     #endregion

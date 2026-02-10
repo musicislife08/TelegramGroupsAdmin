@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Bot
+@using TelegramGroupsAdmin.Core.Models
 @inject ITelegramBotService BotService
 @inject IChatHealthCache ChatHealthCache
 @inject IManagedChatsRepository ManagedChatsRepository
@@ -157,15 +158,15 @@
             foreach (var chat in chats)
             {
                 // Get cached health status from health cache
-                var health = ChatHealthCache.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
+                var health = ChatHealthCache.GetCachedHealth(chat.Chat.Id) ?? new ChatHealthStatus
                 {
-                    ChatId = chat.ChatId,
+                    Chat = ChatIdentity.FromId(chat.Chat.Id),
                     Status = ChatHealthStatusType.Unknown,
                     IsReachable = true
                 };
 
                 // Check if this chat has custom configs
-                var configRecord = await ConfigRepository.GetAsync(chat.ChatId);
+                var configRecord = await ConfigRepository.GetAsync(chat.Chat.Id);
                 var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
                 var hasServiceMsgConfig = !string.IsNullOrEmpty(configRecord?.ServiceMessageDeletionConfig);
                 var hasBanCelebrationConfig = !string.IsNullOrEmpty(configRecord?.BanCelebrationConfig);
@@ -174,7 +175,7 @@
                 {
                     Chat = chat,
                     HealthStatus = health,
-                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId),
+                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.Chat.Id),
                     HasCustomWelcomeConfig = hasWelcomeConfig,
                     HasCustomServiceMsgConfig = hasServiceMsgConfig,
                     HasCustomBanCelebrationConfig = hasBanCelebrationConfig
@@ -194,7 +195,7 @@
     private void HandleHealthUpdate(ChatHealthStatus health)
     {
         // Update health status for the chat in real-time
-        var chat = _chats.FirstOrDefault(c => c.Chat.ChatId == health.ChatId);
+        var chat = _chats.FirstOrDefault(c => c.Chat.Chat.Id == health.Chat.Id);
         if (chat != null)
         {
             chat.HealthStatus = health;
@@ -225,11 +226,11 @@
         if (string.IsNullOrWhiteSpace(_searchString))
             return true;
 
-        if (!string.IsNullOrEmpty(chat.Chat.ChatName) &&
-            chat.Chat.ChatName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(chat.Chat.Chat.ChatName) &&
+            chat.Chat.Chat.ChatName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (chat.Chat.ChatId.ToString().Contains(_searchString))
+        if (chat.Chat.Chat.Id.ToString().Contains(_searchString))
             return true;
 
         return false;

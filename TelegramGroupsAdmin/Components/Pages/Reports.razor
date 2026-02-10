@@ -191,7 +191,7 @@
                 userId,
                 permissionLevel,
                 cancellationToken: _cts.Token);
-            var accessibleChatIds = accessibleChats.Select(c => c.ChatId).ToHashSet();
+            var accessibleChatIds = accessibleChats.Select(c => c.Chat.Id).ToHashSet();
 
             var unifiedQueue = new List<ReportQueueItem>();
 

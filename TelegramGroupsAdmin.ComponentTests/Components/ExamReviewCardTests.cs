@@ -599,8 +599,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         var managedChats = new List<ManagedChatRecord>
         {
             new(
-                ChatId: -1001111111111,
-                ChatName: "Other Group",
+                Chat: new ChatIdentity(-1001111111111, "Other Group"),
                 ChatType: Telegram.Models.ManagedChatType.Group,
                 BotStatus: Telegram.Models.BotChatStatus.Administrator,
                 IsAdmin: true,

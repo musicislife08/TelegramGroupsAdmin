@@ -13,7 +13,7 @@ public interface INotificationService
     /// Send a chat-specific notification to all admins who manage the specified chat
     /// Used for: SpamDetected, SpamAutoDeleted, UserBanned, MessageReported, MalwareDetected, ExamFailed
     /// </summary>
-    /// <param name="chatId">Chat ID where the event occurred</param>
+    /// <param name="chat">Identity of the chat where the event occurred</param>
     /// <param name="eventType">Type of event triggering the notification</param>
     /// <param name="subject">Notification subject/title</param>
     /// <param name="message">Notification message body</param>
@@ -24,7 +24,7 @@ public interface INotificationService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Dictionary mapping userId to delivery success</returns>
     Task<Dictionary<string, bool>> SendChatNotificationAsync(
-        long chatId,
+        ChatIdentity chat,
         NotificationEventType eventType,
         string subject,
         string message,

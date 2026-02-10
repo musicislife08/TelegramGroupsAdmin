@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -96,9 +97,9 @@ public class BotChatService(
         }
     }
 
-    public IReadOnlyList<long> GetHealthyChatIds()
+    public IReadOnlyList<ChatIdentity> GetHealthyChatIdentities()
     {
-        return healthCache.GetHealthyChatIds().ToList();
+        return healthCache.GetHealthyChatIdentities();
     }
 
     /// <summary>
@@ -145,8 +146,7 @@ public class BotChatService(
             };
 
             var chatRecord = new ManagedChatRecord(
-                ChatId: chat.Id,
-                ChatName: chat.Title ?? chat.Username ?? $"Chat {chat.Id}",
+                Chat: ChatIdentity.From(chat),
                 ChatType: chatType,
                 BotStatus: botStatus,
                 IsAdmin: isAdmin,
@@ -527,13 +527,13 @@ public class BotChatService(
             {
                 try
                 {
-                    await RefreshChatAdminsAsync(chat.ChatId, ct);
+                    await RefreshChatAdminsAsync(chat.Chat.Id, ct);
                     refreshedCount++;
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "Failed to refresh admin cache for {Chat}",
-                        LogDisplayName.ChatDebug(chat.ChatName, chat.ChatId));
+                        chat.Chat.ToLogDebug());
                 }
             }
 

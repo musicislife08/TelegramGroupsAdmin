@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -169,8 +170,7 @@ public class TestChatBuilder
         var chatId = _chatId ?? -100_0000_0000 - Random.Shared.Next(1, 999_999_999);
 
         var chatRecord = new ManagedChatRecord(
-            ChatId: chatId,
-            ChatName: _chatName,
+            Chat: new ChatIdentity(chatId, _chatName),
             ChatType: _chatType,
             BotStatus: _botStatus,
             IsAdmin: _isAdmin,
@@ -193,8 +193,8 @@ public class TestChatBuilder
 /// </summary>
 public record TestChat(ManagedChatRecord Record)
 {
-    public long ChatId => Record.ChatId;
-    public string? ChatName => Record.ChatName;
+    public long ChatId => Record.Chat.Id;
+    public string? ChatName => Record.Chat.ChatName;
     public ManagedChatType ChatType => Record.ChatType;
     public bool IsActive => Record.IsActive;
     public bool IsAdmin => Record.IsAdmin;

@@ -523,7 +523,7 @@ public class ExamFlowService : IExamFlowService
         // Get chat info for notification
         var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
         var failureChat = await managedChatsRepo.GetByChatIdAsync(session.ChatId, cancellationToken);
-        var failureChatName = failureChat?.ChatName ?? "Unknown Chat";
+        var failureChatName = failureChat?.Chat.ChatName ?? "Unknown Chat";
 
         // Notify admins of exam failure
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
@@ -550,7 +550,7 @@ public class ExamFlowService : IExamFlowService
         }
 
         await notificationService.SendChatNotificationAsync(
-            chatId: session.ChatId,
+            chat: failureChat?.Chat ?? ChatIdentity.FromId(session.ChatId),
             eventType: NotificationEventType.ExamFailed,
             subject: "Entrance Exam Review Required",
             message: messageBuilder.ToString(),
@@ -566,7 +566,7 @@ public class ExamFlowService : IExamFlowService
             cancellationToken: cancellationToken);
 
         _logger.LogInformation("User {User} failed entrance exam in {Chat}, sent to review",
-            user.ToLogInfo(), failureChat?.ToLogInfo() ?? session.ChatId.ToString());
+            user.ToLogInfo(), failureChat?.Chat.ToLogInfo() ?? session.ChatId.ToString());
 
         return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: true, GroupChatId: session.ChatId);
     }
