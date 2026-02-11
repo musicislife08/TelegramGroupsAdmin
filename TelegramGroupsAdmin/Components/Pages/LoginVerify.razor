@@ -196,7 +196,7 @@
                 return;
             }
 
-            await AuthCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await AuthCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value));
 
             // Redirect using HttpContext (validate URL to prevent open redirect attacks)
             var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
@@ -250,7 +250,7 @@
                 return;
             }
 
-            await AuthCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await AuthCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value));
 
             Logger.LogInformation("User {UserId} logged in using recovery code", UserId);
 

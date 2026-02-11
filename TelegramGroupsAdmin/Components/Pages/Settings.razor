@@ -337,6 +337,8 @@
 
     protected override void OnInitialized()
     {
+        if (WebUser is null) return;
+
         // Load permission flags from cascading WebUser
         _canManageAdminAccounts = WebUser?.IsGlobalAdminOrHigher ?? false;
         _canEditInfrastructure = WebUser?.IsOwner ?? false;

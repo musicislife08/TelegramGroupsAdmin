@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -57,16 +57,16 @@ public class DeleteCommand : IBotCommand
 
             _logger.LogInformation(
                 "DELETE TEST: {Admin} deleted message {MessageId} in {Chat}",
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                message.From.ToLogInfo(),
                 targetMessage.MessageId,
-                LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id));
+                message.Chat.ToLogInfo());
 
             return new CommandResult("✅ Message deleted successfully!\n\n_This is a temporary test command._", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete message {MessageId} in {Chat}",
-                targetMessage.MessageId, LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id));
+                targetMessage.MessageId, message.Chat.ToLogDebug());
             return new CommandResult($"❌ Failed to delete message: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

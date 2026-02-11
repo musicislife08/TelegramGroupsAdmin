@@ -13,6 +13,7 @@ public sealed record WebUserIdentity(string Id, string? Email, PermissionLevel P
 
     /// <summary>
     /// Fallback factory for intermediate auth pages that only have a user ID (no email/permission from claims).
+    /// Grants minimum permission (Admin = lowest level). Safe because callers only perform user-scoped operations.
     /// </summary>
     public static WebUserIdentity FromId(string id) => new(id, null, PermissionLevel.Admin);
 }

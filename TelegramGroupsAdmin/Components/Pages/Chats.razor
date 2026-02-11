@@ -119,6 +119,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         // Subscribe to health updates
         BotService.OnHealthUpdate += HandleHealthUpdate;
 

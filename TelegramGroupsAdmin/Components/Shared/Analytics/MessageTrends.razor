@@ -426,6 +426,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         // Detect user's timezone from browser
         try
         {
@@ -438,13 +440,10 @@
         }
 
         // Load accessible chats based on permissions
-        if (WebUser != null)
-        {
-            _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
-                WebUser.Id,
-                WebUser.PermissionLevel,
-                cancellationToken: CancellationToken.None);
-        }
+        _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
+            WebUser.Id,
+            WebUser.PermissionLevel,
+            cancellationToken: CancellationToken.None);
 
         await LoadLast30Days();
     }

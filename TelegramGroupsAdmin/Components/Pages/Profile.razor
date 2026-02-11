@@ -376,11 +376,10 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (WebUser != null)
-        {
-            await LoadUserAsync();
-            await LoadLinkedAccountsAsync();
-        }
+        if (WebUser is null) return;
+
+        await LoadUserAsync();
+        await LoadLinkedAccountsAsync();
     }
 
     private async Task LoadUserAsync()

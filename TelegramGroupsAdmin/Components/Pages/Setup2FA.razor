@@ -336,7 +336,7 @@
             return;
         }
 
-        await AuthCookieService.SignInAsync(httpContext, user.WebUser.Id, user.WebUser.Email!, (PermissionLevel)user.PermissionLevelInt);
+        await AuthCookieService.SignInAsync(httpContext, user.WebUser);
 
         // Redirect (validate URL to prevent open redirect attacks)
         var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);

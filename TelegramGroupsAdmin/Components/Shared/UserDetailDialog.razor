@@ -432,6 +432,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadUserDetailAsync();
         await LoadTagColorsAsync();
     }

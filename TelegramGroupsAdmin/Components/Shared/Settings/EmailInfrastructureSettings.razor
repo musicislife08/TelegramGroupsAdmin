@@ -294,6 +294,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadConfig();
         await LoadApiKeys();
         CheckConfiguration();

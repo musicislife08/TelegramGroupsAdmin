@@ -157,6 +157,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadReportsAsync();
     }
 

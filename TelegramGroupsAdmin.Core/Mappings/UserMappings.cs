@@ -40,7 +40,7 @@ public static class UserMappings
         public DataModels.UserRecordDto ToDto() => new()
         {
             Id = ui.WebUser.Id,
-            Email = ui.WebUser.Email!,
+            Email = ui.WebUser.Email!, // Always present for persisted users (FromId is only for intermediate auth pages)
             NormalizedEmail = ui.NormalizedEmail,
             PasswordHash = ui.PasswordHash,
             SecurityStamp = ui.SecurityStamp,

@@ -36,7 +36,7 @@ public class AnalyticsRepositoryTests
     private IServiceScope _scope = null!;
     private IAnalyticsRepository _analyticsRepository = null!;
 
-    private const string DefaultTimeZoneId = "America/New_York";
+    private const string DefaultTimeZoneId = "UTC";
 
     [SetUp]
     public async Task SetUp()

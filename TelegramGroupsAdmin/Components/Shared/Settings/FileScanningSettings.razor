@@ -496,6 +496,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadConfig();
         await LoadApiKeysForStatusCheck(); // Only for checking VirusTotal configured status
         await LoadQuotas();

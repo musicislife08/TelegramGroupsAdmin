@@ -222,19 +222,18 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         // Load current user's linked Telegram accounts for message alignment
-        if (WebUser != null)
+        try
         {
-            try
-            {
-                var mappings = await TelegramMappingRepository.GetByUserIdAsync(WebUser!.Id);
-                _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
-                    WebUser!.ToLogDebug());
-            }
+            var mappings = await TelegramMappingRepository.GetByUserIdAsync(WebUser.Id);
+            _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
+                WebUser.ToLogDebug());
         }
 
         // Subscribe to real-time updates

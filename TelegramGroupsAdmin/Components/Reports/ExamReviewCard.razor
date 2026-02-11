@@ -106,7 +106,7 @@
                     @* Chat *@
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
-                        <MudText Typo="Typo.body2">Chat: @(ExamFailure.Chat.ChatName ?? "Unknown")</MudText>
+                        <MudText Typo="Typo.body2">Chat: @ExamFailure.Chat.DisplayName</MudText>
                     </MudStack>
                 </MudStack>
             </MudPaper>

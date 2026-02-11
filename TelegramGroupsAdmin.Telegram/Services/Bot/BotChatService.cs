@@ -115,7 +115,7 @@ public class BotChatService(
             // Skip private chats - only manage groups/supergroups
             if (chat.Type == ChatType.Private)
             {
-                logger.LogDebug("Skipping MyChatMember update for private chat {Chat}", LogDisplayName.ChatDebug(null, chat.Id));
+                logger.LogDebug("Skipping MyChatMember update for private chat {Chat}", chat.ToLogDebug());
                 return;
             }
 
@@ -198,13 +198,12 @@ public class BotChatService(
             // If bot was just promoted to admin, refresh admin cache for this chat immediately
             var botWasAdmin = oldStatus == ChatMemberStatus.Administrator;
             var botIsNowAdmin = newStatus == ChatMemberStatus.Administrator;
-            var chatName = chat.Title ?? chat.Username;
 
             if (!botWasAdmin && botIsNowAdmin)
             {
                 logger.LogInformation(
                     "🎉 Bot promoted to admin in {Chat}, refreshing admin cache immediately",
-                    LogDisplayName.ChatInfo(chatName, chat.Id));
+                    chat.ToLogInfo());
 
                 // Refresh admin cache immediately instead of waiting for periodic health check (30min)
                 await RefreshChatAdminsAsync(ChatIdentity.From(chat), ct);
@@ -248,7 +247,7 @@ public class BotChatService(
         {
             logger.LogError(ex,
                 "Error handling MyChatMember update for {Chat}",
-                LogDisplayName.ChatDebug(myChatMember.Chat.Title, myChatMember.Chat.Id));
+                myChatMember.Chat.ToLogDebug());
         }
     }
 
@@ -558,7 +557,7 @@ public class BotChatService(
         {
             currentLink = $"https://t.me/{chat.Username}";
             logger.LogDebug("Got public invite link for {Chat}: {Link}",
-                LogDisplayName.ChatDebug(chat.Title, chatId), currentLink);
+                chat.ToLogDebug(), currentLink);
 
             // Cache public group link too (username could change)
             var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);

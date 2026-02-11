@@ -25,6 +25,9 @@ public class AuthCookieServiceTests
     private const string TestUserId = "test-user-id-123";
     private const string TestEmail = "test@example.com";
 
+    private static WebUserIdentity TestIdentity(PermissionLevel level = PermissionLevel.Admin) =>
+        new(TestUserId, TestEmail, level);
+
     [SetUp]
     public void SetUp()
     {
@@ -67,7 +70,7 @@ public class AuthCookieServiceTests
         };
 
         // Act
-        await _service.SignInAsync(httpContext, TestUserId, TestEmail, PermissionLevel.Admin);
+        await _service.SignInAsync(httpContext, TestIdentity());
 
         // Assert
         await mockAuthService.Received(1).SignInAsync(
@@ -95,7 +98,7 @@ public class AuthCookieServiceTests
         var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
 
         // Act
-        await _service.SignInAsync(httpContext, TestUserId, TestEmail, PermissionLevel.Admin);
+        await _service.SignInAsync(httpContext, TestIdentity());
 
         // Assert
         Assert.That(capturedPrincipal, Is.Not.Null);
@@ -122,7 +125,7 @@ public class AuthCookieServiceTests
         var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
 
         // Act
-        await _service.SignInAsync(httpContext, TestUserId, TestEmail, PermissionLevel.Admin);
+        await _service.SignInAsync(httpContext, TestIdentity());
 
         // Assert
         Assert.That(capturedPrincipal, Is.Not.Null);
@@ -149,7 +152,7 @@ public class AuthCookieServiceTests
         var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
 
         // Act
-        await _service.SignInAsync(httpContext, TestUserId, TestEmail, PermissionLevel.GlobalAdmin);
+        await _service.SignInAsync(httpContext, TestIdentity(PermissionLevel.GlobalAdmin));
 
         // Assert
         Assert.That(capturedPrincipal, Is.Not.Null);
@@ -178,7 +181,7 @@ public class AuthCookieServiceTests
         var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
 
         // Act
-        await _service.SignInAsync(httpContext, TestUserId, TestEmail, level);
+        await _service.SignInAsync(httpContext, TestIdentity(level));
 
         // Assert
         Assert.That(capturedPrincipal, Is.Not.Null);
@@ -205,7 +208,7 @@ public class AuthCookieServiceTests
         var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
 
         // Act
-        await _service.SignInAsync(httpContext, TestUserId, TestEmail, PermissionLevel.Admin);
+        await _service.SignInAsync(httpContext, TestIdentity());
 
         // Assert
         Assert.That(capturedProps, Is.Not.Null);
@@ -232,7 +235,7 @@ public class AuthCookieServiceTests
         var beforeCall = DateTimeOffset.UtcNow;
 
         // Act
-        await _service.SignInAsync(httpContext, TestUserId, TestEmail, PermissionLevel.Admin);
+        await _service.SignInAsync(httpContext, TestIdentity());
 
         var afterCall = DateTimeOffset.UtcNow;
 
@@ -287,7 +290,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Any<AuthenticationTicket>()).Returns("encrypted-cookie-value");
 
         // Act
-        var result = _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        var result = _service.GenerateCookieValue(TestIdentity());
 
         // Assert
         _mockTicketDataFormat.Received(1).Protect(Arg.Any<AuthenticationTicket>());
@@ -301,7 +304,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Any<AuthenticationTicket>()).Returns(expectedEncryptedValue);
 
         // Act
-        var result = _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        var result = _service.GenerateCookieValue(TestIdentity());
 
         // Assert
         Assert.That(result, Is.EqualTo(expectedEncryptedValue));
@@ -315,7 +318,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        _service.GenerateCookieValue(TestIdentity());
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -332,7 +335,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        _service.GenerateCookieValue(TestIdentity());
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -351,7 +354,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, level);
+        _service.GenerateCookieValue(TestIdentity(level));
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -370,7 +373,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, level);
+        _service.GenerateCookieValue(TestIdentity(level));
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -387,7 +390,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        _service.GenerateCookieValue(TestIdentity());
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -402,7 +405,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        _service.GenerateCookieValue(TestIdentity());
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -419,7 +422,7 @@ public class AuthCookieServiceTests
         var beforeCall = DateTimeOffset.UtcNow;
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        _service.GenerateCookieValue(TestIdentity());
 
         var afterCall = DateTimeOffset.UtcNow;
 
@@ -440,7 +443,7 @@ public class AuthCookieServiceTests
         var beforeCall = DateTimeOffset.UtcNow;
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        _service.GenerateCookieValue(TestIdentity());
 
         var afterCall = DateTimeOffset.UtcNow;
 
@@ -461,7 +464,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, TestEmail, PermissionLevel.Admin);
+        _service.GenerateCookieValue(TestIdentity());
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -482,7 +485,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(TestUserId, emailWithSpecialChars, PermissionLevel.Admin);
+        _service.GenerateCookieValue(new WebUserIdentity(TestUserId, emailWithSpecialChars, PermissionLevel.Admin));
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
@@ -499,7 +502,7 @@ public class AuthCookieServiceTests
         _mockTicketDataFormat.Protect(Arg.Do<AuthenticationTicket>(t => capturedTicket = t)).Returns("cookie");
 
         // Act
-        _service.GenerateCookieValue(guidUserId, TestEmail, PermissionLevel.Owner);
+        _service.GenerateCookieValue(new WebUserIdentity(guidUserId, TestEmail, PermissionLevel.Owner));
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);

@@ -4,7 +4,6 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -230,7 +229,7 @@ public class BanCommand : IBotCommand
                 "{TargetUser} banned by {Executor} from {ChatsAffected} chats. " +
                 "Reason: {Reason}. User notified via {DeliveryMethod}. Trust removed: {TrustRemoved}",
                 targetIdentity.ToLogInfo(),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                message.From.ToLogInfo(),
                 result.ChatsAffected, ModerationConstants.DefaultBanReason, deliveryMethod, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears
