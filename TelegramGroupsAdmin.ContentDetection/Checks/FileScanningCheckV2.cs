@@ -5,9 +5,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Extensions;
 
@@ -70,7 +68,7 @@ public class FileScanningCheckV2 : IContentCheckV2
             {
                 _logger.LogWarning("File exceeds size limit for {User}: {Size} > {Limit} bytes",
                     req.User.ToLogDebug(), req.FileSize, _config.General.MaxFileSizeBytes);
-                
+
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -100,7 +98,7 @@ public class FileScanningCheckV2 : IContentCheckV2
                         .Where(r => r.Result == "Infected")
                         .Select(r => $"{r.Scanner}:{r.ThreatName}")
                         .ToList();
-                    
+
                     return new ContentCheckResponseV2
                     {
                         CheckName = CheckName,
@@ -161,7 +159,7 @@ public class FileScanningCheckV2 : IContentCheckV2
                     req.User.ToLogDebug(),
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
-                
+
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,

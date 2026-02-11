@@ -340,9 +340,9 @@
         if (WebUser is null) return;
 
         // Load permission flags from cascading WebUser
-        _canManageAdminAccounts = WebUser?.IsGlobalAdminOrHigher ?? false;
-        _canEditInfrastructure = WebUser?.IsOwner ?? false;
-        _canEditContent = WebUser?.IsGlobalAdminOrHigher ?? false;
+        _canManageAdminAccounts = WebUser.IsGlobalAdminOrHigher;
+        _canEditInfrastructure = WebUser.IsOwner;
+        _canEditContent = WebUser.IsGlobalAdminOrHigher;
 
         UpdateCurrentSection();
         Navigation.LocationChanged += OnLocationChanged;

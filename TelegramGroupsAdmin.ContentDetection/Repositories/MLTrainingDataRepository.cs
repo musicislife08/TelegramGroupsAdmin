@@ -200,7 +200,7 @@ public class MLTrainingDataRepository(
         var implicitHam = implicitHamDeduped.Take(maxImplicitHam).ToList();
 
         // Combine explicit and implicit ham
-        List<TrainingSample> samples = [..explicitHam, ..implicitHam];
+        List<TrainingSample> samples = [.. explicitHam, .. implicitHam];
 
         var totalHam = explicitHam.Count + implicitHam.Count;
         var totalSamples = spamCount + totalHam;

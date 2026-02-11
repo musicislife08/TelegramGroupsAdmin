@@ -3,7 +3,6 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 

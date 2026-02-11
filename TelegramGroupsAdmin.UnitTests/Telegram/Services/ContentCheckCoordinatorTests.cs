@@ -1,12 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NUnit.Framework;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -98,7 +96,7 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // Result validation
             Assert.That(result.IsUserTrusted, Is.True, "System account should be marked as trusted");
@@ -107,7 +105,7 @@ public class ContentCheckCoordinatorTests
             Assert.That(result.SkipReason, Does.Contain("Telegram system account"));
             Assert.That(result.CriticalCheckViolations, Is.Empty, "No violations for system account");
             Assert.That(result.SpamResult, Is.Null, "No spam detection should run");
-        });
+        }
 
         // CRITICAL: Verify NO repository queries were made (race condition prevention)
         await _mockUserRepository.DidNotReceive()
@@ -142,12 +140,12 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.SpamCheckSkipped, Is.True);
             Assert.That(result.SkipReason, Does.Contain("Telegram system account"));
             Assert.That(result.SpamResult, Is.Null, "No spam detection for system account");
-        });
+        }
 
         // Verify NO critical checks query was made
         await _mockConfigService.DidNotReceive()
@@ -180,7 +178,7 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True);
             Assert.That(result.IsUserAdmin, Is.False);
@@ -188,7 +186,7 @@ public class ContentCheckCoordinatorTests
             Assert.That(result.SkipReason, Does.Contain("trusted and no critical checks"));
             Assert.That(result.CriticalCheckViolations, Is.Empty);
             Assert.That(result.SpamResult, Is.Null);
-        });
+        }
 
         // Verify spam detection was NOT called (early exit optimization)
         await _mockSpamDetectionEngine.DidNotReceive()
@@ -234,14 +232,14 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True);
             Assert.That(result.SpamCheckSkipped, Is.True, "Regular checks skipped after critical checks pass");
             Assert.That(result.SkipReason, Does.Contain("critical checks passed"));
             Assert.That(result.CriticalCheckViolations, Is.Empty);
             Assert.That(result.SpamResult, Is.Null, "Regular spam result not evaluated");
-        });
+        }
 
         // Verify detection WAS called (to run critical checks)
         await _mockSpamDetectionEngine.Received(1)
@@ -294,14 +292,14 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True);
             Assert.That(result.SpamCheckSkipped, Is.False, "Full results returned due to critical violation");
             Assert.That(result.CriticalCheckViolations, Has.Count.EqualTo(1));
             Assert.That(result.CriticalCheckViolations[0], Does.Contain("UrlBlocklist"));
             Assert.That(result.SpamResult, Is.Not.Null, "Full spam result included");
-        });
+        }
     }
 
     #endregion
@@ -330,14 +328,14 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.False);
             Assert.That(result.IsUserAdmin, Is.True);
             Assert.That(result.SpamCheckSkipped, Is.True);
             Assert.That(result.SkipReason, Does.Contain("admin and no critical checks"));
             Assert.That(result.SpamResult, Is.Null);
-        });
+        }
 
         // Verify spam detection was NOT called
         await _mockSpamDetectionEngine.DidNotReceive()
@@ -377,13 +375,13 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserAdmin, Is.True);
             Assert.That(result.SpamCheckSkipped, Is.True);
             Assert.That(result.SkipReason, Does.Contain("chat admin"));
             Assert.That(result.SkipReason, Does.Contain("critical checks passed"));
-        });
+        }
     }
 
     #endregion
@@ -433,7 +431,7 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.False);
             Assert.That(result.IsUserAdmin, Is.False);
@@ -441,7 +439,7 @@ public class ContentCheckCoordinatorTests
             Assert.That(result.SkipReason, Is.Null);
             Assert.That(result.SpamResult, Is.Not.Null);
             Assert.That(result.SpamResult!.IsSpam, Is.True);
-        });
+        }
 
         // Verify detection WAS called
         await _mockSpamDetectionEngine.Received(1)
@@ -566,12 +564,12 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.CriticalCheckViolations, Has.Count.EqualTo(1));
             Assert.That(result.CriticalCheckViolations[0], Does.Contain("UrlBlocklist"));
             Assert.That(result.CriticalCheckViolations[0], Does.Contain("Phishing site detected"));
-        });
+        }
     }
 
     #endregion
@@ -600,12 +598,12 @@ public class ContentCheckCoordinatorTests
         var result = await _coordinator.CheckAsync(request);
 
         // Assert - Should prioritize "trusted" in skip reason
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True);
             Assert.That(result.IsUserAdmin, Is.True);
             Assert.That(result.SkipReason, Does.Contain("trusted"), "Should mention trusted status");
-        });
+        }
     }
 
     [Test]

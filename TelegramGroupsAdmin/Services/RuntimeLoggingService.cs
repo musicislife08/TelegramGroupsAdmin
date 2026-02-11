@@ -1,7 +1,5 @@
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.Services;
 

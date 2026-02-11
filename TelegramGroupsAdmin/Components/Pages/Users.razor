@@ -641,7 +641,8 @@
     {
         var parameters = new DialogParameters<UserDetailDialog>
         {
-            { x => x.UserId, userId }
+            { x => x.UserId, userId },
+            { x => x.WebUser, WebUser }
         };
 
         var options = new DialogOptions

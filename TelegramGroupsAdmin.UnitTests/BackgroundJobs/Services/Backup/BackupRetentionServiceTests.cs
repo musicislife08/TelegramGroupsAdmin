@@ -171,8 +171,11 @@ public class BackupRetentionServiceTests
 
         // Assert - should delete oldest 2 weekly backups
         Assert.That(toDelete.Count, Is.EqualTo(2));
-        Assert.That(toDelete.Any(b => b.FileName == "week4.db"), Is.True);
-        Assert.That(toDelete.Any(b => b.FileName == "week5.db"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(toDelete.Any(b => b.FileName == "week4.db"), Is.True);
+            Assert.That(toDelete.Any(b => b.FileName == "week5.db"), Is.True);
+        }
     }
 
     #endregion
@@ -231,8 +234,11 @@ public class BackupRetentionServiceTests
 
         // Assert - should delete oldest 2 yearly backups
         Assert.That(toDelete.Count, Is.EqualTo(2));
-        Assert.That(toDelete.Any(b => b.FileName == "year3.db"), Is.True);
-        Assert.That(toDelete.Any(b => b.FileName == "year4.db"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(toDelete.Any(b => b.FileName == "year3.db"), Is.True);
+            Assert.That(toDelete.Any(b => b.FileName == "year4.db"), Is.True);
+        }
     }
 
     #endregion
@@ -280,9 +286,12 @@ public class BackupRetentionServiceTests
         // Act
         var info = _service.GetBackupRetentionInfo(backup, allBackups, _defaultConfig);
 
-        // Assert
-        Assert.That(info.PrimaryTier, Is.EqualTo(BackupTier.Yearly));
-        Assert.That(info.WillBeKept, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(info.PrimaryTier, Is.EqualTo(BackupTier.Yearly));
+            Assert.That(info.WillBeKept, Is.True);
+        }
     }
 
     [Test]

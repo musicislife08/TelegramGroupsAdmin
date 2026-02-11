@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NUnit.Framework;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Gif;
-using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -81,18 +79,21 @@ public class ThumbnailServiceTests
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath, maxSize: 100);
 
-        // Assert
-        Assert.That(result, Is.True);
-        Assert.That(File.Exists(destPath), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result, Is.True);
+            Assert.That(File.Exists(destPath), Is.True);
+        }
 
         // Verify dimensions - should be resized to fit within 100x100 maintaining aspect ratio
         // 400x300 -> 100x75 (width constrained)
         using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(100));
             Assert.That(thumbnail.Height, Is.EqualTo(75));
-        });
+        }
     }
 
     [Test]
@@ -115,11 +116,11 @@ public class ThumbnailServiceTests
 
         // 300x600 -> 50x100 (height constrained)
         using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(50));
             Assert.That(thumbnail.Height, Is.EqualTo(100));
-        });
+        }
     }
 
     [Test]
@@ -156,18 +157,21 @@ public class ThumbnailServiceTests
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath, maxSize: 100);
 
-        // Assert
-        Assert.That(result, Is.True);
-        Assert.That(File.Exists(destPath), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result, Is.True);
+            Assert.That(File.Exists(destPath), Is.True);
+        }
 
         // Verify it's a single-frame image (PNG with one frame)
         using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(100));
             Assert.That(thumbnail.Height, Is.EqualTo(100));
             Assert.That(thumbnail.Frames.Count, Is.EqualTo(1), "Thumbnail should have exactly 1 frame");
-        });
+        }
 
         // Verify the first frame color (should be red from first frame)
         var pixel = thumbnail[50, 50];
@@ -194,11 +198,11 @@ public class ThumbnailServiceTests
 
         // ResizeMode.Max with a smaller image should not upscale
         using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.LessThanOrEqualTo(100));
             Assert.That(thumbnail.Height, Is.LessThanOrEqualTo(100));
-        });
+        }
     }
 
     [Test]
@@ -216,10 +220,13 @@ public class ThumbnailServiceTests
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, nestedDestPath, maxSize: 100);
 
-        // Assert
-        Assert.That(result, Is.True);
-        Assert.That(File.Exists(nestedDestPath), Is.True);
-        Assert.That(Directory.Exists(Path.GetDirectoryName(nestedDestPath)), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result, Is.True);
+            Assert.That(File.Exists(nestedDestPath), Is.True);
+            Assert.That(Directory.Exists(Path.GetDirectoryName(nestedDestPath)), Is.True);
+        }
     }
 
     [Test]
@@ -241,11 +248,11 @@ public class ThumbnailServiceTests
         Assert.That(result, Is.True);
 
         using var thumbnail = await Image.LoadAsync<Rgba32>(destPath);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(thumbnail.Width, Is.EqualTo(200));
             Assert.That(thumbnail.Height, Is.EqualTo(200));
-        });
+        }
     }
 
     #endregion
@@ -262,9 +269,12 @@ public class ThumbnailServiceTests
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
 
-        // Assert
-        Assert.That(result, Is.False);
-        Assert.That(File.Exists(destPath), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result, Is.False);
+            Assert.That(File.Exists(destPath), Is.False);
+        }
     }
 
     [Test]
@@ -279,9 +289,12 @@ public class ThumbnailServiceTests
         // Act
         var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
 
-        // Assert
-        Assert.That(result, Is.False);
-        Assert.That(File.Exists(destPath), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result, Is.False);
+            Assert.That(File.Exists(destPath), Is.False);
+        }
     }
 
     [Test]

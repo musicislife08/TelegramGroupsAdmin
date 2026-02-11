@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Auth;
 using TelegramGroupsAdmin.Constants;
-using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Services.Auth;
 

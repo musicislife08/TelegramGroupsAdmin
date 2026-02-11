@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Threading;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Media;

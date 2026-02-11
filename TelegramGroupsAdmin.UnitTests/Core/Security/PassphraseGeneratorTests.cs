@@ -69,8 +69,11 @@ public class PassphraseGeneratorTests
         var exception = Assert.Throws<ArgumentException>(() =>
             PassphraseGenerator.Generate(wordCount: 3));
 
-        Assert.That(exception!.Message, Does.Contain(SecurityConstants.MinimumPassphraseWords.ToString()));
-        Assert.That(exception.Message, Does.Contain(SecurityConstants.MinimumEntropyBits.ToString()));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception!.Message, Does.Contain(SecurityConstants.MinimumPassphraseWords.ToString()));
+            Assert.That(exception.Message, Does.Contain(SecurityConstants.MinimumEntropyBits.ToString()));
+        }
     }
 
     #endregion
@@ -217,9 +220,12 @@ public class PassphraseGeneratorTests
         var entropy7 = PassphraseGenerator.CalculateEntropy(7);
         var entropy8 = PassphraseGenerator.CalculateEntropy(8);
 
-        Assert.That(entropy6, Is.GreaterThan(entropy5));
-        Assert.That(entropy7, Is.GreaterThan(entropy6));
-        Assert.That(entropy8, Is.GreaterThan(entropy7));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entropy6, Is.GreaterThan(entropy5));
+            Assert.That(entropy7, Is.GreaterThan(entropy6));
+            Assert.That(entropy8, Is.GreaterThan(entropy7));
+        }
     }
 
     [Test]

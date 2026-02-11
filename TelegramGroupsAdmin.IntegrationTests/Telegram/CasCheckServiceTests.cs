@@ -87,11 +87,11 @@ public class CasCheckServiceTests
         var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsBanned, Is.False);
             Assert.That(result.Reason, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -125,11 +125,11 @@ public class CasCheckServiceTests
         var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsBanned, Is.True);
             Assert.That(result.Reason, Does.Contain("3 offense"));
-        });
+        }
     }
 
     #endregion
@@ -158,11 +158,11 @@ public class CasCheckServiceTests
         var result2 = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result1.IsBanned, Is.True);
             Assert.That(result2.IsBanned, Is.True);
-        });
+        }
 
         // Verify only one request was made (second was cached)
         Assert.That(_mockServer.LogEntries.Count(), Is.EqualTo(1));
@@ -191,11 +191,11 @@ public class CasCheckServiceTests
         var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - Fail open means return not banned
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsBanned, Is.False);
             Assert.That(result.Reason, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -335,11 +335,11 @@ public class CasCheckServiceTests
         var result = await _service.CheckUserAsync(userId, casConfig);
 
         // Assert - ok=true means banned, even with 0 offenses
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsBanned, Is.True);
             Assert.That(result.Reason, Does.Contain("0 offense"));
-        });
+        }
     }
 
     [Test]
@@ -370,9 +370,12 @@ public class CasCheckServiceTests
         // Act
         var result = await _service.CheckUserAsync(userId, casConfig);
 
-        // Assert - User not banned, but we verified the header was sent
-        Assert.That(result.IsBanned, Is.False);
-        Assert.That(_mockServer.LogEntries.Count(), Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - User not banned, but we verified the header was sent
+            Assert.That(result.IsBanned, Is.False);
+            Assert.That(_mockServer.LogEntries.Count(), Is.EqualTo(1));
+        }
     }
 
     #endregion

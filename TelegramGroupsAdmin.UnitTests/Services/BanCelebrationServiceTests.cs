@@ -151,8 +151,11 @@ public class BanCelebrationServiceTests
 
         // Assert - Each GIF should be used exactly once (shuffle-bag guarantee)
         Assert.That(usedGifIds, Has.Count.EqualTo(3), "Should have used 3 GIFs");
-        Assert.That(usedGifIds.Distinct().Count(), Is.EqualTo(3), "All 3 GIFs should be unique (no repeats)");
-        Assert.That(usedGifIds, Is.EquivalentTo(new[] { 1, 2, 3 }), "Should contain all GIF IDs 1, 2, 3");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(usedGifIds.Distinct().Count(), Is.EqualTo(3), "All 3 GIFs should be unique (no repeats)");
+            Assert.That(usedGifIds, Is.EquivalentTo(new[] { 1, 2, 3 }), "Should contain all GIF IDs 1, 2, 3");
+        }
     }
 
     [Test]
@@ -228,9 +231,12 @@ public class BanCelebrationServiceTests
         var result1 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
         var result2 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
-        // Assert - Both should succeed (deleted GIF skipped gracefully)
-        Assert.That(result1, Is.True, "First celebration should succeed");
-        Assert.That(result2, Is.True, "Second celebration should succeed (deleted GIF skipped)");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Both should succeed (deleted GIF skipped gracefully)
+            Assert.That(result1, Is.True, "First celebration should succeed");
+            Assert.That(result2, Is.True, "Second celebration should succeed (deleted GIF skipped)");
+        }
     }
 
     [Test]
@@ -283,9 +289,12 @@ public class BanCelebrationServiceTests
         var result1 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
         var result2 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
-        // Assert - Both should succeed (deleted caption skipped)
-        Assert.That(result1, Is.True);
-        Assert.That(result2, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Both should succeed (deleted caption skipped)
+            Assert.That(result1, Is.True);
+            Assert.That(result2, Is.True);
+        }
     }
 
     [Test]

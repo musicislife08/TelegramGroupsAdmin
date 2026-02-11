@@ -3,7 +3,6 @@ using System.Text;
 using OtpNet;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Repositories;
 

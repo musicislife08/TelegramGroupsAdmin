@@ -169,9 +169,12 @@ public class TextTokenizerTests
     {
         var result = TextTokenizer.TokenizeToArray("hello hello world");
 
-        Assert.That(result.Count(x => x == "hello"), Is.EqualTo(2));
-        Assert.That(result.Count(x => x == "world"), Is.EqualTo(1));
-        Assert.That(result.Length, Is.EqualTo(3));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Count(x => x == "hello"), Is.EqualTo(2));
+            Assert.That(result.Count(x => x == "world"), Is.EqualTo(1));
+            Assert.That(result.Length, Is.EqualTo(3));
+        }
     }
 
     [Test]
@@ -422,27 +425,36 @@ public class TextTokenizerTests
     [Test]
     public void IsStopWord_CommonStopWord_ReturnsTrue()
     {
-        Assert.That(TextTokenizer.IsStopWord("the"), Is.True);
-        Assert.That(TextTokenizer.IsStopWord("and"), Is.True);
-        Assert.That(TextTokenizer.IsStopWord("for"), Is.True);
-        Assert.That(TextTokenizer.IsStopWord("are"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(TextTokenizer.IsStopWord("the"), Is.True);
+            Assert.That(TextTokenizer.IsStopWord("and"), Is.True);
+            Assert.That(TextTokenizer.IsStopWord("for"), Is.True);
+            Assert.That(TextTokenizer.IsStopWord("are"), Is.True);
+        }
     }
 
     [Test]
     public void IsStopWord_ContentWord_ReturnsFalse()
     {
-        Assert.That(TextTokenizer.IsStopWord("hello"), Is.False);
-        Assert.That(TextTokenizer.IsStopWord("world"), Is.False);
-        Assert.That(TextTokenizer.IsStopWord("test"), Is.False);
-        Assert.That(TextTokenizer.IsStopWord("example"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(TextTokenizer.IsStopWord("hello"), Is.False);
+            Assert.That(TextTokenizer.IsStopWord("world"), Is.False);
+            Assert.That(TextTokenizer.IsStopWord("test"), Is.False);
+            Assert.That(TextTokenizer.IsStopWord("example"), Is.False);
+        }
     }
 
     [Test]
     public void IsStopWord_CaseInsensitive()
     {
-        Assert.That(TextTokenizer.IsStopWord("THE"), Is.True);
-        Assert.That(TextTokenizer.IsStopWord("The"), Is.True);
-        Assert.That(TextTokenizer.IsStopWord("thE"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(TextTokenizer.IsStopWord("THE"), Is.True);
+            Assert.That(TextTokenizer.IsStopWord("The"), Is.True);
+            Assert.That(TextTokenizer.IsStopWord("thE"), Is.True);
+        }
     }
 
     [Test]
@@ -460,8 +472,11 @@ public class TextTokenizerTests
     {
         var result = TextTokenizer.GetWordFrequencies("hello world hello");
 
-        Assert.That(result["hello"], Is.EqualTo(2));
-        Assert.That(result["world"], Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result["hello"], Is.EqualTo(2));
+            Assert.That(result["world"], Is.EqualTo(1));
+        }
     }
 
     [Test]
@@ -485,8 +500,11 @@ public class TextTokenizerTests
     {
         var result = TextTokenizer.GetWordFrequencies("the quick brown fox");
 
-        Assert.That(result.ContainsKey("the"), Is.False);
-        Assert.That(result.ContainsKey("quick"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ContainsKey("the"), Is.False);
+            Assert.That(result.ContainsKey("quick"), Is.True);
+        }
     }
 
     [Test]
@@ -495,8 +513,11 @@ public class TextTokenizerTests
         var options = new TokenizerOptions { RemoveStopWords = false };
         var result = TextTokenizer.GetWordFrequencies("the the the quick", options);
 
-        Assert.That(result["the"], Is.EqualTo(3));
-        Assert.That(result["quick"], Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result["the"], Is.EqualTo(3));
+            Assert.That(result["quick"], Is.EqualTo(1));
+        }
     }
 
     #endregion
@@ -526,10 +547,13 @@ public class TextTokenizerTests
     [Test]
     public void StopWords_IsCaseInsensitive()
     {
-        // The HashSet uses OrdinalIgnoreCase comparer
-        Assert.That(TextTokenizer.StopWords.Contains("THE"), Is.True);
-        Assert.That(TextTokenizer.StopWords.Contains("The"), Is.True);
-        Assert.That(TextTokenizer.StopWords.Contains("tHe"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // The HashSet uses OrdinalIgnoreCase comparer
+            Assert.That(TextTokenizer.StopWords.Contains("THE"), Is.True);
+            Assert.That(TextTokenizer.StopWords.Contains("The"), Is.True);
+            Assert.That(TextTokenizer.StopWords.Contains("tHe"), Is.True);
+        }
     }
 
     #endregion
@@ -541,11 +565,14 @@ public class TextTokenizerTests
     {
         var options = TokenizerOptions.Default;
 
-        Assert.That(options.RemoveEmojis, Is.True);
-        Assert.That(options.RemoveStopWords, Is.True);
-        Assert.That(options.RemoveNumbers, Is.True);
-        Assert.That(options.MinWordLength, Is.EqualTo(2));
-        Assert.That(options.ConvertToLowerCase, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.RemoveEmojis, Is.True);
+            Assert.That(options.RemoveStopWords, Is.True);
+            Assert.That(options.RemoveNumbers, Is.True);
+            Assert.That(options.MinWordLength, Is.EqualTo(2));
+            Assert.That(options.ConvertToLowerCase, Is.True);
+        }
     }
 
     [Test]
@@ -560,11 +587,14 @@ public class TextTokenizerTests
             ConvertToLowerCase = false
         };
 
-        Assert.That(options.RemoveEmojis, Is.False);
-        Assert.That(options.RemoveStopWords, Is.False);
-        Assert.That(options.RemoveNumbers, Is.False);
-        Assert.That(options.MinWordLength, Is.EqualTo(5));
-        Assert.That(options.ConvertToLowerCase, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.RemoveEmojis, Is.False);
+            Assert.That(options.RemoveStopWords, Is.False);
+            Assert.That(options.RemoveNumbers, Is.False);
+            Assert.That(options.MinWordLength, Is.EqualTo(5));
+            Assert.That(options.ConvertToLowerCase, Is.False);
+        }
     }
 
     #endregion

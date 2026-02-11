@@ -251,14 +251,17 @@ public class BitwiseUtilitiesTests
     [Test]
     public void PopCount_PowerOfTwo_ReturnsOne()
     {
-        // Powers of 2 have exactly one bit set
-        Assert.That(BitwiseUtilities.PopCount(2), Is.EqualTo(1));
-        Assert.That(BitwiseUtilities.PopCount(4), Is.EqualTo(1));
-        Assert.That(BitwiseUtilities.PopCount(8), Is.EqualTo(1));
-        Assert.That(BitwiseUtilities.PopCount(16), Is.EqualTo(1));
-        Assert.That(BitwiseUtilities.PopCount(32), Is.EqualTo(1));
-        Assert.That(BitwiseUtilities.PopCount(64), Is.EqualTo(1));
-        Assert.That(BitwiseUtilities.PopCount(128), Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Powers of 2 have exactly one bit set
+            Assert.That(BitwiseUtilities.PopCount(2), Is.EqualTo(1));
+            Assert.That(BitwiseUtilities.PopCount(4), Is.EqualTo(1));
+            Assert.That(BitwiseUtilities.PopCount(8), Is.EqualTo(1));
+            Assert.That(BitwiseUtilities.PopCount(16), Is.EqualTo(1));
+            Assert.That(BitwiseUtilities.PopCount(32), Is.EqualTo(1));
+            Assert.That(BitwiseUtilities.PopCount(64), Is.EqualTo(1));
+            Assert.That(BitwiseUtilities.PopCount(128), Is.EqualTo(1));
+        }
     }
 
     [TestCase(0x00, ExpectedResult = 0)]

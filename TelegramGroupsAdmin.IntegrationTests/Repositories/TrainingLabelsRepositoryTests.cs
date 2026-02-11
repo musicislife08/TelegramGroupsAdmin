@@ -100,12 +100,15 @@ public class TrainingLabelsRepositoryTests
         // Assert - Verify inserted
         var label = await _repository.GetByMessageIdAsync(messageId);
         Assert.That(label, Is.Not.Null);
-        Assert.That(label!.MessageId, Is.EqualTo(messageId));
-        Assert.That(label.Label, Is.EqualTo(TrainingLabel.Spam));
-        Assert.That(label.LabeledByUserId, Is.EqualTo(userId));
-        Assert.That(label.Reason, Is.EqualTo("Manual spam marking by admin"));
-        Assert.That(label.AuditLogId, Is.EqualTo(123));
-        Assert.That(label.LabeledAt, Is.GreaterThan(DateTimeOffset.UtcNow.AddMinutes(-1)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(label!.MessageId, Is.EqualTo(messageId));
+            Assert.That(label.Label, Is.EqualTo(TrainingLabel.Spam));
+            Assert.That(label.LabeledByUserId, Is.EqualTo(userId));
+            Assert.That(label.Reason, Is.EqualTo("Manual spam marking by admin"));
+            Assert.That(label.AuditLogId, Is.EqualTo(123));
+            Assert.That(label.LabeledAt, Is.GreaterThan(DateTimeOffset.UtcNow.AddMinutes(-1)));
+        }
     }
 
     [Test]
@@ -124,8 +127,11 @@ public class TrainingLabelsRepositoryTests
         // Assert
         var label = await _repository.GetByMessageIdAsync(messageId);
         Assert.That(label, Is.Not.Null);
-        Assert.That(label!.Label, Is.EqualTo(TrainingLabel.Ham));
-        Assert.That(label.LabeledByUserId, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(label!.Label, Is.EqualTo(TrainingLabel.Ham));
+            Assert.That(label.LabeledByUserId, Is.Null);
+        }
     }
 
     [Test]
@@ -143,13 +149,16 @@ public class TrainingLabelsRepositoryTests
 
         // Assert - Should update, not duplicate
         var label = await _repository.GetByMessageIdAsync(messageId);
-        Assert.That(label!.Label, Is.EqualTo(TrainingLabel.Ham));
-        Assert.That(label.LabeledByUserId, Is.EqualTo(GoldenDataset.TelegramUsers.User4_TelegramUserId));
-        Assert.That(label.Reason, Is.EqualTo("Corrected to ham"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(label!.Label, Is.EqualTo(TrainingLabel.Ham));
+            Assert.That(label.LabeledByUserId, Is.EqualTo(GoldenDataset.TelegramUsers.User4_TelegramUserId));
+            Assert.That(label.Reason, Is.EqualTo("Corrected to ham"));
+        }
 
         // Verify only ONE row in database
         var count = await _testHelper!.ExecuteScalarAsync<long>(
-            $"SELECT COUNT(*) FROM training_labels WHERE message_id = {messageId}");
+                $"SELECT COUNT(*) FROM training_labels WHERE message_id = {messageId}");
         Assert.That(count, Is.EqualTo(1), "Should update existing row, not create duplicate");
     }
 
@@ -196,8 +205,11 @@ public class TrainingLabelsRepositoryTests
 
         // Assert
         Assert.That(label, Is.Not.Null);
-        Assert.That(label!.MessageId, Is.EqualTo(messageId));
-        Assert.That(label.Label, Is.EqualTo(TrainingLabel.Spam));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(label!.MessageId, Is.EqualTo(messageId));
+            Assert.That(label.Label, Is.EqualTo(TrainingLabel.Spam));
+        }
     }
 
     [Test]

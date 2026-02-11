@@ -70,10 +70,13 @@ public class ChannelReplyContentCheckTests
 
         var result = await _check.CheckAsync(request);
 
-        Assert.That(result.CheckName, Is.EqualTo(CheckName.ChannelReply));
-        Assert.That(result.Score, Is.EqualTo(ScoringConstants.ScoreChannelReply));
-        Assert.That(result.Abstained, Is.False);
-        Assert.That(result.ProcessingTimeMs, Is.GreaterThanOrEqualTo(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.CheckName, Is.EqualTo(CheckName.ChannelReply));
+            Assert.That(result.Score, Is.EqualTo(ScoringConstants.ScoreChannelReply));
+            Assert.That(result.Abstained, Is.False);
+            Assert.That(result.ProcessingTimeMs, Is.GreaterThanOrEqualTo(0));
+        }
     }
 
     private static ContentCheckRequest CreateRequest(

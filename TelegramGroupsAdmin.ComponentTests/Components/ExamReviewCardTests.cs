@@ -6,9 +6,7 @@ using NSubstitute;
 using TelegramGroupsAdmin.Components.Reports;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
@@ -424,8 +422,11 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert - Action buttons hidden when already reviewed
         var buttons = cut.FindAll("button");
-        Assert.That(buttons.Any(b => b.TextContent.Contains("Approve")), Is.False);
-        Assert.That(buttons.Any(b => b.TextContent.Contains("Deny")), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(buttons.Any(b => b.TextContent.Contains("Approve")), Is.False);
+            Assert.That(buttons.Any(b => b.TextContent.Contains("Deny")), Is.False);
+        }
     }
 
     [Test]
@@ -478,8 +479,11 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Approve));
-        Assert.That(receivedAction!.Value.failure.Id, Is.EqualTo(failure.Id));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Approve));
+            Assert.That(receivedAction!.Value.failure.Id, Is.EqualTo(failure.Id));
+        }
     }
 
     [Test]

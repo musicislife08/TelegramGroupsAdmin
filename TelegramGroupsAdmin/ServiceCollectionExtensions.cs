@@ -8,7 +8,6 @@ using Polly;
 using Polly.RateLimiting;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
 
 namespace TelegramGroupsAdmin;

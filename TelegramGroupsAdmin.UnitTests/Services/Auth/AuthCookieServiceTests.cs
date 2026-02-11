@@ -428,8 +428,11 @@ public class AuthCookieServiceTests
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
-        Assert.That(capturedTicket!.Properties.IssuedUtc, Is.Not.Null);
-        Assert.That(capturedTicket.Properties.IssuedUtc!.Value, Is.GreaterThanOrEqualTo(beforeCall.AddSeconds(-1)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(capturedTicket!.Properties.IssuedUtc, Is.Not.Null);
+            Assert.That(capturedTicket.Properties.IssuedUtc!.Value, Is.GreaterThanOrEqualTo(beforeCall.AddSeconds(-1)));
+        }
         Assert.That(capturedTicket.Properties.IssuedUtc!.Value, Is.LessThanOrEqualTo(afterCall.AddSeconds(1)));
     }
 
@@ -449,10 +452,13 @@ public class AuthCookieServiceTests
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
-        Assert.That(capturedTicket!.Properties.ExpiresUtc, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(capturedTicket!.Properties.ExpiresUtc, Is.Not.Null);
 
-        // Verify expiration is approximately 30 days from now
-        Assert.That(capturedTicket.Properties.ExpiresUtc!.Value, Is.GreaterThanOrEqualTo(beforeCall.AddDays(30).AddSeconds(-1)));
+            // Verify expiration is approximately 30 days from now
+            Assert.That(capturedTicket.Properties.ExpiresUtc!.Value, Is.GreaterThanOrEqualTo(beforeCall.AddDays(30).AddSeconds(-1)));
+        }
         Assert.That(capturedTicket.Properties.ExpiresUtc!.Value, Is.LessThanOrEqualTo(afterCall.AddDays(30).AddSeconds(1)));
     }
 
@@ -468,8 +474,11 @@ public class AuthCookieServiceTests
 
         // Assert
         Assert.That(capturedTicket, Is.Not.Null);
-        Assert.That(capturedTicket!.Principal.Identity, Is.Not.Null);
-        Assert.That(capturedTicket.Principal.Identity!.AuthenticationType, Is.EqualTo(CookieAuthenticationDefaults.AuthenticationScheme));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(capturedTicket!.Principal.Identity, Is.Not.Null);
+            Assert.That(capturedTicket.Principal.Identity!.AuthenticationType, Is.EqualTo(CookieAuthenticationDefaults.AuthenticationScheme));
+        }
     }
 
     #endregion

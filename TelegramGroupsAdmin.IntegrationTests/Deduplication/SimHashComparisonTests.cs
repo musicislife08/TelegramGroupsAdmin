@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
@@ -109,11 +108,11 @@ public class SimHashIntegrationTests
         var recomputedHash = _simHashService.ComputeHash(testText);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(savedHash, Is.EqualTo(computedHash), "Hash should survive DB round-trip");
             Assert.That(recomputedHash, Is.EqualTo(computedHash), "Hash should be deterministic");
-        });
+        }
     }
 
     #endregion
@@ -212,12 +211,12 @@ public class SimHashIntegrationTests
         TestContext.Out.WriteLine($"Crypto vs Ham: {cryptoVsHam}");
         TestContext.Out.WriteLine($"Giveaway vs Ham: {giveawayVsHam}");
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cryptoVsGiveaway, Is.GreaterThan(15), "Different spam types should be distinguishable");
             Assert.That(cryptoVsHam, Is.GreaterThan(20), "Spam and ham should be clearly different");
             Assert.That(giveawayVsHam, Is.GreaterThan(20), "Different topics should have high distance");
-        });
+        }
     }
 
     #endregion

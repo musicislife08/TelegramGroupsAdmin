@@ -4,11 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Reports;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramModels = TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -591,8 +588,11 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo(ReportAction.Spam));
-        Assert.That(receivedAction!.Value.report.Id, Is.EqualTo(report.Id));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(receivedAction!.Value.action, Is.EqualTo(ReportAction.Spam));
+            Assert.That(receivedAction!.Value.report.Id, Is.EqualTo(report.Id));
+        }
     }
 
     [Test]

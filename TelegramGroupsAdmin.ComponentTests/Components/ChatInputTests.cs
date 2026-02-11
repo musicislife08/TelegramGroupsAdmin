@@ -206,8 +206,11 @@ public class ChatInputTests : MudBlazorTestContext
 
         // Assert
         var editIndicator = cut.Find(".edit-indicator");
-        Assert.That(editIndicator, Is.Not.Null);
-        Assert.That(cut.Markup, Does.Contain("Edit message"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(editIndicator, Is.Not.Null);
+            Assert.That(cut.Markup, Does.Contain("Edit message"));
+        }
     }
 
     [Test]

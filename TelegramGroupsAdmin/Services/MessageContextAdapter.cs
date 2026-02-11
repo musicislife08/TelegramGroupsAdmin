@@ -1,6 +1,4 @@
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using ContentDetectionServices = TelegramGroupsAdmin.ContentDetection.Services;
 

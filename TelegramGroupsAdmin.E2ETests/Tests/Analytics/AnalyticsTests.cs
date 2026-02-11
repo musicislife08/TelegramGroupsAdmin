@@ -1,7 +1,4 @@
-using Microsoft.Playwright;
-using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
-using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Analytics;
 
@@ -120,13 +117,16 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - click Message Trends tab
         await _analyticsPage.SelectTabAsync("Message Trends");
 
-        // Assert - tab is now active
-        Assert.That(await _analyticsPage.IsMessageTrendsTabActiveAsync(), Is.True,
-            "Message Trends tab should be active after clicking");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - tab is now active
+            Assert.That(await _analyticsPage.IsMessageTrendsTabActiveAsync(), Is.True,
+                "Message Trends tab should be active after clicking");
 
-        // URL should have fragment
-        Assert.That(_analyticsPage.GetCurrentFragment(), Is.EqualTo("trends"),
-            "URL fragment should be 'trends'");
+            // URL should have fragment
+            Assert.That(_analyticsPage.GetCurrentFragment(), Is.EqualTo("trends"),
+                "URL fragment should be 'trends'");
+        }
     }
 
     [Test]
@@ -139,11 +139,14 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - click Performance tab
         await _analyticsPage.SelectTabAsync("Performance");
 
-        // Assert - tab is now active and shows info alert
-        Assert.That(await _analyticsPage.IsPerformanceTabActiveAsync(), Is.True,
-            "Performance tab should be active after clicking");
-        Assert.That(await _analyticsPage.IsPerformanceMetricsVisibleAsync(), Is.True,
-            "Performance metrics info alert should be visible");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - tab is now active and shows info alert
+            Assert.That(await _analyticsPage.IsPerformanceTabActiveAsync(), Is.True,
+                "Performance tab should be active after clicking");
+            Assert.That(await _analyticsPage.IsPerformanceMetricsVisibleAsync(), Is.True,
+                "Performance metrics info alert should be visible");
+        }
     }
 
     [Test]
@@ -156,11 +159,14 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         // Act - click Welcome Analytics tab
         await _analyticsPage.SelectTabAsync("Welcome Analytics");
 
-        // Assert - tab is now active and shows info alert
-        Assert.That(await _analyticsPage.IsWelcomeAnalyticsTabActiveAsync(), Is.True,
-            "Welcome Analytics tab should be active after clicking");
-        Assert.That(await _analyticsPage.IsWelcomeAnalyticsVisibleAsync(), Is.True,
-            "Welcome Analytics info alert should be visible");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - tab is now active and shows info alert
+            Assert.That(await _analyticsPage.IsWelcomeAnalyticsTabActiveAsync(), Is.True,
+                "Welcome Analytics tab should be active after clicking");
+            Assert.That(await _analyticsPage.IsWelcomeAnalyticsVisibleAsync(), Is.True,
+                "Welcome Analytics info alert should be visible");
+        }
     }
 
     [Test]
@@ -269,12 +275,15 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         var monthValue = await _analyticsPage.GetMonthOverMonthValueAsync();
         var yearValue = await _analyticsPage.GetYearOverYearValueAsync();
 
-        Assert.That(weekValue, Is.Not.Null.And.Not.Empty,
-            "Week over Week card should have a value");
-        Assert.That(monthValue, Is.Not.Null.And.Not.Empty,
-            "Month over Month card should have a value");
-        Assert.That(yearValue, Is.Not.Null.And.Not.Empty,
-            "Year over Year card should have a value");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(weekValue, Is.Not.Null.And.Not.Empty,
+                      "Week over Week card should have a value");
+            Assert.That(monthValue, Is.Not.Null.And.Not.Empty,
+                "Month over Month card should have a value");
+            Assert.That(yearValue, Is.Not.Null.And.Not.Empty,
+                "Year over Year card should have a value");
+        }
     }
 
     [Test]
@@ -292,12 +301,15 @@ public class AnalyticsTests : SharedAuthenticatedTestBase
         var monthAvg = await _analyticsPage.GetMonthOverMonthAverageAsync();
         var yearAvg = await _analyticsPage.GetYearOverYearAverageAsync();
 
-        Assert.That(weekAvg, Is.Not.Null.And.Not.Empty,
-            "Week over Week card should have an average comparison");
-        Assert.That(monthAvg, Is.Not.Null.And.Not.Empty,
-            "Month over Month card should have an average comparison");
-        Assert.That(yearAvg, Is.Not.Null.And.Not.Empty,
-            "Year over Year card should have an average comparison");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(weekAvg, Is.Not.Null.And.Not.Empty,
+                      "Week over Week card should have an average comparison");
+            Assert.That(monthAvg, Is.Not.Null.And.Not.Empty,
+                "Month over Month card should have an average comparison");
+            Assert.That(yearAvg, Is.Not.Null.And.Not.Empty,
+                "Year over Year card should have an average comparison");
+        }
     }
 
     #endregion

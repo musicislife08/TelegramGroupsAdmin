@@ -161,12 +161,15 @@ public class RecoveryCodesTests : SharedE2ETestBase
 
         // Assert - should show error snackbar
         var snackbar = await _profilePage.WaitForSnackbarAsync();
-        Assert.That(snackbar, Does.Contain("Invalid").IgnoreCase,
-            "Should show error for invalid password");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snackbar, Does.Contain("Invalid").IgnoreCase,
+                      "Should show error for invalid password");
 
-        // Dialog should still be visible (not closed)
-        Assert.That(await _profilePage.IsPasswordConfirmDialogVisibleAsync(), Is.True,
-            "Dialog should remain open after failed password verification");
+            // Dialog should still be visible (not closed)
+            Assert.That(await _profilePage.IsPasswordConfirmDialogVisibleAsync(), Is.True,
+                "Dialog should remain open after failed password verification");
+        }
     }
 
     [Test]
@@ -291,13 +294,16 @@ public class RecoveryCodesTests : SharedE2ETestBase
         await _verifyPage.ClickUseRecoveryCodeAsync();
         await _verifyPage.WaitForRecoveryCodeFormAsync();
 
-        // Assert - recovery code input should be visible, TOTP input should not
-        Assert.That(await _verifyPage.IsRecoveryCodeInputVisibleAsync(), Is.True,
-            "Recovery code input should be visible");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - recovery code input should be visible, TOTP input should not
+            Assert.That(await _verifyPage.IsRecoveryCodeInputVisibleAsync(), Is.True,
+                "Recovery code input should be visible");
 
-        // "Back to authenticator" link should be visible
-        Assert.That(await _verifyPage.IsBackToAuthenticatorLinkVisibleAsync(), Is.True,
-            "Back to authenticator link should be visible");
+            // "Back to authenticator" link should be visible
+            Assert.That(await _verifyPage.IsBackToAuthenticatorLinkVisibleAsync(), Is.True,
+                "Back to authenticator link should be visible");
+        }
     }
 
     [Test]

@@ -1,10 +1,6 @@
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
-using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;

@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -115,12 +114,12 @@ public class BotDmServiceTests
         var result = await _service!.SendDmAsync(TestUserId, "Test message");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.DmSent, Is.True);
             Assert.That(result.Failed, Is.False);
             Assert.That(result.MessageId, Is.EqualTo(999));
-        });
+        }
 
         // Verify user's bot_dm_enabled was updated
         var user = await _userRepository!.GetByTelegramIdAsync(TestUserId);
@@ -146,12 +145,12 @@ public class BotDmServiceTests
         var result = await _service!.SendDmAsync(TestUserId, "Test message");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.DmSent, Is.False);
             Assert.That(result.Failed, Is.True);
             Assert.That(result.ErrorMessage, Does.Contain("not enabled DMs"));
-        });
+        }
 
         // Verify user's bot_dm_enabled was set to false
         var user = await _userRepository.GetByTelegramIdAsync(TestUserId);
@@ -191,13 +190,13 @@ public class BotDmServiceTests
             autoDeleteSeconds: 30);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.DmSent, Is.False);
             Assert.That(result.FallbackUsed, Is.True);
             Assert.That(result.Failed, Is.False);
             Assert.That(result.FallbackMessageId, Is.EqualTo(888));
-        });
+        }
 
         // Verify auto-delete job was scheduled
         await _mockJobScheduler.Received(1).ScheduleJobAsync(
@@ -235,11 +234,11 @@ public class BotDmServiceTests
             "Test message");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.DmSent, Is.True);
             Assert.That(result.Failed, Is.False);
-        });
+        }
 
         // Verify user's bot_dm_enabled was updated
         var user = await _userRepository!.GetByTelegramIdAsync(TestUserId);
@@ -266,23 +265,23 @@ public class BotDmServiceTests
             "Your report was resolved!");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.DmSent, Is.False);
             Assert.That(result.Failed, Is.True);
             Assert.That(result.ErrorMessage, Does.Contain("queued for later"));
-        });
+        }
 
         // Verify notification was queued
         var pendingNotifications = await _pendingNotificationsRepository!
             .GetPendingNotificationsForUserAsync(TestUserId);
 
         Assert.That(pendingNotifications, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(pendingNotifications[0].NotificationType, Is.EqualTo("report_resolved"));
             Assert.That(pendingNotifications[0].MessageText, Is.EqualTo("Your report was resolved!"));
-        });
+        }
     }
 
     #endregion
@@ -317,12 +316,12 @@ public class BotDmServiceTests
             keyboard);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.DmSent, Is.True);
             Assert.That(result.Failed, Is.False);
             Assert.That(result.MessageId, Is.EqualTo(777));
-        });
+        }
 
         // Verify user's bot_dm_enabled was updated
         var user = await _userRepository!.GetByTelegramIdAsync(TestUserId);
@@ -353,12 +352,12 @@ public class BotDmServiceTests
             keyboard);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.DmSent, Is.False);
             Assert.That(result.Failed, Is.True);
             Assert.That(result.ErrorMessage, Does.Contain("cannot be queued"));
-        });
+        }
 
         // Verify NO notification was queued (keyboard messages can't be queued)
         var pendingNotifications = await _pendingNotificationsRepository!

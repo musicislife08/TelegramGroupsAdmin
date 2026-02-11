@@ -84,7 +84,7 @@ public class ExamConfigEditorTests : ExamConfigEditorTestContext
         return new ExamMcQuestion
         {
             Question = question,
-            Answers = answers.Length > 0 ? [..answers] : ["Correct answer", "Wrong answer"]
+            Answers = answers.Length > 0 ? [.. answers] : ["Correct answer", "Wrong answer"]
         };
     }
 

@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -157,10 +156,13 @@ public class AuditHandlerTests
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null, "Audit record should be inserted");
-        Assert.That(record!.UserId, Is.EqualTo(ValidUserId));
-        Assert.That(record.MessageId, Is.EqualTo(messageId));
-        Assert.That(record.ActionType, Is.EqualTo(Data.Models.UserActionType.Delete));
-        Assert.That(record.SystemIdentifier, Is.EqualTo("IntegrationTest"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record!.UserId, Is.EqualTo(ValidUserId));
+            Assert.That(record.MessageId, Is.EqualTo(messageId));
+            Assert.That(record.ActionType, Is.EqualTo(Data.Models.UserActionType.Delete));
+            Assert.That(record.SystemIdentifier, Is.EqualTo("IntegrationTest"));
+        }
     }
 
     [Test]
@@ -334,9 +336,12 @@ public class AuditHandlerTests
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null);
-        Assert.That(record!.SystemIdentifier, Is.EqualTo("AutoModerator"));
-        Assert.That(record.WebUserId, Is.Null, "WebUserId should be null for system actor");
-        Assert.That(record.TelegramUserId, Is.Null, "TelegramUserId should be null for system actor");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record!.SystemIdentifier, Is.EqualTo("AutoModerator"));
+            Assert.That(record.WebUserId, Is.Null, "WebUserId should be null for system actor");
+            Assert.That(record.TelegramUserId, Is.Null, "TelegramUserId should be null for system actor");
+        }
     }
 
     #endregion

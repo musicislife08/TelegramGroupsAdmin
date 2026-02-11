@@ -9,7 +9,6 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Extensions;
@@ -169,7 +168,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                     Details = vetoResultV2.Details
                 };
 
-                List<ContentCheckResponse> updatedCheckResults = [..pipelineResult.CheckResults, vetoCheckResult];
+                List<ContentCheckResponse> updatedCheckResults = [.. pipelineResult.CheckResults, vetoCheckResult];
 
                 // AI abstained (API error, timeout, rate limit) - defer to pipeline verdict
                 if (vetoResultV2.Abstained)

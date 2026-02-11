@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -115,7 +113,7 @@ public class SystemAccountBypassTests
         var result = await _coordinator!.CheckAsync(request);
 
         // Assert: System account is trusted and all checks are skipped
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True,
                 $"System account {systemUserId} should be marked as trusted");
@@ -127,7 +125,7 @@ public class SystemAccountBypassTests
                 "No spam detection should run for system accounts");
             Assert.That(result.CriticalCheckViolations, Is.Empty,
                 "No critical check violations for system accounts");
-        });
+        }
     }
 
     [Test]
@@ -145,7 +143,7 @@ public class SystemAccountBypassTests
         var result = await _coordinator!.CheckAsync(request);
 
         // Assert: Content is NOT checked because it's from a system account
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True,
                 "Anonymous admin should be trusted");
@@ -153,7 +151,7 @@ public class SystemAccountBypassTests
                 "Spam checks should be skipped for anonymous admin");
             Assert.That(result.SpamResult, Is.Null,
                 "No spam detection should run - admin content is trusted");
-        });
+        }
 
         // If the detection engine was called, the test would throw
         // (ThrowingContentDetectionEngine throws on any call)

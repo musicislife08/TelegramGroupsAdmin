@@ -86,7 +86,7 @@
                             <MessageBubbleTelegram Message="messageWrapper.Message"
                                                    ContentCheck="@GetContentCheck(messageWrapper.Message.MessageId)"
                                                    EditCount="@GetEditCount(messageWrapper.Message.MessageId)"
-                                                   ShowSpamActions="@(WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)"
+                                                   ShowSpamActions="@(WebUser?.PermissionLevel >= PermissionLevel.GlobalAdmin)"
                                                    DetectionHistory="@messageWrapper.DetectionResults"
                                                    UserTags="@messageWrapper.UserTags"
                                                    UserNotes="@messageWrapper.UserNotes"
@@ -1080,7 +1080,8 @@
     {
         var parameters = new DialogParameters<UserDetailDialog>
         {
-            { x => x.UserId, userId }
+            { x => x.UserId, userId },
+            { x => x.WebUser, WebUser }
         };
 
         var options = new DialogOptions

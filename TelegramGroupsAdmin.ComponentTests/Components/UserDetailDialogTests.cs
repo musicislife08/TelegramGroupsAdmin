@@ -5,7 +5,6 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -79,11 +78,14 @@ public class UserDetailDialogTests : MudBlazorTestContext
         return provider;
     }
 
+    private static readonly WebUserIdentity TestWebUser = new("test-user", "test@example.com", PermissionLevel.Owner);
+
     private Task<IDialogReference> OpenDialogAsync(long userId)
     {
         var parameters = new DialogParameters<UserDetailDialog>
         {
-            { x => x.UserId, userId }
+            { x => x.UserId, userId },
+            { x => x.WebUser, TestWebUser }
         };
 
         var options = new DialogOptions

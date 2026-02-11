@@ -69,9 +69,12 @@ public class ExamConfigTests
             ]
         };
 
-        // Act & Assert
-        Assert.That(config.HasMcQuestions, Is.True);
-        Assert.That(config.McQuestions.Count, Is.EqualTo(4));
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert
+            Assert.That(config.HasMcQuestions, Is.True);
+            Assert.That(config.McQuestions.Count, Is.EqualTo(4));
+        }
     }
 
     #endregion
@@ -224,13 +227,16 @@ public class ExamConfigTests
         // Arrange
         var config = new ExamConfig();
 
-        // Assert
-        Assert.That(config.McPassingThreshold, Is.EqualTo(80));
-        Assert.That(config.RequireBothToPass, Is.True);
-        Assert.That(config.McQuestions, Is.Empty);
-        Assert.That(config.OpenEndedQuestion, Is.Null);
-        Assert.That(config.GroupTopic, Is.Null);
-        Assert.That(config.EvaluationCriteria, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(config.McPassingThreshold, Is.EqualTo(80));
+            Assert.That(config.RequireBothToPass, Is.True);
+            Assert.That(config.McQuestions, Is.Empty);
+            Assert.That(config.OpenEndedQuestion, Is.Null);
+            Assert.That(config.GroupTopic, Is.Null);
+            Assert.That(config.EvaluationCriteria, Is.Null);
+        }
     }
 
     #endregion

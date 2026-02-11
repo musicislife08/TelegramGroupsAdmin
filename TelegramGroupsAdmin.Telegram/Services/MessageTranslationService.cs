@@ -3,7 +3,6 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 using TelegramGroupsAdmin.Core.Utilities;
 

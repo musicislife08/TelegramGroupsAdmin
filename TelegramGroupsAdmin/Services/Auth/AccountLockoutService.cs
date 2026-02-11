@@ -1,6 +1,5 @@
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
 

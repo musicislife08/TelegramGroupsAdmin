@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Extensions;
@@ -133,14 +132,14 @@ public class BotChatServiceTests
         // Assert - Managed chat created
         var managedChat = await _managedChatsRepo!.GetByChatIdAsync(TestChatId);
         Assert.That(managedChat, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(managedChat!.Identity.Id, Is.EqualTo(TestChatId));
             Assert.That(managedChat.Identity.ChatName, Is.EqualTo(TestChatName));
             Assert.That(managedChat.IsAdmin, Is.True);
             Assert.That(managedChat.IsActive, Is.True);
             Assert.That(managedChat.IsDeleted, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -163,11 +162,11 @@ public class BotChatServiceTests
         var managedChat = await _managedChatsRepo!.GetByChatIdAsync(TestChatId);
         Assert.That(managedChat, Is.Not.Null);
         // BotStatus should reflect kicked status, IsActive should be false
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(managedChat!.BotStatus, Is.EqualTo(BotChatStatus.Kicked));
             Assert.That(managedChat.IsActive, Is.False);
-        });
+        }
     }
 
     [Test]

@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -81,13 +80,13 @@ public class BanHandlerTests
         var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Spam violation");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
             Assert.That(result.ErrorMessage, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -110,12 +109,12 @@ public class BanHandlerTests
         var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Repeated violations", 100L);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True, "Partial success is still success");
             Assert.That(result.ChatsAffected, Is.EqualTo(3));
             Assert.That(result.ChatsFailed, Is.EqualTo(2));
-        });
+        }
     }
 
     [Test]
@@ -133,12 +132,12 @@ public class BanHandlerTests
         var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Test reason");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Network error"));
             Assert.That(result.ChatsAffected, Is.EqualTo(0));
-        });
+        }
     }
 
     [Test]
@@ -203,12 +202,12 @@ public class BanHandlerTests
         var result = await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, duration, "Timeout for spam");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(3));
             Assert.That(result.ExpiresAt, Is.GreaterThan(DateTimeOffset.UtcNow));
-        });
+        }
 
         // Verify job was scheduled
         await _mockJobScheduler.Received(1).ScheduleJobAsync(
@@ -299,11 +298,11 @@ public class BanHandlerTests
         var result = await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Telegram API error"));
-        });
+        }
     }
 
     #endregion
@@ -323,12 +322,12 @@ public class BanHandlerTests
         var result = await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "False positive");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(4));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
-        });
+        }
 
         // Verify ban status was cleared on user (source of truth)
         await _mockUserRepository.Received(1).SetBanStatusAsync(
@@ -355,12 +354,12 @@ public class BanHandlerTests
         var result = await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "Appeal approved");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(2));
             Assert.That(result.ChatsFailed, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -377,11 +376,11 @@ public class BanHandlerTests
         var result = await _handler.UnbanAsync(UserIdentity.FromId(userId), executor, "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Telegram API error"));
-        });
+        }
     }
 
     [Test]
@@ -435,11 +434,11 @@ public class BanHandlerTests
         var result = await _handler.BanInChatAsync(UserIdentity.FromId(user.Id), ChatIdentity.FromId(chat.Id), executor, "Lazy ban sync");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(1));
-        });
+        }
 
         // Verify Telegram API called
         await _mockApiClient.Received(1).BanChatMemberAsync(
@@ -465,11 +464,11 @@ public class BanHandlerTests
         var result = await _handler.BanInChatAsync(UserIdentity.FromId(user.Id), ChatIdentity.FromId(chat.Id), executor, "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("User is admin"));
-        });
+        }
     }
 
     [Test]

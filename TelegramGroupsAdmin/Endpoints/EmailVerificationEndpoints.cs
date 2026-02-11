@@ -1,5 +1,5 @@
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Auth;
@@ -70,8 +70,8 @@ public static class EmailVerificationEndpoints
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserEmailVerified,
-            actor: Actor.FromWebUser(user.WebUser.Id),
-            target: Actor.FromWebUser(user.WebUser.Id),
+            actor: user.WebUser.ToActor(),
+            target: user.WebUser.ToActor(),
             value: user.WebUser.Email,
             cancellationToken: cancellationToken);
 

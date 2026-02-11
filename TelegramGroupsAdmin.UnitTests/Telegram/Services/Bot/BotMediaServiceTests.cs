@@ -1,8 +1,6 @@
-using System.IO.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using NUnit.Framework;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using Testably.Abstractions.Testing;
@@ -116,11 +114,11 @@ public class BotMediaServiceTests
 
         // Assert - Returns cached path without re-downloading
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.RelativePath, Is.EqualTo($"user_photos/{TestUserId}.jpg"));
             Assert.That(result.FileUniqueId, Is.EqualTo(TestFileUniqueId));
-        });
+        }
 
         // Verify file was NOT downloaded (cache hit)
         await _mockMediaHandler.DidNotReceive().GetFileAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -166,11 +164,11 @@ public class BotMediaServiceTests
 
         // Assert - Full flow completed successfully
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.RelativePath, Is.EqualTo($"user_photos/{TestUserId}.jpg"));
             Assert.That(result.FileUniqueId, Is.EqualTo(newFileUniqueId));
-        });
+        }
 
         // Verify download occurred
         await _mockMediaHandler.Received(1).GetFileAsync(TestFileId, Arg.Any<CancellationToken>());
@@ -196,11 +194,11 @@ public class BotMediaServiceTests
 
         // Assert - Full flow completed successfully
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.RelativePath, Is.EqualTo($"user_photos/{TestUserId}.jpg"));
             Assert.That(result.FileUniqueId, Is.EqualTo(TestFileUniqueId));
-        });
+        }
 
         // Verify download occurred
         await _mockMediaHandler.Received(1).GetFileAsync(TestFileId, Arg.Any<CancellationToken>());

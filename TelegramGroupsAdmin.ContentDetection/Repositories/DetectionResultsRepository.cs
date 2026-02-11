@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
