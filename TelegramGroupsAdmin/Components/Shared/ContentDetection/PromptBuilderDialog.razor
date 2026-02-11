@@ -126,7 +126,7 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
-    [Parameter] public long ChatId { get; set; }
+    [Parameter] public ChatIdentity Chat { get; set; } = ChatIdentity.FromId(0);
 
     private PromptBuilderRequest _request = new();
     private string? _generatedPrompt;
@@ -134,7 +134,8 @@
 
     protected override void OnInitialized()
     {
-        _request.ChatId = ChatId;
+        _request.Chat = Chat;
+        _request.ChatId = Chat.Id;
         _request.Strictness = StrictnessLevel.Balanced;
         _request.MessageHistoryCount = 20;
     }
@@ -191,7 +192,8 @@
         _generatedPrompt = null;
         _request = new PromptBuilderRequest
         {
-            ChatId = ChatId,
+            Chat = Chat,
+            ChatId = Chat.Id,
             Strictness = StrictnessLevel.Balanced,
             MessageHistoryCount = 20
         };

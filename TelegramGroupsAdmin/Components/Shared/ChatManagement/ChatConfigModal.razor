@@ -154,7 +154,7 @@
                     @if (_useCustomConfig)
                     {
                         <!-- Reusable DetectionOverview component for per-chat configuration -->
-                        <DetectionOverview ChatId="@ChatInfo.Record.Identity.Id" />
+                        <DetectionOverview Chat="@ChatInfo.Record.Identity" />
                     }
                     else
                     {
@@ -236,7 +236,7 @@
                     @if (_useCustomServiceMsgConfig)
                     {
                         <!-- Reusable ServiceMessageDeletionSettings component for per-chat configuration -->
-                        <ServiceMessageDeletionSettings @ref="_serviceMsgConfigComponent" ChatId="@ChatInfo.Record.Identity.Id" OnSaved="OnServiceMsgConfigSaved" />
+                        <ServiceMessageDeletionSettings @ref="_serviceMsgConfigComponent" Chat="@ChatInfo.Record.Identity" OnSaved="OnServiceMsgConfigSaved" />
 
                         <!-- Save Button -->
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -284,7 +284,7 @@
                     @if (_useCustomBanCelebrationConfig)
                     {
                         <!-- Reusable BanCelebrationChatSettings component for per-chat configuration -->
-                        <BanCelebrationChatSettings @ref="_banCelebrationConfigComponent" ChatId="@ChatInfo.Record.Identity.Id" OnSaved="OnBanCelebrationConfigSaved" />
+                        <BanCelebrationChatSettings @ref="_banCelebrationConfigComponent" Chat="@ChatInfo.Record.Identity" OnSaved="OnBanCelebrationConfigSaved" />
 
                         <!-- Save Button -->
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"

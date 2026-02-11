@@ -160,7 +160,7 @@
                 // Get cached health status from health cache
                 var health = ChatHealthCache.GetCachedHealth(chat.Identity.Id) ?? new ChatHealthStatus
                 {
-                    Chat = ChatIdentity.FromId(chat.Identity.Id),
+                    Chat = chat.Identity,
                     Status = ChatHealthStatusType.Unknown,
                     IsReachable = true
                 };

@@ -5,6 +5,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -94,7 +95,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
     {
         // Arrange & Act - With ChatId means per-chat mode
         var cut = Render<ServiceMessageDeletionSettings>(p => p
-            .Add(x => x.ChatId, 123456L));
+            .Add(x => x.Chat, ChatIdentity.FromId(123456L)));
 
         // Assert
         cut.WaitForAssertion(() =>
@@ -296,7 +297,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
     {
         // Arrange & Act - Per-chat mode (has ChatId)
         var cut = Render<ServiceMessageDeletionSettings>(p => p
-            .Add(x => x.ChatId, 123456L));
+            .Add(x => x.Chat, ChatIdentity.FromId(123456L)));
 
         // Assert - Buttons should be hidden in per-chat mode
         cut.WaitForAssertion(() =>
@@ -387,7 +388,7 @@ public class ServiceMessageDeletionSettingsTests : ServiceMessageDeletionSetting
 
         // Act
         var cut = Render<ServiceMessageDeletionSettings>(p => p
-            .Add(x => x.ChatId, chatId));
+            .Add(x => x.Chat, ChatIdentity.FromId(chatId)));
 
         // Wait for async initialization
         cut.WaitForAssertion(() =>

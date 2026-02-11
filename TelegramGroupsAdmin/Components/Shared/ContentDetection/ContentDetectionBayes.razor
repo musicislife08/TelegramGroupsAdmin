@@ -62,11 +62,11 @@
 
 @code {
     [Parameter]
-    public long? ChatId { get; set; }
+    public ChatIdentity? Chat { get; set; }
 
     private ContentDetectionConfig _config = new();
     private ContentDetectionConfig _globalConfig = new();
-    private bool IsGlobalView => ChatId is null or 0;
+    private bool IsGlobalView => Chat is null || Chat.Id == 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,7 +89,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, ChatId!.Value);
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Chat!.Id);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }

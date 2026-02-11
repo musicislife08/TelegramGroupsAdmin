@@ -4,6 +4,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.Settings;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -68,7 +69,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
         bool showLibraryHint = true)
     {
         return Render<BanCelebrationChatSettings>(parameters => parameters
-            .Add(p => p.ChatId, chatId)
+            .Add(p => p.Chat, ChatIdentity.FromId(chatId))
             .Add(p => p.ShowLibraryHint, showLibraryHint));
     }
 
