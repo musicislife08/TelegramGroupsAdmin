@@ -84,7 +84,7 @@ public partial class MessageProcessingService(
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
                             commandResult.Response,
-                            parseMode: ParseMode.Markdown,
+                            parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
                             cancellationToken: cancellationToken);
                     }
                 }
@@ -394,7 +394,7 @@ public partial class MessageProcessingService(
                             var responseMessage = await botMessageService.SendAndSaveMessageAsync(
                                 message.Chat.Id,
                                 commandResult.Response,
-                                parseMode: ParseMode.Markdown,
+                                parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 cancellationToken: cancellationToken);
 

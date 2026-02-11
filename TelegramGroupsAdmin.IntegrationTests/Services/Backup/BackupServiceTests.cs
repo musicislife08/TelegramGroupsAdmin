@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.Models;
@@ -713,6 +714,7 @@ public class BackupServiceTests
             long telegramUserId,
             string notificationType,
             string messageText,
+            ParseMode parseMode = ParseMode.MarkdownV2,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 

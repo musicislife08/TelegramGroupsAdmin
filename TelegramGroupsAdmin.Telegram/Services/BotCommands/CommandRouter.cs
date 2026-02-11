@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -11,7 +12,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 /// <summary>
 /// Result of executing a bot command
 /// </summary>
-public record CommandResult(string? Response, bool DeleteCommandMessage, int? DeleteResponseAfterSeconds = null);
+public record CommandResult(string? Response, bool DeleteCommandMessage, int? DeleteResponseAfterSeconds = null, ParseMode? ParseMode = null);
 
 /// <summary>
 /// Routes bot commands to appropriate handlers with permission checking

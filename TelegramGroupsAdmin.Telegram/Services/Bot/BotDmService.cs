@@ -109,6 +109,7 @@ public class BotDmService(
         long telegramUserId,
         string notificationType,
         string messageText,
+        ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default)
     {
         var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
@@ -119,6 +120,7 @@ public class BotDmService(
             await messageHandler.SendAsync(
                 chatId: telegramUserId,
                 text: messageText,
+                parseMode: parseMode,
                 ct: cancellationToken);
 
             logger.LogInformation(

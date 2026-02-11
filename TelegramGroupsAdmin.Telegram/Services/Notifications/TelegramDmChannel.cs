@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Notifications;
@@ -34,10 +35,12 @@ public class TelegramDmChannel : INotificationChannel
         }
 
         // Delegate to DmDeliveryService with queue-on-failure behavior
+        // NotificationHandler formats messages in HTML (<b>, EscapeHtml), so use Html parse mode
         var result = await _dmDeliveryService.SendDmWithQueueAsync(
             telegramUserId,
             notification.Type,
             notification.Message,
+            ParseMode.Html,
             cancellationToken);
 
         // Convert DmDeliveryResult to DeliveryResult

@@ -315,7 +315,7 @@ public class NotificationService : INotificationService
                     mapping.TelegramId,
                     "notification",
                     formattedMessage,
-                    cancellationToken);
+                    cancellationToken: cancellationToken);
             }
 
             if (result.DmSent)
