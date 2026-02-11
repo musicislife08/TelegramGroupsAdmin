@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -58,8 +59,8 @@ public class MessageBackfillService : IMessageBackfillService
         {
             var messageRecord = new MessageRecord(
                 MessageId: messageId,
-                User: new UserIdentity(telegramMessage.From?.Id ?? 0, telegramMessage.From?.FirstName, telegramMessage.From?.LastName, telegramMessage.From?.Username),
-                Chat: new ChatIdentity(chatId, null),
+                User: telegramMessage.From is { } from ? UserIdentity.From(from) : UserIdentity.FromId(0),
+                Chat: ChatIdentity.FromId(chatId),
                 Timestamp: telegramMessage.Date,
                 MessageText: messageText,
                 PhotoFileId: null,

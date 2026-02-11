@@ -5,6 +5,7 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -74,8 +75,8 @@ public class BotMessageService(
         // Save to messages table (use bot info from cache, not sentMessage.From which may be null)
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            User: new UserIdentity(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username),
-            Chat: new ChatIdentity(chatId, sentMessage.Chat.Title ?? sentMessage.Chat.Username),
+            User: UserIdentity.From(botInfo),
+            Chat: ChatIdentity.From(sentMessage.Chat),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
             PhotoFileId: null,
@@ -277,8 +278,8 @@ public class BotMessageService(
         // Save to messages table
         var messageRecord = new MessageRecord(
             MessageId: messageId,
-            User: new UserIdentity(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username),
-            Chat: new ChatIdentity(chatId, chatInfo.Title ?? chatInfo.Username),
+            User: UserIdentity.From(botInfo),
+            Chat: ChatIdentity.From(chatInfo),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
             PhotoFileId: null,
@@ -376,8 +377,8 @@ public class BotMessageService(
         // Save to messages table with animation metadata
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            User: new UserIdentity(botInfo.Id, botInfo.FirstName, botInfo.LastName, botInfo.Username),
-            Chat: new ChatIdentity(chatId, sentMessage.Chat.Title ?? sentMessage.Chat.Username),
+            User: UserIdentity.From(botInfo),
+            Chat: ChatIdentity.From(sentMessage.Chat),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: caption, // Caption as message text
             PhotoFileId: null,

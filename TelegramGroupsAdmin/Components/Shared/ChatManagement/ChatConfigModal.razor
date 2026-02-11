@@ -337,16 +337,16 @@
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd DataLabel="Username">
-                                    @if (!string.IsNullOrEmpty(context.Username))
+                                    @if (!string.IsNullOrEmpty(context.User.Username))
                                     {
-                                        <text>@@@context.Username</text>
+                                        <text>@@@context.User.Username</text>
                                     }
                                     else
                                     {
                                         <MudText Typo="Typo.body2" Color="Color.Secondary">No username</MudText>
                                     }
                                 </MudTd>
-                                <MudTd DataLabel="Telegram ID">@context.TelegramId</MudTd>
+                                <MudTd DataLabel="Telegram ID">@context.User.Id</MudTd>
                                 <MudTd DataLabel="Role">
                                     @if (context.IsCreator)
                                     {
@@ -359,7 +359,7 @@
                                 </MudTd>
                                 <MudTd DataLabel="Web App User">
                                     @{
-                                        var linkedEmail = _adminLinkages.GetValueOrDefault(context.TelegramId);
+                                        var linkedEmail = _adminLinkages.GetValueOrDefault(context.User.Id);
                                         if (!string.IsNullOrEmpty(linkedEmail))
                                         {
                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -449,13 +449,13 @@
             _adminLinkages.Clear();
             foreach (var admin in _admins)
             {
-                var userId = await TelegramMappingsRepository.GetUserIdByTelegramIdAsync(admin.TelegramId);
+                var userId = await TelegramMappingsRepository.GetUserIdByTelegramIdAsync(admin.User.Id);
                 if (!string.IsNullOrEmpty(userId))
                 {
                     var user = await UserManagementService.GetUserByIdAsync(userId);
                     if (user != null)
                     {
-                        _adminLinkages[admin.TelegramId] = user.Email;
+                        _adminLinkages[admin.User.Id] = user.Email;
                     }
                 }
             }

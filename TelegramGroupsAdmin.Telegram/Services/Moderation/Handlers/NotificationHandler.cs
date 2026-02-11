@@ -367,12 +367,12 @@ public class NotificationHandler : INotificationHandler
             foreach (var admin in chatAdmins)
             {
                 // Check if admin has linked their Telegram account
-                var mapping = await _telegramUserMappingRepository.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
+                var mapping = await _telegramUserMappingRepository.GetByTelegramIdAsync(admin.User.Id, cancellationToken);
                 if (mapping == null)
                     continue;
 
                 await _dmDeliveryService.SendDmWithMediaAsync(
-                    admin.TelegramId,
+                    admin.User.Id,
                     "spam_banned",
                     consolidatedMessage,
                     photoPath,

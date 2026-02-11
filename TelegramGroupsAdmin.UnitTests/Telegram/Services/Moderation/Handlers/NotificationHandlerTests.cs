@@ -77,10 +77,7 @@ public class NotificationHandlerTests
         {
             Id = 1,
             ChatId = chatId,
-            TelegramId = telegramId,
-            Username = "test_admin",
-            FirstName = "Admin",
-            LastName = "User",
+            User = new UserIdentity(telegramId, "Admin", "User", "test_admin"),
             IsCreator = false,
             PromotedAt = DateTimeOffset.UtcNow.AddDays(-30),
             LastVerifiedAt = DateTimeOffset.UtcNow,

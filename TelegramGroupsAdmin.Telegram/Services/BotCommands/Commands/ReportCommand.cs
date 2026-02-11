@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -72,7 +73,7 @@ public class ReportCommand(
         var report = new Report(
             Id: 0, // Will be assigned by database
             MessageId: reportedMessage.MessageId,
-            Chat: new ChatIdentity(message.Chat.Id, message.Chat.Title),
+            Chat: ChatIdentity.From(message.Chat),
             ReportCommandMessageId: message.MessageId,
             ReportedByUserId: reporter.Id,
             ReportedByUserName: reporter.Username ?? reporter.FirstName,

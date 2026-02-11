@@ -218,7 +218,7 @@ public class BotChatServiceTests
         // Assert - Admin list was refreshed
         var admins = await _chatAdminsRepo!.GetChatAdminsAsync(TestChatId);
         Assert.That(admins, Has.Count.EqualTo(1));
-        Assert.That(admins[0].TelegramId, Is.EqualTo(TestUserId));
+        Assert.That(admins[0].User.Id, Is.EqualTo(TestUserId));
     }
 
     #endregion
@@ -244,7 +244,7 @@ public class BotChatServiceTests
         // Assert - Admin record created
         var admins = await _chatAdminsRepo!.GetChatAdminsAsync(TestChatId);
         Assert.That(admins, Has.Count.EqualTo(1));
-        Assert.That(admins[0].TelegramId, Is.EqualTo(TestUserId));
+        Assert.That(admins[0].User.Id, Is.EqualTo(TestUserId));
 
         // Assert - User was auto-trusted
         var user = await _userRepo!.GetByTelegramIdAsync(TestUserId);

@@ -166,9 +166,7 @@ public class NotificationHandlerTests
         {
             Id = 1,
             ChatId = TestChatId,
-            TelegramId = TestAdminTelegramId,
-            Username = "admin",
-            FirstName = "Admin"
+            User = new UserIdentity(TestAdminTelegramId, "Admin", null, "admin")
         };
         _mockChatAdminsRepo.GetChatAdminsAsync(TestChatId, Arg.Any<CancellationToken>())
             .Returns(new List<ChatAdmin> { admin });

@@ -39,19 +39,19 @@ public record Actor
     // ============================================================================
 
     // Common system actors (eliminates magic strings)
-    public static Actor AutoDetection => FromSystem("auto_detection");
-    public static Actor BotProtection => FromSystem("bot_protection");
-    public static Actor FileScanner => FromSystem("file_scanner");
-    public static Actor AutoTrust => FromSystem("auto_trust");
-    public static Actor Impersonation => FromSystem("impersonation");
-    public static Actor AutoBan => FromSystem("auto_ban");
-    public static Actor Cas => FromSystem("cas"); // CAS (Combot Anti-Spam) user join check
-    public static Actor LanguageWarning => FromSystem("language_warning"); // Phase 4.21
-    public static Actor SystemSeed => FromSystem("system_seed"); // Initial data seeding
-    public static Actor ExamFlow => FromSystem("exam_flow"); // Entrance exam auto-pass
-    public static Actor WelcomeFlow => FromSystem("welcome_flow"); // Welcome/rules flow completion
-    public static Actor TempbanExpiry => FromSystem("tempban_expiry"); // Scheduled tempban expiry
-    public static Actor Unknown => FromSystem("unknown");
+    public static readonly Actor AutoDetection = FromSystem("auto_detection");
+    public static readonly Actor BotProtection = FromSystem("bot_protection");
+    public static readonly Actor FileScanner = FromSystem("file_scanner");
+    public static readonly Actor AutoTrust = FromSystem("auto_trust");
+    public static readonly Actor Impersonation = FromSystem("impersonation");
+    public static readonly Actor AutoBan = FromSystem("auto_ban");
+    public static readonly Actor Cas = FromSystem("cas"); // CAS (Combot Anti-Spam) user join check
+    public static readonly Actor LanguageWarning = FromSystem("language_warning"); // Phase 4.21
+    public static readonly Actor SystemSeed = FromSystem("system_seed"); // Initial data seeding
+    public static readonly Actor ExamFlow = FromSystem("exam_flow"); // Entrance exam auto-pass
+    public static readonly Actor WelcomeFlow = FromSystem("welcome_flow"); // Welcome/rules flow completion
+    public static readonly Actor TempbanExpiry = FromSystem("tempban_expiry"); // Scheduled tempban expiry
+    public static readonly Actor Unknown = FromSystem("unknown");
 
     /// <summary>
     /// Create actor from web user
