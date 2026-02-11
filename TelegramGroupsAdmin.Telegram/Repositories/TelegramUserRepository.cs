@@ -115,15 +115,14 @@ public class TelegramUserRepository : ITelegramUserRepository
             {
                 entity.IsTrusted = true;
                 _logger.LogInformation(
-                    "Created Telegram system account (user {TelegramUserId}) with automatic trust",
-                    user.TelegramUserId);
+                    "Created Telegram system account {User} with automatic trust",
+                    user.ToLogInfo());
             }
             else
             {
                 _logger.LogInformation(
-                    "Created Telegram user {TelegramUserId} (@{Username})",
-                    user.TelegramUserId,
-                    user.Username);
+                    "Created Telegram user {User}",
+                    user.ToLogDebug());
             }
 
             context.TelegramUsers.Add(entity);
@@ -219,8 +218,8 @@ public class TelegramUserRepository : ITelegramUserRepository
             await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Updated trust status for Telegram user {TelegramUserId}: {IsTrusted}",
-                telegramUserId,
+                "Updated trust status for {User}: {IsTrusted}",
+                entity.ToLogInfo(),
                 isTrusted);
         }
     }
@@ -244,8 +243,8 @@ public class TelegramUserRepository : ITelegramUserRepository
             await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Updated bot DM status for Telegram user {TelegramUserId}: {BotDmEnabled}",
-                telegramUserId,
+                "Updated bot DM status for {User}: {BotDmEnabled}",
+                entity.ToLogInfo(),
                 enabled);
         }
     }

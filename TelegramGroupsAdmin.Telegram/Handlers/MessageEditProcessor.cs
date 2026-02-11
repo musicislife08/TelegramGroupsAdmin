@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
@@ -105,9 +106,10 @@ public class MessageEditProcessor
         await repository.UpdateMessageAsync(updatedMessage, cancellationToken);
 
         _logger.LogInformation(
-            "Recorded edit for message {MessageId} in chat {ChatId}",
+            "Recorded edit for message {MessageId} by {User} in {Chat}",
             editedMessage.MessageId,
-            editedMessage.Chat.Id);
+            editedMessage.From.ToLogInfo(),
+            editedMessage.Chat.ToLogInfo());
 
         // Schedule spam re-scan in background
         await ScheduleSpamReScanAsync(editedMessage, newText);
