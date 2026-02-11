@@ -96,7 +96,7 @@ public class ExamConfigEditorTests : ExamConfigEditorTestContext
         string chatName = "Test Chat")
     {
         return new ManagedChatRecord(
-            Chat: new ChatIdentity(chatId, chatName),
+            Identity: new ChatIdentity(chatId, chatName),
             ChatType: ManagedChatType.Group,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,

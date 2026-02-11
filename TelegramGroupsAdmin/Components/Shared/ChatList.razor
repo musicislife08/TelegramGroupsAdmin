@@ -14,17 +14,17 @@
     }
     else
     {
-        @foreach (var chat in Chats.OrderBy(c => c.Chat.Id))
+        @foreach (var chat in Chats.OrderBy(c => c.Identity.Id))
         {
-            <div class="chat-list-item @(IsSelected(chat.Chat.Id) ? "active" : "")"
-                 @onclick="() => OnChatSelected.InvokeAsync(chat.Chat.Id)">
+            <div class="chat-list-item @(IsSelected(chat.Identity.Id) ? "active" : "")"
+                 @onclick="() => OnChatSelected.InvokeAsync(chat.Identity.Id)">
 
                 @* Chat Avatar *@
                 <div class="chat-avatar-wrapper">
                     @if (!string.IsNullOrEmpty(chat.ChatIconPath))
                     {
                         <img src="@GetChatIconPath(chat.ChatIconPath)"
-                             alt="@chat.Chat.ChatName"
+                             alt="@chat.Identity.ChatName"
                              class="chat-avatar"
                              loading="lazy" />
                     }
@@ -41,17 +41,17 @@
                 @* Chat Info *@
                 <div class="chat-info">
                     <div class="chat-title-row">
-                        <span class="chat-title">@chat.Chat.ChatName</span>
-                        @if (MessageCounts.TryGetValue(chat.Chat.Id, out var count) && count > 0)
+                        <span class="chat-title">@chat.Identity.ChatName</span>
+                        @if (MessageCounts.TryGetValue(chat.Identity.Id, out var count) && count > 0)
                         {
                             <span class="chat-count">@count</span>
                         }
                     </div>
                     <div class="chat-subtitle-row">
                         <span class="chat-last-message">
-                            @GetLastMessagePreview(chat.Chat.Id)
+                            @GetLastMessagePreview(chat.Identity.Id)
                         </span>
-                        @if (UnreadCounts.TryGetValue(chat.Chat.Id, out var unread) && unread > 0)
+                        @if (UnreadCounts.TryGetValue(chat.Identity.Id, out var unread) && unread > 0)
                         {
                             <span class="chat-unread-badge">@unread</span>
                         }

@@ -104,7 +104,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         {
             _logger.LogDebug(
                 "{User} has {MessageCount} messages in {Chat}, threshold {Threshold}, skipping check",
-                user.ToLogDebug(), messageCount, (chat?.Chat ?? ChatIdentity.FromId(chatId)).ToLogDebug(), threshold);
+                user.ToLogDebug(), messageCount, (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug(), threshold);
             return false;
         }
 

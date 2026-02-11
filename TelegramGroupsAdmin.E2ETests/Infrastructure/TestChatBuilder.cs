@@ -170,7 +170,7 @@ public class TestChatBuilder
         var chatId = _chatId ?? -100_0000_0000 - Random.Shared.Next(1, 999_999_999);
 
         var chatRecord = new ManagedChatRecord(
-            Chat: new ChatIdentity(chatId, _chatName),
+            Identity: new ChatIdentity(chatId, _chatName),
             ChatType: _chatType,
             BotStatus: _botStatus,
             IsAdmin: _isAdmin,
@@ -193,8 +193,8 @@ public class TestChatBuilder
 /// </summary>
 public record TestChat(ManagedChatRecord Record)
 {
-    public long ChatId => Record.Chat.Id;
-    public string? ChatName => Record.Chat.ChatName;
+    public long ChatId => Record.Identity.Id;
+    public string? ChatName => Record.Identity.ChatName;
     public ManagedChatType ChatType => Record.ChatType;
     public bool IsActive => Record.IsActive;
     public bool IsAdmin => Record.IsAdmin;

@@ -15,7 +15,7 @@ public class ChatInfoCellTests : MudBlazorTestContext
         ManagedChatType chatType = ManagedChatType.Supergroup)
     {
         return new ManagedChatRecord(
-            Chat: new ChatIdentity(chatId, chatName),
+            Identity: new ChatIdentity(chatId, chatName),
             ChatType: chatType,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,

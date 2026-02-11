@@ -606,8 +606,8 @@ public partial class MessageProcessingService(
             {
                 logger.LogWarning(
                     "{User} is already banned in {Chat}, deleting message {MessageId} immediately (multi-message spam cleanup)",
-                    LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                    message.From.ToLogDebug(),
+                    message.Chat.ToLogDebug(),
                     message.MessageId);
 
                 var moderationService = messageScope.ServiceProvider.GetRequiredService<IBotModerationService>();

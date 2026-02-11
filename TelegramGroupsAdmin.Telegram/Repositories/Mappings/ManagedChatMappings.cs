@@ -12,7 +12,7 @@ public static class ManagedChatMappings
     extension(DataModels.ManagedChatRecordDto data)
     {
         public UiModels.ManagedChatRecord ToModel() => new(
-            Chat: new ChatIdentity(data.ChatId, data.ChatName),
+            Identity: new ChatIdentity(data.ChatId, data.ChatName),
             ChatType: (UiModels.ManagedChatType)data.ChatType,
             BotStatus: (UiModels.BotChatStatus)data.BotStatus,
             IsAdmin: data.IsAdmin,
@@ -29,8 +29,8 @@ public static class ManagedChatMappings
     {
         public DataModels.ManagedChatRecordDto ToDto() => new()
         {
-            ChatId = ui.Chat.Id,
-            ChatName = ui.Chat.ChatName,
+            ChatId = ui.Identity.Id,
+            ChatName = ui.Identity.ChatName,
             ChatType = (DataModels.ManagedChatType)(int)ui.ChatType,
             BotStatus = (DataModels.BotChatStatus)(int)ui.BotStatus,
             IsAdmin = ui.IsAdmin,

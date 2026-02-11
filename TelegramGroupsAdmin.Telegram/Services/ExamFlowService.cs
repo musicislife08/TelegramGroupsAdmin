@@ -234,7 +234,7 @@ public class ExamFlowService : IExamFlowService
         // Verify question index
         if (session.CurrentQuestionIndex != questionIndex)
         {
-            _logger.LogWarning("Question index mismatch: expected {Expected}, got {Actual}",
+            _logger.LogDebug("Question index mismatch: expected {Expected}, got {Actual}",
                 session.CurrentQuestionIndex, questionIndex);
             return new ExamAnswerResult(ExamComplete: false, Passed: null, SentToReview: false);
         }
@@ -521,7 +521,7 @@ public class ExamFlowService : IExamFlowService
         // Get chat info for notification
         var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
         var failureChat = await managedChatsRepo.GetByChatIdAsync(session.ChatId, cancellationToken);
-        var failureChatName = failureChat?.Chat.ChatName ?? "Unknown Chat";
+        var failureChatName = failureChat?.Identity.ChatName ?? "Unknown Chat";
 
         // Notify admins of exam failure
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
@@ -548,7 +548,7 @@ public class ExamFlowService : IExamFlowService
         }
 
         await notificationService.SendChatNotificationAsync(
-            chat: failureChat?.Chat ?? ChatIdentity.FromId(session.ChatId),
+            chat: failureChat?.Identity ?? ChatIdentity.FromId(session.ChatId),
             eventType: NotificationEventType.ExamFailed,
             subject: "Entrance Exam Review Required",
             message: messageBuilder.ToString(),
@@ -564,7 +564,7 @@ public class ExamFlowService : IExamFlowService
             cancellationToken: cancellationToken);
 
         _logger.LogInformation("{User} failed entrance exam in {Chat}, sent to review",
-            user.ToLogInfo(), (failureChat?.Chat ?? ChatIdentity.FromId(session.ChatId)).ToLogInfo());
+            user.ToLogInfo(), (failureChat?.Identity ?? ChatIdentity.FromId(session.ChatId)).ToLogInfo());
 
         return new ExamAnswerResult(ExamComplete: true, Passed: false, SentToReview: true, GroupChatId: session.ChatId);
     }

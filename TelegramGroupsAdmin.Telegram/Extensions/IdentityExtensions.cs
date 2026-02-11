@@ -69,7 +69,7 @@ public static class IdentityExtensions
             long chatId, IManagedChatsRepository repo, CancellationToken ct = default)
         {
             var chat = await repo.GetByChatIdAsync(chatId, ct);
-            return chat?.Chat ?? ChatIdentity.FromId(chatId);
+            return chat?.Identity ?? ChatIdentity.FromId(chatId);
         }
     }
 }

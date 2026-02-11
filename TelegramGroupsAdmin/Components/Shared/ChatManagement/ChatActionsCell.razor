@@ -59,7 +59,7 @@
     {
         try
         {
-            var payload = new ChatHealthCheckPayload { ChatId = ChatInfo.Chat.Chat.Id };
+            var payload = new ChatHealthCheckPayload { ChatId = ChatInfo.Record.Identity.Id };
 
             await JobScheduler.ScheduleJobAsync(
                 BackgroundJobNames.ChatHealthCheck,
@@ -71,7 +71,7 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to refresh health for chat {ChatId}", ChatInfo.Chat.Chat.Id);
+            Logger.LogError(ex, "Failed to refresh health for chat {ChatId}", ChatInfo.Record.Identity.Id);
             Snackbar.Add("Failed to refresh chat health. Please try again.", Severity.Error);
         }
     }
@@ -82,7 +82,7 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
 
         var dialog = await DialogService.ShowAsync<ChatConfigModal>(
-            $"Configure: {ChatInfo.Chat.Chat.ChatName}",
+            $"Configure: {ChatInfo.Record.Identity.ChatName}",
             parameters,
             options);
         var result = await dialog.Result;
@@ -93,7 +93,7 @@
 
     private async Task LeaveChatAsync()
     {
-        var message = $"Are you sure you want the bot to leave '{ChatInfo.Chat.Chat.ChatName}'?\n\n" +
+        var message = $"Are you sure you want the bot to leave '{ChatInfo.Record.Identity.ChatName}'?\n\n" +
                       "This will:\n" +
                       "• Remove the bot from the Telegram group\n" +
                       "• Delete all chat configuration and history\n" +
@@ -114,25 +114,25 @@
             try
             {
                 // 1. Leave Telegram chat (skip if bot already left/kicked - API will fail)
-                var alreadyLeft = ChatInfo.Chat.BotStatus is BotChatStatus.Left or BotChatStatus.Kicked;
+                var alreadyLeft = ChatInfo.Record.BotStatus is BotChatStatus.Left or BotChatStatus.Kicked;
                 if (!alreadyLeft)
                 {
-                    await ChatService.LeaveChatAsync(ChatInfo.Chat.Chat.Id);
+                    await ChatService.LeaveChatAsync(ChatInfo.Record.Identity.Id);
                 }
 
                 // 2. Soft-delete from database (preserves config for potential re-add)
-                await ManagedChatsRepository.DeleteAsync(ChatInfo.Chat.Chat.Id);
+                await ManagedChatsRepository.DeleteAsync(ChatInfo.Record.Identity.Id);
 
                 // 3. Notify parent
                 var statusMessage = alreadyLeft
-                    ? $"Removed '{ChatInfo.Chat.Chat.ChatName}' from managed chats"
-                    : $"Left chat '{ChatInfo.Chat.Chat.ChatName}' successfully";
+                    ? $"Removed '{ChatInfo.Record.Identity.ChatName}' from managed chats"
+                    : $"Left chat '{ChatInfo.Record.Identity.ChatName}' successfully";
                 Snackbar.Add(statusMessage, Severity.Success);
                 await OnChatLeft.InvokeAsync();
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Failed to leave chat {ChatId}", ChatInfo.Chat.Chat.Id);
+                Logger.LogError(ex, "Failed to leave chat {ChatId}", ChatInfo.Record.Identity.Id);
                 Snackbar.Add("Failed to leave chat. Please try again.", Severity.Error);
             }
         }

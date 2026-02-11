@@ -102,7 +102,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         // Arrange & Act - With Chat means per-chat mode
         var testChat = new ManagedChatRecord(
-            Chat: new ChatIdentity(123456L, "Test Chat"),
+            Identity: new ChatIdentity(123456L, "Test Chat"),
             ChatType: ManagedChatType.Supergroup,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,
@@ -428,7 +428,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         // Arrange & Act - Per-chat mode (has Chat)
         var testChat = new ManagedChatRecord(
-            Chat: new ChatIdentity(123456L, "Test Chat"),
+            Identity: new ChatIdentity(123456L, "Test Chat"),
             ChatType: ManagedChatType.Supergroup,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,

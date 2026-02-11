@@ -367,8 +367,8 @@
             {
                 var allManagedChats = await ManagedChatsRepository.GetActiveChatsAsync();
                 _otherManagedChats = allManagedChats
-                    .Where(c => distinctChatIds.Contains(c.Chat.Id))
-                    .Select(c => c.Chat.ChatName ?? $"Chat {c.Chat.Id}")
+                    .Where(c => distinctChatIds.Contains(c.Identity.Id))
+                    .Select(c => c.Identity.ChatName ?? $"Chat {c.Identity.Id}")
                     .ToList();
             }
         }

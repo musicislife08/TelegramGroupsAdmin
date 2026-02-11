@@ -146,7 +146,7 @@ public class BotChatService(
             };
 
             var chatRecord = new ManagedChatRecord(
-                Chat: ChatIdentity.From(chat),
+                Identity: ChatIdentity.From(chat),
                 ChatType: chatType,
                 BotStatus: botStatus,
                 IsAdmin: isAdmin,
@@ -528,13 +528,13 @@ public class BotChatService(
             {
                 try
                 {
-                    await RefreshChatAdminsAsync(chat.Chat, ct);
+                    await RefreshChatAdminsAsync(chat.Identity, ct);
                     refreshedCount++;
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "Failed to refresh admin cache for {Chat}",
-                        chat.Chat.ToLogDebug());
+                        chat.Identity.ToLogDebug());
                 }
             }
 

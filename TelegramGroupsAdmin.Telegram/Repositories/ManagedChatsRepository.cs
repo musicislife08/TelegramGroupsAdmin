@@ -25,12 +25,12 @@ public class ManagedChatsRepository : IManagedChatsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await context.ManagedChats
-            .FirstOrDefaultAsync(mc => mc.ChatId == chat.Chat.Id, cancellationToken);
+            .FirstOrDefaultAsync(mc => mc.ChatId == chat.Identity.Id, cancellationToken);
 
         if (existing != null)
         {
             // Update existing record
-            existing.ChatName = chat.Chat.ChatName;
+            existing.ChatName = chat.Identity.ChatName;
             existing.ChatType = (Data.Models.ManagedChatType)(int)chat.ChatType;
             existing.BotStatus = (Data.Models.BotChatStatus)(int)chat.BotStatus;
             existing.IsAdmin = chat.IsAdmin;
@@ -59,8 +59,8 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
         _logger.LogDebug(
             "Upserted managed chat {ChatId} ({ChatName}): {BotStatus}, admin={IsAdmin}, active={IsActive}",
-            chat.Chat.Id,
-            chat.Chat.ChatName,
+            chat.Identity.Id,
+            chat.Identity.ChatName,
             chat.BotStatus,
             chat.IsAdmin,
             chat.IsActive);

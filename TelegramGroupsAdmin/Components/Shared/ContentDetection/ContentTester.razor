@@ -33,10 +33,10 @@
                 </MudSelectItem>
                 @foreach (var chat in _managedChats)
                 {
-                    <MudSelectItem T="long?" Value="@((long?)chat.Chat.Id)">
+                    <MudSelectItem T="long?" Value="@((long?)chat.Identity.Id)">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
-                            <MudText>@chat.Chat.ChatName (@chat.Chat.Id)</MudText>
+                            <MudText>@chat.Identity.ChatName (@chat.Identity.Id)</MudText>
                         </MudStack>
                     </MudSelectItem>
                 }
@@ -778,8 +778,8 @@
             return "Global Configuration";
         }
 
-        var chat = _managedChats.FirstOrDefault(c => c.Chat.Id == chatId);
-        return chat != null ? $"{chat.Chat.ChatName} ({chat.Chat.Id})" : $"Chat {chatId}";
+        var chat = _managedChats.FirstOrDefault(c => c.Identity.Id == chatId);
+        return chat != null ? $"{chat.Identity.ChatName} ({chat.Identity.Id})" : $"Chat {chatId}";
     }
 
     private string GetFileIcon(string fileName)

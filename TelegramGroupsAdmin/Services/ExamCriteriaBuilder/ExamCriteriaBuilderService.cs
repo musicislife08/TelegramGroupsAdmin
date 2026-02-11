@@ -60,7 +60,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
             }
 
             var chatContext = request.Chat != null
-                ? $" for {request.Chat.Chat.ToLogInfo()}"
+                ? $" for {request.Chat.Identity.ToLogInfo()}"
                 : " (global default)";
             _logger.LogInformation("Generated exam evaluation criteria{ChatContext}, topic: {GroupTopic}",
                 chatContext, request.GroupTopic);
@@ -69,7 +69,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
             {
                 Success = true,
                 GeneratedCriteria = result.Content.Trim(),
-                ChatDisplayName = request.Chat?.Chat.ChatName
+                ChatDisplayName = request.Chat?.Identity.ChatName
             };
         }
         catch (Exception ex)
@@ -121,7 +121,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
             }
 
             var chatContext = chat != null
-                ? $" for {chat.Chat.ToLogInfo()}"
+                ? $" for {chat.Identity.ToLogInfo()}"
                 : " (global default)";
             _logger.LogInformation("Improved exam evaluation criteria{ChatContext} based on feedback", chatContext);
 
@@ -129,7 +129,7 @@ public class ExamCriteriaBuilderService : IExamCriteriaBuilderService
             {
                 Success = true,
                 GeneratedCriteria = result.Content.Trim(),
-                ChatDisplayName = chat?.Chat.ChatName
+                ChatDisplayName = chat?.Identity.ChatName
             };
         }
         catch (Exception ex)

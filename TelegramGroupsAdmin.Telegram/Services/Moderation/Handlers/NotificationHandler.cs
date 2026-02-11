@@ -240,11 +240,11 @@ public class NotificationHandler : INotificationHandler
         {
             try
             {
-                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.Chat.Id, cancellationToken);
+                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.Identity.Id, cancellationToken);
                 if (!string.IsNullOrEmpty(inviteLink))
                 {
                     // Use chat name from managed chat record, or fall back to chatId
-                    var chatDisplayName = managedChat.Chat.ChatName ?? managedChat.Chat.Id.ToString();
+                    var chatDisplayName = managedChat.Identity.ChatName ?? managedChat.Identity.Id.ToString();
                     inviteLinks.Add($"• [{chatDisplayName}]({inviteLink})");
                 }
             }
@@ -252,7 +252,7 @@ public class NotificationHandler : INotificationHandler
             {
                 _logger.LogDebug(ex,
                     "Failed to get invite link for chat {ChatId}, skipping from notification",
-                    managedChat.Chat.Id);
+                    managedChat.Identity.Id);
             }
         }
 

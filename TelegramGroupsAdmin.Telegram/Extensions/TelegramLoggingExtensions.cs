@@ -179,8 +179,8 @@ public static class TelegramLoggingExtensions
         {
             var chat = await repo.GetByChatIdAsync(chatId, ct);
             return includeId
-                ? LogDisplayName.ChatDebug(chat?.Chat.ChatName, chatId)
-                : LogDisplayName.ChatInfo(chat?.Chat.ChatName, chatId);
+                ? LogDisplayName.ChatDebug(chat?.Identity.ChatName, chatId)
+                : LogDisplayName.ChatInfo(chat?.Identity.ChatName, chatId);
         }
     }
 }

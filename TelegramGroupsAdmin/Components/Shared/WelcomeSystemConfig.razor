@@ -405,7 +405,7 @@
         try
         {
             // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
-            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, Chat?.Chat.Id ?? 0);
+            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, Chat?.Identity.Id ?? 0);
 
             if (config == null)
             {
@@ -464,8 +464,8 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.Chat ?? ChatIdentity.FromId(0), _config);
-            Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.Chat.ToLogInfo()}" : "globally")}", Severity.Success);
+            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.Identity ?? ChatIdentity.FromId(0), _config);
+            Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.Identity.ToLogInfo()}" : "globally")}", Severity.Success);
 
             // Invoke callback if provided
             if (OnSaved.HasDelegate)

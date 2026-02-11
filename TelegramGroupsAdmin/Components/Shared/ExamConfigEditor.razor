@@ -353,7 +353,7 @@
             Config.EvaluationCriteria = generatedCriteria;
             NotifyConfigChanged();
 
-            var chatContext = Chat != null ? $" for {Chat.Chat.ToLogInfo()}" : "";
+            var chatContext = Chat != null ? $" for {Chat.Identity.ToLogInfo()}" : "";
             Snackbar.Add($"Evaluation criteria saved{chatContext}!", Severity.Success);
         }
     }

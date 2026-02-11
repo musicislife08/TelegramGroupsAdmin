@@ -213,7 +213,7 @@ public class BotDmService(
             logger.LogInformation(
                 "Sent fallback message {MessageId} in {Chat}{DeleteInfo}",
                 fallbackMessage.MessageId,
-                (chat?.Chat ?? ChatIdentity.FromId(chatId)).ToLogInfo(),
+                (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogInfo(),
                 autoDeleteSeconds.HasValue ? $", will delete in {autoDeleteSeconds.Value} seconds" : "");
 
             // Schedule auto-delete if requested
@@ -248,14 +248,14 @@ public class BotDmService(
             {
                 logger.LogWarning(
                     "Failed to send fallback message in {Chat} - network unavailable",
-                    (chat?.Chat ?? ChatIdentity.FromId(chatId)).ToLogDebug());
+                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
             }
             else
             {
                 logger.LogError(
                     ex,
                     "Failed to send fallback message in {Chat}",
-                    (chat?.Chat ?? ChatIdentity.FromId(chatId)).ToLogDebug());
+                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
             }
 
             return new DmDeliveryResult

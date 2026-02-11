@@ -50,12 +50,12 @@ public class ChatHealthRefreshOrchestrator(
             {
                 var existingChat = await managedChatsRepository.GetByChatIdAsync(chat.Id, cancellationToken);
 
-                if (existingChat != null && existingChat.Chat.ChatName != freshName)
+                if (existingChat != null && existingChat.Identity.ChatName != freshName)
                 {
-                    var updatedChat = existingChat with { Chat = existingChat.Chat with { ChatName = freshName } };
+                    var updatedChat = existingChat with { Identity = existingChat.Identity with { ChatName = freshName } };
                     await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
                     logger.LogDebug("Updated chat name: {OldName} -> {NewName} for {Chat}",
-                        existingChat.Chat.ChatName, freshName, health.Chat.ToLogDebug());
+                        existingChat.Identity.ChatName, freshName, health.Chat.ToLogDebug());
                 }
             }
 
@@ -262,7 +262,7 @@ public class ChatHealthRefreshOrchestrator(
 
             foreach (var chat in chats)
             {
-                await RefreshHealthForChatAsync(chat.Chat, cancellationToken);
+                await RefreshHealthForChatAsync(chat.Identity, cancellationToken);
             }
 
             logger.LogDebug("Completed health check for {Count} chats", chats.Count);
@@ -283,7 +283,7 @@ public class ChatHealthRefreshOrchestrator(
             logger.LogInformation("Syncing linked channels for {Count} managed chats", chats.Count);
             foreach (var chat in chats)
             {
-                await FetchLinkedChannelAsync(chat.Chat, cancellationToken);
+                await FetchLinkedChannelAsync(chat.Identity, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -341,20 +341,20 @@ public class ChatHealthRefreshOrchestrator(
     {
         try
         {
-            var iconPath = await photoService.GetChatIconAsync(chat.Chat);
+            var iconPath = await photoService.GetChatIconAsync(chat.Identity);
 
             if (iconPath != null)
             {
                 // Save icon path to database
                 var updatedChat = chat with { ChatIconPath = iconPath };
                 await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
-                logger.LogInformation("Cached chat icon for {Chat}", chat.Chat.ToLogInfo());
+                logger.LogInformation("Cached chat icon for {Chat}", chat.Identity.ToLogInfo());
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to fetch chat icon for {Chat} (non-fatal)",
-                chat.Chat.ToLogDebug());
+                chat.Identity.ToLogDebug());
             // Non-fatal - don't throw
         }
     }

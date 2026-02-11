@@ -29,7 +29,7 @@ public class ChatListTests : MudBlazorTestContext
         string? chatIconPath = null)
     {
         return new ManagedChatRecord(
-            Chat: new ChatIdentity(chatId, chatName),
+            Identity: new ChatIdentity(chatId, chatName),
             ChatType: chatType,
             BotStatus: botStatus,
             IsAdmin: isAdmin,

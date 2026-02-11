@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// Managed chat record for UI display
 /// </summary>
 public record ManagedChatRecord(
-    ChatIdentity Chat,
+    ChatIdentity Identity,
     ManagedChatType ChatType,
     BotChatStatus BotStatus,
     bool IsAdmin,

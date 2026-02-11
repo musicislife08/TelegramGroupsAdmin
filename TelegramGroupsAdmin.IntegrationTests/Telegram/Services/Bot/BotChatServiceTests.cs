@@ -135,8 +135,8 @@ public class BotChatServiceTests
         Assert.That(managedChat, Is.Not.Null);
         Assert.Multiple(() =>
         {
-            Assert.That(managedChat!.Chat.Id, Is.EqualTo(TestChatId));
-            Assert.That(managedChat.Chat.ChatName, Is.EqualTo(TestChatName));
+            Assert.That(managedChat!.Identity.Id, Is.EqualTo(TestChatId));
+            Assert.That(managedChat.Identity.ChatName, Is.EqualTo(TestChatName));
             Assert.That(managedChat.IsAdmin, Is.True);
             Assert.That(managedChat.IsActive, Is.True);
             Assert.That(managedChat.IsDeleted, Is.False);

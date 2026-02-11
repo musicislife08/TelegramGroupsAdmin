@@ -68,8 +68,8 @@ public abstract class ChatActionsCellTestContext : BunitContext
     {
         return new ManagedChatInfo
         {
-            Chat = new ManagedChatRecord(
-                Chat: new ChatIdentity(chatId, chatName),
+            Record = new ManagedChatRecord(
+                Identity: new ChatIdentity(chatId, chatName),
                 ChatType: ManagedChatType.Supergroup,
                 BotStatus: BotChatStatus.Administrator,
                 IsAdmin: true,

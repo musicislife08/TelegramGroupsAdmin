@@ -67,11 +67,11 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Chat Name">
-                    <ChatInfoCell Chat="@context.Chat" />
+                    <ChatInfoCell Chat="@context.Record" />
                 </MudTd>
-                <MudTd DataLabel="Type">@context.Chat.ChatType.ToString()</MudTd>
+                <MudTd DataLabel="Type">@context.Record.ChatType.ToString()</MudTd>
                 <MudTd DataLabel="Bot Status">
-                    <ChatStatusChip BotStatus="@context.Chat.BotStatus" />
+                    <ChatStatusChip BotStatus="@context.Record.BotStatus" />
                 </MudTd>
                 <MudTd DataLabel="Health">
                     <ChatStatusChip HealthStatus="@context.HealthStatus.Status"
@@ -88,9 +88,9 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Last Seen">
-                    @if (context.Chat.LastSeenAt.HasValue)
+                    @if (context.Record.LastSeenAt.HasValue)
                     {
-                        @context.Chat.LastSeenAt.Value.ToString("g")
+                        @context.Record.LastSeenAt.Value.ToString("g")
                     }
                     else
                     {
@@ -158,24 +158,24 @@
             foreach (var chat in chats)
             {
                 // Get cached health status from health cache
-                var health = ChatHealthCache.GetCachedHealth(chat.Chat.Id) ?? new ChatHealthStatus
+                var health = ChatHealthCache.GetCachedHealth(chat.Identity.Id) ?? new ChatHealthStatus
                 {
-                    Chat = ChatIdentity.FromId(chat.Chat.Id),
+                    Chat = ChatIdentity.FromId(chat.Identity.Id),
                     Status = ChatHealthStatusType.Unknown,
                     IsReachable = true
                 };
 
                 // Check if this chat has custom configs
-                var configRecord = await ConfigRepository.GetAsync(chat.Chat.Id);
+                var configRecord = await ConfigRepository.GetAsync(chat.Identity.Id);
                 var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
                 var hasServiceMsgConfig = !string.IsNullOrEmpty(configRecord?.ServiceMessageDeletionConfig);
                 var hasBanCelebrationConfig = !string.IsNullOrEmpty(configRecord?.BanCelebrationConfig);
 
                 _chats.Add(new ManagedChatInfo
                 {
-                    Chat = chat,
+                    Record = chat,
                     HealthStatus = health,
-                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.Chat.Id),
+                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.Identity.Id),
                     HasCustomWelcomeConfig = hasWelcomeConfig,
                     HasCustomServiceMsgConfig = hasServiceMsgConfig,
                     HasCustomBanCelebrationConfig = hasBanCelebrationConfig
@@ -195,7 +195,7 @@
     private void HandleHealthUpdate(ChatHealthStatus health)
     {
         // Update health status for the chat in real-time
-        var chat = _chats.FirstOrDefault(c => c.Chat.Chat.Id == health.Chat.Id);
+        var chat = _chats.FirstOrDefault(c => c.Record.Identity.Id == health.Chat.Id);
         if (chat != null)
         {
             chat.HealthStatus = health;
@@ -220,17 +220,17 @@
     private bool FilterFunc(ManagedChatInfo chat)
     {
         // Filter by deleted status first
-        if (!_showDeletedChats && chat.Chat.IsDeleted)
+        if (!_showDeletedChats && chat.Record.IsDeleted)
             return false;
 
         if (string.IsNullOrWhiteSpace(_searchString))
             return true;
 
-        if (!string.IsNullOrEmpty(chat.Chat.Chat.ChatName) &&
-            chat.Chat.Chat.ChatName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(chat.Record.Identity.ChatName) &&
+            chat.Record.Identity.ChatName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (chat.Chat.Chat.Id.ToString().Contains(_searchString))
+        if (chat.Record.Identity.Id.ToString().Contains(_searchString))
             return true;
 
         return false;
