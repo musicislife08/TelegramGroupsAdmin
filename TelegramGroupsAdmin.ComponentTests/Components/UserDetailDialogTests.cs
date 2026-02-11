@@ -6,7 +6,6 @@ using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Helpers;
-using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -33,7 +32,6 @@ public class UserDetailDialogTests : MudBlazorTestContext
     private IUserTagsRepository _mockTagsRepo = null!;
     private ITagDefinitionsRepository _mockTagDefinitionsRepo = null!;
     private IUserActionsRepository _mockActionsRepo = null!;
-    private IBlazorAuthHelper _mockAuthHelper = null!;
     private ISnackbar _mockSnackbar = null!;
     private IDialogService _dialogService = null!;
 
@@ -50,7 +48,6 @@ public class UserDetailDialogTests : MudBlazorTestContext
         // Create mocks for services used by the dialog
         _mockUserService = Substitute.For<ITelegramUserManagementService>();
         _mockModerationService = Substitute.For<IBotModerationService>();
-        _mockAuthHelper = Substitute.For<IBlazorAuthHelper>();
         _mockSnackbar = Substitute.For<ISnackbar>();
         _mockTagDefinitionsRepo = Substitute.For<ITagDefinitionsRepository>();
 
@@ -68,7 +65,6 @@ public class UserDetailDialogTests : MudBlazorTestContext
         Services.AddSingleton(_mockTagsRepo);
         Services.AddSingleton(_mockTagDefinitionsRepo);
         Services.AddSingleton(_mockActionsRepo);
-        Services.AddSingleton(_mockAuthHelper);
         Services.AddSingleton(_mockSnackbar);
 
         // Default setup for tag definitions

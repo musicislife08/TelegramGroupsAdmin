@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared
 @inject AuthenticationStateProvider AuthStateProvider
@@ -34,7 +36,9 @@
     </MudDrawer>
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
-            @Body
+            <CascadingValue Value="_webUser">
+                @Body
+            </CascadingValue>
         </MudContainer>
     </MudMainContent>
 </MudLayout>
@@ -45,6 +49,7 @@
     private string? _userId;
     private bool _isAuthenticated;
     private bool _isDevelopment;
+    private WebUserIdentity? _webUser;
 
     private MudTheme _currentTheme => _isDevelopment ? _devTheme : _prodTheme;
 
@@ -99,6 +104,12 @@
             _isAuthenticated = true;
             _userEmail = user.Identity.Name;
             _userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            var permissionLevel = PermissionLevel.Admin;
+            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
+            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
+                permissionLevel = (PermissionLevel)level;
+            _webUser = new WebUserIdentity(_userId!, _userEmail, permissionLevel);
 
             // Initialize notification state for the authenticated user
             if (!string.IsNullOrEmpty(_userId))

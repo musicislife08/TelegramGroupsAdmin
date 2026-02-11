@@ -1,9 +1,9 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Repositories
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @inject ISystemConfigRepository ConfigRepository
 @inject IAuditService AuditService
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 
 <MudGrid>
@@ -126,6 +126,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private ApiKeysConfig _apiKeys = new();
     private bool _isSaving;
     private bool _isConfigured;
@@ -165,15 +167,12 @@
             await ConfigRepository.SaveApiKeysAsync(_apiKeys);
 
             // Create audit log entry
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    $"virustotal_api_key:configured={!string.IsNullOrWhiteSpace(_apiKeys.VirusTotal)}");
-            }
+            var actor = WebUser!.ToActor();
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                $"virustotal_api_key:configured={!string.IsNullOrWhiteSpace(_apiKeys.VirusTotal)}");
 
             // Update configuration status
             CheckConfiguration();

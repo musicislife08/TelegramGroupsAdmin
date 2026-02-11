@@ -84,14 +84,14 @@ public class UserRepository : IUserRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = user.ToDto();
-        entity.NormalizedEmail = user.Email.ToUpperInvariant();
+        entity.NormalizedEmail = user.WebUser.Email!.ToUpperInvariant();
 
         context.Users.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Created user {User}", user.ToLogInfo());
 
-        return user.Id;
+        return user.WebUser.Id;
     }
 
     /// <summary>
@@ -436,15 +436,15 @@ public class UserRepository : IUserRepository
     public async Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == user.Id, cancellationToken);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == user.WebUser.Id, cancellationToken);
         if (entity == null) return;
 
         // Update all fields
-        entity.Email = user.Email;
+        entity.Email = user.WebUser.Email!;
         entity.NormalizedEmail = user.NormalizedEmail;
         entity.PasswordHash = user.PasswordHash;
         entity.SecurityStamp = user.SecurityStamp;
-        entity.PermissionLevel = (DataModels.PermissionLevel)(int)user.PermissionLevel;
+        entity.PermissionLevel = (DataModels.PermissionLevel)(int)user.WebUser.PermissionLevel;
         entity.InvitedBy = user.InvitedBy;
         entity.IsActive = user.IsActive;
         entity.TotpSecret = user.TotpSecret;

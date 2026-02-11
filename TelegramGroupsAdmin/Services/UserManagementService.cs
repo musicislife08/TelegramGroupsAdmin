@@ -49,7 +49,7 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
 
         // Get old permission level for audit log
         var user = await userRepository.GetByIdAsync(userId, cancellationToken);
-        var oldPermissionLevel = user?.PermissionLevel;
+        var oldPermissionLevel = user?.WebUser.PermissionLevel;
 
         await userRepository.UpdatePermissionLevelAsync(userId, permissionLevel, modifiedBy, cancellationToken);
 

@@ -1,11 +1,11 @@
 @using TelegramGroupsAdmin.ContentDetection.ML
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @inject IThresholdRecommendationsRepository RecommendationsRepository
 @inject IThresholdRecommendationService RecommendationService
 @inject IAuditService AuditService
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IJSRuntime JsRuntime
@@ -232,6 +232,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private List<ThresholdRecommendation> _recommendations = [];
     private List<ThresholdRecommendation> _filteredRecommendations = [];
     private IEnumerable<string?> _selectedStatuses = new List<string>
@@ -325,7 +327,6 @@
             else
             {
                 // Persist DTOs to database
-                var userId = await AuthHelper.GetCurrentUserIdAsync();
                 var persisted = 0;
 
                 foreach (var dto in dtos)
@@ -351,15 +352,13 @@
                     persisted++;
                 }
 
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    await AuditService.LogEventAsync(
-                        AuditEventType.ConfigurationChanged,
-                        Actor.FromWebUser(userId),
-                        null,
-                        $"Generated {persisted} ML threshold recommendations"
-                    );
-                }
+                var actor = WebUser!.ToActor();
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    actor,
+                    null,
+                    $"Generated {persisted} ML threshold recommendations"
+                );
 
                 _generationMessage = $"Successfully generated {persisted} threshold recommendation(s)!";
                 _generationMessageSeverity = Severity.Success;
@@ -385,18 +384,12 @@
         _isApplying = true;
         try
         {
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (string.IsNullOrEmpty(userId))
-            {
-                Snackbar.Add("Unable to identify user", Severity.Error);
-                return;
-            }
+            await RecommendationsRepository.ApplyRecommendationAsync(recommendation.Id, WebUser!.Id);
 
-            await RecommendationsRepository.ApplyRecommendationAsync(recommendation.Id, userId);
-
+            var actor = WebUser!.ToActor();
             await AuditService.LogEventAsync(
                 AuditEventType.ConfigurationChanged,
-                Actor.FromWebUser(userId),
+                actor,
                 null,
                 $"Applied threshold recommendation for {recommendation.AlgorithmName}: {recommendation.CurrentThreshold} → {recommendation.RecommendedThreshold}"
             );
@@ -419,20 +412,14 @@
         _isRejecting = true;
         try
         {
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (string.IsNullOrEmpty(userId))
-            {
-                Snackbar.Add("Unable to identify user", Severity.Error);
-                return;
-            }
-
             var reason = "Rejected by admin"; // TODO: Add dialog for rejection reason
 
-            await RecommendationsRepository.RejectRecommendationAsync(recommendation.Id, userId, reason);
+            await RecommendationsRepository.RejectRecommendationAsync(recommendation.Id, WebUser!.Id, reason);
 
+            var actor = WebUser!.ToActor();
             await AuditService.LogEventAsync(
                 AuditEventType.ConfigurationChanged,
-                Actor.FromWebUser(userId),
+                actor,
                 null,
                 $"Rejected threshold recommendation for {recommendation.AlgorithmName}"
             );

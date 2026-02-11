@@ -19,7 +19,6 @@
 @inject IJSRuntime Js
 @inject IDialogService DialogService
 @inject ITelegramBotService BotService
-@inject IBlazorAuthHelper AuthHelper
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ITrainingLabelsRepository TrainingLabelsRepository
 @inject IJobTriggerService JobTriggerService
@@ -87,7 +86,7 @@
                             <MessageBubbleTelegram Message="messageWrapper.Message"
                                                    ContentCheck="@GetContentCheck(messageWrapper.Message.MessageId)"
                                                    EditCount="@GetEditCount(messageWrapper.Message.MessageId)"
-                                                   ShowSpamActions="@(_userPermissionLevel >= PermissionLevel.GlobalAdmin)"
+                                                   ShowSpamActions="@(WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)"
                                                    DetectionHistory="@messageWrapper.DetectionResults"
                                                    UserTags="@messageWrapper.UserTags"
                                                    UserNotes="@messageWrapper.UserNotes"
@@ -170,6 +169,8 @@
 </div>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     // Chat state
     private List<ManagedChatRecord> _managedChats = [];
     private List<ManagedChatRecord> _filteredChats = [];
@@ -191,9 +192,6 @@
     private DateTime _lastUpdate = DateTime.Now;
 
     // User state
-    private string? _currentUserId; // Cached web user ID for service calls
-    private string? _currentUserEmail; // Cached web user email for logging
-    private PermissionLevel _userPermissionLevel = PermissionLevel.Admin; // Default to Admin
     private HashSet<long> _userTelegramIds = []; // Current user's linked Telegram IDs
 
     // Phase 1: Send & Edit Messages as Bot state
@@ -224,23 +222,18 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Cache user identity for service calls (avoids repeated AuthHelper calls)
-        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
-        _currentUserEmail = await AuthHelper.GetCurrentUserEmailAsync();
-        _userPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
         // Load current user's linked Telegram accounts for message alignment
-        if (!string.IsNullOrEmpty(_currentUserId))
+        if (WebUser != null)
         {
             try
             {
-                var mappings = await TelegramMappingRepository.GetByUserIdAsync(_currentUserId);
+                var mappings = await TelegramMappingRepository.GetByUserIdAsync(WebUser!.Id);
                 _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
             }
             catch (Exception ex)
             {
                 Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
-                    LogDisplayName.WebUserDebug(_currentUserEmail, _currentUserId));
+                    WebUser!.ToLogDebug());
             }
         }
 
@@ -406,7 +399,7 @@
                         _editCounts[kvp.Key] = kvp.Value;
 
                     // Load detection history for Admin+ users (now included in wrapper)
-                    if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
+                    if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
                     {
                         var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId);
                         messageWrapper.DetectionResults.AddRange(history);
@@ -545,21 +538,10 @@
     {
         try
         {
-            // Get current user and their permission level
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                Logger.LogWarning("Unable to identify current user for chat filtering");
-                _managedChats = [];
-                return;
-            }
-
             // Load chats accessible to this user (filtered by permission level)
             _managedChats = await ChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel);
+                WebUser!.Id,
+                WebUser.PermissionLevel);
             ApplyChatFilter();
 
             // Calculate message counts for each chat
@@ -652,7 +634,7 @@
         try
         {
             // PERF-APP-1: Load first page with detection history included (single JOIN query)
-            var firstPage = _userPermissionLevel >= PermissionLevel.GlobalAdmin
+            var firstPage = WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin
                 ? await MessageQueryService.GetMessagesWithDetectionHistoryAsync(chatId, limit: PageSize)
                 : (await MessageQueryService.GetMessagesByChatIdAsync(chatId, limit: PageSize))
                     .Select(m => new MessageWithDetectionHistory { Message = m }).ToList();
@@ -665,7 +647,7 @@
             {
                 var messageIds = _allMessages.Select(m => m.Message.MessageId).ToList();
 
-                if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
+                if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
                 {
                     // Admin: Only load edit counts (detection history already in wrapper)
                     _editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
@@ -744,7 +726,7 @@
             }
 
             // PERF-APP-1: Load older messages with detection history included
-            var olderMessages = _userPermissionLevel >= PermissionLevel.GlobalAdmin
+            var olderMessages = WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin
                 ? await MessageQueryService.GetMessagesWithDetectionHistoryAsync(
                     _selectedChatId.Value,
                     limit: PageSize,
@@ -763,7 +745,7 @@
                 // PERF-APP-3: Load edit counts and spam checks in parallel
                 var messageIds = olderMessages.Select(m => m.Message.MessageId).ToList();
 
-                if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
+                if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
                 {
                     // Admin: Only load edit counts (detection history already in wrapper)
                     var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
@@ -911,16 +893,7 @@
         {
             // Get current user ID for audit trail
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service (deletes message, bans user globally, creates detection result)
             var result = await ModerationService.MarkAsSpamAndBanAsync(
@@ -958,16 +931,7 @@
         {
             // Get current user ID for audit trail
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Check if this was previously marked as spam (false positive correction scenario)
             var wasPreviouslySpam = GetContentCheck(message.MessageId)?.IsSpam == true;
@@ -1158,16 +1122,7 @@
         try
         {
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to delete the message (service handles bot client internally)
             var result = await ModerationService.DeleteMessageAsync(
@@ -1251,16 +1206,7 @@
         {
             // Get current user ID for audit trail
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
@@ -1338,16 +1284,7 @@
         try
         {
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to warn the user
             var warnServiceResult = await ModerationService.WarnUserAsync(
@@ -1613,14 +1550,14 @@
     /// </summary>
     private async Task CheckFeatureAvailabilityAsync()
     {
-        if (string.IsNullOrEmpty(_currentUserId))
+        if (WebUser == null)
         {
             _isFeatureAvailable = false;
             _featureUnavailableReason = "Not authenticated";
             return;
         }
 
-        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(_currentUserId, _currentUserEmail);
+        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(WebUser!);
         _isFeatureAvailable = result.IsAvailable;
         _botUserId = result.BotUserId;
         _linkedUsername = result.LinkedUsername;
@@ -1653,15 +1590,14 @@
         if (!_selectedChatId.HasValue)
             return;
 
-        if (string.IsNullOrEmpty(_currentUserId))
+        if (WebUser == null)
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
         var result = await WebBotMessagingService.SendMessageAsync(
-            _currentUserId,
-            _currentUserEmail,
+            WebUser!,
             _selectedChatId.Value,
             text,
             _replyToMessageId);
@@ -1689,15 +1625,14 @@
         if (!_isEditingMessageId.HasValue || !_selectedChatId.HasValue)
             return;
 
-        if (string.IsNullOrEmpty(_currentUserId))
+        if (WebUser == null)
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
         var result = await WebBotMessagingService.EditMessageAsync(
-            _currentUserId,
-            _currentUserEmail,
+            WebUser!,
             _selectedChatId.Value,
             (int)_isEditingMessageId.Value,
             text);

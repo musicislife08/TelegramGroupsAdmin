@@ -1,7 +1,7 @@
 @page "/logout"
 @using System.Security.Claims
-@using TelegramGroupsAdmin.Core.Utilities
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services.Auth
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IAuthService AuthService
@@ -18,19 +18,22 @@
         {
             // Get user info from claims before signing out (for audit log)
             var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var email = httpContext.User.FindFirstValue(ClaimTypes.Email) ?? "unknown";
+            var email = httpContext.User.FindFirstValue(ClaimTypes.Email);
+            var permissionClaim = httpContext.User.FindFirstValue(ClaimTypes.Role);
+            _ = Enum.TryParse<PermissionLevel>(permissionClaim, out var permissionLevel);
 
             // Audit logout (best-effort - don't block signout if this fails)
             if (!string.IsNullOrEmpty(userId))
             {
+                var webUser = new WebUserIdentity(userId, email, permissionLevel);
                 try
                 {
-                    await AuthService.AuditLogoutAsync(userId, email);
+                    await AuthService.AuditLogoutAsync(webUser);
                 }
                 catch (Exception ex)
                 {
                     Logger.LogWarning(ex, "Failed to audit logout for {User}, proceeding with signout",
-                        LogDisplayName.WebUserDebug(email, userId));
+                        webUser.ToLogDebug());
                 }
             }
 

@@ -11,12 +11,10 @@ public static class UserMappings
     extension(DataModels.UserRecordDto data)
     {
         public UserRecord ToModel() => new(
-            Id: data.Id,
-            Email: data.Email,
+            WebUser: new WebUserIdentity(data.Id, data.Email, (PermissionLevel)data.PermissionLevel),
             NormalizedEmail: data.NormalizedEmail,
             PasswordHash: data.PasswordHash,
             SecurityStamp: data.SecurityStamp,
-            PermissionLevel: (PermissionLevel)data.PermissionLevel,
             InvitedBy: data.InvitedBy,
             IsActive: data.IsActive,
             TotpSecret: data.TotpSecret,
@@ -41,12 +39,12 @@ public static class UserMappings
     {
         public DataModels.UserRecordDto ToDto() => new()
         {
-            Id = ui.Id,
-            Email = ui.Email,
+            Id = ui.WebUser.Id,
+            Email = ui.WebUser.Email!,
             NormalizedEmail = ui.NormalizedEmail,
             PasswordHash = ui.PasswordHash,
             SecurityStamp = ui.SecurityStamp,
-            PermissionLevel = (DataModels.PermissionLevel)(int)ui.PermissionLevel,
+            PermissionLevel = (DataModels.PermissionLevel)(int)ui.WebUser.PermissionLevel,
             InvitedBy = ui.InvitedBy,
             IsActive = ui.IsActive,
             TotpSecret = ui.TotpSecret,

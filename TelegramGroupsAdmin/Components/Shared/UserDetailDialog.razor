@@ -1,5 +1,5 @@
-@using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Helpers
+@using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
@@ -9,7 +9,6 @@
 @inject IUserTagsRepository UserTagsRepository
 @inject ITagDefinitionsRepository TagDefinitionsRepository
 @inject IUserActionsRepository UserActionsRepository
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
@@ -420,6 +419,7 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
     [Parameter] public long UserId { get; set; }
 
     private TelegramUserDetail? _userDetail;
@@ -473,17 +473,7 @@
     {
         if (_userDetail == null) return;
 
-        // Get Actor for audit trail
-        Actor executor;
-        try
-        {
-            executor = await AuthHelper.GetCurrentActorAsync();
-        }
-        catch (InvalidOperationException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-            return;
-        }
+        var executor = WebUser!.ToActor();
 
         var action = _userDetail.IsTrusted ? "remove trust from" : "trust";
         var success = await UserManagementService.ToggleTrustAsync(_userDetail.User.Id, executor);
@@ -515,17 +505,7 @@
 
         try
         {
-            // Get Actor for audit trail
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to ban the user
             var banResult = await ModerationService.BanUserAsync(
@@ -568,17 +548,7 @@
 
         try
         {
-            // Get Actor for audit trail
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Unban the user
             var result = await ModerationService.UnbanUserAsync(
@@ -631,17 +601,7 @@
 
         try
         {
-            // Get Actor for audit trail
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
@@ -699,17 +659,7 @@
 
         try
         {
-            // Get Actor for audit trail
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Use first chat membership as context, or global fallback
             var chat = _userDetail.ChatMemberships.FirstOrDefault()?.Identity ?? ChatIdentity.FromId(0);
@@ -950,14 +900,13 @@
 
         if (result is { Canceled: false, Data: string noteText } && !string.IsNullOrWhiteSpace(noteText))
         {
-            // Get Actor for audit trail
-            Actor? actor = await AuthHelper.TryGetCurrentActorAsync();
+            var actor = WebUser!.ToActor();
 
             var note = new AdminNote
             {
                 TelegramUserId = UserId,
                 NoteText = noteText.Trim(),
-                CreatedBy = actor ?? Actor.FromSystem("unknown"),
+                CreatedBy = actor,
                 CreatedAt = DateTimeOffset.UtcNow,
                 IsPinned = false
             };
@@ -970,18 +919,7 @@
 
     private async Task ToggleNotePin(AdminNote note)
     {
-        // Get Actor for audit trail
-        Actor actor;
-        try
-        {
-            actor = await AuthHelper.GetCurrentActorAsync();
-        }
-        catch (InvalidOperationException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-            return;
-        }
-
+        var actor = WebUser!.ToActor();
         await AdminNotesRepository.TogglePinAsync(note.Id, actor);
         Snackbar.Add(note.IsPinned ? "Note unpinned" : "Note pinned", Severity.Info);
         await LoadUserDetailAsync();
@@ -1001,18 +939,7 @@
 
         if (result is { Canceled: false })
         {
-            // Get Actor for audit trail
-            Actor actor;
-            try
-            {
-                actor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
-
+            var actor = WebUser!.ToActor();
             await AdminNotesRepository.DeleteNoteAsync(note.Id, actor);
             Snackbar.Add("Note deleted", Severity.Success);
             await LoadUserDetailAsync();
@@ -1040,8 +967,7 @@
 
         if (result is { Canceled: false, Data: TagSelectionDialog.TagSelectionResult tagResult })
         {
-            // Get Actor for audit trail
-            var actor = await AuthHelper.TryGetCurrentActorAsync() ?? Actor.FromSystem("unknown");
+            var actor = WebUser!.ToActor();
 
             // Add all selected tags
             var addedCount = 0;
@@ -1071,18 +997,7 @@
 
     private async Task DeleteTag(UserTag tag)
     {
-        // Get Actor for audit trail
-        Actor actor;
-        try
-        {
-            actor = await AuthHelper.GetCurrentActorAsync();
-        }
-        catch (InvalidOperationException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-            return;
-        }
-
+        var actor = WebUser!.ToActor();
         await UserTagsRepository.DeleteTagAsync(tag.Id, actor);
         Snackbar.Add("Tag removed", Severity.Success);
         await LoadUserDetailAsync();
@@ -1120,18 +1035,7 @@
         {
             try
             {
-                // Get Actor for audit trail
-                Actor actor;
-                try
-                {
-                    actor = await AuthHelper.GetCurrentActorAsync();
-                }
-                catch (InvalidOperationException ex)
-                {
-                    Snackbar.Add(ex.Message, Severity.Error);
-                    return;
-                }
-
+                var actor = WebUser!.ToActor();
                 await UserActionsRepository.ExpireActionAsync(action.Id, actor);
                 Snackbar.Add("Warning removed successfully", Severity.Success);
                 await LoadUserDetailAsync(); // Refresh to update warning count

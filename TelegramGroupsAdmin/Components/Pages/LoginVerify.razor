@@ -175,7 +175,8 @@
         try
         {
             // Verify TOTP code (UserId guaranteed non-null by ValidateSession)
-            var result = await AuthService.VerifyTotpAsync(UserId!, Model.Code);
+            var webUser = WebUserIdentity.FromId(UserId!);
+            var result = await AuthService.VerifyTotpAsync(webUser, Model.Code);
 
             if (!result.Success)
             {
@@ -228,7 +229,8 @@
         try
         {
             // Verify recovery code (UserId guaranteed non-null by ValidateSession)
-            var result = await AuthService.UseRecoveryCodeAsync(UserId!, RecoveryModel.RecoveryCode);
+            var webUser = WebUserIdentity.FromId(UserId!);
+            var result = await AuthService.UseRecoveryCodeAsync(webUser, RecoveryModel.RecoveryCode);
 
             if (!result.Success)
             {

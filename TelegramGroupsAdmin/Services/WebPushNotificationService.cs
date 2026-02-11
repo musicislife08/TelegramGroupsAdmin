@@ -113,7 +113,7 @@ public class WebPushNotificationService : IWebPushNotificationService
             // 1. Always save to database (for in-app bell)
             var notification = new WebNotification
             {
-                UserId = user.Id,
+                UserId = user.WebUser.Id,
                 EventType = eventType,
                 Subject = subject,
                 Message = message,
@@ -154,7 +154,7 @@ public class WebPushNotificationService : IWebPushNotificationService
                 return;
             }
 
-            var subscriptions = await _subscriptionRepository.GetByUserIdAsync(user.Id, cancellationToken);
+            var subscriptions = await _subscriptionRepository.GetByUserIdAsync(user.WebUser.Id, cancellationToken);
 
             if (!subscriptions.Any())
             {

@@ -160,7 +160,7 @@ public static class AuthEndpoints
             // Record attempt for rate limiting
             await rateLimitService.RecordAttemptAsync(request.UserId, "totp_verify");
 
-            var result = await authService.VerifyTotpAsync(request.UserId, request.Code);
+            var result = await authService.VerifyTotpAsync(WebUserIdentity.FromId(request.UserId), request.Code);
 
             if (!result.Success)
             {
@@ -209,7 +209,7 @@ public static class AuthEndpoints
             // Record attempt for rate limiting
             await rateLimitService.RecordAttemptAsync(request.UserId, "recovery_code");
 
-            var result = await authService.UseRecoveryCodeAsync(request.UserId, request.RecoveryCode);
+            var result = await authService.UseRecoveryCodeAsync(WebUserIdentity.FromId(request.UserId), request.RecoveryCode);
 
             if (!result.Success)
             {

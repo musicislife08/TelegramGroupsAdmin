@@ -48,7 +48,7 @@ public static class EmailVerificationEndpoints
         // Check if already verified
         if (user.EmailVerified)
         {
-            logger.LogInformation("User {UserId} already verified, but token matched", user.Id);
+            logger.LogInformation("User {UserId} already verified, but token matched", user.WebUser.Id);
             return Results.Redirect("/login?verified=already");
         }
 
@@ -56,7 +56,7 @@ public static class EmailVerificationEndpoints
         var updatedUser = user with
         {
             EmailVerified = true,
-            ModifiedBy = user.Id,
+            ModifiedBy = user.WebUser.Id,
             ModifiedAt = DateTimeOffset.UtcNow
         };
 
@@ -65,14 +65,14 @@ public static class EmailVerificationEndpoints
         // Mark token as used
         await verificationTokenRepository.MarkAsUsedAsync(token, cancellationToken);
 
-        logger.LogInformation("Email verified for user {UserId}", user.Id);
+        logger.LogInformation("Email verified for user {UserId}", user.WebUser.Id);
 
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserEmailVerified,
-            actor: Actor.FromWebUser(user.Id),
-            target: Actor.FromWebUser(user.Id),
-            value: user.Email,
+            actor: Actor.FromWebUser(user.WebUser.Id),
+            target: Actor.FromWebUser(user.WebUser.Id),
+            value: user.WebUser.Email,
             cancellationToken: cancellationToken);
 
         return Results.Redirect("/login?verified=success");

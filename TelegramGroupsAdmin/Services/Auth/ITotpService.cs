@@ -1,13 +1,15 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Services.Auth;
 
 public interface ITotpService
 {
-    Task<TotpSetupResult> SetupTotpAsync(string userId, string userEmail, CancellationToken cancellationToken = default);
-    Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken cancellationToken = default);
-    Task<bool> VerifyTotpCodeAsync(string userId, string code, CancellationToken cancellationToken = default);
-    Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default);
-    Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default);
-    Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default);
-    Task<bool> UseRecoveryCodeAsync(string userId, string code, CancellationToken cancellationToken = default);
+    Task<TotpSetupResult> SetupTotpAsync(WebUserIdentity user, CancellationToken cancellationToken = default);
+    Task<TotpVerificationResult> VerifyAndEnableTotpAsync(WebUserIdentity user, string code, CancellationToken cancellationToken = default);
+    Task<bool> VerifyTotpCodeAsync(WebUserIdentity user, string code, CancellationToken cancellationToken = default);
+    Task<bool> AdminDisableTotpAsync(WebUserIdentity target, WebUserIdentity admin, CancellationToken cancellationToken = default);
+    Task<bool> AdminEnableTotpAsync(WebUserIdentity target, WebUserIdentity admin, CancellationToken cancellationToken = default);
+    Task<bool> AdminResetTotpAsync(WebUserIdentity target, WebUserIdentity admin, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(WebUserIdentity user, CancellationToken cancellationToken = default);
+    Task<bool> UseRecoveryCodeAsync(WebUserIdentity user, string code, CancellationToken cancellationToken = default);
 }

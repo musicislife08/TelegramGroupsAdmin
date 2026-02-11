@@ -1,11 +1,11 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Repositories
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services.Email
 @inject ISystemConfigRepository ConfigRepository
 @inject IAuditService AuditService
 @inject IEmailService EmailService
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 
 <MudGrid>
@@ -281,6 +281,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private SendGridConfig _config = new();
     private ApiKeysConfig _apiKeys = new();
     private bool _isSaving;
@@ -343,15 +345,12 @@
             await ConfigRepository.SaveApiKeysAsync(_apiKeys);
 
             // Create audit log entry
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    $"sendgrid:enabled={_config.Enabled}:from={_config.FromAddress}:name={_config.FromName}");
-            }
+            var actor = WebUser!.ToActor();
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                $"sendgrid:enabled={_config.Enabled}:from={_config.FromAddress}:name={_config.FromName}");
 
             // Update configuration status
             CheckConfiguration();

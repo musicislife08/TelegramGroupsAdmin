@@ -1,12 +1,12 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.Core.Services.AI
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @inject ISystemConfigRepository ConfigRepository
 @inject IAIServiceFactory AIServiceFactory
 @inject IFeatureTestService FeatureTestService
 @inject IAuditService AuditService
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 
@@ -57,6 +57,8 @@
 </MudAlert>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private AIProviderConfig _config = new();
     private string? _refreshingConnectionId;
 
@@ -90,16 +92,13 @@
             await ConfigRepository.SaveAIProviderConfigAsync(_config);
 
             // Audit log
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                var model = featureConfig.Model ?? featureConfig.AzureDeploymentName ?? "none";
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    $"ai_feature:{featureType}:connection={featureConfig.ConnectionId ?? "disabled"},model={model}");
-            }
+            var model = featureConfig.Model ?? featureConfig.AzureDeploymentName ?? "none";
+            var actor = WebUser!.ToActor();
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                $"ai_feature:{featureType}:connection={featureConfig.ConnectionId ?? "disabled"},model={model}");
 
             Snackbar.Add($"{featureType} configuration saved", Severity.Success);
         }

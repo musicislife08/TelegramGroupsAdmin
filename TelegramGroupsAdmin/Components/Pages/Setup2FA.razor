@@ -220,7 +220,8 @@
         try
         {
             // Generate TOTP setup
-            _totpSetupResult = await AuthService.EnableTotpAsync(UserId);
+            var webUser = WebUserIdentity.FromId(UserId);
+            _totpSetupResult = await AuthService.EnableTotpAsync(webUser);
         }
         catch (Exception ex)
         {
@@ -265,7 +266,8 @@
 
         try
         {
-            var result = await AuthService.VerifyAndEnableTotpAsync(UserId, Model.Code);
+            var webUser = WebUserIdentity.FromId(UserId);
+            var result = await AuthService.VerifyAndEnableTotpAsync(webUser, Model.Code);
 
             if (!result.Success)
             {
@@ -279,7 +281,7 @@
             Logger.LogInformation("TOTP verification successful for user {UserId}, generating recovery codes", UserId);
 
             // Generate recovery codes - user must save these before completing setup
-            var recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(UserId);
+            var recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(webUser);
             Logger.LogInformation("Generated {Count} recovery codes for user {UserId}", recoveryCodes.Count, UserId);
 
             // Store recovery codes in temporary cache and redirect to recovery step
@@ -334,7 +336,7 @@
             return;
         }
 
-        await AuthCookieService.SignInAsync(httpContext, user.Id, user.Email, (PermissionLevel)user.PermissionLevelInt);
+        await AuthCookieService.SignInAsync(httpContext, user.WebUser.Id, user.WebUser.Email!, (PermissionLevel)user.PermissionLevelInt);
 
         // Redirect (validate URL to prevent open redirect attacks)
         var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);

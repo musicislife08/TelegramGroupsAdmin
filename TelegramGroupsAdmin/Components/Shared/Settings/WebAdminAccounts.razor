@@ -1,10 +1,10 @@
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Auth
 @inject IUserManagementService UserManagementService
 @inject IInviteService InviteService
 @inject IAuthService AuthService
 @inject IAccountLockoutService AccountLockoutService
-@inject IBlazorAuthHelper AuthHelper
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -13,7 +13,7 @@
 <div>
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
         <MudText Typo="Typo.h4">User Management</MudText>
-        @if (_currentUserPermissionLevel >= PermissionLevel.GlobalAdmin)
+        @if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
         {
             <MudStack Row="true" Spacing="2">
                 <MudButton Variant="Variant.Outlined"
@@ -71,7 +71,7 @@
                 <MudTd DataLabel="Email">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                        <MudText>@context.Email</MudText>
+                        <MudText>@context.WebUser.Email</MudText>
                     </MudStack>
                 </MudTd>
                 <MudTd DataLabel="Permission Level">
@@ -105,10 +105,10 @@
                 <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
                 <MudTd DataLabel="Last Login">@FormatDate(context.LastLoginAt)</MudTd>
                 <MudTd DataLabel="Actions">
-                    @if (_currentUserPermissionLevel >= PermissionLevel.GlobalAdmin && context.Id != _currentUserId)
+                    @if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin && context.WebUser.Id != WebUser?.Id)
                     {
                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight">
-                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner)
+                            @if (WebUser!.PermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Edit"
                                             IconColor="Color.Primary"
@@ -124,7 +124,7 @@
                                     Resend Verification Email
                                 </MudMenuItem>
                             }
-                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner)
+                            @if (WebUser!.PermissionLevel >= PermissionLevel.Owner)
                             {
                                 @if (context.TotpEnabled)
                                 {
@@ -159,7 +159,7 @@
                                     Unlock Account
                                 </MudMenuItem>
                             }
-                            @if (context.Status == UserStatus.Active && _currentUserPermissionLevel >= PermissionLevel.Owner)
+                            @if (context.Status == UserStatus.Active && WebUser!.PermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Block"
                                             IconColor="Color.Error"
@@ -167,7 +167,7 @@
                                     Disable User
                                 </MudMenuItem>
                             }
-                            else if (context.Status == UserStatus.Disabled && _currentUserPermissionLevel >= PermissionLevel.Owner)
+                            else if (context.Status == UserStatus.Disabled && WebUser!.PermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.CheckCircle"
                                             IconColor="Color.Success"
@@ -175,7 +175,7 @@
                                     Enable User
                                 </MudMenuItem>
                             }
-                            @if (context.Status == UserStatus.Deleted && _currentUserPermissionLevel >= PermissionLevel.Owner)
+                            @if (context.Status == UserStatus.Deleted && WebUser!.PermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.RestoreFromTrash"
                                             IconColor="Color.Success"
@@ -183,7 +183,7 @@
                                     Restore User
                                 </MudMenuItem>
                             }
-                            else if (_currentUserPermissionLevel >= PermissionLevel.Owner)
+                            else if (WebUser!.PermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudDivider />
                                 <MudMenuItem Icon="@Icons.Material.Filled.DeleteForever"
@@ -194,7 +194,7 @@
                             }
                         </MudMenu>
                     }
-                    else if (context.Id == _currentUserId)
+                    else if (context.WebUser.Id == WebUser?.Id)
                     {
                         <MudText Typo="Typo.caption" Color="Color.Secondary">(You)</MudText>
                     }
@@ -209,21 +209,15 @@
 </div>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private List<UserRecord> _users = [];
     private List<UserRecord> _filteredUsers = [];
     private bool _loading = true;
     private IEnumerable<UserStatus>? _selectedStatuses = [UserStatus.Active, UserStatus.Pending, UserStatus.Disabled];
-    private string? _currentUserId;
-    private string? _currentUserEmail;
-    private PermissionLevel _currentUserPermissionLevel = PermissionLevel.Admin;
 
     protected override async Task OnInitializedAsync()
     {
-        // Get current user info
-        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
-        _currentUserEmail = await AuthHelper.GetCurrentUserEmailAsync();
-        _currentUserPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
         await LoadUsersAsync();
     }
 
@@ -274,8 +268,8 @@
         var parameters = new DialogParameters<PermissionDialog>
         {
             { p => p.CurrentPermissionLevel, (PermissionLevel)user.PermissionLevelInt },
-            { p => p.UserEmail, user.Email },
-            { p => p.MaxPermissionLevel, _currentUserPermissionLevel }
+            { p => p.UserEmail, user.WebUser.Email },
+            { p => p.MaxPermissionLevel, WebUser!.PermissionLevel }
         };
 
         var dialog = await DialogService.ShowAsync<PermissionDialog>("Edit Permission Level", parameters);
@@ -284,7 +278,7 @@
         if (result is { Canceled: false, Data: PermissionLevel newLevel })
         {
             // Validate that user isn't trying to escalate beyond their own permission level
-            if (newLevel > _currentUserPermissionLevel)
+            if (newLevel > WebUser!.PermissionLevel)
             {
                 Snackbar.Add("You cannot assign a permission level higher than your own", Severity.Error);
                 return;
@@ -292,8 +286,8 @@
 
             try
             {
-                await UserManagementService.UpdatePermissionLevelAsync(user.Id, (int)newLevel, _currentUserId!, (int)_currentUserPermissionLevel);
-                Snackbar.Add($"Updated {user.Email} to {GetPermissionName(newLevel)}", Severity.Success);
+                await UserManagementService.UpdatePermissionLevelAsync(user.WebUser.Id, (int)newLevel, WebUser!.Id, (int)WebUser!.PermissionLevel);
+                Snackbar.Add($"Updated {user.WebUser.Email} to {GetPermissionName(newLevel)}", Severity.Success);
                 await LoadUsersAsync();
             }
             catch (Exception ex)
@@ -307,15 +301,15 @@
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Disable User",
-            $"Are you sure you want to disable {user.Email}? They will not be able to log in.",
+            $"Are you sure you want to disable {user.WebUser.Email}? They will not be able to log in.",
             yesText: "Disable", cancelText: "Cancel");
 
         if (confirmed == true)
         {
             try
             {
-                await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Disabled, _currentUserId!);
-                Snackbar.Add($"Disabled user {user.Email}", Severity.Success);
+                await UserManagementService.UpdateStatusAsync(user.WebUser.Id, UserStatus.Disabled, WebUser!.Id);
+                Snackbar.Add($"Disabled user {user.WebUser.Email}", Severity.Success);
                 await LoadUsersAsync();
             }
             catch (Exception ex)
@@ -329,8 +323,8 @@
     {
         try
         {
-            await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Active, _currentUserId!);
-            Snackbar.Add($"Enabled user {user.Email}", Severity.Success);
+            await UserManagementService.UpdateStatusAsync(user.WebUser.Id, UserStatus.Active, WebUser!.Id);
+            Snackbar.Add($"Enabled user {user.WebUser.Email}", Severity.Success);
             await LoadUsersAsync();
         }
         catch (Exception ex)
@@ -341,13 +335,13 @@
 
     private async Task CreateUser()
     {
-        if (string.IsNullOrEmpty(_currentUserId))
+        if (WebUser == null)
         {
             Snackbar.Add("Unable to identify current user", Severity.Error);
             return;
         }
 
-        var parameters = new DialogParameters<CreateInviteDialog> { { p => p.MaxPermissionLevel, _currentUserPermissionLevel } };
+        var parameters = new DialogParameters<CreateInviteDialog> { { p => p.MaxPermissionLevel, WebUser!.PermissionLevel } };
 
         var dialog = await DialogService.ShowAsync<CreateInviteDialog>("Create User", parameters);
         var result = await dialog.Result;
@@ -366,7 +360,7 @@
                 var permissionLevelEnum = permissionLevelProperty?.GetValue(data) as PermissionLevel? ?? PermissionLevel.Admin;
                 var permissionLevel = (int)permissionLevelEnum; // Cast enum to int for service layer
 
-                var token = await InviteService.CreateInviteWithPermissionAsync(_currentUserId, permissionLevel, (int)_currentUserPermissionLevel, validDays);
+                var token = await InviteService.CreateInviteWithPermissionAsync(WebUser!.Id, permissionLevel, (int)WebUser.PermissionLevel, validDays);
                 var inviteLink = $"{Navigation.BaseUri}register?invite={token}";
                 var expiresAt = DateTimeOffset.UtcNow.AddDays(validDays);
 
@@ -416,15 +410,15 @@
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Delete User",
-            $"Are you sure you want to permanently delete {user.Email}? This action marks the user as deleted for audit purposes but keeps the record.",
+            $"Are you sure you want to permanently delete {user.WebUser.Email}? This action marks the user as deleted for audit purposes but keeps the record.",
             yesText: "Delete", cancelText: "Cancel");
 
         if (confirmed == true)
         {
             try
             {
-                await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Deleted, _currentUserId!);
-                Snackbar.Add($"Deleted user {user.Email}", Severity.Success);
+                await UserManagementService.UpdateStatusAsync(user.WebUser.Id, UserStatus.Deleted, WebUser!.Id);
+                Snackbar.Add($"Deleted user {user.WebUser.Email}", Severity.Success);
                 await LoadUsersAsync();
             }
             catch (Exception ex)
@@ -438,7 +432,7 @@
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Disable TOTP",
-            $"Are you sure you want to disable TOTP for {user.Email}?\n\n" +
+            $"Are you sure you want to disable TOTP for {user.WebUser.Email}?\n\n" +
             "This sets TotpEnabled=false, allowing them to bypass 2FA at login. " +
             "Their TOTP secret is preserved.",
             yesText: "Disable TOTP",
@@ -448,15 +442,15 @@
         {
             try
             {
-                var success = await AuthService.AdminDisableTotpAsync(user.Id, _currentUserId!);
+                var success = await AuthService.AdminDisableTotpAsync(user.WebUser, WebUser!);
                 if (success)
                 {
-                    Snackbar.Add($"Disabled TOTP for {user.Email}", Severity.Success);
+                    Snackbar.Add($"Disabled TOTP for {user.WebUser.Email}", Severity.Success);
                     await LoadUsersAsync();
                 }
                 else
                 {
-                    Snackbar.Add($"Failed to disable TOTP for {user.Email}. You may not have permission.", Severity.Error);
+                    Snackbar.Add($"Failed to disable TOTP for {user.WebUser.Email}. You may not have permission.", Severity.Error);
                 }
             }
             catch (Exception ex)
@@ -470,7 +464,7 @@
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Enable TOTP",
-            $"Are you sure you want to enable TOTP for {user.Email}?\n\n" +
+            $"Are you sure you want to enable TOTP for {user.WebUser.Email}?\n\n" +
             "This sets TotpEnabled=true. If they have a TOTP secret, they'll need to verify. " +
             "If not, they'll be redirected to setup 2FA on next login.",
             yesText: "Enable TOTP",
@@ -480,15 +474,15 @@
         {
             try
             {
-                var success = await AuthService.AdminEnableTotpAsync(user.Id, _currentUserId!);
+                var success = await AuthService.AdminEnableTotpAsync(user.WebUser, WebUser!);
                 if (success)
                 {
-                    Snackbar.Add($"Enabled TOTP for {user.Email}", Severity.Success);
+                    Snackbar.Add($"Enabled TOTP for {user.WebUser.Email}", Severity.Success);
                     await LoadUsersAsync();
                 }
                 else
                 {
-                    Snackbar.Add($"Failed to enable TOTP for {user.Email}. You may not have permission.", Severity.Error);
+                    Snackbar.Add($"Failed to enable TOTP for {user.WebUser.Email}. You may not have permission.", Severity.Error);
                 }
             }
             catch (Exception ex)
@@ -502,7 +496,7 @@
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Reset TOTP",
-            $"Are you sure you want to reset TOTP for {user.Email}?\n\n" +
+            $"Are you sure you want to reset TOTP for {user.WebUser.Email}?\n\n" +
             "This will:\n" +
             "• Wipe their TOTP secret and setup timestamp\n" +
             "• Set TotpEnabled=false (bypass 2FA)\n" +
@@ -514,15 +508,15 @@
         {
             try
             {
-                var success = await AuthService.AdminResetTotpAsync(user.Id, _currentUserId!);
+                var success = await AuthService.AdminResetTotpAsync(user.WebUser, WebUser!);
                 if (success)
                 {
-                    Snackbar.Add($"Reset TOTP for {user.Email}", Severity.Success);
+                    Snackbar.Add($"Reset TOTP for {user.WebUser.Email}", Severity.Success);
                     await LoadUsersAsync();
                 }
                 else
                 {
-                    Snackbar.Add($"Failed to reset TOTP for {user.Email}. You may not have permission.", Severity.Error);
+                    Snackbar.Add($"Failed to reset TOTP for {user.WebUser.Email}. You may not have permission.", Severity.Error);
                 }
             }
             catch (Exception ex)
@@ -540,7 +534,7 @@
 
         var confirmed = await DialogService.ShowMessageBox(
             "Unlock Account",
-            $"Are you sure you want to manually unlock {user.Email}?\n\n" +
+            $"Are you sure you want to manually unlock {user.WebUser.Email}?\n\n" +
             $"This account is currently locked until {user.LockedUntil:yyyy-MM-dd HH:mm:ss UTC} " +
             $"({Math.Ceiling(timeRemaining)} minutes remaining) due to failed login attempts.\n\n" +
             "Unlocking will:\n" +
@@ -554,8 +548,8 @@
         {
             try
             {
-                await AccountLockoutService.UnlockAccountAsync(user.Id, _currentUserId!, _currentUserEmail!);
-                Snackbar.Add($"Unlocked account for {user.Email}", Severity.Success);
+                await AccountLockoutService.UnlockAccountAsync(user.WebUser, WebUser!);
+                Snackbar.Add($"Unlocked account for {user.WebUser.Email}", Severity.Success);
                 await LoadUsersAsync();
             }
             catch (Exception ex)
@@ -569,10 +563,10 @@
     {
         try
         {
-            var success = await AuthService.ResendVerificationEmailAsync(user.Email);
+            var success = await AuthService.ResendVerificationEmailAsync(user.WebUser.Email!);
             if (success)
             {
-                Snackbar.Add($"Verification email sent to {user.Email}", Severity.Success);
+                Snackbar.Add($"Verification email sent to {user.WebUser.Email}", Severity.Success);
             }
             else
             {
@@ -589,15 +583,15 @@
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Restore User",
-            $"Are you sure you want to restore {user.Email}? The user will be set to Active status and can log in again.",
+            $"Are you sure you want to restore {user.WebUser.Email}? The user will be set to Active status and can log in again.",
             yesText: "Restore", cancelText: "Cancel");
 
         if (confirmed == true)
         {
             try
             {
-                await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Active, _currentUserId!);
-                Snackbar.Add($"Restored user {user.Email}", Severity.Success);
+                await UserManagementService.UpdateStatusAsync(user.WebUser.Id, UserStatus.Active, WebUser!.Id);
+                Snackbar.Add($"Restored user {user.WebUser.Email}", Severity.Success);
                 await LoadUsersAsync();
             }
             catch (Exception ex)
@@ -611,7 +605,7 @@
     {
         var parameters = new DialogParameters<InviteManagementDialog>
         {
-            { p => p.CurrentUserPermissionLevel, _currentUserPermissionLevel }
+            { p => p.CurrentUserPermissionLevel, WebUser!.PermissionLevel }
         };
         var options = new DialogOptions
         {

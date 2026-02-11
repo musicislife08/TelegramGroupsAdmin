@@ -1,12 +1,12 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services.AI
-@using TelegramGroupsAdmin.Services
 @inject ISystemConfigRepository ConfigRepository
 @inject IAIServiceFactory AIServiceFactory
 @inject IChatService ChatService
 @inject IAuditService AuditService
-@inject IBlazorAuthHelper AuthHelper
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -90,6 +90,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private AIProviderConfig _config = new();
     private ApiKeysConfig _apiKeys = new();
 
@@ -144,15 +146,12 @@
 
     private async Task LogAuditAsync(AIConnection connection)
     {
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        if (!string.IsNullOrEmpty(userId))
-        {
-            await AuditService.LogEventAsync(
-                AuditEventType.ConfigurationChanged,
-                Actor.FromWebUser(userId),
-                Actor.FromWebUser(userId),
-                $"ai_connection:{connection.Id}:provider={connection.Provider}:enabled={connection.Enabled}");
-        }
+        var actor = WebUser!.ToActor();
+        await AuditService.LogEventAsync(
+            AuditEventType.ConfigurationChanged,
+            actor,
+            actor,
+            $"ai_connection:{connection.Id}:provider={connection.Provider}:enabled={connection.Enabled}");
     }
 
     private async Task OpenAddConnectionDialog()
@@ -200,15 +199,12 @@
             // Invalidate cached kernel for deleted connection
             ChatService.InvalidateCache(connection.Id);
 
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    $"ai_connection_deleted:{connection.Id}");
-            }
+            var actor = WebUser!.ToActor();
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                $"ai_connection_deleted:{connection.Id}");
 
             Snackbar.Add($"Connection '{connection.Id}' deleted", Severity.Success);
         }

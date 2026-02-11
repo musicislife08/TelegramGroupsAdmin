@@ -3,13 +3,11 @@
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Repositories
-@using TelegramGroupsAdmin.Services
 @attribute [Authorize(Policy = "OwnerOnly")]
 
 @inject INotificationService NotificationService
 @inject IWebPushNotificationService WebPushService
 @inject INotificationStateService NotificationState
-@inject IBlazorAuthHelper AuthHelper
 @inject IUserRepository UserRepository
 
 <PageTitle>Notification Debug</PageTitle>
@@ -146,6 +144,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private MudForm _form = null!;
     private NotificationEventType _selectedEventType = NotificationEventType.SpamDetected;
     private string _subject = "Test Notification";
@@ -153,7 +153,6 @@
     private DeliveryMode _deliveryMode = DeliveryMode.ToCurrentUser;
     private bool _isSending;
     private readonly List<DeliveryResult> _deliveryResults = [];
-    private string? _currentUserId;
 
     private readonly List<EventTypeInfo> _eventTypeInfo =
     [
@@ -166,11 +165,6 @@
         new(NotificationEventType.MalwareDetected, "Malware detected in file", "VirusTotal/ClamAV scan"),
         new(NotificationEventType.ChatAdminChanged, "Chat admin promoted/demoted", "Telegram admin sync")
     ];
-
-    protected override async Task OnInitializedAsync()
-    {
-        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
-    }
 
     private async Task SendTestNotificationAsync()
     {
@@ -185,9 +179,9 @@
             bool success;
             string resultMessage;
 
-            if (_deliveryMode == DeliveryMode.ToCurrentUser && !string.IsNullOrEmpty(_currentUserId))
+            if (_deliveryMode == DeliveryMode.ToCurrentUser)
             {
-                var user = await UserRepository.GetByIdAsync(_currentUserId);
+                var user = await UserRepository.GetByIdAsync(WebUser!.Id);
                 if (user == null)
                 {
                     _deliveryResults.Add(new DeliveryResult

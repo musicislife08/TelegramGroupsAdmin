@@ -58,7 +58,7 @@
                     <MudSelectItem T="string?" Value="null">All Actors</MudSelectItem>
                     @foreach (var user in _users)
                     {
-                        <MudSelectItem T="string?" Value="@user.Id">@user.Email</MudSelectItem>
+                        <MudSelectItem T="string?" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
                     }
                     <MudSelectItem T="string?" Value="@("SYSTEM")">SYSTEM</MudSelectItem>
                 </MudSelect>
@@ -73,7 +73,7 @@
                     <MudSelectItem T="string?" Value="null">All Targets</MudSelectItem>
                     @foreach (var user in _users)
                     {
-                        <MudSelectItem T="string?" Value="@user.Id">@user.Email</MudSelectItem>
+                        <MudSelectItem T="string?" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
@@ -446,7 +446,7 @@
         try
         {
             _users = await UserRepository.GetAllIncludingDeletedAsync();
-            _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
+            _userEmailCache = _users.ToDictionary(u => u.WebUser.Id, u => u.WebUser.Email!);
         }
         catch (Exception ex)
         {

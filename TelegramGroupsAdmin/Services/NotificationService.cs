@@ -106,7 +106,7 @@ public class NotificationService : INotificationService
                     user, eventType, subject, message,
                     reportId, photoPath, reportedUserId, chat.Id, reportType,
                     cancellationToken);
-                results[user.Id] = success;
+                results[user.WebUser.Id] = success;
             }
 
             return results;
@@ -129,7 +129,7 @@ public class NotificationService : INotificationService
         {
             // Get all users with Owner permission level (PermissionLevel = 2)
             var allUsers = await _userRepo.GetAllAsync(cancellationToken);
-            var ownerUsers = allUsers.Where(u => u.PermissionLevel == Core.Models.PermissionLevel.Owner).ToList();
+            var ownerUsers = allUsers.Where(u => u.WebUser.PermissionLevel == Core.Models.PermissionLevel.Owner).ToList();
 
             if (ownerUsers.Count == 0)
             {
@@ -146,7 +146,7 @@ public class NotificationService : INotificationService
             foreach (var owner in ownerUsers)
             {
                 var success = await SendNotificationAsync(owner, eventType, subject, message, cancellationToken);
-                results[owner.Id] = success;
+                results[owner.WebUser.Id] = success;
             }
 
             return results;
@@ -187,7 +187,7 @@ public class NotificationService : INotificationService
         try
         {
             // Get user preferences (creates default if not exists)
-            var config = await _preferencesRepo.GetOrCreateAsync(user.Id, cancellationToken);
+            var config = await _preferencesRepo.GetOrCreateAsync(user.WebUser.Id, cancellationToken);
 
             var deliverySuccess = false;
 
@@ -195,7 +195,7 @@ public class NotificationService : INotificationService
             if (config.IsEnabled(NotificationChannel.TelegramDm, eventType))
             {
                 var telegramSuccess = await SendTelegramDmAsync(
-                    user.Id, subject, message,
+                    user.WebUser.Id, subject, message,
                     reportId, photoPath, reportedUserId, chatId, reportType,
                     cancellationToken);
                 deliverySuccess = deliverySuccess || telegramSuccess;
@@ -419,7 +419,7 @@ public class NotificationService : INotificationService
     {
         try
         {
-            var emailAddress = user.Email;
+            var emailAddress = user.WebUser.Email!;
 
             // Format message as HTML email
             var htmlBody = $@"
