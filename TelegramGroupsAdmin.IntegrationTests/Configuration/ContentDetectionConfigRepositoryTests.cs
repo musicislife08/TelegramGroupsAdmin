@@ -206,11 +206,11 @@ public class ContentDetectionConfigRepositoryTests
         var loaded = await _repository.GetGlobalConfigAsync();
 
         // Assert - These were returning false before the fix
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(loaded.UrlBlocklist.AlwaysRun, Is.True, "UrlBlocklist.AlwaysRun should be persisted");
             Assert.That(loaded.FileScanning.AlwaysRun, Is.True, "FileScanning.AlwaysRun should be persisted");
-        });
+        }
     }
 
     [Test]
@@ -239,7 +239,7 @@ public class ContentDetectionConfigRepositoryTests
         var loaded = await _repository.GetGlobalConfigAsync();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(loaded.StopWords.AlwaysRun, Is.True, "StopWords.AlwaysRun");
             Assert.That(loaded.Similarity.AlwaysRun, Is.True, "Similarity.AlwaysRun");
@@ -254,7 +254,7 @@ public class ContentDetectionConfigRepositoryTests
             Assert.That(loaded.ImageSpam.AlwaysRun, Is.True, "ImageSpam.AlwaysRun");
             Assert.That(loaded.VideoSpam.AlwaysRun, Is.True, "VideoSpam.AlwaysRun");
             Assert.That(loaded.FileScanning.AlwaysRun, Is.True, "FileScanning.AlwaysRun");
-        });
+        }
     }
 
     #endregion
@@ -339,14 +339,14 @@ public class ContentDetectionConfigRepositoryTests
         var loaded = await _repository.GetGlobalConfigAsync();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(loaded.ThreatIntel.Timeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
             Assert.That(loaded.UrlBlocklist.CacheDuration, Is.EqualTo(TimeSpan.FromHours(24)));
             Assert.That(loaded.SeoScraping.Timeout, Is.EqualTo(TimeSpan.FromSeconds(10)));
             Assert.That(loaded.ImageSpam.Timeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
             Assert.That(loaded.VideoSpam.Timeout, Is.EqualTo(TimeSpan.FromSeconds(60)));
-        });
+        }
     }
 
     #endregion

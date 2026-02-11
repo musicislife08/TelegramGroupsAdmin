@@ -1,6 +1,5 @@
-@using System.Security.Claims
-@using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
+@using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
 @inject IBackupService BackupService
@@ -8,7 +7,6 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime Js
 @inject IAuditService AuditService
-@inject AuthenticationStateProvider AuthStateProvider
 
 <MudPaper Class="pa-4" Elevation="0" Outlined="true">
     <MudStack Spacing="3">
@@ -299,6 +297,7 @@
 </MudDialog>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
     [Parameter] public string BackupDirectory { get; set; } = "/data/backups";
     [Parameter] public EventCallback<BackupFileInfo> OnRestoreRequested { get; set; }
 
@@ -327,6 +326,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadBackupsAsync();
     }
 
@@ -419,12 +420,10 @@
             Snackbar.Add($"Downloading {backup.FileName}", Severity.Success);
 
             // Audit log the backup download (security-sensitive action)
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
+            var actor = WebUser!.ToActor();
             await AuditService.LogEventAsync(
                 AuditEventType.DataExported,
-                actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
+                actor: actor,
                 target: null,
                 value: $"Downloaded backup: {backup.FileName} ({FormatBytes(backup.FileSizeBytes)})");
         }

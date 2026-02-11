@@ -120,13 +120,13 @@ public class AIProviderConfigIntegrationTests
 
         // Assert
         Assert.That(retrievedConfig, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(retrievedConfig!.Connections, Has.Count.EqualTo(1));
             Assert.That(retrievedConfig.Connections[0].Id, Is.EqualTo("openai-main"));
             Assert.That(retrievedConfig.Connections[0].Provider, Is.EqualTo(AIProviderType.OpenAI));
             Assert.That(retrievedConfig.Connections[0].Enabled, Is.True);
-        });
+        }
     }
 
     #endregion
@@ -199,12 +199,12 @@ public class AIProviderConfigIntegrationTests
         // Assert
         var retrieved = await _configRepo.GetAIProviderConfigAsync();
         Assert.That(retrieved, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(retrieved!.Connections, Has.Count.EqualTo(1));
             Assert.That(retrieved.Connections[0].Id, Is.EqualTo("updated"));
             Assert.That(retrieved.Connections[0].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
-        });
+        }
     }
 
     [Test]
@@ -246,12 +246,12 @@ public class AIProviderConfigIntegrationTests
         // Assert
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.Connections, Has.Count.EqualTo(3));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(retrieved.Connections.Select(c => c.Id), Contains.Item("openai"));
             Assert.That(retrieved.Connections.Select(c => c.Id), Contains.Item("azure"));
             Assert.That(retrieved.Connections.Select(c => c.Id), Contains.Item("local"));
-        });
+        }
     }
 
     #endregion
@@ -315,13 +315,13 @@ public class AIProviderConfigIntegrationTests
         // Assert
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.Features, Has.Count.EqualTo(5));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(retrieved.Features[AIFeatureType.SpamDetection].MaxTokens, Is.EqualTo(500));
             Assert.That(retrieved.Features[AIFeatureType.Translation].MaxTokens, Is.EqualTo(1000));
             Assert.That(retrieved.Features[AIFeatureType.PromptBuilder].MaxTokens, Is.EqualTo(2000));
             Assert.That(retrieved.Features[AIFeatureType.SpamDetection].Temperature, Is.EqualTo(0.2));
-        });
+        }
     }
 
     [Test]
@@ -398,12 +398,12 @@ public class AIProviderConfigIntegrationTests
         Assert.That(retrieved, Is.Not.Null);
         var models = retrieved!.Connections[0].AvailableModels;
         Assert.That(models, Has.Count.EqualTo(3));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(models.Select(m => m.Id), Contains.Item("llama3.2:latest"));
             Assert.That(models.Select(m => m.Id), Contains.Item("codellama:13b"));
             Assert.That(models.First(m => m.Id == "llama3.2:latest").SizeBytes, Is.EqualTo(2048000000));
-        });
+        }
     }
 
     [Test]
@@ -470,12 +470,12 @@ public class AIProviderConfigIntegrationTests
 
         // Assert
         Assert.That(retrieved, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(retrieved!.GetAIConnectionKey("openai"), Is.EqualTo("sk-test-key-12345"));
             Assert.That(retrieved.GetAIConnectionKey("local"), Is.EqualTo("local-api-key-xyz"));
             Assert.That(retrieved.GetAIConnectionKey("nonexistent"), Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -511,11 +511,11 @@ public class AIProviderConfigIntegrationTests
 
         // Assert
         var retrieved = await _configRepo.GetApiKeysAsync();
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(retrieved!.GetAIConnectionKey("openai"), Is.Null, "Empty key should be removed");
             Assert.That(retrieved.GetAIConnectionKey("azure"), Is.EqualTo("key2"), "Other keys should remain");
-        });
+        }
     }
 
     #endregion

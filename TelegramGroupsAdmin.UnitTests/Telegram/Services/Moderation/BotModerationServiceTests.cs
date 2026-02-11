@@ -1,13 +1,9 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
-using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -97,11 +93,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("system account"));
-        });
+        }
 
         // Verify no handler was called
         await _mockBanHandler.DidNotReceive().BanAsync(
@@ -132,9 +128,12 @@ public class BotModerationServiceTests
                 Chat = ChatIdentity.FromId(TestChatId)
             });
 
-        // Assert
-        Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("system account"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("system account"));
+        }
     }
 
     [Test]
@@ -157,9 +156,12 @@ public class BotModerationServiceTests
                 Duration = TimeSpan.FromHours(1)
             });
 
-        // Assert
-        Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("system account"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("system account"));
+        }
     }
 
     #endregion
@@ -189,12 +191,12 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.TrustRemoved, Is.True);
-        });
+        }
 
         // Verify business rule: bans always revoke trust
         await _mockTrustHandler.Received(1).UntrustAsync(
@@ -271,12 +273,12 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WarningCount, Is.EqualTo(2));
             Assert.That(result.AutoBanTriggered, Is.False);
-        });
+        }
 
         // Verify ban was NOT called
         await _mockBanHandler.DidNotReceive().BanAsync(
@@ -318,13 +320,13 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WarningCount, Is.EqualTo(3));
             Assert.That(result.AutoBanTriggered, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
-        });
+        }
 
         // Verify auto-ban was triggered with Actor.AutoBan
         await _mockBanHandler.Received(1).BanAsync(
@@ -443,13 +445,13 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.MessageDeleted, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.TrustRemoved, Is.True);
-        });
+        }
 
         // Verify all steps were called
         await _mockMessageHandler.Received(1).EnsureExistsAsync(
@@ -498,12 +500,12 @@ public class BotModerationServiceTests
             });
 
         // Assert - Overall success even though message wasn't deleted
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.MessageDeleted, Is.False);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
-        });
+        }
     }
 
     [Test]
@@ -536,11 +538,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.MessageDeleted, Is.True); // Message was deleted before ban failed
-        });
+        }
 
         // Training data should NOT be created on failure
         await _mockTrainingHandler.DidNotReceive().CreateSpamSampleAsync(
@@ -608,12 +610,12 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.TrustRestored, Is.True);
-        });
+        }
 
         // Verify trust was restored
         await _mockTrustHandler.Received(1).TrustAsync(
@@ -678,11 +680,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
-        });
+        }
 
         // Verify user was notified about temp ban
         await _mockNotificationHandler.Received(1).NotifyUserTempBanAsync(
@@ -715,11 +717,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("API error"));
-        });
+        }
 
         // Verify notification was NOT sent on failure
         await _mockNotificationHandler.DidNotReceive().NotifyUserTempBanAsync(
@@ -753,11 +755,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(3));
-        });
+        }
 
         // Verify user was notified even with partial success
         await _mockNotificationHandler.Received(1).NotifyUserTempBanAsync(
@@ -793,11 +795,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("system account"));
-        });
+        }
 
         // Verify no handler was called
         await _mockRestrictHandler.DidNotReceive().RestrictAsync(
@@ -834,11 +836,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(1));
-        });
+        }
 
         // Verify audit was logged
         await _mockAuditHandler.Received(1).LogRestrictAsync(
@@ -904,11 +906,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("User is admin"));
-        });
+        }
 
         // Verify audit was NOT logged on failure
         await _mockAuditHandler.DidNotReceive().LogRestrictAsync(
@@ -947,11 +949,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.MessageDeleted, Is.True);
-        });
+        }
 
         // Verify audit was logged
         await _mockAuditHandler.Received(1).LogDeleteAsync(
@@ -982,11 +984,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.MessageDeleted, Is.False);
-        });
+        }
 
         // Verify audit was still logged (deletion attempt recorded)
         await _mockAuditHandler.Received(1).LogDeleteAsync(
@@ -1020,12 +1022,12 @@ public class BotModerationServiceTests
             });
 
         // Assert - Overall success (ban completed), but TrustRemoved=false
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.TrustRemoved, Is.False, "Trust revocation failed, so should be false");
-        });
+        }
 
         // Verify: Ban audit logged, but Untrust audit NOT logged (it failed)
         await _mockAuditHandler.Received(1).LogBanAsync(
@@ -1066,11 +1068,11 @@ public class BotModerationServiceTests
             });
 
         // Assert - Overall success (warning recorded), notification failure is non-critical
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WarningCount, Is.EqualTo(1));
-        });
+        }
 
         // Verify: Audit still logged despite notification failure
         await _mockAuditHandler.Received(1).LogWarnAsync(
@@ -1105,12 +1107,12 @@ public class BotModerationServiceTests
             });
 
         // Assert - Warning succeeded, auto-ban attempted but failed
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True, "Warning itself succeeded");
             Assert.That(result.WarningCount, Is.EqualTo(3));
             Assert.That(result.AutoBanTriggered, Is.False, "Auto-ban was attempted but failed");
-        });
+        }
 
         // Verify: Ban was attempted
         await _mockBanHandler.Received(1).BanAsync(
@@ -1141,12 +1143,12 @@ public class BotModerationServiceTests
             });
 
         // Assert - Unban succeeded, trust restoration failed
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.TrustRestored, Is.False, "Trust restoration failed");
-        });
+        }
     }
 
     [Test]
@@ -1185,12 +1187,12 @@ public class BotModerationServiceTests
             });
 
         // Assert - Overall success (ban is the critical action)
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.MessageDeleted, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
-        });
+        }
 
         // Verify training data creation was attempted
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
@@ -1220,11 +1222,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(1));
-        });
+        }
 
         // Verify audit record was created
         await _mockAuditHandler.Received(1).LogBanAsync(
@@ -1247,11 +1249,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("system account"));
-        });
+        }
 
         // Verify handler was NOT called
         await _mockBanHandler.DidNotReceive().BanInChatAsync(
@@ -1277,11 +1279,11 @@ public class BotModerationServiceTests
             });
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("User is chat admin"));
-        });
+        }
 
         // Verify no audit record on failure
         await _mockAuditHandler.DidNotReceive().LogBanAsync(
@@ -1342,11 +1344,11 @@ public class BotModerationServiceTests
             });
 
         // Assert - Primary operation succeeded despite audit failure
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True, "Telegram operation succeeded, so result should be success");
             Assert.That(result.MessageDeleted, Is.True);
-        });
+        }
 
         // Verify audit was attempted (but failed gracefully)
         await _mockAuditHandler.Received(1).LogDeleteAsync(
@@ -1379,11 +1381,11 @@ public class BotModerationServiceTests
             });
 
         // Assert - Primary operation succeeded despite audit failure
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
-        });
+        }
 
         // Verify audit was attempted
         await _mockAuditHandler.Received(1).LogBanAsync(
@@ -1418,11 +1420,11 @@ public class BotModerationServiceTests
             });
 
         // Assert - Primary operation succeeded despite audit failure
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WarningCount, Is.EqualTo(1));
-        });
+        }
 
         // Verify audit was attempted
         await _mockAuditHandler.Received(1).LogWarnAsync(
@@ -1454,11 +1456,11 @@ public class BotModerationServiceTests
             });
 
         // Assert - Primary operation succeeded despite audit failure
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(1));
-        });
+        }
 
         // Verify audit was attempted
         await _mockAuditHandler.Received(1).LogRestorePermissionsAsync(
@@ -1527,16 +1529,19 @@ public class BotModerationServiceTests
                 Reason = malwareDetails
             });
 
-        // Assert
-        Assert.That(result.Success, Is.True);
-        Assert.That(result.MessageDeleted, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.MessageDeleted, Is.True);
+        }
 
         // Verify message was deleted with FileScanner actor
         await _mockMessageHandler.Received(1).DeleteAsync(
-            Arg.Any<ChatIdentity>(),
-            messageId,
-            Actor.FileScanner,
-            Arg.Any<CancellationToken>());
+                Arg.Any<ChatIdentity>(),
+                messageId,
+                Actor.FileScanner,
+                Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1741,16 +1746,19 @@ public class BotModerationServiceTests
                 Reason = string.Join(", ", violations)
             });
 
-        // Assert
-        Assert.That(result.Success, Is.True);
-        Assert.That(result.MessageDeleted, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.MessageDeleted, Is.True);
+        }
 
         // Verify message was deleted with AutoDetection actor
         await _mockMessageHandler.Received(1).DeleteAsync(
-            Arg.Any<ChatIdentity>(),
-            messageId,
-            Actor.AutoDetection,
-            Arg.Any<CancellationToken>());
+                Arg.Any<ChatIdentity>(),
+                messageId,
+                Actor.AutoDetection,
+                Arg.Any<CancellationToken>());
     }
 
     [Test]

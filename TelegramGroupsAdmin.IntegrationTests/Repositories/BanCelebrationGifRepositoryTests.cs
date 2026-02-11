@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -136,9 +135,12 @@ public class BanCelebrationGifRepositoryTests
 
         // Assert - Should be ordered by CreatedAt descending (newest first)
         Assert.That(result, Has.Count.EqualTo(3));
-        Assert.That(result[0].Id, Is.EqualTo(gif3.Id));
-        Assert.That(result[1].Id, Is.EqualTo(gif2.Id));
-        Assert.That(result[2].Id, Is.EqualTo(gif1.Id));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].Id, Is.EqualTo(gif3.Id));
+            Assert.That(result[1].Id, Is.EqualTo(gif2.Id));
+            Assert.That(result[2].Id, Is.EqualTo(gif1.Id));
+        }
     }
 
     #endregion
@@ -204,12 +206,12 @@ public class BanCelebrationGifRepositoryTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.Id, Is.EqualTo(added.Id));
             Assert.That(result.Name, Is.EqualTo("Test GIF"));
             Assert.That(result.FilePath, Does.Contain("ban-gifs"));
-        });
+        }
     }
 
     [Test]
@@ -237,13 +239,13 @@ public class BanCelebrationGifRepositoryTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Id, Is.GreaterThan(0));
             Assert.That(result.Name, Is.EqualTo("Celebration"));
             Assert.That(result.FilePath, Does.EndWith(".gif"));
             Assert.That(result.FileId, Is.Null); // Not cached yet
-        });
+        }
 
         // Verify file exists on disk
         var fullPath = _repository.GetFullPath(result.FilePath);
@@ -340,8 +342,11 @@ public class BanCelebrationGifRepositoryTests
 
         // Assert
         var result = await _repository.GetByIdAsync(gif.Id);
-        Assert.That(result, Is.Null, "Database record should be deleted");
-        Assert.That(File.Exists(fullPath), Is.False, "File should be deleted from disk");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Null, "Database record should be deleted");
+            Assert.That(File.Exists(fullPath), Is.False, "File should be deleted from disk");
+        }
     }
 
     [Test]
@@ -364,8 +369,11 @@ public class BanCelebrationGifRepositoryTests
 
         // Assert
         var gifFullPath = _repository.GetFullPath(gif.FilePath);
-        Assert.That(File.Exists(gifFullPath), Is.False, "GIF file should be deleted");
-        Assert.That(File.Exists(fullThumbPath), Is.False, "Thumbnail should be deleted");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.Exists(gifFullPath), Is.False, "GIF file should be deleted");
+            Assert.That(File.Exists(fullThumbPath), Is.False, "Thumbnail should be deleted");
+        }
     }
 
     [Test]

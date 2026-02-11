@@ -1,4 +1,4 @@
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Models.Analytics
 @using TelegramGroupsAdmin.Repositories
@@ -6,7 +6,6 @@
 @inject IMessageStatsService MessageStatsService
 @inject IManagedChatsRepository ChatsRepository
 @inject IAnalyticsRepository AnalyticsRepository
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 
@@ -367,6 +366,8 @@
     private DateTimeOffset? _endDate;
     private string _userTimeZone = "UTC"; // Default to UTC until detected
 
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private List<ManagedChatRecord> _accessibleChats = [];
     private long _selectedChatId;
 
@@ -425,6 +426,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         // Detect user's timezone from browser
         try
         {
@@ -437,16 +440,10 @@
         }
 
         // Load accessible chats based on permissions
-        var userId = await AuthHelper.GetCurrentUserIdAsync();
-        var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-        if (!string.IsNullOrEmpty(userId))
-        {
-            _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel,
-                cancellationToken: CancellationToken.None);
-        }
+        _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
+            WebUser.Id,
+            WebUser.PermissionLevel,
+            cancellationToken: CancellationToken.None);
 
         await LoadLast30Days();
     }

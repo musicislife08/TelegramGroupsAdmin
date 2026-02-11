@@ -52,10 +52,13 @@ public class NotificationStateServiceTests
         // Act
         await _stateService.InitializeAsync(TestUserId);
 
-        // Assert
-        Assert.That(_stateService.IsLoaded, Is.True);
-        Assert.That(_stateService.UnreadCount, Is.EqualTo(1));
-        Assert.That(_stateService.Notifications.Count, Is.EqualTo(2));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(_stateService.IsLoaded, Is.True);
+            Assert.That(_stateService.UnreadCount, Is.EqualTo(1));
+            Assert.That(_stateService.Notifications.Count, Is.EqualTo(2));
+        }
     }
 
     [Test]
@@ -150,10 +153,13 @@ public class NotificationStateServiceTests
         // Act
         await _stateService.MarkAsReadAsync(1);
 
-        // Assert
-        Assert.That(_stateService.UnreadCount, Is.EqualTo(0));
-        Assert.That(_stateService.Notifications[0].IsRead, Is.True);
-        Assert.That(_stateService.Notifications[0].ReadAt, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(_stateService.UnreadCount, Is.EqualTo(0));
+            Assert.That(_stateService.Notifications[0].IsRead, Is.True);
+            Assert.That(_stateService.Notifications[0].ReadAt, Is.Not.Null);
+        }
     }
 
     [Test]
@@ -194,9 +200,12 @@ public class NotificationStateServiceTests
         // Act - Try to mark non-existent notification
         await _stateService.MarkAsReadAsync(999);
 
-        // Assert - State unchanged
-        Assert.That(_stateService.UnreadCount, Is.EqualTo(1));
-        Assert.That(_stateService.Notifications[0].IsRead, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - State unchanged
+            Assert.That(_stateService.UnreadCount, Is.EqualTo(1));
+            Assert.That(_stateService.Notifications[0].IsRead, Is.False);
+        }
     }
 
     #endregion
@@ -224,9 +233,12 @@ public class NotificationStateServiceTests
         // Act
         await _stateService.MarkAllAsReadAsync();
 
-        // Assert
-        Assert.That(_stateService.UnreadCount, Is.EqualTo(0));
-        Assert.That(_stateService.Notifications.All(n => n.IsRead), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(_stateService.UnreadCount, Is.EqualTo(0));
+            Assert.That(_stateService.Notifications.All(n => n.IsRead), Is.True);
+        }
     }
 
     [Test]
@@ -260,9 +272,12 @@ public class NotificationStateServiceTests
         var newNotification = CreateNotification(2, "New", false);
         await _stateService.AddNotificationAsync(newNotification);
 
-        // Assert - New notification at index 0
-        Assert.That(_stateService.Notifications[0].Subject, Is.EqualTo("New"));
-        Assert.That(_stateService.Notifications[1].Subject, Is.EqualTo("Old"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - New notification at index 0
+            Assert.That(_stateService.Notifications[0].Subject, Is.EqualTo("New"));
+            Assert.That(_stateService.Notifications[1].Subject, Is.EqualTo("Old"));
+        }
     }
 
     [Test]
@@ -298,9 +313,12 @@ public class NotificationStateServiceTests
         // Act - Add read notification
         await _stateService.AddNotificationAsync(CreateNotification(1, "New", true));
 
-        // Assert - Count should not increase
-        Assert.That(_stateService.UnreadCount, Is.EqualTo(0));
-        Assert.That(_stateService.Notifications.Count, Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Count should not increase
+            Assert.That(_stateService.UnreadCount, Is.EqualTo(0));
+            Assert.That(_stateService.Notifications.Count, Is.EqualTo(1));
+        }
     }
 
     [Test]

@@ -236,12 +236,15 @@ public class EmailVerificationTests : E2ETestBase
         // because the HTML5 'required' attribute blocks form submission
         var emailInput = Page.Locator("input#email");
         var isInvalid = await emailInput.EvaluateAsync<bool>("el => !el.validity.valid");
-        Assert.That(isInvalid, Is.True,
-            "Browser should mark empty required field as invalid");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(isInvalid, Is.True,
+                      "Browser should mark empty required field as invalid");
 
-        // Form should not have been submitted (no success or server error)
-        Assert.That(await _resendPage.HasSuccessMessageAsync(), Is.False,
-            "Should not show success (form not submitted)");
+            // Form should not have been submitted (no success or server error)
+            Assert.That(await _resendPage.HasSuccessMessageAsync(), Is.False,
+                "Should not show success (form not submitted)");
+        }
     }
 
     [Test]

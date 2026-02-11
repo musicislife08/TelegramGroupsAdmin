@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -68,7 +67,7 @@ public class TelegramBotService(
         {
             logger.LogInformation(
                 "Bot identity set: {BotDisplayName}",
-                LogDisplayName.UserInfo(user.FirstName, user.LastName, user.Username, user.Id));
+                user.ToLogInfo());
         }
         else
         {

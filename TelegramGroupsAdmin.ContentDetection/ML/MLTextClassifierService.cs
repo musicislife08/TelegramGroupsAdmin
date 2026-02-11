@@ -5,10 +5,7 @@ using Microsoft.ML;
 using System.Security.Cryptography;
 using System.Text.Json;
 using TelegramGroupsAdmin.ContentDetection.Constants;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 
 namespace TelegramGroupsAdmin.ContentDetection.ML;
 

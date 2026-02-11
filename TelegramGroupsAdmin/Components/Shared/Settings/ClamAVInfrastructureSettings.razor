@@ -1,11 +1,11 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Services
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @inject ISystemConfigRepository ConfigRepository
 @inject IFileScannerService FileScannerService
 @inject IAuditService AuditService
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 
 <MudGrid>
@@ -136,6 +136,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private FileScanningConfig _config = new();
     private bool _isSaving;
     private bool _isTesting;
@@ -144,6 +146,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadConfigAsync();
     }
 
@@ -203,15 +207,12 @@
             await ConfigRepository.SaveAsync(_config, chatId: 0);
 
             // Create audit log entry
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    $"clamav_connection:host={_config.Tier1.ClamAV.Host}:port={_config.Tier1.ClamAV.Port}:timeout={_config.Tier1.ClamAV.TimeoutSeconds}");
-            }
+            var actor = WebUser!.ToActor();
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                $"clamav_connection:host={_config.Tier1.ClamAV.Host}:port={_config.Tier1.ClamAV.Port}:timeout={_config.Tier1.ClamAV.TimeoutSeconds}");
 
             Snackbar.Add("ClamAV connection settings saved successfully", Severity.Success);
         }

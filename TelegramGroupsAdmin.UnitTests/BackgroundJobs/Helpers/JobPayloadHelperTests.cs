@@ -43,8 +43,11 @@ public class JobPayloadHelperTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Name, Is.EqualTo("test-value"));
-        Assert.That(result.Value, Is.EqualTo(42));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Name, Is.EqualTo("test-value"));
+            Assert.That(result.Value, Is.EqualTo(42));
+        }
     }
 
     [Test]
@@ -154,8 +157,11 @@ public class JobPayloadHelperTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Name, Is.EqualTo("required-test"));
-        Assert.That(result.Value, Is.EqualTo(100));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Name, Is.EqualTo("required-test"));
+            Assert.That(result.Value, Is.EqualTo(100));
+        }
     }
 
     [Test]

@@ -8,7 +8,6 @@ using Polly;
 using Polly.RateLimiting;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
 
 namespace TelegramGroupsAdmin;
@@ -134,7 +133,6 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<IAuditService, AuditService>();
             services.AddScoped<IFeatureAvailabilityService, FeatureAvailabilityService>(); // FEATURE-5.3: Check external service configuration status
-            services.AddScoped<IBlazorAuthHelper, BlazorAuthHelper>(); // Authentication context extraction helper for UI components
 
             // Prompt builder service (Phase 4.X: AI-powered prompt generation)
             services.AddScoped<Services.PromptBuilder.IPromptBuilderService, Services.PromptBuilder.PromptBuilderService>();

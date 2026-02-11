@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -48,12 +47,12 @@ public class WarnHandlerTests
         var result = await _handler.WarnAsync(UserIdentity.FromId(userId), executor, "Spam detected", TestChatId);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WarningCount, Is.EqualTo(1));
             Assert.That(result.ErrorMessage, Is.Null);
-        });
+        }
 
         // Verify warning was added via user repository
         await _mockUserRepository.Received(1).AddWarningAsync(
@@ -77,11 +76,11 @@ public class WarnHandlerTests
         var result = await _handler.WarnAsync(UserIdentity.FromId(userId), executor, "Repeated violation", TestChatId);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WarningCount, Is.EqualTo(3));
-        });
+        }
     }
 
     [Test]
@@ -149,12 +148,12 @@ public class WarnHandlerTests
         var result = await _handler.WarnAsync(UserIdentity.FromId(userId), executor, "Test", TestChatId);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Database insert failed"));
             Assert.That(result.WarningCount, Is.EqualTo(0));
-        });
+        }
     }
 
     [Test]
@@ -171,11 +170,11 @@ public class WarnHandlerTests
         var result = await _handler.WarnAsync(UserIdentity.FromId(userId), executor, "Test", TestChatId);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("unknown user"));
-        });
+        }
     }
 
     [Test]

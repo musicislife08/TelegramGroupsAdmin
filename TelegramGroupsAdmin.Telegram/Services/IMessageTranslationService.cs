@@ -1,5 +1,4 @@
 using TelegramGroupsAdmin.Core.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 

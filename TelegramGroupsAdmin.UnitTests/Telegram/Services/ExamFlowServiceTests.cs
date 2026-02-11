@@ -54,9 +54,12 @@ public class ExamFlowServiceTests
     [Test]
     public void IsExamCallback_DifferentPrefix_ReturnsFalse()
     {
-        // Act & Assert
-        Assert.That(_service.IsExamCallback("welcome:123"), Is.False);
-        Assert.That(_service.IsExamCallback("other:data"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert
+            Assert.That(_service.IsExamCallback("welcome:123"), Is.False);
+            Assert.That(_service.IsExamCallback("other:data"), Is.False);
+        }
     }
 
     [Test]
@@ -69,17 +72,23 @@ public class ExamFlowServiceTests
     [Test]
     public void IsExamCallback_SimilarButNotExactPrefix_ReturnsFalse()
     {
-        // Act & Assert - "examination" starts with "exam" but not "exam:"
-        Assert.That(_service.IsExamCallback("examination:123"), Is.False);
-        Assert.That(_service.IsExamCallback("exam123"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert - "examination" starts with "exam" but not "exam:"
+            Assert.That(_service.IsExamCallback("examination:123"), Is.False);
+            Assert.That(_service.IsExamCallback("exam123"), Is.False);
+        }
     }
 
     [Test]
     public void IsExamCallback_CaseSensitive_ReturnsFalse()
     {
-        // Act & Assert - prefix is case-sensitive
-        Assert.That(_service.IsExamCallback("EXAM:123:0:1"), Is.False);
-        Assert.That(_service.IsExamCallback("Exam:123:0:1"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert - prefix is case-sensitive
+            Assert.That(_service.IsExamCallback("EXAM:123:0:1"), Is.False);
+            Assert.That(_service.IsExamCallback("Exam:123:0:1"), Is.False);
+        }
     }
 
     #endregion
@@ -94,9 +103,12 @@ public class ExamFlowServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Value.SessionId, Is.EqualTo(12345));
-        Assert.That(result!.Value.QuestionIndex, Is.EqualTo(2));
-        Assert.That(result!.Value.AnswerIndex, Is.EqualTo(3));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Value.SessionId, Is.EqualTo(12345));
+            Assert.That(result!.Value.QuestionIndex, Is.EqualTo(2));
+            Assert.That(result!.Value.AnswerIndex, Is.EqualTo(3));
+        }
     }
 
     [Test]
@@ -107,9 +119,12 @@ public class ExamFlowServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Value.SessionId, Is.EqualTo(0));
-        Assert.That(result!.Value.QuestionIndex, Is.EqualTo(0));
-        Assert.That(result!.Value.AnswerIndex, Is.EqualTo(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Value.SessionId, Is.EqualTo(0));
+            Assert.That(result!.Value.QuestionIndex, Is.EqualTo(0));
+            Assert.That(result!.Value.AnswerIndex, Is.EqualTo(0));
+        }
     }
 
     [Test]
@@ -126,17 +141,23 @@ public class ExamFlowServiceTests
     [Test]
     public void ParseExamCallback_WrongPrefix_ReturnsNull()
     {
-        // Act & Assert
-        Assert.That(_service.ParseExamCallback("welcome:123:0:1"), Is.Null);
-        Assert.That(_service.ParseExamCallback("other:123:0:1"), Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert
+            Assert.That(_service.ParseExamCallback("welcome:123:0:1"), Is.Null);
+            Assert.That(_service.ParseExamCallback("other:123:0:1"), Is.Null);
+        }
     }
 
     [Test]
     public void ParseExamCallback_TooFewParts_ReturnsNull()
     {
-        // Act & Assert
-        Assert.That(_service.ParseExamCallback("exam:123"), Is.Null);
-        Assert.That(_service.ParseExamCallback("exam:123:0"), Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert
+            Assert.That(_service.ParseExamCallback("exam:123"), Is.Null);
+            Assert.That(_service.ParseExamCallback("exam:123:0"), Is.Null);
+        }
     }
 
     [Test]
@@ -175,9 +196,12 @@ public class ExamFlowServiceTests
 
         // Assert - parsing should succeed (validation is elsewhere)
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Value.SessionId, Is.EqualTo(-1));
-        Assert.That(result!.Value.QuestionIndex, Is.EqualTo(-1));
-        Assert.That(result!.Value.AnswerIndex, Is.EqualTo(-1));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Value.SessionId, Is.EqualTo(-1));
+            Assert.That(result!.Value.QuestionIndex, Is.EqualTo(-1));
+            Assert.That(result!.Value.AnswerIndex, Is.EqualTo(-1));
+        }
     }
 
     [Test]

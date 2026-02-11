@@ -1,11 +1,10 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
 @inject IConfigService ConfigService
 @inject IPromptVersionRepository PromptVersionRepository
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject IBlazorAuthHelper AuthHelper
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">
@@ -154,6 +153,8 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter]
     public ChatIdentity? Chat { get; set; }
 
@@ -165,6 +166,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadConfiguration();
         await LoadPromptVersions();
     }
@@ -249,7 +252,7 @@
         {
             try
             {
-                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+                var userEmail = WebUser!.Email;
 
                 // Save as new version
                 var newVersion = await PromptVersionRepository.CreateVersionAsync(
@@ -322,7 +325,7 @@
             try
             {
                 long targetChatId = Chat?.Id ?? 0;
-                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+                var userEmail = WebUser!.Email;
 
                 // Save as new version
                 var newVersion = await PromptVersionRepository.CreateVersionAsync(

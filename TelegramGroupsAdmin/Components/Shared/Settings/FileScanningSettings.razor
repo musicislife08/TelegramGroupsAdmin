@@ -3,14 +3,14 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Services
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @inject ISystemConfigRepository ConfigRepository
 @inject IFileScanQuotaRepository QuotaRepository
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject IFileScanResultRepository FileScanResultRepository
 @inject IFileScannerService FileScannerService
 @inject IAuditService AuditService
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IConfiguration Configuration
 
@@ -473,6 +473,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private FileScanningConfig _config = new();
     private ApiKeysConfig _apiKeys = new();
     private List<FileScanQuotaModel> _quotas = [];
@@ -494,6 +496,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadConfig();
         await LoadApiKeysForStatusCheck(); // Only for checking VirusTotal configured status
         await LoadQuotas();
@@ -562,15 +566,12 @@
             await ConfigRepository.SaveAsync(_config, chatId: null); // Save global config
 
             // Create audit log entry
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    $"file_scanning:vt_enabled={_config.Tier2.VirusTotal.Enabled}:daily={_config.Tier2.VirusTotal.DailyLimit}:permin={_config.Tier2.VirusTotal.PerMinuteLimit}");
-            }
+            var actor = WebUser!.ToActor();
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                $"file_scanning:vt_enabled={_config.Tier2.VirusTotal.Enabled}:daily={_config.Tier2.VirusTotal.DailyLimit}:permin={_config.Tier2.VirusTotal.PerMinuteLimit}");
 
             Snackbar.Add("Settings saved", Severity.Success);
         }

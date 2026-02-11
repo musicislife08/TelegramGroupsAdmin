@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -70,13 +69,13 @@ public class RestrictHandlerTests
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, duration, "Test mute");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(1));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
             Assert.That(result.ExpiresAt, Is.GreaterThan(DateTimeOffset.UtcNow));
-        });
+        }
 
         // Verify single-chat API call was made
         await _mockApiClient.Received(1).RestrictChatMemberAsync(
@@ -102,12 +101,12 @@ public class RestrictHandlerTests
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, duration, "Timeout");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ExpiresAt, Is.GreaterThan(expectedExpiryLower));
             Assert.That(result.ExpiresAt, Is.LessThan(expectedExpiryUpper));
-        });
+        }
     }
 
     [Test]
@@ -130,12 +129,12 @@ public class RestrictHandlerTests
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("User not found in chat"));
             Assert.That(result.ChatsAffected, Is.EqualTo(0));
-        });
+        }
     }
 
     [Test]
@@ -172,12 +171,12 @@ public class RestrictHandlerTests
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, duration, "Global mute");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
-        });
+        }
 
         // Verify API was called once per chat
         await _mockApiClient.Received(5).RestrictChatMemberAsync(
@@ -207,12 +206,12 @@ public class RestrictHandlerTests
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Spam");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True, "Partial success is still success");
             Assert.That(result.ChatsAffected, Is.EqualTo(3));
             Assert.That(result.ChatsFailed, Is.EqualTo(2));
-        });
+        }
     }
 
     [Test]
@@ -230,11 +229,11 @@ public class RestrictHandlerTests
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("No managed chats available"));
-        });
+        }
     }
 
     [Test]
@@ -250,12 +249,12 @@ public class RestrictHandlerTests
         var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True, "No failures = still success, even with zero affected");
             Assert.That(result.ChatsAffected, Is.EqualTo(0));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
-        });
+        }
 
         // Verify API was never called (no chats to process)
         await _mockApiClient.DidNotReceive().RestrictChatMemberAsync(
@@ -292,7 +291,7 @@ public class RestrictHandlerTests
 
         // Assert - All permissions should be false (full mute)
         Assert.That(capturedPermissions, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(capturedPermissions!.CanSendMessages, Is.False);
             Assert.That(capturedPermissions.CanSendAudios, Is.False);
@@ -308,7 +307,7 @@ public class RestrictHandlerTests
             Assert.That(capturedPermissions.CanInviteUsers, Is.False);
             Assert.That(capturedPermissions.CanPinMessages, Is.False);
             Assert.That(capturedPermissions.CanManageTopics, Is.False);
-        });
+        }
     }
 
     #endregion

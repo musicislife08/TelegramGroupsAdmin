@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NUnit.Framework;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 
@@ -75,11 +74,11 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.Message, Does.Contain("No response received"));
-        });
+        }
     }
 
     [Test]
@@ -104,11 +103,11 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.Message, Does.Contain("No response received"));
-        });
+        }
     }
 
     [Test]
@@ -137,12 +136,12 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Message, Does.Contain("Model responded successfully"));
             Assert.That(result.Message, Does.Contain("5 tokens"));
-        });
+        }
     }
 
     [Test]
@@ -171,11 +170,11 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Message, Does.Contain("Translation test passed"));
-        });
+        }
     }
 
     [Test]
@@ -206,12 +205,12 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Message, Does.Contain("Vision test passed"));
             Assert.That(result.Message, Does.Contain("image"));
-        });
+        }
     }
 
     [Test]
@@ -242,12 +241,12 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Message, Does.Contain("Vision test passed"));
             Assert.That(result.Message, Does.Contain("video frame"));
-        });
+        }
     }
 
     [Test]
@@ -274,11 +273,11 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.Message, Does.Contain("vision"));
-        });
+        }
     }
 
     [Test]
@@ -307,11 +306,11 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.Message, Does.Contain("Prompt builder test passed"));
-        });
+        }
     }
 
     [Test]
@@ -325,11 +324,11 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.Message, Does.Contain("Unknown feature type"));
-        });
+        }
     }
 
     [Test]
@@ -354,12 +353,12 @@ public class FeatureTestServiceTests
             "gpt-4o-mini");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.Message, Does.Contain("Test failed unexpectedly"));
             Assert.That(result.ErrorDetails, Does.Contain("Connection failed"));
-        });
+        }
     }
 
     #endregion

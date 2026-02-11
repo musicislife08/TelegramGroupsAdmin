@@ -120,8 +120,8 @@ public class MuteCommand : IBotCommand
 
             _logger.LogInformation(
                 "{TargetUser} muted by {Executor} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
-                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                targetUser.ToLogInfo(),
+                message.From.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
             return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
@@ -129,7 +129,7 @@ public class MuteCommand : IBotCommand
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to mute {User}",
-                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
+                targetUser.ToLogDebug());
             return new CommandResult($"❌ Failed to mute user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

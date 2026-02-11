@@ -178,10 +178,13 @@ public class DataIntegrityTests
             ");
         });
 
-        Assert.That(bothNullException!.SqlState, Is.EqualTo("23514"), // CHECK constraint
-            "Both NULL should violate exclusive arc CHECK constraint");
-        Assert.That(bothNullException.ConstraintName, Is.EqualTo("CK_message_translations_exclusive_source"),
-            "Should mention exclusive source constraint");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bothNullException!.SqlState, Is.EqualTo("23514"), // CHECK constraint
+                      "Both NULL should violate exclusive arc CHECK constraint");
+            Assert.That(bothNullException.ConstraintName, Is.EqualTo("CK_message_translations_exclusive_source"),
+                "Should mention exclusive source constraint");
+        }
 
         // Test 2: message_translations exclusive arc (both non-NULL - invalid)
         // First create message and edit using DbContext
@@ -229,19 +232,22 @@ public class DataIntegrityTests
             ");
         });
 
-        Assert.That(noActorException!.SqlState, Is.EqualTo("23514"),
-            "Zero actors should violate exclusive arc CHECK constraint");
-        Assert.That(noActorException.ConstraintName, Is.EqualTo("CK_audit_log_exclusive_actor"),
-            "Should mention actor exclusive arc constraint");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(noActorException!.SqlState, Is.EqualTo("23514"),
+                      "Zero actors should violate exclusive arc CHECK constraint");
+            Assert.That(noActorException.ConstraintName, Is.EqualTo("CK_audit_log_exclusive_actor"),
+                "Should mention actor exclusive arc constraint");
+        }
 
         // Test 4: audit_log exclusive actor (multiple actors - invalid)
         var multiActorException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
-        {
-            await helper.ExecuteSqlAsync(@"
+            {
+                await helper.ExecuteSqlAsync(@"
                 INSERT INTO audit_log (event_type, timestamp, actor_system_identifier, actor_web_user_id, value)
                 VALUES (2, NOW(), 'SYSTEM', 'user-id', 'Multiple actors');
             ");
-        });
+            });
 
         Assert.That(multiActorException!.SqlState, Is.EqualTo("23514"),
             "Multiple actors should violate exclusive arc CHECK constraint");
@@ -274,55 +280,67 @@ public class DataIntegrityTests
             ");
         });
 
-        Assert.That(emailNullException!.SqlState, Is.EqualTo("23502"), // NOT NULL violation
-            "NULL email should violate NOT NULL constraint");
-        Assert.That(emailNullException.ColumnName, Is.EqualTo("email"),
-            "Constraint should be on email column");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(emailNullException!.SqlState, Is.EqualTo("23502"), // NOT NULL violation
+                      "NULL email should violate NOT NULL constraint");
+            Assert.That(emailNullException.ColumnName, Is.EqualTo("email"),
+                "Constraint should be on email column");
+        }
 
         // Test 2: messages.timestamp NOT NULL
         var timestampNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
-        {
-            await helper.ExecuteSqlAsync(@"
+            {
+                await helper.ExecuteSqlAsync(@"
                 INSERT INTO messages (message_id, user_id, chat_id, timestamp)
                 VALUES (9000, 666, 777, NULL);
             ");
-        });
+            });
 
-        Assert.That(timestampNullException!.SqlState, Is.EqualTo("23502"),
-            "NULL timestamp should violate NOT NULL constraint");
-        Assert.That(timestampNullException.ColumnName, Is.EqualTo("timestamp"),
-            "Constraint should be on timestamp column");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(timestampNullException!.SqlState, Is.EqualTo("23502"),
+                      "NULL timestamp should violate NOT NULL constraint");
+            Assert.That(timestampNullException.ColumnName, Is.EqualTo("timestamp"),
+                "Constraint should be on timestamp column");
+        }
 
         // Test 3: message_translations.translated_text NOT NULL
         var translatedTextNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
-        {
-            await helper.ExecuteSqlAsync(@"
+            {
+                await helper.ExecuteSqlAsync(@"
                 INSERT INTO messages (message_id, user_id, chat_id, timestamp)
                 VALUES (9001, 666, 777, NOW());
 
                 INSERT INTO message_translations (message_id, translated_text, detected_language, translated_at)
                 VALUES (9001, NULL, 'en', NOW());
             ");
-        });
+            });
 
-        Assert.That(translatedTextNullException!.SqlState, Is.EqualTo("23502"),
-            "NULL translated_text should violate NOT NULL constraint");
-        Assert.That(translatedTextNullException.ColumnName, Is.EqualTo("translated_text"),
-            "Constraint should be on translated_text column");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(translatedTextNullException!.SqlState, Is.EqualTo("23502"),
+                      "NULL translated_text should violate NOT NULL constraint");
+            Assert.That(translatedTextNullException.ColumnName, Is.EqualTo("translated_text"),
+                "Constraint should be on translated_text column");
+        }
 
         // Test 4: managed_chats.chat_type NOT NULL
         var chatTypeNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
-        {
-            await helper.ExecuteSqlAsync(@"
+            {
+                await helper.ExecuteSqlAsync(@"
                 INSERT INTO managed_chats (chat_id, chat_name, chat_type)
                 VALUES (400, 'Test Chat', NULL);
             ");
-        });
+            });
 
-        Assert.That(chatTypeNullException!.SqlState, Is.EqualTo("23502"),
-            "NULL chat_type should violate NOT NULL constraint");
-        Assert.That(chatTypeNullException.ColumnName, Is.EqualTo("chat_type"),
-            "Constraint should be on chat_type column");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chatTypeNullException!.SqlState, Is.EqualTo("23502"),
+                      "NULL chat_type should violate NOT NULL constraint");
+            Assert.That(chatTypeNullException.ColumnName, Is.EqualTo("chat_type"),
+                "Constraint should be on chat_type column");
+        }
     }
 
     /// <summary>
@@ -352,11 +370,14 @@ public class DataIntegrityTests
             ");
         });
 
-        Assert.That(orphanedMessageException!.SqlState, Is.EqualTo("23503"), // FK violation
-            "Orphaned message_id should violate FK constraint");
-        Assert.That(orphanedMessageException.ConstraintName,
-            Is.EqualTo("FK_message_translations_messages_message_id"),
-            "Should mention FK to messages table");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(orphanedMessageException!.SqlState, Is.EqualTo("23503"), // FK violation
+                      "Orphaned message_id should violate FK constraint");
+            Assert.That(orphanedMessageException.ConstraintName,
+                Is.EqualTo("FK_message_translations_messages_message_id"),
+                "Should mention FK to messages table");
+        }
 
         // Test 2: chat_admins FK to managed_chats (orphaned chat_id)
         // First create telegram user using DbContext (handles all required fields)
@@ -391,26 +412,32 @@ public class DataIntegrityTests
         Assert.That(orphanedChatException!.InnerException, Is.InstanceOf<Npgsql.PostgresException>());
 
         var pgEx = (Npgsql.PostgresException)orphanedChatException.InnerException!;
-        Assert.That(pgEx.SqlState, Is.EqualTo("23503"),
-            "Orphaned chat_id should violate FK constraint");
-        Assert.That(pgEx.ConstraintName,
-            Is.EqualTo("FK_chat_admins_managed_chats_chat_id"),
-            "Should mention FK to managed_chats table");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pgEx.SqlState, Is.EqualTo("23503"),
+                      "Orphaned chat_id should violate FK constraint");
+            Assert.That(pgEx.ConstraintName,
+                Is.EqualTo("FK_chat_admins_managed_chats_chat_id"),
+                "Should mention FK to managed_chats table");
+        }
 
         // Test 4: audit_log FK to users (orphaned actor_web_user_id)
         var orphanedUserException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
-        {
-            await helper.ExecuteSqlAsync(@"
+            {
+                await helper.ExecuteSqlAsync(@"
                 INSERT INTO audit_log (event_type, timestamp, actor_web_user_id, value)
                 VALUES (2, NOW(), 'nonexistent-user-id', 'Invalid audit entry');
             ");
-        });
+            });
 
-        Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"),
-            "Orphaned actor_web_user_id should violate FK constraint");
-        Assert.That(orphanedUserException.ConstraintName,
-            Is.EqualTo("FK_audit_log_users_actor_web_user_id"),
-            "Should mention FK to users table");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"),
+                      "Orphaned actor_web_user_id should violate FK constraint");
+            Assert.That(orphanedUserException.ConstraintName,
+                Is.EqualTo("FK_audit_log_users_actor_web_user_id"),
+                "Should mention FK to users table");
+        }
     }
 
     /// <summary>
@@ -441,11 +468,14 @@ public class DataIntegrityTests
             ");
         });
 
-        Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"), // FK violation
-            "Orphaned user_id should violate FK constraint");
-        Assert.That(orphanedUserException.ConstraintName,
-            Is.EqualTo("FK_push_subscriptions_users_user_id"),
-            "Should mention FK to users table");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"), // FK violation
+                      "Orphaned user_id should violate FK constraint");
+            Assert.That(orphanedUserException.ConstraintName,
+                Is.EqualTo("FK_push_subscriptions_users_user_id"),
+                "Should mention FK to users table");
+        }
 
         // Test 2: UNIQUE constraint - (user_id, endpoint) must be unique
         // First create a valid user
@@ -480,11 +510,14 @@ public class DataIntegrityTests
             ");
         });
 
-        Assert.That(duplicateException!.SqlState, Is.EqualTo("23505"), // UNIQUE violation
-            "Duplicate (user_id, endpoint) should violate UNIQUE constraint");
-        Assert.That(duplicateException.ConstraintName,
-            Is.EqualTo("IX_push_subscriptions_user_id_endpoint"),
-            "Should mention unique index on (user_id, endpoint)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(duplicateException!.SqlState, Is.EqualTo("23505"), // UNIQUE violation
+                      "Duplicate (user_id, endpoint) should violate UNIQUE constraint");
+            Assert.That(duplicateException.ConstraintName,
+                Is.EqualTo("IX_push_subscriptions_user_id_endpoint"),
+                "Should mention unique index on (user_id, endpoint)");
+        }
     }
 
     /// <summary>
@@ -513,11 +546,14 @@ public class DataIntegrityTests
             ");
         });
 
-        Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"), // FK violation
-            "Orphaned user_id should violate FK constraint");
-        Assert.That(orphanedUserException.ConstraintName,
-            Is.EqualTo("FK_web_notifications_users_user_id"),
-            "Should mention FK to users table");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"), // FK violation
+                      "Orphaned user_id should violate FK constraint");
+            Assert.That(orphanedUserException.ConstraintName,
+                Is.EqualTo("FK_web_notifications_users_user_id"),
+                "Should mention FK to users table");
+        }
 
         // Verify valid insert works
         await using (var context = helper.GetDbContext())

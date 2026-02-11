@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -166,14 +165,14 @@ public class BotMessageServiceTests
         // Assert - Message saved to database
         var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
         Assert.That(savedMessage, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.MessageId, Is.EqualTo(messageId));
             Assert.That(savedMessage.MessageText, Is.EqualTo(text));
             Assert.That(savedMessage.Chat.Id, Is.EqualTo(TestChatId));
             Assert.That(savedMessage.User.Id, Is.EqualTo(TestBotId));
             Assert.That(savedMessage.User.Username, Is.EqualTo(TestBotUsername));
-        });
+        }
     }
 
     [Test]
@@ -242,11 +241,11 @@ public class BotMessageServiceTests
             .FirstOrDefaultAsync(u => u.TelegramUserId == TestBotId);
 
         Assert.That(botUser, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(botUser!.Username, Is.EqualTo(TestBotUsername));
             Assert.That(botUser.IsBot, Is.True);
-        });
+        }
     }
 
     #endregion
@@ -285,11 +284,11 @@ public class BotMessageServiceTests
         // Assert - Edit history created
         var edits = await _editService!.GetEditsForMessageAsync(messageId);
         Assert.That(edits, Has.Count.EqualTo(1));
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(edits[0].OldText, Is.EqualTo(originalText));
             Assert.That(edits[0].NewText, Is.EqualTo(editedText));
-        });
+        }
     }
 
     [Test]
@@ -323,11 +322,11 @@ public class BotMessageServiceTests
 
         // Assert - Message text updated in database
         var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.MessageText, Is.EqualTo(editedText));
             Assert.That(savedMessage.EditDate, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -366,11 +365,11 @@ public class BotMessageServiceTests
 
         // Assert - Message marked as deleted in database
         var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.DeletedAt, Is.Not.Null);
             Assert.That(savedMessage.DeletionSource, Is.EqualTo("test_deletion"));
-        });
+        }
     }
 
     [Test]
@@ -392,11 +391,11 @@ public class BotMessageServiceTests
 
         // Assert - Message still marked as deleted (with "_failed" suffix)
         var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.DeletedAt, Is.Not.Null);
             Assert.That(savedMessage.DeletionSource, Is.EqualTo("test_deletion_failed"));
-        });
+        }
     }
 
     #endregion
@@ -444,12 +443,12 @@ public class BotMessageServiceTests
         // Assert - Message saved with media metadata
         var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
         Assert.That(savedMessage, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.MessageText, Is.EqualTo(caption));
             Assert.That(savedMessage.MediaType, Is.EqualTo(TelegramGroupsAdmin.Telegram.Models.MediaType.Animation));
             Assert.That(savedMessage.MediaFileId, Is.EqualTo("test_animation_file_id"));
-        });
+        }
     }
 
     #endregion

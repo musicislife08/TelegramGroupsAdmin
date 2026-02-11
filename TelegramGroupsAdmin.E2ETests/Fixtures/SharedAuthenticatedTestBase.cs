@@ -111,9 +111,7 @@ public abstract class SharedAuthenticatedTestBase : SharedE2ETestBase
 
         // Generate the encrypted cookie value
         var cookieValue = authCookieService.GenerateCookieValue(
-            user.Id,
-            user.Email,
-            user.PermissionLevel);
+            new WebUserIdentity(user.Id, user.Email, user.PermissionLevel));
 
         // Extract host and port from the server address
         var baseUri = new Uri(SharedFactory.ServerAddress);

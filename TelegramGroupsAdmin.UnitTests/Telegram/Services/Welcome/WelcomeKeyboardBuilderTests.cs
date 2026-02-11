@@ -53,9 +53,12 @@ public class WelcomeKeyboardBuilderTests
         var keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, userId);
         var acceptButton = keyboard.InlineKeyboard.First().First();
 
-        // Assert
-        Assert.That(acceptButton.CallbackData, Is.EqualTo("welcome_accept:98765"));
-        Assert.That(acceptButton.Text, Is.EqualTo("✅ Accept"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(acceptButton.CallbackData, Is.EqualTo("welcome_accept:98765"));
+            Assert.That(acceptButton.Text, Is.EqualTo("✅ Accept"));
+        }
     }
 
     [Test]
@@ -73,9 +76,12 @@ public class WelcomeKeyboardBuilderTests
         var keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, userId);
         var denyButton = keyboard.InlineKeyboard.First().Last();
 
-        // Assert
-        Assert.That(denyButton.CallbackData, Is.EqualTo("welcome_deny:11111"));
-        Assert.That(denyButton.Text, Is.EqualTo("Decline"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(denyButton.CallbackData, Is.EqualTo("welcome_deny:11111"));
+            Assert.That(denyButton.Text, Is.EqualTo("Decline"));
+        }
     }
 
     [Test]
@@ -92,9 +98,12 @@ public class WelcomeKeyboardBuilderTests
         var keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, userId: 1);
         var buttons = keyboard.InlineKeyboard.First().ToList();
 
-        // Assert
-        Assert.That(buttons[0].Text, Is.EqualTo("I Agree to Rules"));
-        Assert.That(buttons[1].Text, Is.EqualTo("No Thanks"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(buttons[0].Text, Is.EqualTo("I Agree to Rules"));
+            Assert.That(buttons[1].Text, Is.EqualTo("No Thanks"));
+        }
     }
 
     #endregion
@@ -116,9 +125,12 @@ public class WelcomeKeyboardBuilderTests
         // Act
         var keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatId, userId, botUsername);
 
-        // Assert: Single row with single button
-        Assert.That(keyboard.InlineKeyboard.Count(), Is.EqualTo(1));
-        Assert.That(keyboard.InlineKeyboard.First().Count(), Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Single row with single button
+            Assert.That(keyboard.InlineKeyboard.Count(), Is.EqualTo(1));
+            Assert.That(keyboard.InlineKeyboard.First().Count(), Is.EqualTo(1));
+        }
     }
 
     [Test]
@@ -137,9 +149,12 @@ public class WelcomeKeyboardBuilderTests
         var keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatId, userId, botUsername);
         var button = keyboard.InlineKeyboard.First().First();
 
-        // Assert
-        Assert.That(button.Url, Is.EqualTo("https://t.me/MyAwesomeBot?start=welcome_-1001234567890_12345"));
-        Assert.That(button.Text, Is.EqualTo("Open DM"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(button.Url, Is.EqualTo("https://t.me/MyAwesomeBot?start=welcome_-1001234567890_12345"));
+            Assert.That(button.Text, Is.EqualTo("Open DM"));
+        }
     }
 
     [Test]
@@ -169,9 +184,12 @@ public class WelcomeKeyboardBuilderTests
         // Act
         var keyboard = WelcomeKeyboardBuilder.BuildReturnToChatKeyboard("Test Chat", "https://t.me/testchat");
 
-        // Assert
-        Assert.That(keyboard.InlineKeyboard.Count(), Is.EqualTo(1));
-        Assert.That(keyboard.InlineKeyboard.First().Count(), Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(keyboard.InlineKeyboard.Count(), Is.EqualTo(1));
+            Assert.That(keyboard.InlineKeyboard.First().Count(), Is.EqualTo(1));
+        }
     }
 
     [Test]
@@ -185,9 +203,12 @@ public class WelcomeKeyboardBuilderTests
         var keyboard = WelcomeKeyboardBuilder.BuildReturnToChatKeyboard(chatName, chatLink);
         var button = keyboard.InlineKeyboard.First().First();
 
-        // Assert
-        Assert.That(button.Url, Is.EqualTo("https://t.me/cryptotraders"));
-        Assert.That(button.Text, Does.Contain("Crypto Traders"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(button.Url, Is.EqualTo("https://t.me/cryptotraders"));
+            Assert.That(button.Text, Does.Contain("Crypto Traders"));
+        }
     }
 
     [Test]
@@ -214,9 +235,12 @@ public class WelcomeKeyboardBuilderTests
         // Act
         var keyboard = WelcomeKeyboardBuilder.BuildDmAcceptKeyboard(config, groupChatId: -100, userId: 123);
 
-        // Assert
-        Assert.That(keyboard.InlineKeyboard.Count(), Is.EqualTo(1));
-        Assert.That(keyboard.InlineKeyboard.First().Count(), Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(keyboard.InlineKeyboard.Count(), Is.EqualTo(1));
+            Assert.That(keyboard.InlineKeyboard.First().Count(), Is.EqualTo(1));
+        }
     }
 
     [Test]
@@ -231,9 +255,12 @@ public class WelcomeKeyboardBuilderTests
         var keyboard = WelcomeKeyboardBuilder.BuildDmAcceptKeyboard(config, groupChatId, userId);
         var button = keyboard.InlineKeyboard.First().First();
 
-        // Assert: dm_accept:groupChatId:userId format
-        Assert.That(button.CallbackData, Is.EqualTo("dm_accept:-1001234567890:99999"));
-        Assert.That(button.Text, Is.EqualTo("Accept Rules"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: dm_accept:groupChatId:userId format
+            Assert.That(button.CallbackData, Is.EqualTo("dm_accept:-1001234567890:99999"));
+            Assert.That(button.Text, Is.EqualTo("Accept Rules"));
+        }
     }
 
     #endregion

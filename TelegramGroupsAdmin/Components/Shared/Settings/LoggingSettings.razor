@@ -1,9 +1,9 @@
-@using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @using Microsoft.Extensions.Logging
 @inject IRuntimeLoggingService RuntimeLoggingService
 @inject IAuditService AuditService
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="4">
@@ -196,6 +196,8 @@
 </MudStack>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private LogConfig? _config;
     private bool _loading = true;
     private bool _isSaving;
@@ -204,6 +206,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadConfiguration();
     }
 
@@ -234,15 +238,12 @@
             await RuntimeLoggingService.UpdateConfigAsync(_config);
 
             // Create audit log entry
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    $"logging:default={_config.DefaultLevel}:overrides={_config.Overrides.Count}");
-            }
+            var actor = WebUser!.ToActor();
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                $"logging:default={_config.DefaultLevel}:overrides={_config.Overrides.Count}");
 
             Snackbar.Add("Settings saved", Severity.Success);
         }

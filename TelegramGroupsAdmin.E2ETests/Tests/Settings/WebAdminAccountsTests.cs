@@ -1,7 +1,4 @@
-using Microsoft.Playwright;
-using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
-using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Settings;
 
@@ -119,11 +116,14 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         await _accountsPage.NavigateAsync();
         await _accountsPage.WaitForLoadAsync();
 
-        // Assert
-        Assert.That(await _accountsPage.IsCreateUserButtonVisibleAsync(), Is.True,
-            "Owner should see Create User button");
-        Assert.That(await _accountsPage.IsManageInvitesButtonVisibleAsync(), Is.True,
-            "Owner should see Manage Invites button");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(await _accountsPage.IsCreateUserButtonVisibleAsync(), Is.True,
+                "Owner should see Create User button");
+            Assert.That(await _accountsPage.IsManageInvitesButtonVisibleAsync(), Is.True,
+                "Owner should see Manage Invites button");
+        }
     }
 
     #endregion
@@ -183,13 +183,16 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         // Assert - GlobalAdmin should see Admin and GlobalAdmin options, but NOT Owner
         var options = await _accountsPage.GetPermissionOptionsAsync();
 
-        // Should have Admin and GlobalAdmin
-        Assert.That(options.Any(o => o.Contains("Admin")), Is.True,
-            "GlobalAdmin should see Admin option");
+        using (Assert.EnterMultipleScope())
+        {
+            // Should have Admin and GlobalAdmin
+            Assert.That(options.Any(o => o.Contains("Admin")), Is.True,
+                "GlobalAdmin should see Admin option");
 
-        // Should NOT see Owner option
-        Assert.That(options.Any(o => o == "Owner" || o.Contains("Owner")), Is.False,
-            "GlobalAdmin should NOT see Owner option");
+            // Should NOT see Owner option
+            Assert.That(options.Any(o => o == "Owner" || o.Contains("Owner")), Is.False,
+                "GlobalAdmin should NOT see Owner option");
+        }
 
         // Cleanup
         await _accountsPage.CloseDialogAsync();
@@ -209,10 +212,13 @@ public class WebAdminAccountsTests : AuthenticatedTestBase
         // Assert - Owner should see all options including Owner
         var options = await _accountsPage.GetPermissionOptionsAsync();
 
-        Assert.That(options.Any(o => o.Contains("Admin")), Is.True,
-            "Owner should see Admin option");
-        Assert.That(options.Any(o => o.Contains("Owner")), Is.True,
-            "Owner should see Owner option");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.Any(o => o.Contains("Admin")), Is.True,
+                      "Owner should see Admin option");
+            Assert.That(options.Any(o => o.Contains("Owner")), Is.True,
+                "Owner should see Owner option");
+        }
 
         // Cleanup
         await _accountsPage.CloseDialogAsync();

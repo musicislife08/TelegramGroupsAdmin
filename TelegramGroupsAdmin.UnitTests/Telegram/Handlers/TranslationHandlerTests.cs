@@ -1,11 +1,4 @@
-using Microsoft.Extensions.Logging;
-using NSubstitute;
-using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Telegram.Handlers;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Handlers;
 
@@ -261,9 +254,12 @@ public class TranslationHandlerTests
                               text.Length >= minLength &&
                               latinRatio < threshold;
 
-        // Assert: Don't translate (already English)
-        Assert.That(shouldTranslate, Is.False);
-        Assert.That(latinRatio, Is.GreaterThan(0.9)); // High Latin ratio
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Don't translate (already English)
+            Assert.That(shouldTranslate, Is.False);
+            Assert.That(latinRatio, Is.GreaterThan(0.9)); // High Latin ratio
+        }
     }
 
     /// <summary>
@@ -286,9 +282,12 @@ public class TranslationHandlerTests
                               text.Length >= minLength &&
                               latinRatio < threshold;
 
-        // Assert: Should translate
-        Assert.That(shouldTranslate, Is.True);
-        Assert.That(latinRatio, Is.LessThan(0.1)); // Low Latin ratio
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Should translate
+            Assert.That(shouldTranslate, Is.True);
+            Assert.That(latinRatio, Is.LessThan(0.1)); // Low Latin ratio
+        }
     }
 
     /// <summary>
@@ -310,9 +309,12 @@ public class TranslationHandlerTests
                               text.Length >= minLength &&
                               TranslationHandler.CalculateLatinScriptRatio(text) < threshold;
 
-        // Assert: Should translate (>= check)
-        Assert.That(shouldTranslate, Is.True);
-        Assert.That(text.Length, Is.EqualTo(20));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Should translate (>= check)
+            Assert.That(shouldTranslate, Is.True);
+            Assert.That(text.Length, Is.EqualTo(20));
+        }
     }
 
     /// <summary>
@@ -336,9 +338,12 @@ public class TranslationHandlerTests
                               text.Length >= minLength &&
                               latinRatio < threshold;
 
-        // Assert: Don't translate (< check, not <=)
-        Assert.That(shouldTranslate, Is.False);
-        Assert.That(latinRatio, Is.EqualTo(0.8).Within(0.01));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Don't translate (< check, not <=)
+            Assert.That(shouldTranslate, Is.False);
+            Assert.That(latinRatio, Is.EqualTo(0.8).Within(0.01));
+        }
     }
 
     /// <summary>

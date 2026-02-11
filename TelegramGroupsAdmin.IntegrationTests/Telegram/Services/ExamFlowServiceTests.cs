@@ -191,9 +191,12 @@ public class ExamFlowServiceTests
 
         var session = await sessionRepo.GetSessionAsync(TestChatId, TestUserId);
         Assert.That(session, Is.Not.Null);
-        Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
-        Assert.That(session.UserId, Is.EqualTo(TestUserId));
-        Assert.That(session.CurrentQuestionIndex, Is.EqualTo(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
+            Assert.That(session.UserId, Is.EqualTo(TestUserId));
+            Assert.That(session.CurrentQuestionIndex, Is.EqualTo(0));
+        }
     }
 
     [Test]
@@ -249,8 +252,11 @@ public class ExamFlowServiceTests
         Assert.That(result.ExamComplete, Is.False); // Only 1 of 2 MC questions answered
 
         var updatedSession = await sessionRepo.GetByIdAsync(session.Id);
-        Assert.That(updatedSession!.CurrentQuestionIndex, Is.EqualTo(1));
-        Assert.That(updatedSession.McAnswers, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedSession!.CurrentQuestionIndex, Is.EqualTo(1));
+            Assert.That(updatedSession.McAnswers, Is.Not.Null);
+        }
         Assert.That(updatedSession.McAnswers!.ContainsKey(0), Is.True);
     }
 
@@ -275,9 +281,12 @@ public class ExamFlowServiceTests
         var result = await examFlowService.HandleMcAnswerAsync(
             sessionId, questionIndex: 0, answerIndex: 0, user, message);
 
-        // Assert - expired session should be treated as complete/failed
-        Assert.That(result.ExamComplete, Is.True);
-        Assert.That(result.Passed, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - expired session should be treated as complete/failed
+            Assert.That(result.ExamComplete, Is.True);
+            Assert.That(result.Passed, Is.False);
+        }
     }
 
     [Test]
@@ -302,9 +311,12 @@ public class ExamFlowServiceTests
         var result = await examFlowService.HandleMcAnswerAsync(
             sessionId, questionIndex: 0, answerIndex: 0, wrongUser, message);
 
-        // Assert - wrong user is rejected, but legitimate user's exam is still active (not complete)
-        Assert.That(result.ExamComplete, Is.False);
-        Assert.That(result.Passed, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - wrong user is rejected, but legitimate user's exam is still active (not complete)
+            Assert.That(result.ExamComplete, Is.False);
+            Assert.That(result.Passed, Is.Null);
+        }
 
         // Verify the session still exists for the legitimate user
         var session = await sessionRepo.GetByIdAsync(sessionId);

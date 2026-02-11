@@ -4,7 +4,7 @@
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Data.Models
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Bot
@@ -16,7 +16,6 @@
 @inject IReportActionsService ReportActionsService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IBotModerationService ModerationOrchestrator
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject ILogger<Reports> Logger
 @inject IExamFlowService ExamFlowService
@@ -148,19 +147,17 @@
     private List<ReportQueueItem> _filteredReports = [];
     private ReportTypeFilter _selectedTypeFilter = ReportTypeFilter.All;
     private StatusFilter _selectedStatusFilter = StatusFilter.Pending;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private bool _loading = true;
     private int _pendingSpamCount;
     private int _pendingImpersonationCount;
     private int _pendingExamCount;
-    private string _currentUserId = string.Empty;
-    private string _currentUserDisplayName = string.Empty;
     private readonly CancellationTokenSource _cts = new();
 
     protected override async Task OnInitializedAsync()
     {
-        // Get current user ID and display name using auth helper
-        _currentUserId = await AuthHelper.GetCurrentUserIdAsync() ?? string.Empty;
-        _currentUserDisplayName = await AuthHelper.GetCurrentUserEmailAsync() ?? _currentUserId;
+        if (WebUser is null) return;
 
         await LoadReportsAsync();
     }
@@ -178,18 +175,9 @@
         try
         {
             // Get accessible chats for current user (Admin users only see their chats)
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                Snackbar.Add("Unable to identify current user", Severity.Error);
-                return;
-            }
-
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel,
+                WebUser!.Id,
+                WebUser.PermissionLevel,
                 cancellationToken: _cts.Token);
             var accessibleChatIds = accessibleChats.Select(c => c.Identity.Id).ToHashSet();
 
@@ -360,7 +348,7 @@
     {
         try
         {
-            var executor = Actor.FromWebUser(_currentUserId, _currentUserDisplayName);
+            var executor = WebUser!.ToActor();
 
             switch (args.Action)
             {
@@ -398,7 +386,7 @@
     {
         try
         {
-            var executor = Actor.FromWebUser(_currentUserId, _currentUserDisplayName);
+            var executor = WebUser!.ToActor();
 
             switch (args.Action)
             {
@@ -415,7 +403,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "confirm",
                         $"Confirmed impersonation, banned from {banResult.ChatsAffected} chats");
 
@@ -427,7 +415,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "dismiss",
                         "Dismissed as false positive");
 
@@ -447,7 +435,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "trust",
                         "User trusted - not impersonation");
 
@@ -471,7 +459,7 @@
 
         try
         {
-            var executor = Actor.FromWebUser(_currentUserId, _currentUserDisplayName);
+            var executor = WebUser!.ToActor();
 
             switch (args.Action)
             {
@@ -492,7 +480,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "approve",
                         "Manually approved after exam failure");
 
@@ -515,7 +503,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "deny",
                         "Denied entry after exam review");
 
@@ -538,7 +526,7 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "deny_ban",
                         "Denied and banned after exam review");
 

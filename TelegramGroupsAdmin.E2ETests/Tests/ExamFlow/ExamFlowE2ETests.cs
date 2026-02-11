@@ -91,9 +91,12 @@ public class ExamFlowE2ETests : E2ETestBase
         // Assert: Welcome response updated in database
         var updatedWelcome = await welcomeRepo.GetByUserAndChatAsync(TestUserId, TestGroupChatId);
         Assert.That(updatedWelcome, Is.Not.Null, "Welcome response should still exist");
-        Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
-        Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted),
-            "Welcome response should be marked as Accepted");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
+            Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted),
+                "Welcome response should be marked as Accepted");
+        }
     }
 
     [Test]
@@ -164,8 +167,11 @@ public class ExamFlowE2ETests : E2ETestBase
         // Assert: Welcome response updated
         var updatedWelcome = await welcomeRepo.GetByUserAndChatAsync(TestUserId, TestGroupChatId);
         Assert.That(updatedWelcome, Is.Not.Null);
-        Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
-        Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
+            Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted));
+        }
     }
 
     [Test]
@@ -234,9 +240,12 @@ public class ExamFlowE2ETests : E2ETestBase
         // Assert: Welcome response stays Pending (admin will decide)
         var updatedWelcome = await welcomeRepo.GetByUserAndChatAsync(TestUserId, TestGroupChatId);
         Assert.That(updatedWelcome, Is.Not.Null);
-        Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout should be cleared");
-        Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Pending),
-            "Should stay Pending while in review queue");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout should be cleared");
+            Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Pending),
+                "Should stay Pending while in review queue");
+        }
     }
 
     #region Helper Methods

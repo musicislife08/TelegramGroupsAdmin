@@ -33,7 +33,7 @@ public class ContentDetectionConfigMappingsTests
         var model = data.ToModel();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(model.Timeout, Is.EqualTo(TimeSpan.FromSeconds(15)));
             Assert.That(model.UseGlobal, Is.True);
@@ -41,7 +41,7 @@ public class ContentDetectionConfigMappingsTests
             Assert.That(model.ApiUrl, Is.EqualTo("https://api.cas.chat"));
             Assert.That(model.UserAgent, Is.EqualTo("TestAgent"));
             Assert.That(model.AlwaysRun, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -62,7 +62,7 @@ public class ContentDetectionConfigMappingsTests
         var data = model.ToData();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(data.TimeoutSeconds, Is.EqualTo(10.0));
             Assert.That(data.UseGlobal, Is.False);
@@ -70,7 +70,7 @@ public class ContentDetectionConfigMappingsTests
             Assert.That(data.ApiUrl, Is.EqualTo("https://custom.api"));
             Assert.That(data.UserAgent, Is.EqualTo("CustomAgent"));
             Assert.That(data.AlwaysRun, Is.False);
-        });
+        }
     }
 
     [Test]
@@ -110,12 +110,12 @@ public class ContentDetectionConfigMappingsTests
         var model = data.ToModel();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(model.CacheDuration, Is.EqualTo(TimeSpan.FromSeconds(3600)));
             Assert.That(model.CacheDuration, Is.EqualTo(TimeSpan.FromHours(1)));
             Assert.That(model.AlwaysRun, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -172,11 +172,11 @@ public class ContentDetectionConfigMappingsTests
         var model = data.ToModel();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(model.Timeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
             Assert.That(model.UseVirusTotal, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -250,12 +250,12 @@ public class ContentDetectionConfigMappingsTests
         var model = data.ToModel();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(model.Timeout, Is.EqualTo(TimeSpan.FromSeconds(30)));
             Assert.That(model.UseOpenAIVision, Is.True);
             Assert.That(model.UseOCR, Is.True);
-        });
+        }
     }
 
     [Test]
@@ -292,11 +292,11 @@ public class ContentDetectionConfigMappingsTests
         var model = data.ToModel();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(model.Timeout, Is.EqualTo(TimeSpan.FromSeconds(60)));
             Assert.That(model.Timeout, Is.EqualTo(TimeSpan.FromMinutes(1)));
-        });
+        }
     }
 
     [Test]
@@ -360,9 +360,12 @@ public class ContentDetectionConfigMappingsTests
         var data = model.ToData();
         var roundTrip = data.ToModel();
 
-        // Assert
-        Assert.That(roundTrip.CacheDuration, Is.EqualTo(TimeSpan.FromDays(1)));
-        Assert.That(data.CacheDurationSeconds, Is.EqualTo(86400.0));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(roundTrip.CacheDuration, Is.EqualTo(TimeSpan.FromDays(1)));
+            Assert.That(data.CacheDurationSeconds, Is.EqualTo(86400.0));
+        }
     }
 
     #endregion
@@ -387,14 +390,14 @@ public class ContentDetectionConfigMappingsTests
         var roundTripData = model.ToData();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(roundTripData.ThreatIntel.TimeoutSeconds, Is.EqualTo(30.0));
             Assert.That(roundTripData.UrlBlocklist.CacheDurationSeconds, Is.EqualTo(3600.0));
             Assert.That(roundTripData.SeoScraping.TimeoutSeconds, Is.EqualTo(10.0));
             Assert.That(roundTripData.ImageSpam.TimeoutSeconds, Is.EqualTo(30.0));
             Assert.That(roundTripData.VideoSpam.TimeoutSeconds, Is.EqualTo(60.0));
-        });
+        }
     }
 
     #endregion

@@ -39,7 +39,7 @@ public class ReportsPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/reports");
+        await _page.GotoAsync("/reports", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
     }
 
     /// <summary>

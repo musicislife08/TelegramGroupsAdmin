@@ -175,11 +175,11 @@ public class NotificationHandlerTests
         var result = await _handler.NotifyUserCriticalViolationAsync(UserIdentity.FromId(userId), violations);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("blocked"));
-        });
+        }
     }
 
     #endregion

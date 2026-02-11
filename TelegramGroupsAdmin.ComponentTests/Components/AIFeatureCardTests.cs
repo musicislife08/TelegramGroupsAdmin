@@ -1,5 +1,4 @@
 using Bunit;
-using Microsoft.AspNetCore.Components;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -380,8 +379,11 @@ public class AIFeatureCardTests : MudBlazorTestContext
 
         // Assert - Test/Save buttons should not be visible when disabled
         var buttons = cut.FindAll("button");
-        Assert.That(buttons.Any(b => b.TextContent.Contains("Test")), Is.False);
-        Assert.That(buttons.Any(b => b.TextContent.Contains("Save")), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(buttons.Any(b => b.TextContent.Contains("Test")), Is.False);
+            Assert.That(buttons.Any(b => b.TextContent.Contains("Save")), Is.False);
+        }
     }
 
     #endregion

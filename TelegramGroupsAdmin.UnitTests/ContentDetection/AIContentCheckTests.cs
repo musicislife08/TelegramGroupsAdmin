@@ -187,10 +187,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("too short"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("too short"));
+        }
     }
 
     [Test]
@@ -217,9 +220,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(4.0).Within(0.01)); // 0.8 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(4.0).Within(0.01)); // 0.8 * 5.0
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     #endregion
@@ -249,10 +255,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("No spam flags"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("No spam flags"));
+        }
     }
 
     [Test]
@@ -279,10 +288,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.False); // Veto returns clean verdict, not abstention
-        Assert.That(response.Details, Does.Contain("Clean"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.False); // Veto returns clean verdict, not abstention
+            Assert.That(response.Details, Does.Contain("Clean"));
+        }
     }
 
     #endregion
@@ -307,9 +319,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+        }
     }
 
     #endregion
@@ -327,11 +342,14 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(4.75).Within(0.01)); // 0.95 * 5.0
-        Assert.That(response.Abstained, Is.False);
-        Assert.That(response.CheckName, Is.EqualTo(CheckName.OpenAI));
-        Assert.That(response.Details, Does.Contain("Spam"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(4.75).Within(0.01)); // 0.95 * 5.0
+            Assert.That(response.Abstained, Is.False);
+            Assert.That(response.CheckName, Is.EqualTo(CheckName.OpenAI));
+            Assert.That(response.Details, Does.Contain("Spam"));
+        }
         Assert.That(response.Details, Does.Contain("prohibited content"));
     }
 
@@ -346,9 +364,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(3.0).Within(0.01)); // 0.6 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(3.0).Within(0.01)); // 0.6 * 5.0
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     [Test]
@@ -362,9 +383,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(1.5).Within(0.01)); // 0.3 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(1.5).Within(0.01)); // 0.3 * 5.0
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     #endregion
@@ -382,11 +406,14 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        // Review is capped at ContentDetectionConstants.ReviewThreshold even though 0.9 * 5.0 = 4.5
-        Assert.That(response.Score, Is.EqualTo(ContentDetectionConstants.ReviewThreshold).Within(0.01));
-        Assert.That(response.Abstained, Is.False);
-        Assert.That(response.Details, Does.Contain("Review"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            // Review is capped at ContentDetectionConstants.ReviewThreshold even though 0.9 * 5.0 = 4.5
+            Assert.That(response.Score, Is.EqualTo(ContentDetectionConstants.ReviewThreshold).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+            Assert.That(response.Details, Does.Contain("Review"));
+        }
     }
 
     [Test]
@@ -400,9 +427,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(2.5).Within(0.01)); // 0.5 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(2.5).Within(0.01)); // 0.5 * 5.0
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     #endregion
@@ -420,10 +450,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.False); // Clean is a verdict, not an abstention
-        Assert.That(response.Details, Does.Contain("Clean"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.False); // Clean is a verdict, not an abstention
+            Assert.That(response.Details, Does.Contain("Clean"));
+        }
         Assert.That(response.Details, Does.Contain("legitimate message"));
     }
 
@@ -444,17 +477,20 @@ public class AIContentCheckTests
         // Act - Second call with same message
         var response2 = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response1.Score, Is.EqualTo(response2.Score));
-        Assert.That(response2.Details, Does.Contain("cached"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response1.Score, Is.EqualTo(response2.Score));
+            Assert.That(response2.Details, Does.Contain("cached"));
+        }
 
         // Verify chat service was only called once (cached on second call)
         await _mockChatService.Received(1).GetCompletionAsync(
-            Arg.Any<AIFeatureType>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<ChatCompletionOptions?>(),
-            Arg.Any<CancellationToken>());
+                Arg.Any<AIFeatureType>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -474,9 +510,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+        }
     }
 
     [Test]
@@ -492,10 +531,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Error, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Error, Is.Not.Null);
+        }
     }
 
     [Test]
@@ -512,10 +554,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("Failed to parse"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("Failed to parse"));
+        }
     }
 
     [Test]
@@ -532,9 +577,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+        }
     }
 
     #endregion
@@ -561,10 +609,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        // Default confidence is 0.8, so score should be 0.8 * 5.0 = 4.0
-        Assert.That(response.Score, Is.EqualTo(4.0).Within(0.01));
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            // Default confidence is 0.8, so score should be 0.8 * 5.0 = 4.0
+            Assert.That(response.Score, Is.EqualTo(4.0).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     [Test]
@@ -587,9 +638,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True); // Unknown result should abstain
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True); // Unknown result should abstain
+        }
     }
 
     #endregion
@@ -609,17 +663,20 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(4.5).Within(0.01)); // 0.9 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(4.5).Within(0.01)); // 0.9 * 5.0
+            Assert.That(response.Abstained, Is.False);
+        }
 
         // Verify AI service was called (OCR text should be analyzed)
         await _mockChatService.Received(1).GetCompletionAsync(
-            Arg.Any<AIFeatureType>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<ChatCompletionOptions?>(),
-            Arg.Any<CancellationToken>());
+                Arg.Any<AIFeatureType>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -635,9 +692,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert - Clean verdict
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Clean verdict
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     [Test]
@@ -653,9 +713,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert - Should NOT abstain because combined length > 10
-        Assert.That(response.Abstained, Is.False);
-        Assert.That(response.Score, Is.EqualTo(3.75).Within(0.01)); // 0.75 * 5.0
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Should NOT abstain because combined length > 10
+            Assert.That(response.Abstained, Is.False);
+            Assert.That(response.Score, Is.EqualTo(3.75).Within(0.01)); // 0.75 * 5.0
+        }
     }
 
     [Test]
@@ -669,9 +732,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert - Should abstain because combined text too short
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("too short"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Should abstain because combined text too short
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("too short"));
+        }
     }
 
     [Test]

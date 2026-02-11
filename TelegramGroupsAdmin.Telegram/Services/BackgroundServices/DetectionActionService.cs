@@ -6,11 +6,8 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
@@ -87,8 +84,8 @@ public class DetectionActionService(
                 logger.LogWarning(
                     "Hard block for message {MessageId} from {User} in {Chat}: {Reason}",
                     message.MessageId,
-                    LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
-                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                    message.From.ToLogDebug(),
+                    message.Chat.ToLogDebug(),
                     hardBlockResult.Details);
 
                 await moderationOrchestrator.MarkAsSpamAndBanAsync(
@@ -112,8 +109,8 @@ public class DetectionActionService(
                 logger.LogWarning(
                     "Malware detected in message {MessageId} from {User} in {Chat}: {Details}",
                     message.MessageId,
-                    LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
-                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                    message.From.ToLogDebug(),
+                    message.Chat.ToLogDebug(),
                     malwareResult.Details);
 
                 await moderationOrchestrator.HandleMalwareViolationAsync(
@@ -164,8 +161,8 @@ public class DetectionActionService(
                 logger.LogInformation(
                     "Message {MessageId} from {User} in {Chat} triggers auto-ban (net: {NetConfidence}, OpenAI: {OpenAIConf}%)",
                     message.MessageId,
-                    LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
-                    LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id),
+                    message.From.ToLogInfo(),
+                    message.Chat.ToLogInfo(),
                     spamResult.NetConfidence,
                     openAIResult.Confidence);
 

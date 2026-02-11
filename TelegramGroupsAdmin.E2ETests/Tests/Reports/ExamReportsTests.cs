@@ -53,15 +53,18 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Assert
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "Should display exam review when pending exam failure exists");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
+                "Should display exam review when pending exam failure exists");
 
-        Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
-            "Pending exam chip should be visible");
+            Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
+                "Pending exam chip should be visible");
 
-        Assert.That(await _reportsPage.GetPendingExamCountAsync(), Is.GreaterThanOrEqualTo(1),
-            "Should show at least 1 pending exam review");
+            Assert.That(await _reportsPage.GetPendingExamCountAsync(), Is.GreaterThanOrEqualTo(1),
+                "Should show at least 1 pending exam review");
+        }
     }
 
     [Test]
@@ -182,10 +185,13 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         var examCount = await _reportsPage.GetExamReviewCountAsync();
         var moderationCount = await _reportsPage.GetModerationReportCountAsync();
 
-        Assert.That(examCount, Is.GreaterThanOrEqualTo(1),
-            "Should show exam reviews when filtered");
-        Assert.That(moderationCount, Is.EqualTo(0),
-            "Should not show moderation reports when filtered to exam reviews");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(examCount, Is.GreaterThanOrEqualTo(1),
+                      "Should show exam reviews when filtered");
+            Assert.That(moderationCount, Is.EqualTo(0),
+                "Should not show moderation reports when filtered to exam reviews");
+        }
     }
 
     [Test]
@@ -299,7 +305,7 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
         var impersonationCount = await _reportsPage.GetImpersonationAlertCountAsync();
         var examCount = await _reportsPage.GetExamReviewCountAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(moderationCount, Is.GreaterThanOrEqualTo(1),
                 "Should display at least 1 moderation report");
@@ -307,20 +313,23 @@ public class ExamReportsTests : SharedAuthenticatedTestBase
                 "Should display at least 1 impersonation alert");
             Assert.That(examCount, Is.GreaterThanOrEqualTo(1),
                 "Should display at least 1 exam review");
-        });
+        }
 
         // Verify each card type header is visible
         await Expect(Page.GetByText("Moderation Report", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(Page.GetByText("Exam Review", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Verify pending count chips show all types
-        Assert.That(await _reportsPage.IsPendingModerationChipVisibleAsync(), Is.True,
-            "Pending moderation chip should be visible");
-        Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
-            "Pending impersonation chip should be visible");
-        Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
-            "Pending exam chip should be visible");
+        using (Assert.EnterMultipleScope())
+        {
+            // Verify pending count chips show all types
+            Assert.That(await _reportsPage.IsPendingModerationChipVisibleAsync(), Is.True,
+                "Pending moderation chip should be visible");
+            Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
+                "Pending impersonation chip should be visible");
+            Assert.That(await _reportsPage.IsPendingExamChipVisibleAsync(), Is.True,
+                "Pending exam chip should be visible");
+        }
     }
 
     #endregion

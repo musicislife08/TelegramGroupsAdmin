@@ -179,8 +179,11 @@ public class CascadeBehaviorTests
         var translationExists = await helper.ExecuteScalarAsync<bool>(
             "SELECT EXISTS(SELECT 1 FROM message_translations WHERE message_id = 5000)");
 
-        Assert.That(messageExists, Is.True, "Message should exist before deletion");
-        Assert.That(translationExists, Is.True, "Translation should exist before message deletion");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(messageExists, Is.True, "Message should exist before deletion");
+            Assert.That(translationExists, Is.True, "Translation should exist before message deletion");
+        }
 
         // Act - Delete the message
         await using (var context = helper.GetDbContext())
@@ -296,9 +299,12 @@ public class CascadeBehaviorTests
         var messageCount = await helper.ExecuteScalarAsync<long>(
             "SELECT COUNT(*) FROM messages WHERE chat_id = 200");
 
-        Assert.That(chatActive, Is.True, "Chat should be active initially");
-        Assert.That(adminCount, Is.EqualTo(1), "Should have 1 admin initially");
-        Assert.That(messageCount, Is.EqualTo(1), "Should have 1 message initially");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chatActive, Is.True, "Chat should be active initially");
+            Assert.That(adminCount, Is.EqualTo(1), "Should have 1 admin initially");
+            Assert.That(messageCount, Is.EqualTo(1), "Should have 1 message initially");
+        }
 
         // Act - Deactivate managed chat (bot removed from chat scenario)
         await using (var context = helper.GetDbContext())
@@ -318,12 +324,15 @@ public class CascadeBehaviorTests
         var chatActiveAfter = await helper.ExecuteScalarAsync<bool>(
             "SELECT is_active FROM managed_chats WHERE chat_id = 200");
 
-        Assert.That(chatExistsAfter, Is.True, "Chat should still exist (preserved for audit)");
-        Assert.That(chatActiveAfter, Is.False, "Chat should be marked inactive");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chatExistsAfter, Is.True, "Chat should still exist (preserved for audit)");
+            Assert.That(chatActiveAfter, Is.False, "Chat should be marked inactive");
+        }
 
         // 2. Messages should be preserved (retention policy handles deletion separately)
         var messageCountAfter = await helper.ExecuteScalarAsync<long>(
-            "SELECT COUNT(*) FROM messages WHERE chat_id = 200");
+                "SELECT COUNT(*) FROM messages WHERE chat_id = 200");
         Assert.That(messageCountAfter, Is.EqualTo(1),
             "Messages should be preserved (retention policy deletes separately)");
 

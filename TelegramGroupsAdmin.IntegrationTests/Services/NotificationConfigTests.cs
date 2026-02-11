@@ -17,10 +17,13 @@ public class NotificationConfigTests
         // Arrange
         var config = new NotificationConfig();
 
-        // Act & Assert
-        Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.SpamDetected), Is.False);
-        Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.UserBanned), Is.False);
-        Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.MalwareDetected), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert
+            Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.SpamDetected), Is.False);
+            Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.UserBanned), Is.False);
+            Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.MalwareDetected), Is.False);
+        }
     }
 
     [Test]
@@ -59,9 +62,12 @@ public class NotificationConfigTests
             ]
         };
 
-        // Act & Assert
-        Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.BackupFailed), Is.True);
-        Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.MalwareDetected), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert
+            Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.BackupFailed), Is.True);
+            Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.MalwareDetected), Is.True);
+        }
     }
 
     [Test]
@@ -110,19 +116,22 @@ public class NotificationConfigTests
             ]
         };
 
-        // Act & Assert - TelegramDm
-        Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.SpamDetected), Is.True);
-        Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.UserBanned), Is.True);
-        Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.BackupFailed), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert - TelegramDm
+            Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.SpamDetected), Is.True);
+            Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.UserBanned), Is.True);
+            Assert.That(config.IsEnabled(NotificationChannel.TelegramDm, NotificationEventType.BackupFailed), Is.False);
 
-        // Act & Assert - Email
-        Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.BackupFailed), Is.True);
-        Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.SpamDetected), Is.False);
+            // Act & Assert - Email
+            Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.BackupFailed), Is.True);
+            Assert.That(config.IsEnabled(NotificationChannel.Email, NotificationEventType.SpamDetected), Is.False);
 
-        // Act & Assert - WebPush
-        Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.SpamDetected), Is.True);
-        Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.MessageReported), Is.True);
-        Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.UserBanned), Is.False);
+            // Act & Assert - WebPush
+            Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.SpamDetected), Is.True);
+            Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.MessageReported), Is.True);
+            Assert.That(config.IsEnabled(NotificationChannel.WebPush, NotificationEventType.UserBanned), Is.False);
+        }
     }
 
     #endregion
@@ -141,8 +150,11 @@ public class NotificationConfigTests
 
         // Assert
         Assert.That(channel, Is.Not.Null);
-        Assert.That(channel.Channel, Is.EqualTo(NotificationChannel.Email));
-        Assert.That(config.Channels.Count, Is.EqualTo(1), "Should have created one channel");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(channel.Channel, Is.EqualTo(NotificationChannel.Email));
+            Assert.That(config.Channels.Count, Is.EqualTo(1), "Should have created one channel");
+        }
     }
 
     [Test]
@@ -160,9 +172,12 @@ public class NotificationConfigTests
         // Act
         var channel = config.GetOrCreateChannel(NotificationChannel.TelegramDm);
 
-        // Assert
-        Assert.That(channel, Is.SameAs(existingPref), "Should return same instance");
-        Assert.That(config.Channels.Count, Is.EqualTo(1), "Should not create duplicate");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(channel, Is.SameAs(existingPref), "Should return same instance");
+            Assert.That(config.Channels.Count, Is.EqualTo(1), "Should not create duplicate");
+        }
         Assert.That(channel.EnabledEvents, Contains.Item(NotificationEventType.SpamDetected));
     }
 
@@ -177,10 +192,13 @@ public class NotificationConfigTests
         var second = config.GetOrCreateChannel(NotificationChannel.WebPush);
         var third = config.GetOrCreateChannel(NotificationChannel.WebPush);
 
-        // Assert
-        Assert.That(second, Is.SameAs(first), "Second call should return same instance");
-        Assert.That(third, Is.SameAs(first), "Third call should return same instance");
-        Assert.That(config.Channels.Count, Is.EqualTo(1), "Should only have one channel");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(second, Is.SameAs(first), "Second call should return same instance");
+            Assert.That(third, Is.SameAs(first), "Third call should return same instance");
+            Assert.That(config.Channels.Count, Is.EqualTo(1), "Should only have one channel");
+        }
     }
 
     [Test]
@@ -194,11 +212,14 @@ public class NotificationConfigTests
         var email = config.GetOrCreateChannel(NotificationChannel.Email);
         var webPush = config.GetOrCreateChannel(NotificationChannel.WebPush);
 
-        // Assert
-        Assert.That(config.Channels.Count, Is.EqualTo(3));
-        Assert.That(telegram.Channel, Is.EqualTo(NotificationChannel.TelegramDm));
-        Assert.That(email.Channel, Is.EqualTo(NotificationChannel.Email));
-        Assert.That(webPush.Channel, Is.EqualTo(NotificationChannel.WebPush));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(config.Channels.Count, Is.EqualTo(3));
+            Assert.That(telegram.Channel, Is.EqualTo(NotificationChannel.TelegramDm));
+            Assert.That(email.Channel, Is.EqualTo(NotificationChannel.Email));
+            Assert.That(webPush.Channel, Is.EqualTo(NotificationChannel.WebPush));
+        }
     }
 
     #endregion
@@ -213,8 +234,11 @@ public class NotificationConfigTests
 
         // Assert
         Assert.That(pref.EnabledEvents, Is.Not.Null);
-        Assert.That(pref.EnabledEvents.Count, Is.EqualTo(0));
-        Assert.That(pref.DigestMinutes, Is.EqualTo(0), "Default digest should be 0 (immediate)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pref.EnabledEvents.Count, Is.EqualTo(0));
+            Assert.That(pref.DigestMinutes, Is.EqualTo(0), "Default digest should be 0 (immediate)");
+        }
     }
 
     [Test]

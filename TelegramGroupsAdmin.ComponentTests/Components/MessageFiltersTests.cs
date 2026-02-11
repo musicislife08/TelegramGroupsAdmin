@@ -1,7 +1,6 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
@@ -370,16 +369,19 @@ public class MessageFiltersTests : MessageFiltersTestContext
         // Arrange & Act
         var state = new MessageFilters.MessageFilterState();
 
-        // Assert
-        Assert.That(state.SearchText, Is.Null);
-        Assert.That(state.UserName, Is.Null);
-        Assert.That(state.ChatName, Is.Null);
-        Assert.That(state.SpamFilter, Is.EqualTo(MessageFilters.SpamFilterOption.All));
-        Assert.That(state.StartDate, Is.Null);
-        Assert.That(state.EndDate, Is.Null);
-        Assert.That(state.HasImages, Is.Null);
-        Assert.That(state.HasLinks, Is.Null);
-        Assert.That(state.HasEdits, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(state.SearchText, Is.Null);
+            Assert.That(state.UserName, Is.Null);
+            Assert.That(state.ChatName, Is.Null);
+            Assert.That(state.SpamFilter, Is.EqualTo(MessageFilters.SpamFilterOption.All));
+            Assert.That(state.StartDate, Is.Null);
+            Assert.That(state.EndDate, Is.Null);
+            Assert.That(state.HasImages, Is.Null);
+            Assert.That(state.HasLinks, Is.Null);
+            Assert.That(state.HasEdits, Is.Null);
+        }
     }
 
     #endregion

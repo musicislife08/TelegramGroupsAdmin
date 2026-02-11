@@ -1,13 +1,12 @@
 @page "/users"
 @attribute [Authorize]
-@using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Components.Shared.Settings
+@using TelegramGroupsAdmin.Core.Extensions
+@using TelegramGroupsAdmin.Core.Models
 @inject ITelegramUserManagementService UserManagementService
-@inject IBlazorAuthHelper AuthHelper
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
-@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Users - TelegramGroupsAdmin</PageTitle>
 
@@ -467,6 +466,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private List<TelegramUserListItem> _allUsers = [];
     private List<TelegramUserListItem> _taggedUsers = [];
     private List<TelegramUserListItem> _trustedUsers = [];
@@ -490,6 +491,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadUsersAsync();
     }
 
@@ -539,20 +542,10 @@
 
         try
         {
-            // Get current user's accessible chats
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                Snackbar.Add("Unable to identify current user", Severity.Error);
-                return;
-            }
-
             // Get accessible chat IDs for filtering
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel);
+                WebUser!.Id,
+                WebUser.PermissionLevel);
             var chatIds = accessibleChats.Select(c => c.Identity.Id).ToList();
 
             // Load all user lists in parallel (filtered by accessible chats for Admin users)
@@ -588,15 +581,7 @@
     {
         try
         {
-            // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (executorId == null)
-            {
-                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
-                return;
-            }
-            var executor = Actor.FromWebUser(executorId);
+            var executor = WebUser!.ToActor();
 
             var action = user.IsTrusted ? "remove trust from" : "trust";
             var success = await UserManagementService.ToggleTrustAsync(user.TelegramUserId, executor);
@@ -631,15 +616,7 @@
             if (confirmed != true)
                 return;
 
-            // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (executorId == null)
-            {
-                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
-                return;
-            }
-            var executor = Actor.FromWebUser(executorId);
+            var executor = WebUser!.ToActor();
 
             // Unban the user
             var success = await UserManagementService.UnbanAsync(user.TelegramUserId, executor, reason: "Unbanned from web interface");
@@ -664,7 +641,8 @@
     {
         var parameters = new DialogParameters<UserDetailDialog>
         {
-            { x => x.UserId, userId }
+            { x => x.UserId, userId },
+            { x => x.WebUser, WebUser }
         };
 
         var options = new DialogOptions

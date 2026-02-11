@@ -275,12 +275,15 @@ public class ReplyPreviewTests : MudBlazorTestContext
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, "Hello"));
 
-        // Assert - verify expected elements exist
-        Assert.That(cut.FindAll(".reply-preview").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-bar").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-content").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-user").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-text").Count, Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - verify expected elements exist
+            Assert.That(cut.FindAll(".reply-preview").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-bar").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-content").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-user").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-text").Count, Is.EqualTo(1));
+        }
     }
 
     #endregion

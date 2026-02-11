@@ -1,5 +1,3 @@
-using TelegramGroupsAdmin.Core.Models;
-
 namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>

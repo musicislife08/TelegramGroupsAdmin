@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Core.Repositories;
 

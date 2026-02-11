@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
-using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Extensions;
@@ -112,7 +111,7 @@ public class StopWordsContentCheckV2(
 
             var details = $"Found stop words: {string.Join(", ", foundMatches.Take(3))}" +
                          (foundMatches.Count > 3 ? $" (+{foundMatches.Count - 3} more)" : "");
-            
+
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,

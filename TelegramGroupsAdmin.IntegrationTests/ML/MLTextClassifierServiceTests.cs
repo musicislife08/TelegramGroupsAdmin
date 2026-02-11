@@ -6,7 +6,6 @@ using System.Text.Json;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -113,18 +112,24 @@ public class MLTextClassifierServiceTests
         var modelPath = Path.Combine(_tempDataDirectory, "ml-models", "spam-classifier.zip");
         var metadataPath = Path.Combine(_tempDataDirectory, "ml-models", "spam-classifier.json");
 
-        Assert.That(File.Exists(modelPath), Is.True, "Model file should exist");
-        Assert.That(File.Exists(metadataPath), Is.True, "Metadata file should exist");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(File.Exists(modelPath), Is.True, "Model file should exist");
+            Assert.That(File.Exists(metadataPath), Is.True, "Metadata file should exist");
+        }
 
         // Verify metadata
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 spam samples from combined datasets");
-        Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 ham samples (explicit labels + implicit ≥50 words)");
-        Assert.That(metadata.TotalSampleCount, Is.GreaterThanOrEqualTo(40));
-        Assert.That(metadata.IsBalanced, Is.True, "Training data should be balanced (20-80% spam)");
-        Assert.That(metadata.ModelHash, Is.Not.Null.And.Not.Empty);
-        Assert.That(metadata.ModelSizeBytes, Is.GreaterThan(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 spam samples from combined datasets");
+            Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 ham samples (explicit labels + implicit ≥50 words)");
+            Assert.That(metadata.TotalSampleCount, Is.GreaterThanOrEqualTo(40));
+            Assert.That(metadata.IsBalanced, Is.True, "Training data should be balanced (20-80% spam)");
+            Assert.That(metadata.ModelHash, Is.Not.Null.And.Not.Empty);
+            Assert.That(metadata.ModelSizeBytes, Is.GreaterThan(0));
+        }
     }
 
     [Test]
@@ -184,11 +189,14 @@ public class MLTextClassifierServiceTests
 
         var loadedMetadata = newService.GetMetadata();
         Assert.That(loadedMetadata, Is.Not.Null);
-        Assert.That(loadedMetadata!.SpamSampleCount, Is.EqualTo(originalMetadata!.SpamSampleCount));
-        Assert.That(loadedMetadata.HamSampleCount, Is.EqualTo(originalMetadata.HamSampleCount));
-        Assert.That(loadedMetadata.ModelHash, Is.EqualTo(originalMetadata.ModelHash));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(loadedMetadata!.SpamSampleCount, Is.EqualTo(originalMetadata!.SpamSampleCount));
+            Assert.That(loadedMetadata.HamSampleCount, Is.EqualTo(originalMetadata.HamSampleCount));
+            Assert.That(loadedMetadata.ModelHash, Is.EqualTo(originalMetadata.ModelHash));
+        }
 
-        (serviceProvider as IDisposable)?.Dispose();
+    (serviceProvider as IDisposable)?.Dispose();
     }
 
     [Test]
@@ -202,8 +210,11 @@ public class MLTextClassifierServiceTests
 
         // Assert
         Assert.That(prediction, Is.Not.Null);
-        Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
-        Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
+            Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        }
     }
 
     [Test]
@@ -220,8 +231,11 @@ public class MLTextClassifierServiceTests
         // Assert - Verify training completed successfully (one call trained, other skipped)
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null, "Training should complete successfully");
-        Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 spam samples from combined datasets");
-        Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 ham samples (explicit labels + implicit ≥50 words)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 spam samples from combined datasets");
+            Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20), "At least 20 ham samples (explicit labels + implicit ≥50 words)");
+        }
 
         // Verify only one model file created (not duplicated)
         var modelPath = Path.Combine(_tempDataDirectory, "ml-models", "spam-classifier.zip");
@@ -257,9 +271,12 @@ public class MLTextClassifierServiceTests
         // Act - Try to load corrupted model
         var loaded = await _mlService!.LoadModelAsync();
 
-        // Assert - Should return false gracefully (not throw exception)
-        Assert.That(loaded, Is.False, "Loading corrupted model should return false");
-        Assert.That(_mlService.GetMetadata(), Is.Null, "Metadata should be null after failed load");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Should return false gracefully (not throw exception)
+            Assert.That(loaded, Is.False, "Loading corrupted model should return false");
+            Assert.That(_mlService.GetMetadata(), Is.Null, "Metadata should be null after failed load");
+        }
     }
 
     [Test]
@@ -270,9 +287,12 @@ public class MLTextClassifierServiceTests
         // Act
         var loaded = await _mlService!.LoadModelAsync();
 
-        // Assert
-        Assert.That(loaded, Is.False, "Loading non-existent model should return false");
-        Assert.That(_mlService.GetMetadata(), Is.Null, "Metadata should be null when model doesn't exist");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(loaded, Is.False, "Loading non-existent model should return false");
+            Assert.That(_mlService.GetMetadata(), Is.Null, "Metadata should be null when model doesn't exist");
+        }
     }
 
     [Test]
@@ -406,8 +426,11 @@ public class MLTextClassifierServiceTests
 
         // Assert - Should return a valid prediction (not throw)
         Assert.That(prediction, Is.Not.Null, "ML.NET handles null input gracefully");
-        Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
-        Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
+            Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        }
     }
 
     [Test]
@@ -421,8 +444,11 @@ public class MLTextClassifierServiceTests
 
         // Assert - Empty string should be treated as ham (low spam probability)
         Assert.That(prediction, Is.Not.Null, "Predict should handle empty string");
-        Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
-        Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
+            Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        }
     }
 
     [Test]
@@ -437,8 +463,11 @@ public class MLTextClassifierServiceTests
 
         // Assert - Should handle very long text without crashing
         Assert.That(prediction, Is.Not.Null, "Predict should handle very long text");
-        Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
-        Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
+            Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        }
     }
 
     [Test]
@@ -453,8 +482,11 @@ public class MLTextClassifierServiceTests
 
         // Assert
         Assert.That(prediction, Is.Not.Null, "Predict should handle special characters");
-        Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
-        Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(prediction!.Probability, Is.GreaterThanOrEqualTo(0.0f));
+            Assert.That(prediction.Probability, Is.LessThanOrEqualTo(1.0f));
+        }
     }
 
     #endregion
@@ -478,11 +510,14 @@ public class MLTextClassifierServiceTests
         // Assert - Implicit ham is added to balance the dataset
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
-        // SQL has 100 spam samples, but SimHash deduplication removes near-duplicates (~6)
-        Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(90), "After dedup, most spam samples should remain");
-        Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(100), "Should not exceed raw spam count");
-        Assert.That(metadata.HamSampleCount, Is.GreaterThan(20), "Should add implicit ham on top of 20 explicit ham");
-        Assert.That(metadata.IsBalanced, Is.True, "Implicit ham should bring dataset into balanced range (20-80% spam)");
+        using (Assert.EnterMultipleScope())
+        {
+            // SQL has 100 spam samples, but SimHash deduplication removes near-duplicates (~6)
+            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(90), "After dedup, most spam samples should remain");
+            Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(100), "Should not exceed raw spam count");
+            Assert.That(metadata.HamSampleCount, Is.GreaterThan(20), "Should add implicit ham on top of 20 explicit ham");
+            Assert.That(metadata.IsBalanced, Is.True, "Implicit ham should bring dataset into balanced range (20-80% spam)");
+        }
     }
 
     [Test]
@@ -502,17 +537,23 @@ public class MLTextClassifierServiceTests
         // Assert - Explicit ham is now CAPPED to maintain balance
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
-        // SQL has 20 spam samples; small dataset so minimal dedup impact expected
-        Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(15), "After dedup, most spam samples should remain");
-        Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(20), "Should not exceed raw spam count");
+        using (Assert.EnterMultipleScope())
+        {
+            // SQL has 20 spam samples; small dataset so minimal dedup impact expected
+            Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(15), "After dedup, most spam samples should remain");
+            Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(20), "Should not exceed raw spam count");
 
-        // NEW BEHAVIOR: Explicit ham is capped to dynamicHamCap (20 * 2.33 = 46)
-        Assert.That(metadata.HamSampleCount, Is.LessThanOrEqualTo(46),
-            "Explicit ham should be capped at dynamicHamCap (20 * 2.33 = 46) for balance");
-        Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20),
-            "Should use at least 20 ham samples");
-        Assert.That(metadata.IsBalanced, Is.True,
-            "Dataset should be balanced after capping explicit ham (20-80% spam ratio)");
+            // NEW BEHAVIOR: Explicit ham is capped to dynamicHamCap (20 * 2.33 = 46)
+            Assert.That(metadata.HamSampleCount, Is.LessThanOrEqualTo(46),
+                "Explicit ham should be capped at dynamicHamCap (20 * 2.33 = 46) for balance");
+        }
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20),
+                      "Should use at least 20 ham samples");
+            Assert.That(metadata.IsBalanced, Is.True,
+                "Dataset should be balanced after capping explicit ham (20-80% spam ratio)");
+        }
     }
 
     [Test]
@@ -527,9 +568,12 @@ public class MLTextClassifierServiceTests
         // Assert
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata!.SpamRatio, Is.GreaterThanOrEqualTo(0.2).And.LessThanOrEqualTo(0.8),
-            "Spam ratio should be between 20-80% for balanced dataset");
-        Assert.That(metadata.IsBalanced, Is.True, "Dataset should be flagged as balanced");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata!.SpamRatio, Is.GreaterThanOrEqualTo(0.2).And.LessThanOrEqualTo(0.8),
+                      "Spam ratio should be between 20-80% for balanced dataset");
+            Assert.That(metadata.IsBalanced, Is.True, "Dataset should be flagged as balanced");
+        }
     }
 
     #endregion

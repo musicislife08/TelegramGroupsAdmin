@@ -1,15 +1,14 @@
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// User record for UI display
+/// User record for UI display.
+/// Identity fields (Id, Email, PermissionLevel) are embedded in WebUser.
 /// </summary>
 public record UserRecord(
-    string Id,
-    string Email,
+    WebUserIdentity WebUser,
     string NormalizedEmail,
     string PasswordHash,
     string SecurityStamp,
-    PermissionLevel PermissionLevel,
     string? InvitedBy,
     bool IsActive,
     string? TotpSecret,
@@ -31,6 +30,6 @@ public record UserRecord(
 {
     public bool CanLogin => Status == UserStatus.Active && EmailVerified && !IsLocked;
     public bool IsPending => Status == UserStatus.Pending;
-    public int PermissionLevelInt => (int)PermissionLevel;
+    public int PermissionLevelInt => (int)WebUser.PermissionLevel;
     public bool IsLocked => LockedUntil.HasValue && LockedUntil.Value > DateTimeOffset.UtcNow;
 }

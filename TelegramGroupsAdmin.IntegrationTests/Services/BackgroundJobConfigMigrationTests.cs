@@ -120,22 +120,28 @@ public class BackgroundJobConfigMigrationTests
         // Assert - Verify MessageCleanup was migrated to typed DataCleanup
         var messageCleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(messageCleanupJob, Is.Not.Null, "MessageCleanup job should exist after migration");
-        Assert.That(messageCleanupJob!.DataCleanup, Is.Not.Null, "DataCleanup typed settings should be populated");
-        Assert.That(messageCleanupJob.DataCleanup!.MessageRetention, Is.EqualTo("14d"));
-        Assert.That(messageCleanupJob.DataCleanup.ReportRetention, Is.EqualTo("60d"));
-        Assert.That(messageCleanupJob.DataCleanup.CallbackContextRetention, Is.EqualTo("3d"));
-        Assert.That(messageCleanupJob.DataCleanup.WebNotificationRetention, Is.EqualTo("10d"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(messageCleanupJob!.DataCleanup, Is.Not.Null, "DataCleanup typed settings should be populated");
+            Assert.That(messageCleanupJob.DataCleanup!.MessageRetention, Is.EqualTo("14d"));
+            Assert.That(messageCleanupJob.DataCleanup.ReportRetention, Is.EqualTo("60d"));
+            Assert.That(messageCleanupJob.DataCleanup.CallbackContextRetention, Is.EqualTo("3d"));
+            Assert.That(messageCleanupJob.DataCleanup.WebNotificationRetention, Is.EqualTo("10d"));
+        }
 
         // Assert - Verify ScheduledBackup was migrated to typed ScheduledBackup
         var backupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.ScheduledBackup);
         Assert.That(backupJob, Is.Not.Null, "ScheduledBackup job should exist after migration");
-        Assert.That(backupJob!.ScheduledBackup, Is.Not.Null, "ScheduledBackup typed settings should be populated");
-        Assert.That(backupJob.ScheduledBackup!.RetainHourlyBackups, Is.EqualTo(12));
-        Assert.That(backupJob.ScheduledBackup.RetainDailyBackups, Is.EqualTo(14));
-        Assert.That(backupJob.ScheduledBackup.RetainWeeklyBackups, Is.EqualTo(8));
-        Assert.That(backupJob.ScheduledBackup.RetainMonthlyBackups, Is.EqualTo(6));
-        Assert.That(backupJob.ScheduledBackup.RetainYearlyBackups, Is.EqualTo(2));
-        Assert.That(backupJob.ScheduledBackup.BackupDirectory, Is.EqualTo("/custom/backups"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(backupJob!.ScheduledBackup, Is.Not.Null, "ScheduledBackup typed settings should be populated");
+            Assert.That(backupJob.ScheduledBackup!.RetainHourlyBackups, Is.EqualTo(12));
+            Assert.That(backupJob.ScheduledBackup.RetainDailyBackups, Is.EqualTo(14));
+            Assert.That(backupJob.ScheduledBackup.RetainWeeklyBackups, Is.EqualTo(8));
+            Assert.That(backupJob.ScheduledBackup.RetainMonthlyBackups, Is.EqualTo(6));
+            Assert.That(backupJob.ScheduledBackup.RetainYearlyBackups, Is.EqualTo(2));
+            Assert.That(backupJob.ScheduledBackup.BackupDirectory, Is.EqualTo("/custom/backups"));
+        }
     }
 
     [Test]
@@ -173,11 +179,14 @@ public class BackgroundJobConfigMigrationTests
         // Assert - Values should be unchanged (migration didn't corrupt them)
         var job = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(job, Is.Not.Null);
-        Assert.That(job!.DataCleanup, Is.Not.Null);
-        Assert.That(job.DataCleanup!.MessageRetention, Is.EqualTo("45d"));
-        Assert.That(job.DataCleanup.ReportRetention, Is.EqualTo("90d"));
-        Assert.That(job.DataCleanup.CallbackContextRetention, Is.EqualTo("14d"));
-        Assert.That(job.DataCleanup.WebNotificationRetention, Is.EqualTo("21d"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(job!.DataCleanup, Is.Not.Null);
+            Assert.That(job.DataCleanup!.MessageRetention, Is.EqualTo("45d"));
+            Assert.That(job.DataCleanup.ReportRetention, Is.EqualTo("90d"));
+            Assert.That(job.DataCleanup.CallbackContextRetention, Is.EqualTo("14d"));
+            Assert.That(job.DataCleanup.WebNotificationRetention, Is.EqualTo("21d"));
+        }
     }
 
     [Test]
@@ -229,11 +238,14 @@ public class BackgroundJobConfigMigrationTests
 
         // Assert - ScheduledBackup should be migrated
         var backupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.ScheduledBackup);
-        Assert.That(backupJob!.ScheduledBackup, Is.Not.Null);
-        Assert.That(backupJob.ScheduledBackup!.RetainHourlyBackups, Is.EqualTo(48));
-        Assert.That(backupJob.ScheduledBackup.BackupDirectory, Is.EqualTo("/mixed/backups"));
-        // Defaults should be applied for missing settings
-        Assert.That(backupJob.ScheduledBackup.RetainDailyBackups, Is.EqualTo(7)); // default
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(backupJob!.ScheduledBackup, Is.Not.Null);
+            Assert.That(backupJob.ScheduledBackup!.RetainHourlyBackups, Is.EqualTo(48));
+            Assert.That(backupJob.ScheduledBackup.BackupDirectory, Is.EqualTo("/mixed/backups"));
+            // Defaults should be applied for missing settings
+            Assert.That(backupJob.ScheduledBackup.RetainDailyBackups, Is.EqualTo(7)); // default
+        }
     }
 
     [Test]
@@ -251,14 +263,20 @@ public class BackgroundJobConfigMigrationTests
         // Verify MessageCleanup has typed settings
         var cleanupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
         Assert.That(cleanupJob, Is.Not.Null);
-        Assert.That(cleanupJob!.DataCleanup, Is.Not.Null);
-        Assert.That(cleanupJob.DataCleanup!.MessageRetention, Is.EqualTo(DataCleanupSettings.DefaultMessageRetentionString));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cleanupJob!.DataCleanup, Is.Not.Null);
+            Assert.That(cleanupJob.DataCleanup!.MessageRetention, Is.EqualTo(DataCleanupSettings.DefaultMessageRetentionString));
+        }
 
         // Verify ScheduledBackup has typed settings
         var backupJob = await _configService.GetJobConfigAsync(BackgroundJobNames.ScheduledBackup);
         Assert.That(backupJob, Is.Not.Null);
-        Assert.That(backupJob!.ScheduledBackup, Is.Not.Null);
-        Assert.That(backupJob.ScheduledBackup!.BackupDirectory, Is.EqualTo("/data/backups")); // default
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(backupJob!.ScheduledBackup, Is.Not.Null);
+            Assert.That(backupJob.ScheduledBackup!.BackupDirectory, Is.EqualTo("/data/backups")); // default
+        }
     }
 
     [Test]
@@ -294,9 +312,12 @@ public class BackgroundJobConfigMigrationTests
         // Assert
         var maintenanceJob = await _configService.GetJobConfigAsync(BackgroundJobNames.DatabaseMaintenance);
         Assert.That(maintenanceJob, Is.Not.Null);
-        Assert.That(maintenanceJob!.DatabaseMaintenance, Is.Not.Null);
-        Assert.That(maintenanceJob.DatabaseMaintenance!.RunVacuum, Is.False);
-        Assert.That(maintenanceJob.DatabaseMaintenance.RunAnalyze, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(maintenanceJob!.DatabaseMaintenance, Is.Not.Null);
+            Assert.That(maintenanceJob.DatabaseMaintenance!.RunVacuum, Is.False);
+            Assert.That(maintenanceJob.DatabaseMaintenance.RunAnalyze, Is.True);
+        }
     }
 
     [Test]
@@ -331,8 +352,11 @@ public class BackgroundJobConfigMigrationTests
         // Assert
         var photoJob = await _configService.GetJobConfigAsync(BackgroundJobNames.UserPhotoRefresh);
         Assert.That(photoJob, Is.Not.Null);
-        Assert.That(photoJob!.UserPhotoRefresh, Is.Not.Null);
-        Assert.That(photoJob.UserPhotoRefresh!.DaysBack, Is.EqualTo(14));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(photoJob!.UserPhotoRefresh, Is.Not.Null);
+            Assert.That(photoJob.UserPhotoRefresh!.DaysBack, Is.EqualTo(14));
+        }
     }
 
     [Test]
@@ -395,10 +419,13 @@ public class BackgroundJobConfigMigrationTests
 
         // Assert - Reload and verify persistence
         var reloaded = await _configService.GetJobConfigAsync(BackgroundJobNames.DataCleanup);
-        Assert.That(reloaded!.DataCleanup!.MessageRetention, Is.EqualTo("60d"));
-        Assert.That(reloaded.DataCleanup.ReportRetention, Is.EqualTo("120d"));
-        Assert.That(reloaded.DataCleanup.CallbackContextRetention, Is.EqualTo("14d"));
-        Assert.That(reloaded.DataCleanup.WebNotificationRetention, Is.EqualTo("30d"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reloaded!.DataCleanup!.MessageRetention, Is.EqualTo("60d"));
+            Assert.That(reloaded.DataCleanup.ReportRetention, Is.EqualTo("120d"));
+            Assert.That(reloaded.DataCleanup.CallbackContextRetention, Is.EqualTo("14d"));
+            Assert.That(reloaded.DataCleanup.WebNotificationRetention, Is.EqualTo("30d"));
+        }
     }
 
     [Test]

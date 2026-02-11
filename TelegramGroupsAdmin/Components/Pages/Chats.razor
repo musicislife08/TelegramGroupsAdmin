@@ -1,5 +1,4 @@
 @page "/chats"
-@using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
@@ -10,7 +9,6 @@
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IContentDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @attribute [Authorize]
 @implements IDisposable
@@ -112,6 +110,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private List<ManagedChatInfo> _chats = [];
     private bool _loading = true;
     private string _searchString = "";
@@ -119,6 +119,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         // Subscribe to health updates
         BotService.OnHealthUpdate += HandleHealthUpdate;
 
@@ -130,21 +132,11 @@
         _loading = true;
         try
         {
-            // Get current user and their permission level
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                Snackbar.Add("Unable to identify current user", Severity.Error);
-                return;
-            }
-
             // Load chats accessible to this user (filtered by permission level)
             // Include deleted chats - UI toggle controls visibility
             var chats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel,
+                WebUser!.Id,
+                WebUser.PermissionLevel,
                 includeDeleted: true);
 
             // Check which chats have custom spam configs

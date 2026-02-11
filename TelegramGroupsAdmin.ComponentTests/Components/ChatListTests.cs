@@ -158,9 +158,12 @@ public class ChatListTests : MudBlazorTestContext
 
         // Assert - should be sorted by ChatId (ascending)
         var items = cut.FindAll(".chat-list-item");
-        Assert.That(items[0].TextContent, Does.Contain("Third")); // -100333 comes first (more negative)
-        Assert.That(items[1].TextContent, Does.Contain("Second"));
-        Assert.That(items[2].TextContent, Does.Contain("First")); // -100111 comes last
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items[0].TextContent, Does.Contain("Third")); // -100333 comes first (more negative)
+            Assert.That(items[1].TextContent, Does.Contain("Second"));
+            Assert.That(items[2].TextContent, Does.Contain("First")); // -100111 comes last
+        }
     }
 
     #endregion
@@ -182,8 +185,11 @@ public class ChatListTests : MudBlazorTestContext
 
         // Assert
         var img = cut.Find("img.chat-avatar");
-        Assert.That(img.GetAttribute("src"), Does.Contain("chat.jpg"));
-        Assert.That(img.GetAttribute("alt"), Is.EqualTo("Test Chat"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(img.GetAttribute("src"), Does.Contain("chat.jpg"));
+            Assert.That(img.GetAttribute("alt"), Is.EqualTo("Test Chat"));
+        }
     }
 
     [Test]
@@ -525,13 +531,16 @@ public class ChatListTests : MudBlazorTestContext
         var cut = Render<ChatList>(p => p
             .Add(x => x.Chats, chats));
 
-        // Assert
-        Assert.That(cut.FindAll(".chat-list").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-list-item").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-avatar-wrapper").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-info").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-title-row").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-subtitle-row").Count, Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(cut.FindAll(".chat-list").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-list-item").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-avatar-wrapper").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-info").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-title-row").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-subtitle-row").Count, Is.EqualTo(1));
+        }
     }
 
     #endregion

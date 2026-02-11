@@ -1,7 +1,6 @@
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using TelegramGroupsAdmin.Components.Shared;
-using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -205,9 +204,12 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         var cut = Render<MessageBubbleTelegram>(p => p
             .Add(x => x.Message, message));
 
-        // Assert
-        Assert.That(cut.FindAll(".tg-badge-spam"), Is.Empty);
-        Assert.That(cut.FindAll(".tg-badge-ham"), Is.Empty);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(cut.FindAll(".tg-badge-spam"), Is.Empty);
+            Assert.That(cut.FindAll(".tg-badge-ham"), Is.Empty);
+        }
     }
 
     #endregion

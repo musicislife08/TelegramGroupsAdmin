@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -322,10 +321,13 @@ public class MessageHistoryRepositoryTests
         // Verify structure (each message has detection history container)
         foreach (var msg in messages)
         {
-            Assert.That(msg.Message, Is.Not.Null, "Each item should have Message");
-            Assert.That(msg.DetectionResults, Is.Not.Null, "DetectionResults collection should not be null (can be empty)");
-            Assert.That(msg.UserTags, Is.Not.Null, "UserTags collection should not be null (can be empty)");
-            Assert.That(msg.UserNotes, Is.Not.Null, "UserNotes collection should not be null (can be empty)");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(msg.Message, Is.Not.Null, "Each item should have Message");
+                Assert.That(msg.DetectionResults, Is.Not.Null, "DetectionResults collection should not be null (can be empty)");
+                Assert.That(msg.UserTags, Is.Not.Null, "UserTags collection should not be null (can be empty)");
+                Assert.That(msg.UserNotes, Is.Not.Null, "UserNotes collection should not be null (can be empty)");
+            }
         }
 
         // Verify at least one message has detection result (from golden dataset)
@@ -387,10 +389,13 @@ public class MessageHistoryRepositoryTests
         // Assert - Find our message and verify MediaLocalPath is null
         var ourMessage = messagesWithHistory.FirstOrDefault(m => m.Message.MessageId == 999060);
         Assert.That(ourMessage, Is.Not.Null, "Should find our test message");
-        Assert.That(ourMessage!.Message.MediaLocalPath, Is.Null,
-            "MediaLocalPath should be nulled by MessageQueryService.ValidateMediaPath when file doesn't exist");
-        Assert.That(ourMessage.Message.MediaType, Is.EqualTo(UiModels.MediaType.Animation),
-            "MediaType should remain unchanged");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ourMessage!.Message.MediaLocalPath, Is.Null,
+                      "MediaLocalPath should be nulled by MessageQueryService.ValidateMediaPath when file doesn't exist");
+            Assert.That(ourMessage.Message.MediaType, Is.EqualTo(UiModels.MediaType.Animation),
+                "MediaType should remain unchanged");
+        }
     }
 
     [Test]
@@ -457,10 +462,13 @@ public class MessageHistoryRepositoryTests
         var ourMessage = messages.FirstOrDefault(m => m.Message.MessageId == 999010);
         Assert.That(ourMessage, Is.Not.Null, "Should find our test message");
 
-        // Verify the message has the message translation (not the edit translation)
-        Assert.That(ourMessage!.Message.Translation, Is.Not.Null, "Message should have translation");
-        Assert.That(ourMessage.Message.Translation!.TranslatedText, Is.EqualTo("Message translation - should be included"),
-            "Should include message translation, not edit translation (validates exclusive arc constraint)");
+        using (Assert.EnterMultipleScope())
+        {
+            // Verify the message has the message translation (not the edit translation)
+            Assert.That(ourMessage!.Message.Translation, Is.Not.Null, "Message should have translation");
+            Assert.That(ourMessage.Message.Translation!.TranslatedText, Is.EqualTo("Message translation - should be included"),
+                "Should include message translation, not edit translation (validates exclusive arc constraint)");
+        }
     }
 
     #endregion
@@ -490,10 +498,13 @@ public class MessageHistoryRepositoryTests
         // Assert - Verify translation inserted
         var retrieved = await _translationService!.GetTranslationForMessageAsync(messageId);
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.MessageId, Is.EqualTo(messageId));
-        Assert.That(retrieved.EditId, Is.Null, "Should be message translation");
-        Assert.That(retrieved.TranslatedText, Is.EqualTo("Hello world"));
-        Assert.That(retrieved.DetectedLanguage, Is.EqualTo("fr"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.MessageId, Is.EqualTo(messageId));
+            Assert.That(retrieved.EditId, Is.Null, "Should be message translation");
+            Assert.That(retrieved.TranslatedText, Is.EqualTo("Hello world"));
+            Assert.That(retrieved.DetectedLanguage, Is.EqualTo("fr"));
+        }
     }
 
     [Test]
@@ -558,10 +569,13 @@ public class MessageHistoryRepositoryTests
         // Assert - Should have exactly ONE translation for this message (upsert behavior)
         var retrievedSecond = await _translationService.GetTranslationForMessageAsync(999030);
         Assert.That(retrievedSecond, Is.Not.Null);
-        Assert.That(retrievedSecond!.TranslatedText, Is.EqualTo("Updated translation text"),
-            "Translation should be updated to second value (upsert)");
-        Assert.That(retrievedSecond.Confidence, Is.EqualTo(0.95m),
-            "Confidence should match second translation (upsert)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrievedSecond!.TranslatedText, Is.EqualTo("Updated translation text"),
+                      "Translation should be updated to second value (upsert)");
+            Assert.That(retrievedSecond.Confidence, Is.EqualTo(0.95m),
+                "Confidence should match second translation (upsert)");
+        }
 
         // Verify no duplicate translations by checking the database directly would require
         // DbContext access, but GetTranslationForMessageAsync returning the updated value
@@ -686,8 +700,11 @@ public class MessageHistoryRepositoryTests
 
         // Assert
         Assert.That(counts, Is.Not.Null);
-        Assert.That(counts[msg1Id], Is.GreaterThanOrEqualTo(2), "msg1 should have at least 2 edits");
-        Assert.That(counts[msg2Id], Is.GreaterThanOrEqualTo(1), "msg2 should have at least 1 edit");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counts[msg1Id], Is.GreaterThanOrEqualTo(2), "msg1 should have at least 2 edits");
+            Assert.That(counts[msg2Id], Is.GreaterThanOrEqualTo(1), "msg2 should have at least 1 edit");
+        }
     }
 
     #endregion
@@ -711,9 +728,12 @@ public class MessageHistoryRepositoryTests
         // Assert - Retrieve and verify
         var retrieved = await _repository.GetMessageAsync(999001);
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.MessageId, Is.EqualTo(999001));
-        Assert.That(retrieved.MessageText, Is.EqualTo("Test message for insert"));
-        Assert.That(retrieved.User.Id, Is.EqualTo(GoldenDataset.TelegramUsers.User1_TelegramUserId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.MessageId, Is.EqualTo(999001));
+            Assert.That(retrieved.MessageText, Is.EqualTo("Test message for insert"));
+            Assert.That(retrieved.User.Id, Is.EqualTo(GoldenDataset.TelegramUsers.User1_TelegramUserId));
+        }
     }
 
     [Test]
@@ -809,9 +829,12 @@ public class MessageHistoryRepositoryTests
             // Assert - Verify media path was updated
             var retrievedAfter = await _repository.GetMessageAsync(999003);
             Assert.That(retrievedAfter, Is.Not.Null);
-            Assert.That(retrievedAfter!.MediaLocalPath, Is.EqualTo(testMediaFileName),
-                "MediaLocalPath should be updated to filename (ValidateMediaPath confirms file exists)");
-            Assert.That(retrievedAfter.MediaType, Is.EqualTo(UiModels.MediaType.Video), "Other fields should remain unchanged");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(retrievedAfter!.MediaLocalPath, Is.EqualTo(testMediaFileName),
+                              "MediaLocalPath should be updated to filename (ValidateMediaPath confirms file exists)");
+                Assert.That(retrievedAfter.MediaType, Is.EqualTo(UiModels.MediaType.Video), "Other fields should remain unchanged");
+            }
         }
         finally
         {
@@ -849,10 +872,13 @@ public class MessageHistoryRepositoryTests
 
         // Assert - MediaLocalPath should be null because file doesn't exist
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.MediaLocalPath, Is.Null,
-            "MediaLocalPath should be nulled when referenced file doesn't exist on disk");
-        Assert.That(retrieved.MediaType, Is.EqualTo(UiModels.MediaType.Video),
-            "MediaType should remain unchanged");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.MediaLocalPath, Is.Null,
+                      "MediaLocalPath should be nulled when referenced file doesn't exist on disk");
+            Assert.That(retrieved.MediaType, Is.EqualTo(UiModels.MediaType.Video),
+                "MediaType should remain unchanged");
+        }
     }
 
     [Test]
@@ -873,9 +899,12 @@ public class MessageHistoryRepositoryTests
         // Assert
         var retrieved = await _repository.GetMessageAsync(999004);
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.DeletedAt, Is.Not.Null);
-        Assert.That(retrieved.DeletionSource, Is.EqualTo("test_deletion"));
-        Assert.That(retrieved.DeletedAt!.Value, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.DeletedAt, Is.Not.Null);
+            Assert.That(retrieved.DeletionSource, Is.EqualTo("test_deletion"));
+            Assert.That(retrieved.DeletedAt!.Value, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+        }
     }
 
     [Test]
@@ -894,8 +923,11 @@ public class MessageHistoryRepositoryTests
         {
             foreach (var info in userMessages)
             {
-                Assert.That(info.MessageId, Is.GreaterThan(0));
-                Assert.That(info.ChatId, Is.Not.EqualTo(0));
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(info.MessageId, Is.GreaterThan(0));
+                    Assert.That(info.ChatId, Is.Not.EqualTo(0));
+                }
             }
         }
     }
@@ -948,10 +980,13 @@ public class MessageHistoryRepositoryTests
         // because golden dataset contains recent messages that should NOT be deleted
         var result = await _repository!.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
-        // Assert - Should not delete anything (golden dataset is recent)
-        Assert.That(result.DeletedCount, Is.EqualTo(0), "Should not delete recent messages from golden dataset");
-        Assert.That(result.ImagePaths.Count, Is.EqualTo(0));
-        Assert.That(result.MediaPaths.Count, Is.EqualTo(0));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Should not delete anything (golden dataset is recent)
+            Assert.That(result.DeletedCount, Is.EqualTo(0), "Should not delete recent messages from golden dataset");
+            Assert.That(result.ImagePaths.Count, Is.EqualTo(0));
+            Assert.That(result.MediaPaths.Count, Is.EqualTo(0));
+        }
 
         // Verify message count unchanged
         var statsAfter = await _statsService!.GetStatsAsync();
@@ -1018,11 +1053,14 @@ public class MessageHistoryRepositoryTests
         var msg29DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id);
         var msgNonTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id);
 
-        Assert.That(msg45DaysBefore, Is.Not.Null, "45-day old message should exist before cleanup");
-        Assert.That(msg60DaysBefore, Is.Not.Null, "60-day old message should exist before cleanup");
-        Assert.That(msgWithTrainingBefore, Is.Not.Null, "Message with training data should exist before cleanup");
-        Assert.That(msg29DaysBefore, Is.Not.Null, "29-day old message should exist before cleanup");
-        Assert.That(msgNonTrainingBefore, Is.Not.Null, "Message with non-training detection should exist before cleanup");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(msg45DaysBefore, Is.Not.Null, "45-day old message should exist before cleanup");
+            Assert.That(msg60DaysBefore, Is.Not.Null, "60-day old message should exist before cleanup");
+            Assert.That(msgWithTrainingBefore, Is.Not.Null, "Message with training data should exist before cleanup");
+            Assert.That(msg29DaysBefore, Is.Not.Null, "29-day old message should exist before cleanup");
+            Assert.That(msgNonTrainingBefore, Is.Not.Null, "Message with non-training detection should exist before cleanup");
+        }
 
         // Verify cascade data exists before cleanup (edits, translations)
         await using (var context = await contextFactory.CreateDbContextAsync())
@@ -1049,11 +1087,14 @@ public class MessageHistoryRepositoryTests
         var msg35DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg35DaysOld_Id);
         var msgNonTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id);
 
-        Assert.That(msg45DaysAfter, Is.Null, "45-day old message should be deleted");
-        Assert.That(msg60DaysAfter, Is.Null, "60-day old message should be deleted");
-        Assert.That(msg35DaysAfter, Is.Null, "35-day old message should be deleted");
-        Assert.That(msgNonTrainingAfter, Is.Null,
-            "50-day old message with non-training detection should be deleted (detection cascades)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(msg45DaysAfter, Is.Null, "45-day old message should be deleted");
+            Assert.That(msg60DaysAfter, Is.Null, "60-day old message should be deleted");
+            Assert.That(msg35DaysAfter, Is.Null, "35-day old message should be deleted");
+            Assert.That(msgNonTrainingAfter, Is.Null,
+                "50-day old message with non-training detection should be deleted (detection cascades)");
+        }
 
         // Assert - Old message WITH training data is PRESERVED
         var msgWithTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id);
@@ -1077,10 +1118,13 @@ public class MessageHistoryRepositoryTests
             Assert.That(translationCountAfter, Is.EqualTo(0), "Translations should be cascade deleted");
         }
 
-        // Assert - Result statistics are populated
-        Assert.That(result.RemainingMessages, Is.GreaterThan(0), "Should have remaining messages");
-        Assert.That(result.ImagePaths, Is.Empty, "Test messages have no images");
-        Assert.That(result.MediaPaths, Is.Empty, "Test messages have no media");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Result statistics are populated
+            Assert.That(result.RemainingMessages, Is.GreaterThan(0), "Should have remaining messages");
+            Assert.That(result.ImagePaths, Is.Empty, "Test messages have no images");
+            Assert.That(result.MediaPaths, Is.Empty, "Test messages have no media");
+        }
     }
 
     #endregion
@@ -1095,9 +1139,12 @@ public class MessageHistoryRepositoryTests
 
         // Assert
         Assert.That(stats, Is.Not.Null);
-        Assert.That(stats.TotalMessages, Is.GreaterThan(0), "Golden dataset should have messages");
-        Assert.That(stats.UniqueUsers, Is.GreaterThan(0), "Should have users");
-        Assert.That(stats.PhotoCount, Is.GreaterThanOrEqualTo(0), "Should have photo count");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalMessages, Is.GreaterThan(0), "Golden dataset should have messages");
+            Assert.That(stats.UniqueUsers, Is.GreaterThan(0), "Should have users");
+            Assert.That(stats.PhotoCount, Is.GreaterThanOrEqualTo(0), "Should have photo count");
+        }
     }
 
     [Test]
@@ -1122,9 +1169,12 @@ public class MessageHistoryRepositoryTests
 
         // Assert - Should not throw exceptions, should return valid stats object
         Assert.That(stats, Is.Not.Null, "Should return stats object even with empty data");
-        Assert.That(stats.TotalMessages, Is.GreaterThanOrEqualTo(0), "Total messages should be non-negative");
-        Assert.That(stats.UniqueUsers, Is.GreaterThanOrEqualTo(0), "Unique users should be non-negative");
-        Assert.That(stats.PhotoCount, Is.GreaterThanOrEqualTo(0), "Photo count should be non-negative");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalMessages, Is.GreaterThanOrEqualTo(0), "Total messages should be non-negative");
+            Assert.That(stats.UniqueUsers, Is.GreaterThanOrEqualTo(0), "Unique users should be non-negative");
+            Assert.That(stats.PhotoCount, Is.GreaterThanOrEqualTo(0), "Photo count should be non-negative");
+        }
 
         // No assertions on specific values since golden dataset has existing data
         // The important validation is that the method doesn't throw exceptions
@@ -1165,9 +1215,12 @@ public class MessageHistoryRepositoryTests
 
         // Assert
         Assert.That(stats, Is.Not.Null);
-        Assert.That(stats.TotalDetections, Is.GreaterThanOrEqualTo(0));
-        Assert.That(stats.SpamDetected, Is.GreaterThanOrEqualTo(0));
-        Assert.That(stats.SpamPercentage, Is.GreaterThanOrEqualTo(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalDetections, Is.GreaterThanOrEqualTo(0));
+            Assert.That(stats.SpamDetected, Is.GreaterThanOrEqualTo(0));
+            Assert.That(stats.SpamPercentage, Is.GreaterThanOrEqualTo(0));
+        }
         Assert.That(stats.SpamPercentage, Is.LessThanOrEqualTo(100));
     }
 
@@ -1184,9 +1237,12 @@ public class MessageHistoryRepositoryTests
         {
             foreach (var detection in detections)
             {
-                Assert.That(detection.MessageId, Is.GreaterThan(0));
-                Assert.That(detection.DetectionMethod, Is.Not.Null.Or.Empty);
-                Assert.That(detection.Confidence, Is.GreaterThanOrEqualTo(0));
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(detection.MessageId, Is.GreaterThan(0));
+                    Assert.That(detection.DetectionMethod, Is.Not.Null.Or.Empty);
+                    Assert.That(detection.Confidence, Is.GreaterThanOrEqualTo(0));
+                }
             }
         }
     }
@@ -1205,10 +1261,13 @@ public class MessageHistoryRepositoryTests
 
         // Assert
         Assert.That(trends, Is.Not.Null);
-        Assert.That(trends.TotalMessages, Is.GreaterThan(0), "Should have messages in date range");
-        Assert.That(trends.UniqueUsers, Is.GreaterThanOrEqualTo(0));
-        Assert.That(trends.SpamPercentage, Is.GreaterThanOrEqualTo(0));
-        Assert.That(trends.DailyVolume, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(trends.TotalMessages, Is.GreaterThan(0), "Should have messages in date range");
+            Assert.That(trends.UniqueUsers, Is.GreaterThanOrEqualTo(0));
+            Assert.That(trends.SpamPercentage, Is.GreaterThanOrEqualTo(0));
+            Assert.That(trends.DailyVolume, Is.Not.Null);
+        }
         Assert.That(trends.DailyVolume.Count, Is.GreaterThan(0), "Should have daily breakdown");
     }
 
@@ -1234,8 +1293,11 @@ public class MessageHistoryRepositoryTests
         {
             foreach (var (messageId, contentCheck) in contentChecks)
             {
-                Assert.That(messageIds, Does.Contain(messageId), "Returned message ID should be in request list");
-                Assert.That(contentCheck.CheckType, Is.Not.Null.Or.Empty);
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(messageIds, Does.Contain(messageId), "Returned message ID should be in request list");
+                    Assert.That(contentCheck.CheckType, Is.Not.Null.Or.Empty);
+                }
             }
         }
     }

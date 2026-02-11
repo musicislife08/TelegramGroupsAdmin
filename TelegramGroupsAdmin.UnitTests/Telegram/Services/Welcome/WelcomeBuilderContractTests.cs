@@ -35,9 +35,12 @@ public class WelcomeBuilderContractTests
 
         // Assert: Round trip succeeds
         Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Type, Is.EqualTo(WelcomeCallbackType.Accept));
-        Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
-        Assert.That(parsed.ChatId, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parsed!.Type, Is.EqualTo(WelcomeCallbackType.Accept));
+            Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+            Assert.That(parsed.ChatId, Is.Null);
+        }
     }
 
     [Test]
@@ -60,8 +63,11 @@ public class WelcomeBuilderContractTests
 
         // Assert: Round trip succeeds
         Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Type, Is.EqualTo(WelcomeCallbackType.Deny));
-        Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parsed!.Type, Is.EqualTo(WelcomeCallbackType.Deny));
+            Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        }
     }
 
     [Test]
@@ -81,9 +87,12 @@ public class WelcomeBuilderContractTests
 
         // Assert: Round trip succeeds with all fields
         Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Type, Is.EqualTo(WelcomeCallbackType.DmAccept));
-        Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
-        Assert.That(parsed.ChatId, Is.EqualTo(expectedGroupChatId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parsed!.Type, Is.EqualTo(WelcomeCallbackType.DmAccept));
+            Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+            Assert.That(parsed.ChatId, Is.EqualTo(expectedGroupChatId));
+        }
     }
 
     [Test]
@@ -132,8 +141,11 @@ public class WelcomeBuilderContractTests
 
         // Assert: Round trip succeeds
         Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.ChatId, Is.EqualTo(expectedChatId));
-        Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parsed!.ChatId, Is.EqualTo(expectedChatId));
+            Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        }
     }
 
     [Test]
@@ -154,8 +166,11 @@ public class WelcomeBuilderContractTests
 
         // Assert: Round trip succeeds
         Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.ChatId, Is.EqualTo(expectedChatId));
-        Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parsed!.ChatId, Is.EqualTo(expectedChatId));
+            Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        }
     }
 
     [Test]
@@ -172,8 +187,11 @@ public class WelcomeBuilderContractTests
 
         // Assert
         Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.ChatId, Is.EqualTo(expectedChatId));
-        Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(parsed!.ChatId, Is.EqualTo(expectedChatId));
+            Assert.That(parsed.UserId, Is.EqualTo(expectedUserId));
+        }
     }
 
     #endregion

@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Auth;
 
@@ -70,7 +69,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication (TOTP disabled by owner)
-            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value));
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -160,7 +159,7 @@ public static class AuthEndpoints
             // Record attempt for rate limiting
             await rateLimitService.RecordAttemptAsync(request.UserId, "totp_verify");
 
-            var result = await authService.VerifyTotpAsync(request.UserId, request.Code);
+            var result = await authService.VerifyTotpAsync(WebUserIdentity.FromId(request.UserId), request.Code);
 
             if (!result.Success)
             {
@@ -168,7 +167,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value));
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -209,7 +208,7 @@ public static class AuthEndpoints
             // Record attempt for rate limiting
             await rateLimitService.RecordAttemptAsync(request.UserId, "recovery_code");
 
-            var result = await authService.UseRecoveryCodeAsync(request.UserId, request.RecoveryCode);
+            var result = await authService.UseRecoveryCodeAsync(WebUserIdentity.FromId(request.UserId), request.RecoveryCode);
 
             if (!result.Success)
             {
@@ -217,7 +216,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, new WebUserIdentity(result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value));
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();

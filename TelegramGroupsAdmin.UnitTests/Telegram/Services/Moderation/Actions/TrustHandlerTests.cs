@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
@@ -41,11 +40,11 @@ public class TrustHandlerTests
         var result = await _handler.TrustAsync(UserIdentity.FromId(userId), executor, "Verified user");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
-        });
+        }
 
         // Verify repository was called with correct parameters
         await _mockUserRepository.Received(1).UpdateTrustStatusAsync(
@@ -85,11 +84,11 @@ public class TrustHandlerTests
         var result = await _handler.TrustAsync(UserIdentity.FromId(userId), executor, "Test reason");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Database connection failed"));
-        });
+        }
     }
 
     [Test]
@@ -127,11 +126,11 @@ public class TrustHandlerTests
         var result = await _handler.UntrustAsync(UserIdentity.FromId(userId), executor, "Trust revoked due to ban");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
-        });
+        }
 
         // Verify repository was called with isTrusted: false
         await _mockUserRepository.Received(1).UpdateTrustStatusAsync(
@@ -171,11 +170,11 @@ public class TrustHandlerTests
         var result = await _handler.UntrustAsync(UserIdentity.FromId(userId), executor, "Test reason");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("User not found"));
-        });
+        }
     }
 
     [Test]

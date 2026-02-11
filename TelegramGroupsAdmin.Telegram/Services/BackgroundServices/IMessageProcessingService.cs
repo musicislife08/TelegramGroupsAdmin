@@ -1,5 +1,4 @@
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;

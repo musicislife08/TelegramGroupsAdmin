@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Reports;
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -370,8 +369,11 @@ public class ImpersonationAlertCardTests : ImpersonationAlertCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo(ImpersonationAction.Confirm));
-        Assert.That(receivedAction!.Value.alert.Id, Is.EqualTo(alert.Id));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(receivedAction!.Value.action, Is.EqualTo(ImpersonationAction.Confirm));
+            Assert.That(receivedAction!.Value.alert.Id, Is.EqualTo(alert.Id));
+        }
     }
 
     [Test]

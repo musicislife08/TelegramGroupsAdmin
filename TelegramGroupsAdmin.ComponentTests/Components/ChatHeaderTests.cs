@@ -105,8 +105,11 @@ public class ChatHeaderTests : MudBlazorTestContext
 
         // Assert
         var img = cut.Find("img.chat-header-avatar");
-        Assert.That(img.GetAttribute("src"), Does.Contain("group.jpg"));
-        Assert.That(img.GetAttribute("alt"), Is.EqualTo("Test Group"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(img.GetAttribute("src"), Does.Contain("group.jpg"));
+            Assert.That(img.GetAttribute("alt"), Is.EqualTo("Test Group"));
+        }
     }
 
     [Test]
@@ -285,13 +288,16 @@ public class ChatHeaderTests : MudBlazorTestContext
             .Add(x => x.ShowBackButton, true)
             .Add(x => x.ShowMenuButton, true));
 
-        // Assert
-        Assert.That(cut.FindAll(".chat-header").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-header-info").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-header-title").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".chat-header-subtitle").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".back-button").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".menu-button").Count, Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(cut.FindAll(".chat-header").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-header-info").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-header-title").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".chat-header-subtitle").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".back-button").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".menu-button").Count, Is.EqualTo(1));
+        }
     }
 
     [Test]

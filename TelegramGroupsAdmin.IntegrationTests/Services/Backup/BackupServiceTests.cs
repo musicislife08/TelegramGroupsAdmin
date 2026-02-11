@@ -157,8 +157,11 @@ public class BackupServiceTests
         // Verify can extract metadata from encrypted backup (metadata is always unencrypted in tar)
         var metadata = await _backupService.GetMetadataAsync(backupBytes);
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("3.0"));
-        Assert.That(metadata.TableCount, Is.GreaterThan(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata.Version, Is.EqualTo("3.0"));
+            Assert.That(metadata.TableCount, Is.GreaterThan(0));
+        }
     }
 
     [Test]
@@ -279,8 +282,11 @@ public class BackupServiceTests
         var originalUserCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
         var originalMessageCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
 
-        Assert.That(originalUserCount, Is.GreaterThan(0));
-        Assert.That(originalMessageCount, Is.GreaterThan(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(originalUserCount, Is.GreaterThan(0));
+            Assert.That(originalMessageCount, Is.GreaterThan(0));
+        }
 
         // Act - Restore (destructive operation)
         await _backupService.RestoreAsync(originalBackup, passphrase);
@@ -289,8 +295,11 @@ public class BackupServiceTests
         var restoredUserCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
         var restoredMessageCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
 
-        Assert.That(restoredUserCount, Is.EqualTo(originalUserCount));
-        Assert.That(restoredMessageCount, Is.EqualTo(originalMessageCount));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(restoredUserCount, Is.EqualTo(originalUserCount));
+            Assert.That(restoredMessageCount, Is.EqualTo(originalMessageCount));
+        }
     }
 
     [Test]
@@ -469,9 +478,12 @@ public class BackupServiceTests
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("3.0"));
-        Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
-        Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata.Version, Is.EqualTo("3.0"));
+            Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+            Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+        }
     }
 
     [Test]
@@ -533,10 +545,13 @@ public class BackupServiceTests
             await _backupService!.ExportAsync();
         });
 
-        // Verify the exception contains useful diagnostic information
-        Assert.That(ex!.Message, Does.Contain("warnings"), "Exception should identify the corrupted column");
-        Assert.That(ex.Message, Does.Contain("telegram_users"), "Exception should identify the table");
-        Assert.That(ex.InnerException, Is.TypeOf<System.Text.Json.JsonException>(), "Inner exception should be JsonException");
+        using (Assert.EnterMultipleScope())
+        {
+            // Verify the exception contains useful diagnostic information
+            Assert.That(ex!.Message, Does.Contain("warnings"), "Exception should identify the corrupted column");
+            Assert.That(ex.Message, Does.Contain("telegram_users"), "Exception should identify the table");
+            Assert.That(ex.InnerException, Is.TypeOf<System.Text.Json.JsonException>(), "Inner exception should be JsonException");
+        }
     }
 
     [Test]
@@ -640,8 +655,11 @@ public class BackupServiceTests
         {
             var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             Assert.That(config, Is.Not.Null);
-            Assert.That(config!.BackupEncryptionConfig, Is.Not.Null);
-            Assert.That(config.PassphraseEncrypted, Is.Not.Null, "Passphrase should be encrypted");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(config!.BackupEncryptionConfig, Is.Not.Null);
+                Assert.That(config.PassphraseEncrypted, Is.Not.Null, "Passphrase should be encrypted");
+            }
         }
     }
 

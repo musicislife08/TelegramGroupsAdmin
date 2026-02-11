@@ -130,10 +130,10 @@ public class MessageQueryService : IMessageQueryService
                               where userIds.Contains(ut.TelegramUserId) && ut.RemovedAt == null
                               join td in context.TagDefinitions on ut.TagName equals td.TagName into tagGroup
                               from tag in tagGroup.DefaultIfEmpty()
-                              // JOIN to get AddedBy actor Telegram user data
+                                  // JOIN to get AddedBy actor Telegram user data
                               join addedByUser in context.TelegramUsers on ut.ActorTelegramUserId equals addedByUser.TelegramUserId into addedByGroup
                               from addedBy in addedByGroup.DefaultIfEmpty()
-                              // JOIN to get RemovedBy actor Telegram user data
+                                  // JOIN to get RemovedBy actor Telegram user data
                               join removedByUser in context.TelegramUsers on ut.RemovedByTelegramUserId equals removedByUser.TelegramUserId into removedByGroup
                               from removedBy in removedByGroup.DefaultIfEmpty()
                               select new

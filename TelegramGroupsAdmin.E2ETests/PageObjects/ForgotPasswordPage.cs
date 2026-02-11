@@ -29,8 +29,7 @@ public class ForgotPasswordPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/forgot-password");
-        // Wait for the page title to be visible (indicates Blazor Server hydrated)
+        await _page.GotoAsync("/forgot-password", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
         await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 

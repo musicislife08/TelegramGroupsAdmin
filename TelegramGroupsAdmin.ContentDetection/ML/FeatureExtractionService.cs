@@ -1,7 +1,5 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
-using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.ML;

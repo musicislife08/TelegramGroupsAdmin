@@ -112,16 +112,19 @@ public class UsersTests : SharedAuthenticatedTestBase
 
         // Assert - expected tabs exist (tabs are uppercase)
         var tabNames = await _usersPage.GetTabNamesAsync();
-        Assert.That(tabNames.Any(t => t.Contains("ACTIVE", StringComparison.OrdinalIgnoreCase)),
-            "Should have 'Active' tab");
-        Assert.That(tabNames.Any(t => t.Contains("TAGGED", StringComparison.OrdinalIgnoreCase)),
-            "Should have 'Tagged' tab");
-        Assert.That(tabNames.Any(t => t.Contains("TRUSTED", StringComparison.OrdinalIgnoreCase)),
-            "Should have 'Trusted' tab");
-        Assert.That(tabNames.Any(t => t.Contains("BANNED", StringComparison.OrdinalIgnoreCase)),
-            "Should have 'Banned' tab");
-        Assert.That(tabNames.Any(t => t.Contains("INACTIVE", StringComparison.OrdinalIgnoreCase)),
-            "Should have 'Inactive' tab");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tabNames.Any(t => t.Contains("ACTIVE", StringComparison.OrdinalIgnoreCase)),
+                      "Should have 'Active' tab");
+            Assert.That(tabNames.Any(t => t.Contains("TAGGED", StringComparison.OrdinalIgnoreCase)),
+                "Should have 'Tagged' tab");
+            Assert.That(tabNames.Any(t => t.Contains("TRUSTED", StringComparison.OrdinalIgnoreCase)),
+                "Should have 'Trusted' tab");
+            Assert.That(tabNames.Any(t => t.Contains("BANNED", StringComparison.OrdinalIgnoreCase)),
+                "Should have 'Banned' tab");
+            Assert.That(tabNames.Any(t => t.Contains("INACTIVE", StringComparison.OrdinalIgnoreCase)),
+                "Should have 'Inactive' tab");
+        }
     }
 
     [Test]
@@ -286,11 +289,14 @@ public class UsersTests : SharedAuthenticatedTestBase
 
         // Assert - all users visible again
         var finalCount = await _usersPage.GetTotalUserCountAsync();
-        Assert.That(finalCount, Is.EqualTo(initialCount),
-            "Should show all users when search is cleared");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finalCount, Is.EqualTo(initialCount),
+                      "Should show all users when search is cleared");
 
-        Assert.That(await _usersPage.IsFilteredChipVisibleAsync(), Is.False,
-            "Filtered chip should not be visible when search is cleared");
+            Assert.That(await _usersPage.IsFilteredChipVisibleAsync(), Is.False,
+                "Filtered chip should not be visible when search is cleared");
+        }
     }
 
     [Test]

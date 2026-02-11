@@ -1,5 +1,3 @@
-using TelegramGroupsAdmin.Telegram.Models;
-
 namespace TelegramGroupsAdmin.Services;
 
 public interface IUserManagementService

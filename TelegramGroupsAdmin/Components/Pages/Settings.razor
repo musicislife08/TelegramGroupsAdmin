@@ -4,9 +4,8 @@
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Constants
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
 @inject NavigationManager Navigation
-@inject IBlazorAuthHelper AuthHelper
 @implements IDisposable
 
 <PageTitle>Settings</PageTitle>
@@ -312,6 +311,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter]
     public string? Section { get; set; }
 
@@ -334,12 +335,14 @@
     private bool _canEditInfrastructure;
     private bool _canEditContent;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        // Load permission flags
-        _canManageAdminAccounts = await AuthHelper.CanManageAdminAccountsAsync();
-        _canEditInfrastructure = await AuthHelper.CanEditInfrastructureAsync();
-        _canEditContent = await AuthHelper.CanEditContentSettingsAsync();
+        if (WebUser is null) return;
+
+        // Load permission flags from cascading WebUser
+        _canManageAdminAccounts = WebUser.IsGlobalAdminOrHigher;
+        _canEditInfrastructure = WebUser.IsOwner;
+        _canEditContent = WebUser.IsGlobalAdminOrHigher;
 
         UpdateCurrentSection();
         Navigation.LocationChanged += OnLocationChanged;

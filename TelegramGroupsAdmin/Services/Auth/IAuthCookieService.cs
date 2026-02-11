@@ -1,5 +1,3 @@
-using TelegramGroupsAdmin.Core.Models;
-
 namespace TelegramGroupsAdmin.Services.Auth;
 
 /// <summary>
@@ -14,10 +12,8 @@ public interface IAuthCookieService
     /// Use this in the running application where HttpContext is available.
     /// </summary>
     /// <param name="context">The HTTP context to sign into</param>
-    /// <param name="userId">The user's unique identifier</param>
-    /// <param name="email">The user's email address</param>
-    /// <param name="permissionLevel">The user's permission level</param>
-    Task SignInAsync(HttpContext context, string userId, string email, PermissionLevel permissionLevel);
+    /// <param name="user">The web user identity to authenticate</param>
+    Task SignInAsync(HttpContext context, WebUserIdentity user);
 
     /// <summary>
     /// Signs out a user by clearing the authentication cookie.
@@ -29,11 +25,9 @@ public interface IAuthCookieService
     /// Generates an encrypted cookie value without requiring HttpContext.
     /// Use this in tests to create valid auth cookies programmatically.
     /// </summary>
-    /// <param name="userId">The user's unique identifier</param>
-    /// <param name="email">The user's email address</param>
-    /// <param name="permissionLevel">The user's permission level</param>
+    /// <param name="user">The web user identity to generate a cookie for</param>
     /// <returns>The encrypted cookie value that can be set in a browser</returns>
-    string GenerateCookieValue(string userId, string email, PermissionLevel permissionLevel);
+    string GenerateCookieValue(WebUserIdentity user);
 
     /// <summary>
     /// Gets the name of the authentication cookie.

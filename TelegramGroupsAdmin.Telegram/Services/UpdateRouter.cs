@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -45,7 +44,7 @@ public class UpdateRouter(
         {
             logger.LogDebug(
                 "Routing MyChatMember update for chat {Chat}",
-                LogDisplayName.ChatDebug(myChatMember.Chat.Title, myChatMember.Chat.Id));
+                myChatMember.Chat.ToLogDebug());
             await chatService.HandleBotMembershipUpdateAsync(myChatMember, cancellationToken);
 
             // Trigger immediate health check when bot status changes
@@ -59,8 +58,8 @@ public class UpdateRouter(
             var user = chatMember.NewChatMember.User;
             logger.LogDebug(
                 "Routing ChatMember update for user {User} in chat {Chat}",
-                LogDisplayName.UserDebug(user.FirstName, user.LastName, user.Username, user.Id),
-                LogDisplayName.ChatDebug(chatMember.Chat.Title, chatMember.Chat.Id));
+                user.ToLogDebug(),
+                chatMember.Chat.ToLogDebug());
 
             // Check for admin status changes (instant permission updates)
             await chatService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
@@ -111,7 +110,7 @@ public class UpdateRouter(
             logger.LogDebug(
                 "Routing new message {MessageId} from chat {Chat}",
                 message.MessageId,
-                LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id));
+                message.Chat.ToLogDebug());
             await messageProcessingService.HandleNewMessageAsync(message, cancellationToken);
             return;
         }
@@ -131,7 +130,7 @@ public class UpdateRouter(
             logger.LogDebug(
                 "Routing edited message {MessageId} from chat {Chat}",
                 editedMessage.MessageId,
-                LogDisplayName.ChatDebug(editedMessage.Chat.Title, editedMessage.Chat.Id));
+                editedMessage.Chat.ToLogDebug());
             await messageProcessingService.HandleEditedMessageAsync(editedMessage, cancellationToken);
             return;
         }

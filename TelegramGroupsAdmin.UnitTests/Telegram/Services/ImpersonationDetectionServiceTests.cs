@@ -1,13 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
@@ -220,11 +217,11 @@ public class ImpersonationDetectionServiceTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ShouldTakeAction, Is.True, "Score 50 should trigger action");
             Assert.That(result.ShouldAutoBan, Is.False, "Score 50 should not auto-ban");
-        });
+        }
     }
 
     [Test]
@@ -244,11 +241,11 @@ public class ImpersonationDetectionServiceTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ShouldTakeAction, Is.True, "Score 100 should trigger action");
             Assert.That(result.ShouldAutoBan, Is.True, "Score 100 should auto-ban");
-        });
+        }
     }
 
     [Test]
@@ -268,11 +265,11 @@ public class ImpersonationDetectionServiceTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.ShouldTakeAction, Is.False, "Score 49 should not trigger action");
             Assert.That(result.ShouldAutoBan, Is.False, "Score 49 should not auto-ban");
-        });
+        }
     }
 
     [Test]
@@ -309,12 +306,12 @@ public class ImpersonationDetectionServiceTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.TargetEntityType, Is.EqualTo(ProtectedEntityType.Channel));
             Assert.That(result.TargetEntityId, Is.EqualTo(TestChannelId));
             Assert.That(result.TargetEntityName, Is.EqualTo("Official Channel"));
-        });
+        }
     }
 
     [Test]
@@ -333,12 +330,12 @@ public class ImpersonationDetectionServiceTests
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.TargetEntityType, Is.EqualTo(ProtectedEntityType.Chat));
             Assert.That(result.TargetEntityId, Is.EqualTo(TestChatId));
             Assert.That(result.TargetEntityName, Is.EqualTo("Main Group"));
-        });
+        }
     }
 
     [Test]
@@ -357,11 +354,11 @@ public class ImpersonationDetectionServiceTests
         };
 
         // Assert - access IDs directly from SDK objects
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.SuspectedUser.Id, Is.EqualTo(999), "SuspectedUser.Id should be accessible");
             Assert.That(result.DetectionChat.Id, Is.EqualTo(-1001111111111), "DetectionChat.Id should be accessible");
-        });
+        }
     }
 
     #endregion
@@ -409,12 +406,12 @@ public class ImpersonationDetectionServiceTests
     [Test]
     public void ProtectedEntityType_HasCorrectValues()
     {
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That((int)ProtectedEntityType.User, Is.EqualTo(0));
             Assert.That((int)ProtectedEntityType.Chat, Is.EqualTo(1));
             Assert.That((int)ProtectedEntityType.Channel, Is.EqualTo(2));
-        });
+        }
     }
 
     #endregion

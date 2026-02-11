@@ -97,10 +97,13 @@ public class SequenceIntegrityTests
 
         Assert.That(auditLogMismatch, Is.Not.Null,
             "Expected to detect sequence mismatch in audit_log after manual insert with explicit ID");
-        Assert.That(auditLogMismatch!.MaxId, Is.EqualTo(100),
-            "Max ID should be 100 from manual insert");
-        Assert.That(auditLogMismatch.SequenceValue, Is.LessThan(100),
-            "Sequence should be less than 100 (mismatch detected)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(auditLogMismatch!.MaxId, Is.EqualTo(100),
+                      "Max ID should be 100 from manual insert");
+            Assert.That(auditLogMismatch.SequenceValue, Is.LessThan(100),
+                "Sequence should be less than 100 (mismatch detected)");
+        }
     }
 
     /// <summary>

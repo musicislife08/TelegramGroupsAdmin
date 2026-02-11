@@ -1,9 +1,8 @@
 @page "/profile"
-@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Services
 @using QRCoder
-@inject AuthenticationStateProvider AuthStateProvider
 @inject IUserRepository UserRepository
 @inject IAuthService AuthService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
@@ -29,7 +28,7 @@
                 <MudPaper Class="pa-4 mb-4" Elevation="2">
                     <MudText Typo="Typo.h6" Class="mb-3">Account Information</MudText>
                     <MudStack Spacing="2">
-                        <MudTextField Label="Email" Value="@_user.Email" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Email" Value="@_user.WebUser.Email" ReadOnly="true" Variant="Variant.Outlined" />
                         <MudTextField Label="Permission Level" Value="@GetPermissionName(_user.PermissionLevelInt)" ReadOnly="true" Variant="Variant.Outlined" />
                         <MudTextField Label="Account Created" Value="@FormatDate(_user.CreatedAt)" ReadOnly="true" Variant="Variant.Outlined" />
                         <MudTextField Label="Last Login" Value="@FormatDate(_user.LastLoginAt)" ReadOnly="true" Variant="Variant.Outlined" />
@@ -225,7 +224,7 @@
 
             <!-- Notification Preferences -->
             <MudItem xs="12">
-                <NotificationPreferencesCard UserId="@_user.Id" UserPermissionLevel="@_user.PermissionLevelInt" />
+                <NotificationPreferencesCard UserId="@_user.WebUser.Id" UserPermissionLevel="@_user.PermissionLevelInt" />
             </MudItem>
         </MudGrid>
     }
@@ -340,9 +339,10 @@
 
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private UserRecord? _user;
     private bool _loading = true;
-    private string? _currentUserId;
 
     // Password change
     private MudForm? _passwordForm;
@@ -376,27 +376,22 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        if (WebUser is null) return;
 
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            _currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            await LoadUserAsync();
-            await LoadLinkedAccountsAsync();
-        }
+        await LoadUserAsync();
+        await LoadLinkedAccountsAsync();
     }
 
     private async Task LoadUserAsync()
     {
-        if (string.IsNullOrEmpty(_currentUserId)) return;
+        if (WebUser == null) return;
 
         _loading = true;
         StateHasChanged();
 
         try
         {
-            _user = await UserRepository.GetByIdAsync(_currentUserId);
+            _user = await UserRepository.GetByIdAsync(WebUser!.Id);
         }
         catch (Exception ex)
         {
@@ -411,7 +406,7 @@
 
     private async Task ChangePassword()
     {
-        if (string.IsNullOrEmpty(_currentUserId)) return;
+        if (WebUser == null) return;
 
         if (string.IsNullOrWhiteSpace(_currentPassword) || string.IsNullOrWhiteSpace(_newPassword))
         {
@@ -436,7 +431,7 @@
 
         try
         {
-            var success = await AuthService.ChangePasswordAsync(_currentUserId, _currentPassword, _newPassword);
+            var success = await AuthService.ChangePasswordAsync(WebUser!, _currentPassword, _newPassword);
 
             if (success)
             {
@@ -465,14 +460,14 @@
 
     private async Task EnableTotp()
     {
-        if (string.IsNullOrEmpty(_currentUserId)) return;
+        if (WebUser == null) return;
 
         _togglingTotp = true;
         StateHasChanged();
 
         try
         {
-            _totpSetupResult = await AuthService.EnableTotpAsync(_currentUserId);
+            _totpSetupResult = await AuthService.EnableTotpAsync(WebUser!);
             _showTotpSetup = true;
         }
         catch (Exception ex)
@@ -488,7 +483,7 @@
 
     private async Task VerifyAndEnableTotp()
     {
-        if (string.IsNullOrEmpty(_currentUserId) || string.IsNullOrWhiteSpace(_totpVerificationCode))
+        if (WebUser == null || string.IsNullOrWhiteSpace(_totpVerificationCode))
         {
             Snackbar.Add("Please enter the verification code", Severity.Warning);
             return;
@@ -499,7 +494,7 @@
 
         try
         {
-            var result = await AuthService.VerifyAndEnableTotpAsync(_currentUserId, _totpVerificationCode);
+            var result = await AuthService.VerifyAndEnableTotpAsync(WebUser!, _totpVerificationCode);
 
             if (result.Success)
             {
@@ -508,7 +503,7 @@
                 _totpSetupResult = null;
 
                 // Generate recovery codes - user must save these
-                _recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(_currentUserId);
+                _recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(WebUser!);
                 _showRecoveryCodes = true;
 
                 await LoadUserAsync();
@@ -551,7 +546,7 @@
 
     private async Task RegenerateRecoveryCodes()
     {
-        if (string.IsNullOrEmpty(_currentUserId) || string.IsNullOrWhiteSpace(_recoveryCodesPassword))
+        if (WebUser == null || string.IsNullOrWhiteSpace(_recoveryCodesPassword))
         {
             Snackbar.Add("Please enter your password", Severity.Warning);
             return;
@@ -563,7 +558,7 @@
         try
         {
             // Verify password first
-            var loginResult = await AuthService.LoginAsync(_user!.Email, _recoveryCodesPassword);
+            var loginResult = await AuthService.LoginAsync(_user!.WebUser.Email!, _recoveryCodesPassword);
 
             if (!loginResult.Success)
             {
@@ -574,7 +569,7 @@
             }
 
             // Generate new recovery codes
-            _recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(_currentUserId);
+            _recoveryCodes = await AuthService.GenerateRecoveryCodesAsync(WebUser!);
             _showPasswordConfirmDialog = false;
             _recoveryCodesPassword = "";
             _showRecoveryCodes = true;
@@ -600,7 +595,7 @@
 
     private async Task ResetTotp()
     {
-        if (string.IsNullOrEmpty(_currentUserId) || string.IsNullOrWhiteSpace(_resetTotpPassword))
+        if (WebUser == null || string.IsNullOrWhiteSpace(_resetTotpPassword))
         {
             Snackbar.Add("Please enter your password", Severity.Warning);
             return;
@@ -612,7 +607,7 @@
         try
         {
             // Verify password first
-            var loginResult = await AuthService.LoginAsync(_user!.Email, _resetTotpPassword);
+            var loginResult = await AuthService.LoginAsync(_user!.WebUser.Email!, _resetTotpPassword);
 
             if (!loginResult.Success)
             {
@@ -623,7 +618,7 @@
             }
 
             // Generate new TOTP secret (this will replace the old one)
-            _totpSetupResult = await AuthService.EnableTotpAsync(_currentUserId);
+            _totpSetupResult = await AuthService.EnableTotpAsync(WebUser!);
             _resetTotpPassword = "";
             _showTotpSetup = true;
 
@@ -671,11 +666,11 @@
 
     private async Task LoadLinkedAccountsAsync()
     {
-        if (string.IsNullOrEmpty(_currentUserId)) return;
+        if (WebUser == null) return;
 
         try
         {
-            var accounts = await TelegramMappingRepository.GetByUserIdAsync(_currentUserId);
+            var accounts = await TelegramMappingRepository.GetByUserIdAsync(WebUser!.Id);
             _linkedAccounts = accounts.ToList();
         }
         catch (Exception ex)
@@ -687,7 +682,7 @@
 
     private async Task GenerateLinkToken()
     {
-        if (string.IsNullOrEmpty(_currentUserId)) return;
+        if (WebUser == null) return;
 
         _generatingToken = true;
         StateHasChanged();
@@ -695,7 +690,7 @@
         try
         {
             // Revoke any existing unused tokens for this user
-            await TelegramLinkTokenRepository.RevokeUnusedTokensForUserAsync(_currentUserId);
+            await TelegramLinkTokenRepository.RevokeUnusedTokensForUserAsync(WebUser!.Id);
 
             // Generate new token (32 random bytes, base64 encoded)
             var tokenBytes = new byte[32];
@@ -711,7 +706,7 @@
 
             var tokenRecord = new TelegramLinkTokenRecord(
                 Token: token,
-                UserId: _currentUserId,
+                UserId: WebUser!.Id,
                 CreatedAt: now,
                 ExpiresAt: expiresAt,
                 UsedAt: null,

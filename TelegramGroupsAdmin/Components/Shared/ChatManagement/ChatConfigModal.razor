@@ -455,7 +455,7 @@
                     var user = await UserManagementService.GetUserByIdAsync(userId);
                     if (user != null)
                     {
-                        _adminLinkages[admin.User.Id] = user.Email;
+                        _adminLinkages[admin.User.Id] = user.WebUser.Email!;
                     }
                 }
             }

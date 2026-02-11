@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -59,11 +58,11 @@ public class BotUserServiceTests
         var result = await _service.GetMeAsync();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Id, Is.EqualTo(TestBotUser.Id));
             Assert.That(result.Username, Is.EqualTo(TestBotUser.Username));
-        });
+        }
 
         // Verify handler was NOT called (cache hit)
         await _mockUserHandler.DidNotReceive().GetMeAsync(Arg.Any<CancellationToken>());
@@ -80,11 +79,11 @@ public class BotUserServiceTests
         var result = await _service.GetMeAsync();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Id, Is.EqualTo(TestBotUser.Id));
             Assert.That(result.Username, Is.EqualTo(TestBotUser.Username));
-        });
+        }
 
         // Verify handler was called
         await _mockUserHandler.Received(1).GetMeAsync(Arg.Any<CancellationToken>());

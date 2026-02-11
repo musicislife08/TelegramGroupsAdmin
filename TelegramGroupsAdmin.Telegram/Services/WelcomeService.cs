@@ -3,7 +3,6 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -427,9 +426,10 @@ public class WelcomeService(
                 {
                     await messageService.DeleteAndMarkMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, DeletionSourceWelcomeError, cancellationToken);
                 }
-                catch
+                catch (Exception cleanupEx)
                 {
-                    // Best effort cleanup
+                    logger.LogDebug(cleanupEx, "Failed to clean up verifying message {MessageId} in {Chat}",
+                        verifyingMessageId.Value, chatMemberUpdate.Chat.ToLogDebug());
                 }
             }
         }

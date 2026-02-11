@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
@@ -65,11 +64,11 @@ public class MessageHandlerTests
         var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId));
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WasBackfilled, Is.False, "Should not be backfilled since it already exists");
-        });
+        }
 
         // Verify backfill was NOT called
         await _mockMessageBackfillService.DidNotReceive().BackfillIfMissingAsync(
@@ -98,11 +97,11 @@ public class MessageHandlerTests
         var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WasBackfilled, Is.True);
-        });
+        }
 
         // Verify backfill was called
         await _mockMessageBackfillService.Received(1).BackfillIfMissingAsync(
@@ -123,12 +122,12 @@ public class MessageHandlerTests
         var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage: null);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.WasBackfilled, Is.False);
             Assert.That(result.ErrorMessage, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
@@ -150,11 +149,11 @@ public class MessageHandlerTests
         var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.WasBackfilled, Is.False);
-        });
+        }
     }
 
     #endregion
@@ -173,11 +172,11 @@ public class MessageHandlerTests
         var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.MessageDeleted, Is.True);
-        });
+        }
 
         // Verify deletion was called with correct parameters
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
@@ -203,12 +202,12 @@ public class MessageHandlerTests
         var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
 
         // Assert - Worker reports failure, boss decides what to do
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.MessageDeleted, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Message not found"));
-        });
+        }
     }
 
     [Test]

@@ -1,5 +1,4 @@
 using Humanizer;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 

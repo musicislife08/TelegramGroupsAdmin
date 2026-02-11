@@ -53,8 +53,11 @@ public class PendingRecoveryCodesServiceTests
         // Assert - should have the second set of codes
         var retrieved = _service.RetrieveRecoveryCodes(TestToken, TestUserId);
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.Count, Is.EqualTo(3));
-        Assert.That(retrieved[0], Is.EqualTo("second1"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.Count, Is.EqualTo(3));
+            Assert.That(retrieved[0], Is.EqualTo("second1"));
+        }
     }
 
     #endregion
@@ -73,10 +76,13 @@ public class PendingRecoveryCodesServiceTests
 
         // Assert
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.Count, Is.EqualTo(3));
-        Assert.That(retrieved[0], Is.EqualTo("abc123"));
-        Assert.That(retrieved[1], Is.EqualTo("def456"));
-        Assert.That(retrieved[2], Is.EqualTo("ghi789"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.Count, Is.EqualTo(3));
+            Assert.That(retrieved[0], Is.EqualTo("abc123"));
+            Assert.That(retrieved[1], Is.EqualTo("def456"));
+            Assert.That(retrieved[2], Is.EqualTo("ghi789"));
+        }
     }
 
     [Test]
@@ -92,9 +98,12 @@ public class PendingRecoveryCodesServiceTests
         // Second access should fail (codes consumed)
         var secondAccess = _service.RetrieveRecoveryCodes(TestToken, TestUserId);
 
-        // Assert
-        Assert.That(firstAccess, Is.Not.Null);
-        Assert.That(secondAccess, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(firstAccess, Is.Not.Null);
+            Assert.That(secondAccess, Is.Null);
+        }
     }
 
     [Test]
@@ -306,14 +315,20 @@ public class PendingRecoveryCodesServiceTests
         _service.StoreRecoveryCodes("token1", "user1", codes1);
         _service.StoreRecoveryCodes("token2", "user2", codes2);
 
-        // Act & Assert - both should exist independently
-        Assert.That(_service.HasRecoveryCodes("token1", "user1"), Is.True);
-        Assert.That(_service.HasRecoveryCodes("token2", "user2"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert - both should exist independently
+            Assert.That(_service.HasRecoveryCodes("token1", "user1"), Is.True);
+            Assert.That(_service.HasRecoveryCodes("token2", "user2"), Is.True);
+        }
 
         // Accessing one shouldn't affect the other
         var retrieved1 = _service.RetrieveRecoveryCodes("token1", "user1");
-        Assert.That(retrieved1!.Count, Is.EqualTo(1));
-        Assert.That(_service.HasRecoveryCodes("token2", "user2"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved1!.Count, Is.EqualTo(1));
+            Assert.That(_service.HasRecoveryCodes("token2", "user2"), Is.True);
+        }
     }
 
     [Test]
@@ -326,15 +341,21 @@ public class PendingRecoveryCodesServiceTests
         _service.StoreRecoveryCodes("token-session1", TestUserId, codes1);
         _service.StoreRecoveryCodes("token-session2", TestUserId, codes2);
 
-        // Act & Assert
-        Assert.That(_service.HasRecoveryCodes("token-session1", TestUserId), Is.True);
-        Assert.That(_service.HasRecoveryCodes("token-session2", TestUserId), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Act & Assert
+            Assert.That(_service.HasRecoveryCodes("token-session1", TestUserId), Is.True);
+            Assert.That(_service.HasRecoveryCodes("token-session2", TestUserId), Is.True);
+        }
 
         var retrieved1 = _service.RetrieveRecoveryCodes("token-session1", TestUserId);
         var retrieved2 = _service.RetrieveRecoveryCodes("token-session2", TestUserId);
 
-        Assert.That(retrieved1![0], Is.EqualTo("session1-code"));
-        Assert.That(retrieved2![0], Is.EqualTo("session2-code"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved1![0], Is.EqualTo("session1-code"));
+            Assert.That(retrieved2![0], Is.EqualTo("session2-code"));
+        }
     }
 
     #endregion

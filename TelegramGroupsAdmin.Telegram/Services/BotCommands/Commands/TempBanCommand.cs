@@ -121,8 +121,8 @@ public class TempBanCommand : IBotCommand
 
             _logger.LogInformation(
                 "{TargetUser} temp banned by {Executor} from {ChatsAffected} chats for {Duration}. Reason: {Reason}",
-                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                targetUser.ToLogInfo(),
+                message.From.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
             // Return CommandResult with dynamic deletion time matching tempban duration
@@ -131,7 +131,7 @@ public class TempBanCommand : IBotCommand
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to temp ban {User}",
-                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
+                targetUser.ToLogDebug());
             return new CommandResult($"❌ Failed to temp ban user: {ex.Message}", DeleteCommandMessage);
         }
     }
