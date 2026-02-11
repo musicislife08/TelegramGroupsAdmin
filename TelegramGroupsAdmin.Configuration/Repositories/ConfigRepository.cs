@@ -4,10 +4,11 @@ using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Configuration.Repositories;
 
-public class ConfigRepository(AppDbContext context) : IConfigRepository
+public class ConfigRepository(IDbContextFactory<AppDbContext> contextFactory) : IConfigRepository
 {
     public async Task<ConfigRecordDto?> GetAsync(long chatId, CancellationToken cancellationToken = default)
     {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.Configs
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
@@ -15,6 +16,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task UpsertAsync(ConfigRecordDto config, CancellationToken cancellationToken = default)
     {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == config.ChatId, cancellationToken);
 
@@ -55,6 +57,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task DeleteAsync(long chatId, CancellationToken cancellationToken = default)
     {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var config = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
@@ -72,6 +75,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task SaveInviteLinkAsync(long chatId, string inviteLink, CancellationToken cancellationToken = default)
     {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
@@ -98,6 +102,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task ClearInviteLinkAsync(long chatId, CancellationToken cancellationToken = default)
     {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
@@ -111,6 +116,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task ClearAllInviteLinksAsync(CancellationToken cancellationToken = default)
     {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var configsWithLinks = await context.Configs
             .Where(c => c.InviteLink != null)
             .ToListAsync(cancellationToken);
