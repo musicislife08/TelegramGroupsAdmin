@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -42,8 +43,8 @@ public class AIContentCheckV2(
         if (request.IsUserTrusted || request.IsUserAdmin)
         {
             logger.LogDebug(
-                "Skipping AI check for user {UserId}: User is {UserType}",
-                request.UserId,
+                "Skipping AI check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }
@@ -122,7 +123,7 @@ public class AIContentCheckV2(
         catch (InvalidOperationException ex) when (ex.Message.Contains("AI service"))
         {
             // AI service returned null - don't cache, abstain
-            logger.LogWarning("AI API returned null result for user {UserId}, abstaining", req.UserId);
+            logger.LogWarning("AI API returned null result for {User}, abstaining", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -134,7 +135,7 @@ public class AIContentCheckV2(
         }
         catch (TaskCanceledException)
         {
-            logger.LogWarning("AI check for user {UserId}: Request timed out, abstaining", req.UserId);
+            logger.LogWarning("AI check for {User}: Request timed out, abstaining", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -146,7 +147,7 @@ public class AIContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in AI V2 check for user {UserId}, abstaining", req.UserId);
+            logger.LogError(ex, "Error in AI V2 check for {User}, abstaining", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -179,13 +180,13 @@ public class AIContentCheckV2(
                 wasCacheHit = false; // Factory called = cache miss
 
                 // Get message history for context (count from config)
-                var history = await messageContextProvider.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, ct);
+                var history = await messageContextProvider.GetRecentMessagesAsync(req.Chat, req.MessageHistoryCount, ct);
 
                 // Build prompts using the prompt builder
                 var prompts = AIPromptBuilder.CreatePrompts(req, history);
 
                 logger.LogDebug("AI V2 check for {User}: Calling AI service (caption: {CaptionLength}, OCR: {OcrLength}, Vision: {VisionLength})",
-                    req.UserName, req.Message?.Length ?? 0, req.OcrExtractedText?.Length ?? 0, req.VisionAnalysisText?.Length ?? 0);
+                    req.User.ToLogDebug(), req.Message?.Length ?? 0, req.OcrExtractedText?.Length ?? 0, req.VisionAnalysisText?.Length ?? 0);
 
                 // Make AI call using the chat service
                 var aiResult = await chatService.GetCompletionAsync(
@@ -207,7 +208,7 @@ public class AIContentCheckV2(
 
         if (wasCacheHit)
         {
-            logger.LogDebug("AI V2 check for {User}: Using cached result", req.UserName);
+            logger.LogDebug("AI V2 check for {User}: Using cached result", req.User.ToLogDebug());
         }
 
         return (result, wasCacheHit);

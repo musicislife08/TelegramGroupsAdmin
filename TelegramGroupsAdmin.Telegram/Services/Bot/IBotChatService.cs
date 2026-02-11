@@ -1,4 +1,5 @@
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -34,13 +35,13 @@ public interface IBotChatService
     /// <summary>
     /// Check if bot has required permissions in a chat.
     /// </summary>
-    Task<bool> CheckHealthAsync(long chatId, CancellationToken ct = default);
+    Task<bool> CheckHealthAsync(ChatIdentity chat, CancellationToken ct = default);
 
     /// <summary>
-    /// Get all active managed chats where the bot has confirmed permissions.
+    /// Get identities of all active managed chats where the bot has confirmed permissions.
     /// Used by moderation services for cross-chat operations.
     /// </summary>
-    IReadOnlyList<long> GetHealthyChatIds();
+    IReadOnlyList<ChatIdentity> GetHealthyChatIdentities();
 
     /// <summary>
     /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion).
@@ -64,7 +65,7 @@ public interface IBotChatService
     /// Refresh admin list for a specific chat from Telegram API.
     /// Updates chat_admins table and auto-trusts new admins.
     /// </summary>
-    Task RefreshChatAdminsAsync(long chatId, CancellationToken ct = default);
+    Task RefreshChatAdminsAsync(ChatIdentity chat, CancellationToken ct = default);
 
     /// <summary>
     /// Refresh admin cache for all active managed chats.

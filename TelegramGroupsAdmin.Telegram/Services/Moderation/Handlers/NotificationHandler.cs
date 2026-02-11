@@ -240,11 +240,11 @@ public class NotificationHandler : INotificationHandler
         {
             try
             {
-                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.ChatId, cancellationToken);
+                var inviteLink = await _chatService.GetInviteLinkAsync(managedChat.Identity.Id, cancellationToken);
                 if (!string.IsNullOrEmpty(inviteLink))
                 {
                     // Use chat name from managed chat record, or fall back to chatId
-                    var chatDisplayName = managedChat.ChatName ?? managedChat.ChatId.ToString();
+                    var chatDisplayName = managedChat.Identity.ChatName ?? managedChat.Identity.Id.ToString();
                     inviteLinks.Add($"• [{chatDisplayName}]({inviteLink})");
                 }
             }
@@ -252,7 +252,7 @@ public class NotificationHandler : INotificationHandler
             {
                 _logger.LogDebug(ex,
                     "Failed to get invite link for chat {ChatId}, skipping from notification",
-                    managedChat.ChatId);
+                    managedChat.Identity.Id);
             }
         }
 
@@ -292,7 +292,7 @@ public class NotificationHandler : INotificationHandler
         {
             // Build user display (escaped for MarkdownV2)
             var userDisplay = TelegramTextUtilities.EscapeMarkdownV2(
-                TelegramDisplayName.FormatMention(msg.FirstName, msg.LastName, msg.UserName, msg.UserId));
+                TelegramDisplayName.FormatMention(msg.User));
 
             // Build message preview (use translated text if available)
             var messageContent = msg.Translation?.TranslatedText ?? msg.MessageText;
@@ -301,7 +301,7 @@ public class NotificationHandler : INotificationHandler
                 : messageContent ?? "[No text]";
             messageTextPreview = TelegramTextUtilities.EscapeMarkdownV2(messageTextPreview);
 
-            var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(msg.ChatName ?? msg.ChatId.ToString());
+            var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(msg.Chat.ChatName ?? msg.Chat.Id.ToString());
 
             // Build detection details from DetectionResultRecord
             var detectionDetails = new StringBuilder();
@@ -361,18 +361,18 @@ public class NotificationHandler : INotificationHandler
             }
 
             // Send to all chat admins
-            var chatAdmins = await _chatAdminsRepository.GetChatAdminsAsync(msg.ChatId, cancellationToken);
+            var chatAdmins = await _chatAdminsRepository.GetChatAdminsAsync(msg.Chat.Id, cancellationToken);
             var sentCount = 0;
 
             foreach (var admin in chatAdmins)
             {
                 // Check if admin has linked their Telegram account
-                var mapping = await _telegramUserMappingRepository.GetByTelegramIdAsync(admin.TelegramId, cancellationToken);
+                var mapping = await _telegramUserMappingRepository.GetByTelegramIdAsync(admin.User.Id, cancellationToken);
                 if (mapping == null)
                     continue;
 
                 await _dmDeliveryService.SendDmWithMediaAsync(
-                    admin.TelegramId,
+                    admin.User.Id,
                     "spam_banned",
                     consolidatedMessage,
                     photoPath,

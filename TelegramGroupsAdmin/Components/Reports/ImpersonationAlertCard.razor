@@ -73,9 +73,9 @@
                                 </MudAvatar>
                             }
 
-                            <MudText Typo="Typo.body1"><b>@Alert.SuspectedDisplayName</b></MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.SuspectedUserName != null ? $"@{Alert.SuspectedUserName}" : "No username")</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.SuspectedUserId</MudText>
+                            <MudText Typo="Typo.body1"><b>@Alert.SuspectedUser.DisplayName</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.SuspectedUser.Username != null ? $"@{Alert.SuspectedUser.Username}" : "No username")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.SuspectedUser.Id</MudText>
 
                             <MudDivider Class="my-1" Style="width: 80%;" />
 
@@ -123,9 +123,9 @@
                                 </MudAvatar>
                             }
 
-                            <MudText Typo="Typo.body1"><b>@Alert.TargetDisplayName</b></MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.TargetUserName != null ? $"@{Alert.TargetUserName}" : "No username")</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.TargetUserId</MudText>
+                            <MudText Typo="Typo.body1"><b>@Alert.TargetUser.DisplayName</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.TargetUser.Username != null ? $"@{Alert.TargetUser.Username}" : "No username")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.TargetUser.Id</MudText>
 
                             <MudDivider Class="my-1" Style="width: 80%;" />
 
@@ -194,7 +194,7 @@
                     @* Chat *@
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
-                        <MudText Typo="Typo.body2">Chat: @(Alert.ChatName ?? "Unknown")</MudText>
+                        <MudText Typo="Typo.body2">Chat: @(Alert.Chat.ChatName ?? "Unknown")</MudText>
                     </MudStack>
                 </MudStack>
             </MudPaper>
@@ -261,11 +261,11 @@
     protected override async Task OnParametersSetAsync()
     {
         // Load user details
-        _suspectedUser = await TelegramUserRepository.GetByTelegramIdAsync(Alert.SuspectedUserId);
-        _targetUser = await TelegramUserRepository.GetByTelegramIdAsync(Alert.TargetUserId);
+        _suspectedUser = await TelegramUserRepository.GetByTelegramIdAsync(Alert.SuspectedUser.Id);
+        _targetUser = await TelegramUserRepository.GetByTelegramIdAsync(Alert.TargetUser.Id);
 
         // Get message count in this chat
-        _suspectedMessageCount = await MessageRepository.GetMessageCountAsync(Alert.SuspectedUserId, Alert.ChatId);
+        _suspectedMessageCount = await MessageRepository.GetMessageCountAsync(Alert.SuspectedUser.Id, Alert.Chat.Id);
 
         // Get other managed chats this user is in (excluding current chat)
         await LoadOtherManagedChatsAsync();
@@ -275,10 +275,10 @@
     {
         try
         {
-            var userMessages = await MessageRepository.GetUserMessagesAsync(Alert.SuspectedUserId);
+            var userMessages = await MessageRepository.GetUserMessagesAsync(Alert.SuspectedUser.Id);
             var distinctChatIds = userMessages
                 .Select(m => m.ChatId)
-                .Where(chatId => chatId != Alert.ChatId)
+                .Where(chatId => chatId != Alert.Chat.Id)
                 .Distinct()
                 .ToList();
 
@@ -286,8 +286,8 @@
             {
                 var allManagedChats = await ManagedChatsRepository.GetActiveChatsAsync();
                 _otherManagedChats = allManagedChats
-                    .Where(c => distinctChatIds.Contains(c.ChatId))
-                    .Select(c => c.ChatName ?? $"Chat {c.ChatId}")
+                    .Where(c => distinctChatIds.Contains(c.Identity.Id))
+                    .Select(c => c.Identity.ChatName ?? $"Chat {c.Identity.Id}")
                     .ToList();
             }
         }

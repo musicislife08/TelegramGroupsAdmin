@@ -1,11 +1,12 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
 /// Managed chat record for UI display
 /// </summary>
 public record ManagedChatRecord(
-    long ChatId,
-    string? ChatName,
+    ChatIdentity Identity,
     ManagedChatType ChatType,
     BotChatStatus BotStatus,
     bool IsAdmin,

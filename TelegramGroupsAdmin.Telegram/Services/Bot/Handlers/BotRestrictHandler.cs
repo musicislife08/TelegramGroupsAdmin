@@ -75,17 +75,17 @@ public class BotRestrictHandler : IBotRestrictHandler
         CancellationToken cancellationToken)
     {
         var apiClient = await _botClientFactory.GetApiClientAsync();
-        var healthyChatIds = _chatService.GetHealthyChatIds();
+        var healthyChats = _chatService.GetHealthyChatIdentities();
 
         var successCount = 0;
         var failCount = 0;
 
-        await Parallel.ForEachAsync(healthyChatIds, cancellationToken, async (targetChatId, ct) =>
+        await Parallel.ForEachAsync(healthyChats, cancellationToken, async (chat, ct) =>
         {
             try
             {
                 await apiClient.RestrictChatMemberAsync(
-                    chatId: targetChatId,
+                    chatId: chat.Id,
                     userId: user.Id,
                     permissions: permissions,
                     untilDate: expiresAt.UtcDateTime,
@@ -94,7 +94,7 @@ public class BotRestrictHandler : IBotRestrictHandler
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to restrict user {UserId} in chat {ChatId}", user.Id, targetChatId);
+                _logger.LogWarning(ex, "Failed to restrict {User} in {Chat}", user.ToLogDebug(), chat.ToLogDebug());
                 Interlocked.Increment(ref failCount);
             }
         });

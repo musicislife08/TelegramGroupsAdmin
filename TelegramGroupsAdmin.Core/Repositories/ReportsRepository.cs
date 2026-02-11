@@ -228,11 +228,11 @@ public class ReportsRepository : IReportsRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Inserted content report {ReportId} for message {MessageId} in chat {ChatId} by user {UserId}",
+            "Inserted content report {ReportId} for message {MessageId} in chat {ChatId} by {Reporter}",
             entity.Id,
             report.MessageId,
-            report.ChatId,
-            report.ReportedByUserId);
+            report.Chat.Id,
+            report.ReportedByUserName ?? report.ReportedByUserId?.ToString() ?? "system");
 
         return entity.Id;
     }
@@ -320,8 +320,8 @@ public class ReportsRepository : IReportsRepository
         // Build context JSONB
         var alertContext = new ImpersonationAlertContext
         {
-            SuspectedUserId = alert.SuspectedUserId,
-            TargetUserId = alert.TargetUserId,
+            SuspectedUserId = alert.SuspectedUser.Id,
+            TargetUserId = alert.TargetUser.Id,
             TotalScore = alert.TotalScore,
             RiskLevel = alert.RiskLevel.ToString().ToLowerInvariant(),
             NameMatch = alert.NameMatch,
@@ -334,7 +334,7 @@ public class ReportsRepository : IReportsRepository
         var entity = new ReportDto
         {
             Type = (short)ReportType.ImpersonationAlert,
-            ChatId = alert.ChatId,
+            ChatId = alert.Chat.Id,
             ReportedAt = alert.DetectedAt,
             Status = alert.ReviewedAt.HasValue ? (int)ReportStatus.Reviewed : (int)ReportStatus.Pending,
             ReviewedBy = alert.ReviewedByEmail,
@@ -348,10 +348,10 @@ public class ReportsRepository : IReportsRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Created impersonation alert #{ReportId}: User {SuspectedUserId} → Admin {TargetUserId} (score: {Score}, auto_banned: {AutoBanned})",
+            "Created impersonation alert #{ReportId}: {SuspectedUser} → {TargetUser} (score: {Score}, auto_banned: {AutoBanned})",
             entity.Id,
-            alert.SuspectedUserId,
-            alert.TargetUserId,
+            alert.SuspectedUser.DisplayName,
+            alert.TargetUser.DisplayName,
             alert.TotalScore,
             alert.AutoBanned);
 
@@ -462,7 +462,7 @@ public class ReportsRepository : IReportsRepository
         // Build context JSONB
         var examContext = new ExamFailureContext
         {
-            UserId = examFailure.UserId,
+            UserId = examFailure.User.Id,
             McAnswers = examFailure.McAnswers,
             ShuffleState = examFailure.ShuffleState,
             OpenEndedAnswer = examFailure.OpenEndedAnswer,
@@ -474,7 +474,7 @@ public class ReportsRepository : IReportsRepository
         var entity = new ReportDto
         {
             Type = (short)ReportType.ExamFailure,
-            ChatId = examFailure.ChatId,
+            ChatId = examFailure.Chat.Id,
             ReportedAt = examFailure.FailedAt,
             Status = (int)ReportStatus.Pending,
             Context = JsonSerializer.Serialize(examContext, JsonOptions)
@@ -486,8 +486,8 @@ public class ReportsRepository : IReportsRepository
         _logger.LogInformation(
             "Created exam failure report #{ReportId}: User {UserId} in chat {ChatId} (score: {Score}/{Threshold})",
             entity.Id,
-            examFailure.UserId,
-            examFailure.ChatId,
+            examFailure.User.Id,
+            examFailure.Chat.Id,
             examFailure.Score,
             examFailure.PassingThreshold);
 

@@ -40,31 +40,32 @@ public class DeleteUserMessagesJob(
         const string jobName = "DeleteUserMessages";
         var startTimestamp = Stopwatch.GetTimestamp();
         var success = false;
+        var user = payload.User;
 
         try
         {
             _logger.LogInformation(
-                "Starting cross-chat message cleanup for user {UserId}",
-                payload.TelegramUserId);
+                "Starting cross-chat message cleanup for user {UserDisplay} ({UserId})",
+                user.DisplayName, user.Id);
 
             // Fetch all user messages (non-deleted only)
             var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(
-                payload.TelegramUserId,
+                user.Id,
                 cancellationToken);
 
             if (userMessages.Count == 0)
             {
                 _logger.LogInformation(
-                    "No messages found for user {UserId}, cleanup complete",
-                    payload.TelegramUserId);
+                    "No messages found for user {UserDisplay} ({UserId}), cleanup complete",
+                    user.DisplayName, user.Id);
                 success = true;
                 return;
             }
 
             _logger.LogInformation(
-                "Found {MessageCount} messages to delete for user {UserId}",
+                "Found {MessageCount} messages to delete for user {UserDisplay} ({UserId})",
                 userMessages.Count,
-                payload.TelegramUserId);
+                user.DisplayName, user.Id);
 
             var deletedCount = 0;
             var failedCount = 0;
@@ -76,8 +77,8 @@ public class DeleteUserMessagesJob(
                 if (cancellationToken.IsCancellationRequested)
                 {
                     _logger.LogWarning(
-                        "Message cleanup cancelled for user {UserId} after {DeletedCount} deletions",
-                        payload.TelegramUserId,
+                        "Message cleanup cancelled for user {UserDisplay} ({UserId}) after {DeletedCount} deletions",
+                        user.DisplayName, user.Id,
                         deletedCount);
                     break;
                 }
@@ -96,7 +97,7 @@ public class DeleteUserMessagesJob(
                         "Deleted message {MessageId} in chat {ChatId} for user {UserId}",
                         message.MessageId,
                         message.ChatId,
-                        payload.TelegramUserId);
+                        user.Id);
                 }
                 catch (Exception apiEx) when (
                     apiEx.Message.Contains("message to delete not found") ||
@@ -110,7 +111,7 @@ public class DeleteUserMessagesJob(
                         "Skipped message {MessageId} in chat {ChatId} for user {UserId}: {Reason}",
                         message.MessageId,
                         message.ChatId,
-                        payload.TelegramUserId,
+                        user.Id,
                         apiEx.Message);
                 }
                 catch (Exception ex)
@@ -121,14 +122,14 @@ public class DeleteUserMessagesJob(
                         "Failed to delete message {MessageId} in chat {ChatId} for user {UserId}",
                         message.MessageId,
                         message.ChatId,
-                        payload.TelegramUserId);
+                        user.Id);
                     // Continue with other messages, don't throw
                 }
             }
 
             _logger.LogInformation(
-                "Cross-chat message cleanup complete for user {UserId}: {DeletedCount} deleted, {SkippedCount} skipped, {FailedCount} failed",
-                payload.TelegramUserId,
+                "Cross-chat message cleanup complete for user {UserDisplay} ({UserId}): {DeletedCount} deleted, {SkippedCount} skipped, {FailedCount} failed",
+                user.DisplayName, user.Id,
                 deletedCount,
                 skippedCount,
                 failedCount);

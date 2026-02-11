@@ -49,8 +49,8 @@ public class TempbanExpiryJob(
         try
         {
             _logger.LogInformation(
-                "Processing tempban expiry for user {UserId}. Reason: {Reason}, Expired at: {ExpiresAt}",
-                payload.UserId,
+                "Processing tempban expiry for {User}. Reason: {Reason}, Expired at: {ExpiresAt}",
+                payload.User.DisplayName,
                 payload.Reason,
                 payload.ExpiresAt);
 
@@ -60,7 +60,7 @@ public class TempbanExpiryJob(
                 var result = await _moderationService.UnbanUserAsync(
                     new UnbanIntent
                     {
-                        User = UserIdentity.FromId(payload.UserId),
+                        User = payload.User,
                         Executor = Core.Models.Actor.TempbanExpiry,
                         Reason = $"Tempban expired (original reason: {payload.Reason})",
                         RestoreTrust = false
@@ -70,16 +70,16 @@ public class TempbanExpiryJob(
                 if (result.Success)
                 {
                     _logger.LogInformation(
-                        "Completed tempban expiry for user {UserId}. Unbanned from {ChatsAffected} chats",
-                        payload.UserId,
+                        "Completed tempban expiry for {User}. Unbanned from {ChatsAffected} chats",
+                        payload.User.DisplayName,
                         result.ChatsAffected);
                     success = true;
                 }
                 else
                 {
                     _logger.LogWarning(
-                        "Tempban expiry partially failed for user {UserId}: {Error}",
-                        payload.UserId,
+                        "Tempban expiry partially failed for {User}: {Error}",
+                        payload.User.DisplayName,
                         result.ErrorMessage);
                     // Don't throw - partial success is acceptable for tempban expiry
                     success = true;
@@ -89,8 +89,8 @@ public class TempbanExpiryJob(
             {
                 _logger.LogError(
                     ex,
-                    "Failed to process tempban expiry for user {UserId}",
-                    payload.UserId);
+                    "Failed to process tempban expiry for {User}",
+                    payload.User.DisplayName);
                 throw; // Re-throw for retry logic and exception recording
             }
         }

@@ -1,3 +1,5 @@
+using Telegram.Bot.Types.Enums;
+
 namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 
 /// <summary>
@@ -31,12 +33,14 @@ public interface IBotDmService
     /// <param name="telegramUserId">Telegram user ID to send DM to</param>
     /// <param name="notificationType">Type of notification (e.g., "warning", "mystatus")</param>
     /// <param name="messageText">Message text to send</param>
+    /// <param name="parseMode">Telegram parse mode (default: MarkdownV2). Use Html for HTML-formatted messages.</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure (queued notifications are considered failures)</returns>
     Task<DmDeliveryResult> SendDmWithQueueAsync(
         long telegramUserId,
         string notificationType,
         string messageText,
+        ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default);
 
     /// <summary>

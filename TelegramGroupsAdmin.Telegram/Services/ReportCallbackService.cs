@@ -599,14 +599,14 @@ public class ReportCallbackService : IReportCallbackService
             try
             {
                 await messageService.DeleteAndMarkMessageAsync(
-                    report.ChatId,
+                    report.Chat.Id,
                     report.ReportCommandMessageId.Value,
                     "report_cleanup",
                     cancellationToken);
 
                 _logger.LogDebug(
                     "Deleted /report command message {MessageId} in chat {ChatId}",
-                    report.ReportCommandMessageId.Value, report.ChatId);
+                    report.ReportCommandMessageId.Value, report.Chat.Id);
             }
             catch (Exception ex)
             {
@@ -622,14 +622,14 @@ public class ReportCallbackService : IReportCallbackService
             try
             {
                 await messageService.SendAndSaveMessageAsync(
-                    chatId: report.ChatId,
+                    chatId: report.Chat.Id,
                     text: "✓ This message was reviewed and no action was taken",
                     replyParameters: new ReplyParameters { MessageId = report.MessageId.Value },
                     cancellationToken: cancellationToken);
 
                 _logger.LogDebug(
                     "Sent dismiss notification as reply to message {MessageId} in chat {ChatId}",
-                    report.MessageId, report.ChatId);
+                    report.MessageId, report.Chat.Id);
             }
             catch (Exception ex)
             {

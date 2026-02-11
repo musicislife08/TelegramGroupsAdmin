@@ -5,7 +5,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// </summary>
 public class ManagedChatInfo
 {
-    public required ManagedChatRecord Chat { get; init; }
+    public required ManagedChatRecord Record { get; init; }
     public required ChatHealthStatus HealthStatus { get; set; }
     public bool HasCustomSpamConfig { get; set; }
     public bool HasCustomWelcomeConfig { get; set; }

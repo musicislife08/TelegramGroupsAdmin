@@ -247,7 +247,7 @@ public class TelegramUserManagementServiceTests
     public async Task GetUserDetailAsync_DelegatesToRepository()
     {
         // Arrange
-        var expectedDetail = new TelegramUserDetail { TelegramUserId = TestUserId };
+        var expectedDetail = new TelegramUserDetail { User = UserIdentity.FromId(TestUserId) };
         _mockUserRepo.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(expectedDetail);
 

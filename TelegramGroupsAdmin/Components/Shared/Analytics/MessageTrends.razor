@@ -23,7 +23,7 @@
                 <MudChip Value="@(0L)" @key="0">All Chats</MudChip>
                 @foreach (var chat in _accessibleChats)
                 {
-                    <MudChip Value="@chat.ChatId" @key="@chat.ChatId">@chat.ChatName</MudChip>
+                    <MudChip Value="@chat.Identity.Id" @key="@chat.Identity.Id">@chat.Identity.ChatName</MudChip>
                 }
             </MudChipSet>
         </MudPaper>

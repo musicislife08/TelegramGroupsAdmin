@@ -7,8 +7,6 @@ namespace TelegramGroupsAdmin.Core.Models;
 public record ExamFailureRecord
 {
     public long Id { get; init; }
-    public long ChatId { get; init; }
-    public long UserId { get; init; }
 
     /// <summary>
     /// User's multiple choice answers.

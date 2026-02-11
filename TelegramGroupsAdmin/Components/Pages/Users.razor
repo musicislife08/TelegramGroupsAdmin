@@ -553,7 +553,7 @@
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
                 permissionLevel);
-            var chatIds = accessibleChats.Select(c => c.ChatId).ToList();
+            var chatIds = accessibleChats.Select(c => c.Identity.Id).ToList();
 
             // Load all user lists in parallel (filtered by accessible chats for Admin users)
             var allUsersTask = UserManagementService.GetAllUsersAsync(chatIds);

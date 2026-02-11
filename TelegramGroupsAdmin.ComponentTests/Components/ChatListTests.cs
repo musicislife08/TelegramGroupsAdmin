@@ -1,6 +1,7 @@
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using TelegramGroupsAdmin.Components.Shared;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -28,8 +29,7 @@ public class ChatListTests : MudBlazorTestContext
         string? chatIconPath = null)
     {
         return new ManagedChatRecord(
-            ChatId: chatId,
-            ChatName: chatName,
+            Identity: new ChatIdentity(chatId, chatName),
             ChatType: chatType,
             BotStatus: botStatus,
             IsAdmin: isAdmin,

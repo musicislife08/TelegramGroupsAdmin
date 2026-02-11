@@ -116,25 +116,6 @@ public static class TelegramLoggingExtensions
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // UI Model Extensions (ManagedChatRecord)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    extension(ManagedChatRecord? chat)
-    {
-        /// <summary>
-        /// Format managed chat record for INFO logs (name only, no ID).
-        /// </summary>
-        public string ToLogInfo()
-            => LogDisplayName.ChatInfo(chat?.ChatName, chat?.ChatId ?? 0);
-
-        /// <summary>
-        /// Format managed chat record for DEBUG/WARNING/ERROR logs (name + ID).
-        /// </summary>
-        public string ToLogDebug()
-            => LogDisplayName.ChatDebug(chat?.ChatName, chat?.ChatId ?? 0);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // UI Model Extensions (MessageRecord)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -146,7 +127,7 @@ public static class TelegramLoggingExtensions
         public string ToLogInfo()
             => message == null
                 ? "null"
-                : $"Message {message.MessageId} in {message.ChatName ?? $"chat {message.ChatId}"}";
+                : $"Message {message.MessageId} in {message.Chat.ChatName ?? $"chat {message.Chat.Id}"}";
 
         /// <summary>
         /// Format message record for DEBUG/WARNING/ERROR logs (message ID + chat ID + user).
@@ -154,7 +135,7 @@ public static class TelegramLoggingExtensions
         public string ToLogDebug()
             => message == null
                 ? "null"
-                : $"Message {message.MessageId} in {message.ChatName ?? "unknown"} ({message.ChatId}) from {message.DisplayName}";
+                : $"Message {message.MessageId} in {message.Chat.ChatName ?? "unknown"} ({message.Chat.Id}) from {message.User.DisplayName}";
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -198,8 +179,8 @@ public static class TelegramLoggingExtensions
         {
             var chat = await repo.GetByChatIdAsync(chatId, ct);
             return includeId
-                ? LogDisplayName.ChatDebug(chat?.ChatName, chatId)
-                : LogDisplayName.ChatInfo(chat?.ChatName, chatId);
+                ? LogDisplayName.ChatDebug(chat?.Identity.ChatName, chatId)
+                : LogDisplayName.ChatInfo(chat?.Identity.ChatName, chatId);
         }
     }
 }

@@ -234,7 +234,7 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
 
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Updated content detection configuration for chat {ChatId}", chatId);
+            _logger.LogDebug("Updated content detection configuration for chat {ChatId}", chatId);
             return true;
         }
         catch (Exception ex)
@@ -291,7 +291,7 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
             context.ContentDetectionConfigs.Remove(entity);
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Deleted content detection configuration for chat {ChatId}", chatId);
+            _logger.LogDebug("Deleted content detection configuration for chat {ChatId}", chatId);
             return true;
         }
         catch (Exception ex)

@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Core.Models;
 public record Report(
     long Id,
     int MessageId,
-    long ChatId,
+    ChatIdentity Chat,
     int? ReportCommandMessageId,      // NULL for web UI reports, populated for Telegram /report
     long? ReportedByUserId,            // NULL if user has no Telegram link, populated if they do
     string? ReportedByUserName,

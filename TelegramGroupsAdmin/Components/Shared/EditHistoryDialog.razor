@@ -23,7 +23,7 @@
                         </MudAvatar>
                         <MudStack Spacing="0">
                             <MudText Typo="Typo.body2" Style="font-weight: 600;">
-                                @(Message.UserName ?? $"User {Message.UserId}")
+                                @(Message.User.DisplayName)
                             </MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 Message ID: @Message.MessageId
@@ -181,7 +181,7 @@
 
     private string GetUserInitials()
     {
-        var name = Message.UserName ?? $"U{Message.UserId}";
+        var name = Message.User.Username ?? $"U{Message.User.Id}";
         var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length >= 2)
             return $"{parts[0][0]}{parts[1][0]}".ToUpper();

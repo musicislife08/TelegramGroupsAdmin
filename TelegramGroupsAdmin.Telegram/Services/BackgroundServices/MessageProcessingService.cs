@@ -6,7 +6,7 @@ using System.Text.Json;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -84,7 +84,7 @@ public partial class MessageProcessingService(
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
                             commandResult.Response,
-                            parseMode: ParseMode.Markdown,
+                            parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
                             cancellationToken: cancellationToken);
                     }
                 }
@@ -103,7 +103,7 @@ public partial class MessageProcessingService(
                     using var scope = _scopeFactory.CreateScope();
                     var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
-                    var examContext = await examFlowService.GetActiveExamContextAsync(message.From.Id, cancellationToken);
+                    var examContext = await examFlowService.GetActiveExamContextAsync(UserIdentity.From(message.From), cancellationToken);
                     if (examContext?.AwaitingOpenEndedAnswer == true)
                     {
                         var result = await examFlowService.HandleOpenEndedAnswerAsync(
@@ -113,8 +113,8 @@ public partial class MessageProcessingService(
                             cancellationToken);
 
                         logger.LogInformation(
-                            "Processed open-ended exam answer for user {UserId}: Complete={Complete}, Passed={Passed}",
-                            message.From.Id, result.ExamComplete, result.Passed);
+                            "Processed open-ended exam answer for {User}: Complete={Complete}, Passed={Passed}",
+                            message.From.ToLogInfo(), result.ExamComplete, result.Passed);
 
                         // Cancel welcome timeout and update response if exam completed
                         if (result.ExamComplete && result.GroupChatId.HasValue)
@@ -197,11 +197,8 @@ public partial class MessageProcessingService(
             {
                 var serviceMessageRecord = new MessageRecord(
                     message.MessageId,
-                    message.From.Id,
-                    message.From.Username,
-                    message.From.FirstName,
-                    message.From.LastName,
-                    message.Chat.Id,
+                    User: new Core.Models.UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                    Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                     DateTimeOffset.UtcNow,
                     serviceMessageText,
                     PhotoFileId: null,
@@ -209,7 +206,6 @@ public partial class MessageProcessingService(
                     Urls: null,
                     EditDate: null,
                     ContentHash: null,
-                    ChatName: message.Chat.Title ?? message.Chat.Username,
                     PhotoLocalPath: null,
                     PhotoThumbnailPath: null,
                     ChatIconPath: null,
@@ -364,7 +360,7 @@ public partial class MessageProcessingService(
                     try
                     {
                         var chatService = messageScope.ServiceProvider.GetRequiredService<IBotChatService>();
-                        await chatService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
+                        await chatService.RefreshChatAdminsAsync(ChatIdentity.From(message.Chat), cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -398,7 +394,7 @@ public partial class MessageProcessingService(
                             var responseMessage = await botMessageService.SendAndSaveMessageAsync(
                                 message.Chat.Id,
                                 commandResult.Response,
-                                parseMode: ParseMode.Markdown,
+                                parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 cancellationToken: cancellationToken);
 
@@ -550,11 +546,8 @@ public partial class MessageProcessingService(
             // User photo will be fetched asynchronously after message save (non-blocking)
             var messageRecord = new MessageRecord(
                 message.MessageId,
-                message.From!.Id,
-                message.From.Username,
-                message.From.FirstName,
-                message.From.LastName,
-                message.Chat.Id,
+                User: new Core.Models.UserIdentity(message.From!.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                 now,
                 text,
                 photoFileId,
@@ -562,7 +555,6 @@ public partial class MessageProcessingService(
                 urlsJson != "" ? urlsJson : null,
                 EditDate: message.EditDate.HasValue ? new DateTimeOffset(message.EditDate.Value, TimeSpan.Zero) : null,
                 ContentHash: contentHash,
-                ChatName: message.Chat.Title ?? message.Chat.Username,
                 PhotoLocalPath: photoLocalPath,
                 PhotoThumbnailPath: photoThumbnailPath,
                 ChatIconPath: chatIconPath,
@@ -614,8 +606,8 @@ public partial class MessageProcessingService(
             {
                 logger.LogWarning(
                     "{User} is already banned in {Chat}, deleting message {MessageId} immediately (multi-message spam cleanup)",
-                    LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                    message.From.ToLogDebug(),
+                    message.Chat.ToLogDebug(),
                     message.MessageId);
 
                 var moderationService = messageScope.ServiceProvider.GetRequiredService<IBotModerationService>();

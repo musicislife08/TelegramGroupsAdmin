@@ -41,10 +41,10 @@ public interface IBotModerationMessageHandler
     /// Schedule a background job to delete all messages from a user across all managed chats.
     /// Used for cleanup after bans.
     /// </summary>
-    /// <param name="userId">The Telegram user ID whose messages should be deleted.</param>
+    /// <param name="user">The user whose messages should be deleted.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task ScheduleUserMessagesCleanupAsync(
-        long userId,
+        UserIdentity user,
         CancellationToken cancellationToken = default);
 
     /// <summary>

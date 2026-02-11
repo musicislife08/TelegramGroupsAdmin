@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -61,7 +61,7 @@ public class BotProtectionService(
             {
                 // Check if inviter is a chat admin
                 var admins = await chatAdminsRepository.GetChatAdminsAsync(chat.Id, cancellationToken);
-                var isInviterAdmin = admins.Any(admin => admin.TelegramId == invitedBy.Id);
+                var isInviterAdmin = admins.Any(admin => admin.User.Id == invitedBy.Id);
 
                 if (isInviterAdmin)
                 {

@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
@@ -8,5 +10,5 @@ public interface IMessageContextProvider
     /// <summary>
     /// Get recent messages from a chat for context
     /// </summary>
-    Task<IEnumerable<HistoryMessage>> GetRecentMessagesAsync(long chatId, int count = 10, CancellationToken cancellationToken = default);
+    Task<IEnumerable<HistoryMessage>> GetRecentMessagesAsync(ChatIdentity chat, int count = 10, CancellationToken cancellationToken = default);
 }

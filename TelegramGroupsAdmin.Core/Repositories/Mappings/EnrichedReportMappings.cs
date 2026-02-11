@@ -48,15 +48,15 @@ internal static class EnrichedReportMappings
         return new ImpersonationAlertRecord
         {
             Id = view.Id,
-            ChatId = view.ChatId,
+            SuspectedUser = new UserIdentity(alertContext.SuspectedUserId, view.SuspectedFirstName, view.SuspectedLastName, view.SuspectedUsername),
+            TargetUser = new UserIdentity(alertContext.TargetUserId, view.TargetFirstName, view.TargetLastName, view.TargetUsername),
+            Chat = new ChatIdentity(view.ChatId, view.ChatName),
             DetectedAt = view.ReportedAt,
             ReviewedByUserId = view.WebUserId,
             ReviewedAt = view.ReviewedAt,
             Verdict = verdict,
 
             // From JSONB context
-            SuspectedUserId = alertContext.SuspectedUserId,
-            TargetUserId = alertContext.TargetUserId,
             TotalScore = alertContext.TotalScore,
             RiskLevel = riskLevel,
             NameMatch = alertContext.NameMatch,
@@ -64,16 +64,9 @@ internal static class EnrichedReportMappings
             PhotoSimilarityScore = alertContext.PhotoSimilarity,
             AutoBanned = alertContext.AutoBanned,
 
-            // From view joins (no more N+1!)
-            SuspectedUserName = view.SuspectedUsername,
-            SuspectedFirstName = view.SuspectedFirstName,
-            SuspectedLastName = view.SuspectedLastName,
+            // Photo paths from view joins
             SuspectedPhotoPath = view.SuspectedPhotoPath,
-            TargetUserName = view.TargetUsername,
-            TargetFirstName = view.TargetFirstName,
-            TargetLastName = view.TargetLastName,
             TargetPhotoPath = view.TargetPhotoPath,
-            ChatName = view.ChatName,
             ReviewedByEmail = view.ReviewerEmail ?? view.ReviewedBy
         };
     }
@@ -97,7 +90,6 @@ internal static class EnrichedReportMappings
         return new ExamFailureRecord
         {
             Id = view.Id,
-            ChatId = view.ChatId,
             FailedAt = view.ReportedAt,
             ReviewedBy = view.ReviewedBy,
             ReviewedAt = view.ReviewedAt,
@@ -105,7 +97,6 @@ internal static class EnrichedReportMappings
             AdminNotes = view.AdminNotes,
 
             // From JSONB context
-            UserId = examContext.UserId,
             McAnswers = examContext.McAnswers,
             ShuffleState = examContext.ShuffleState,
             OpenEndedAnswer = examContext.OpenEndedAnswer,
@@ -130,7 +121,7 @@ internal static class EnrichedReportMappings
         return new Report(
             Id: view.Id,
             MessageId: view.MessageId,
-            ChatId: view.ChatId,
+            Chat: new ChatIdentity(view.ChatId, view.ChatName),
             ReportCommandMessageId: view.ReportCommandMessageId,
             ReportedByUserId: view.ReportedByUserId,
             ReportedByUserName: view.ReportedByUserName,
@@ -153,14 +144,13 @@ internal static class EnrichedReportMappings
         {
             Id = view.Id,
             Type = (ReportType)view.Type,
-            ChatId = view.ChatId,
+            Chat = new ChatIdentity(view.ChatId, view.ChatName),
             CreatedAt = view.ReportedAt,  // View column is 'reported_at', maps to domain 'CreatedAt'
             Status = (ReportStatus)view.Status,
             ReviewedBy = view.ReviewedBy,
             ReviewedAt = view.ReviewedAt,
             ActionTaken = view.ActionTaken,
-            AdminNotes = view.AdminNotes,
-            ChatName = view.ChatName
+            AdminNotes = view.AdminNotes
         };
     }
 }

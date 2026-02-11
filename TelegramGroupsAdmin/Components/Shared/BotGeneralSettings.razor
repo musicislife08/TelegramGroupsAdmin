@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models
-@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
 @inject IConfigService ConfigService
@@ -298,7 +298,7 @@
             }
 
             // Save as global config (chat_id = 0)
-            await ConfigService.SaveAsync(ConfigType.TelegramBot, 0, _botConfig);
+            await ConfigService.SaveAsync(ConfigType.TelegramBot, ChatIdentity.FromId(0), _botConfig);
 
             // Notify bot service to check config and start/stop immediately
             BotService.NotifyConfigChange();
@@ -352,7 +352,7 @@
                 .ToList();
 
             // Save global bot protection config (chatId=0)
-            await ConfigService.SaveAsync(ConfigType.UrlFilter, 0, _config);
+            await ConfigService.SaveAsync(ConfigType.UrlFilter, ChatIdentity.FromId(0), _config);
             Snackbar.Add("Bot protection configuration saved globally", Severity.Success);
         }
         catch (Exception ex)

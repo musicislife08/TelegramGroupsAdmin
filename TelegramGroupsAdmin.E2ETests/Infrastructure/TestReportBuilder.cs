@@ -165,7 +165,7 @@ public class TestReportBuilder
         var report = new Report(
             Id: 0, // Will be assigned by database
             MessageId: _messageId,
-            ChatId: _chatId,
+            Chat: new ChatIdentity(_chatId, null),
             ReportCommandMessageId: _reportCommandMessageId,
             ReportedByUserId: _reportedByUserId,
             ReportedByUserName: _reportedByUserName,
@@ -193,7 +193,7 @@ public record TestReport(Report Record)
 {
     public long Id => Record.Id;
     public int MessageId => Record.MessageId;
-    public long ChatId => Record.ChatId;
+    public long ChatId => Record.Chat.Id;
     public ReportStatus Status => Record.Status;
     public DateTimeOffset ReportedAt => Record.ReportedAt;
 }

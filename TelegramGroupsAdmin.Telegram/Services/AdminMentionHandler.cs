@@ -69,19 +69,19 @@ public class AdminMentionHandler
             foreach (var admin in admins)
             {
                 // Skip the user who sent the @admin mention
-                if (admin.TelegramId == message.From?.Id)
+                if (admin.User.Id == message.From?.Id)
                     continue;
 
                 // Skip the bot itself (bots can't receive notifications anyway)
-                if (admin.TelegramId == botId)
+                if (admin.User.Id == botId)
                     continue;
 
                 // Create HTML text mention with username or fallback to generic name
                 // Format: <a href="tg://user?id=123">@username</a> or <a href="tg://user?id=123">Admin</a>
-                var displayName = !string.IsNullOrWhiteSpace(admin.Username)
-                    ? $"@{admin.Username}"
+                var displayName = !string.IsNullOrWhiteSpace(admin.User.Username)
+                    ? $"@{admin.User.Username}"
                     : "Admin";
-                mentionsList.Add($"<a href=\"tg://user?id={admin.TelegramId}\">{displayName}</a>");
+                mentionsList.Add($"<a href=\"tg://user?id={admin.User.Id}\">{displayName}</a>");
             }
 
             if (mentionsList.Count == 0)

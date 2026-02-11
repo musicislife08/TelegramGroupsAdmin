@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// Replaces fire-and-forget pattern in ReportService for reliable delivery
 /// </summary>
 public record SendChatNotificationPayload(
-    long ChatId,
+    ChatIdentity Chat,
     NotificationEventType EventType,
     string Subject,
     string Message,

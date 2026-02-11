@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
@@ -42,8 +43,8 @@ public class BayesContentCheckV2(
         if (request.IsUserTrusted || request.IsUserAdmin)
         {
             logger.LogDebug(
-                "Skipping Bayes check for user {UserId}: User is {UserType}",
-                request.UserId,
+                "Skipping Bayes check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }
@@ -130,7 +131,7 @@ public class BayesContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in BayesSpamCheckV2 for user {UserId}", req.UserId);
+            logger.LogError(ex, "Error in BayesSpamCheckV2 for {User}", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,

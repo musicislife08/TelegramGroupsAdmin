@@ -80,11 +80,8 @@ public class TrainingHandlerTests
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "test_user",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: chatId,
+            User: new UserIdentity(userId, "Test", "User", "test_user"),
+            Chat: new ChatIdentity(chatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: messageText,
             PhotoFileId: null,
@@ -92,7 +89,6 @@ public class TrainingHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

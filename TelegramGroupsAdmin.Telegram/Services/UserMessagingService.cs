@@ -109,14 +109,14 @@ public class UserMessagingService : IUserMessagingService
                 else
                 {
                     // DM failed - add to batch mention list
-                    var userMention = TelegramDisplayName.FormatMention(user?.FirstName, user?.LastName, user?.Username, userId);
+                    var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
                     failedDmUsers.Add((userId, userMention));
                 }
             }
             else
             {
                 // User doesn't have DM enabled, add to batch mention list
-                var userMention = TelegramDisplayName.FormatMention(user?.FirstName, user?.LastName, user?.Username, userId);
+                var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
                 failedDmUsers.Add((userId, userMention));
             }
         }
@@ -186,7 +186,7 @@ public class UserMessagingService : IUserMessagingService
 
         try
         {
-            var userMention = TelegramDisplayName.FormatMention(user?.FirstName, user?.LastName, user?.Username, userId);
+            var userMention = TelegramDisplayName.FormatMention(new Core.Models.UserIdentity(userId, user?.FirstName, user?.LastName, user?.Username));
             var chatMessage = $"{userMention}: {messageText}";
 
             await _messageService.SendAndSaveMessageAsync(

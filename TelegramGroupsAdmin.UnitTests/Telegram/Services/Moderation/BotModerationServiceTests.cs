@@ -4,7 +4,6 @@ using NSubstitute.ExceptionExtensions;
 using NUnit.Framework;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
@@ -1602,7 +1601,7 @@ public class BotModerationServiceTests
 
         // Assert - Report was created with isAutomated=true
         await _mockReportService.Received(1).CreateReportAsync(
-            Arg.Is<Report>(r => r.MessageId == (int)messageId && r.ChatId == chatId),
+            Arg.Is<Report>(r => r.MessageId == (int)messageId && r.Chat.Id == chatId),
             null,
             true,
             Arg.Any<CancellationToken>());

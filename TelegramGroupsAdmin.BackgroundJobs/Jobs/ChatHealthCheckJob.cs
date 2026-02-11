@@ -4,10 +4,11 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -87,8 +88,10 @@ public class ChatHealthCheckJob : IJob
                 if (payload.ChatId.HasValue)
                 {
                     // Single chat refresh (from manual UI button)
-                    _logger.LogInformation("Running health check for chat {ChatId}", payload.ChatId.Value);
-                    await _chatHealthRefreshOrchestrator.RefreshSingleChatAsync(payload.ChatId.Value, includeIcon: true, cancellationToken);
+                    // Job payload only carries raw ID (serialization boundary) — orchestrator enriches internally
+                    var chat = ChatIdentity.FromId(payload.ChatId.Value);
+                    _logger.LogDebug("Running single-chat health check for {ChatId}", payload.ChatId.Value);
+                    await _chatHealthRefreshOrchestrator.RefreshSingleChatAsync(chat, includeIcon: true, cancellationToken);
                 }
                 else
                 {

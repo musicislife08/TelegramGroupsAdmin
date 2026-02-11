@@ -6,6 +6,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -95,8 +96,7 @@ public class ExamConfigEditorTests : ExamConfigEditorTestContext
         string chatName = "Test Chat")
     {
         return new ManagedChatRecord(
-            ChatId: chatId,
-            ChatName: chatName,
+            Identity: new ChatIdentity(chatId, chatName),
             ChatType: ManagedChatType.Group,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,

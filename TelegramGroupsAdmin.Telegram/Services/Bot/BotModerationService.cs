@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -123,7 +122,7 @@ public class BotModerationService : IBotModerationService
 
         // Schedule cleanup of user's messages
         await SafeExecuteAsync(
-            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
             $"Schedule messages cleanup for user {intent.User.Id}");
 
         // Step 4: Create training data (non-critical - failure doesn't affect ban success)
@@ -133,15 +132,9 @@ public class BotModerationService : IBotModerationService
 
         // Step 5: Send ban celebration (non-critical - failure doesn't affect ban success)
         await SafeExecuteAsync(
-            async () =>
-            {
-                await _banCelebrationService.SendBanCelebrationAsync(
-                    intent.Chat.Id,
-                    intent.Chat.ChatName ?? intent.Chat.Id.ToString(),
-                    intent.User.Id,
-                    intent.User.DisplayName,
-                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken);
-            },
+            () => _banCelebrationService.SendBanCelebrationAsync(
+                    intent.Chat, intent.User,
+                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken),
             $"Send ban celebration for user {intent.User.Id} in chat {intent.Chat.Id}");
 
         // Step 6: Rich admin notification (replaces simple notification from BanUserAsync)
@@ -203,22 +196,18 @@ public class BotModerationService : IBotModerationService
 
         // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
         await SafeExecuteAsync(
-            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+            () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
             $"Schedule messages cleanup for user {intent.User.Id}");
 
         // Bug 3 fix: Ban celebration when chat context is provided
         // (enables celebrations for CAS/Impersonation bans that carry the originating chat)
         if (intent.Chat is { } celebrationChat)
         {
-            await SafeExecuteAsync(async () =>
-            {
-                await _banCelebrationService.SendBanCelebrationAsync(
-                    celebrationChat.Id,
-                    celebrationChat.ChatName ?? celebrationChat.Id.ToString(),
-                    intent.User.Id,
-                    intent.User.DisplayName,
-                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken);
-            }, $"Send ban celebration for user {intent.User.Id} in chat {celebrationChat.Id}");
+            await SafeExecuteAsync(
+                () => _banCelebrationService.SendBanCelebrationAsync(
+                    celebrationChat, intent.User,
+                    isAutoBan: intent.Executor.Type is ActorType.System, cancellationToken),
+                $"Send ban celebration for user {intent.User.Id} in chat {celebrationChat.Id}");
         }
 
         return new ModerationResult
@@ -296,7 +285,7 @@ public class BotModerationService : IBotModerationService
 
                 // Schedule cleanup of user's messages
                 await SafeExecuteAsync(
-                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User.Id, cancellationToken),
+                    () => _messageHandler.ScheduleUserMessagesCleanupAsync(intent.User, cancellationToken),
                     $"Schedule messages cleanup for user {intent.User.Id}");
 
                 result = result with
@@ -568,7 +557,7 @@ public class BotModerationService : IBotModerationService
             var report = new Report(
                 Id: 0, // Assigned by database
                 MessageId: (int)intent.MessageId,
-                ChatId: intent.Chat.Id,
+                Chat: intent.Chat,
                 ReportCommandMessageId: null,
                 ReportedByUserId: null,
                 ReportedByUserName: "File Scanner",

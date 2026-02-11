@@ -2,12 +2,14 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Data.Constants;
-using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Data.Constants;
+using TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.Configuration.Services;
+namespace TelegramGroupsAdmin.Core.Services;
 
 /// <summary>
 /// Service for managing unified configuration storage with automatic global/chat merging
@@ -30,12 +32,12 @@ public class ConfigService(
         WriteIndented = false
     };
 
-    public async Task SaveAsync<T>(ConfigType configType, long chatId, T config, string? displayName = null) where T : class
+    public async Task SaveAsync<T>(ConfigType configType, ChatIdentity chat, T config) where T : class
     {
         ArgumentNullException.ThrowIfNull(config);
 
-        // Build scope string for logging
-        var scope = chatId == 0 ? "global" : (displayName ?? $"chat {chatId}");
+        var chatId = chat.Id;
+        var scope = chatId == 0 ? "global" : chat.DisplayName;
 
         // Route ContentDetection to separate repository
         if (configType == ConfigType.ContentDetection)
@@ -184,14 +186,19 @@ public class ConfigService(
             tags: [$"effective_{configType}"]);
     }
 
-    public async Task DeleteAsync(ConfigType configType, long chatId)
+    public async Task DeleteAsync(ConfigType configType, ChatIdentity chat)
     {
+        var chatId = chat.Id;
+        var scope = chatId == 0 ? "global" : chat.DisplayName;
+
         // Route ContentDetection to separate repository
         if (configType == ConfigType.ContentDetection)
         {
             if (chatId != 0)
                 await contentDetectionConfigRepository.DeleteChatConfigAsync(chatId);
             // Note: Can't delete global config (chat_id=0), it's the fallback
+
+            logger.LogInformation("Configuration deleted: {ConfigType} ({Scope})", configType, scope);
 
             await cache.RemoveAsync($"cfg_{configType}_{chatId}");
             await cache.RemoveAsync($"cfg_effective_{configType}_{chatId}");
@@ -216,6 +223,8 @@ public class ConfigService(
         {
             await configRepository.UpsertAsync(record);
         }
+
+        logger.LogInformation("Configuration deleted: {ConfigType} ({Scope})", configType, scope);
 
         // Invalidate cache after deletion
         var cacheKey = $"cfg_{configType}_{chatId}";

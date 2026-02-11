@@ -1211,13 +1211,14 @@ public class ReportCallbackServiceTests
         string? reviewedBy = null,
         string? actionTaken = null,
         DateTimeOffset? reviewedAt = null,
-        int? reportCommandMessageId = null)
+        int? reportCommandMessageId = null,
+        ChatIdentity? chat = null)
     {
         return new ReportBase
         {
             Id = TestReportId,
             Type = ReportType.ContentReport,
-            ChatId = TestChatId,
+            Chat = chat ?? new ChatIdentity(TestChatId, "Test Chat"),
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             Status = status,
             ReviewedBy = reviewedBy,
@@ -1287,13 +1288,14 @@ public class ReportCallbackServiceTests
         ReportStatus status = ReportStatus.Pending,
         string? reviewedBy = null,
         string? actionTaken = null,
-        DateTimeOffset? reviewedAt = null)
+        DateTimeOffset? reviewedAt = null,
+        ChatIdentity? chat = null)
     {
         return new ReportBase
         {
             Id = TestReportId,
             Type = ReportType.ExamFailure,
-            ChatId = TestChatId,
+            Chat = chat ?? new ChatIdentity(TestChatId, "Test Chat"),
             CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
             Status = status,
             ReviewedBy = reviewedBy,

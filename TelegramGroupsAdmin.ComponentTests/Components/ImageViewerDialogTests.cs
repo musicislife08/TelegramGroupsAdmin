@@ -32,11 +32,8 @@ public class ImageViewerDialogTests : DialogTestContext
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: userName,
-            FirstName: firstName,
-            LastName: lastName,
-            ChatId: chatId,
+            User: new UserIdentity(userId, firstName, lastName, userName),
+            Chat: new ChatIdentity(chatId, chatName),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: messageText,
             PhotoFileId: photoLocalPath != null ? "file_123" : null,
@@ -44,7 +41,6 @@ public class ImageViewerDialogTests : DialogTestContext
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: chatName,
             PhotoLocalPath: photoLocalPath,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -164,10 +160,10 @@ public class ImageViewerDialogTests : DialogTestContext
         // Act
         _ = OpenDialogAsync(message);
 
-        // Assert
+        // Assert - DisplayName prioritizes FirstName+LastName over Username (matches Telegram UI behavior)
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("johndoe"));
+            Assert.That(provider.Markup, Does.Contain("Test User"));
         });
     }
 

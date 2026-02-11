@@ -5,7 +5,8 @@ using NSubstitute.ExceptionExtensions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -144,7 +145,7 @@ public class BanCelebrationServiceTests
         // Act - Call 3 times (one full bag cycle)
         for (var i = 0; i < 3; i++)
         {
-            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+            var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
             Assert.That(result, Is.True, $"Celebration {i + 1} should succeed");
         }
 
@@ -164,7 +165,7 @@ public class BanCelebrationServiceTests
         // Act - Call 3 times (exhausts bag of 2 + starts new bag)
         for (var i = 0; i < 3; i++)
         {
-            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+            var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
             Assert.That(result, Is.True, $"Celebration {i + 1} should succeed");
         }
 
@@ -180,7 +181,7 @@ public class BanCelebrationServiceTests
         SetupSuccessfulSendAnimation();
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Test Chat", 456, "BadUser", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Test Chat"), new UserIdentity(456, "BadUser", null, null), true);
 
         // Assert
         Assert.That(result, Is.True);
@@ -195,7 +196,7 @@ public class BanCelebrationServiceTests
         SetupSuccessfulSendAnimation();
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert
         Assert.That(result, Is.True);
@@ -224,8 +225,8 @@ public class BanCelebrationServiceTests
         SetupSuccessfulSendAnimation();
 
         // Act - Call twice, one of the calls will hit the deleted GIF
-        var result1 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
-        var result2 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result1 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
+        var result2 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert - Both should succeed (deleted GIF skipped gracefully)
         Assert.That(result1, Is.True, "First celebration should succeed");
@@ -239,7 +240,7 @@ public class BanCelebrationServiceTests
         _mockGifRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int>());
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -255,7 +256,7 @@ public class BanCelebrationServiceTests
         _mockCaptionRepository.GetAllIdsAsync(Arg.Any<CancellationToken>()).Returns(new List<int>());
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -279,8 +280,8 @@ public class BanCelebrationServiceTests
         SetupSuccessfulSendAnimation();
 
         // Act - Call twice, one will hit the deleted caption
-        var result1 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
-        var result2 = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result1 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
+        var result2 = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert - Both should succeed (deleted caption skipped)
         Assert.That(result1, Is.True);
@@ -307,7 +308,7 @@ public class BanCelebrationServiceTests
             .Returns((BanCelebrationGif?)null);
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert - Should return false (no valid GIFs found after exhausting bag and reshuffling)
         Assert.That(result, Is.False);
@@ -327,7 +328,7 @@ public class BanCelebrationServiceTests
             .Returns(disabledConfig);
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -351,7 +352,7 @@ public class BanCelebrationServiceTests
             .Returns(config);
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", isAutoBan: true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), isAutoBan: true);
 
         // Assert
         Assert.That(result, Is.False);
@@ -372,7 +373,7 @@ public class BanCelebrationServiceTests
             .Returns(config);
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", isAutoBan: false);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), isAutoBan: false);
 
         // Assert
         Assert.That(result, Is.False);
@@ -387,7 +388,7 @@ public class BanCelebrationServiceTests
             .Returns((BanCelebrationConfig?)null);
 
         // Act - Default config has Enabled=false (feature is opt-in)
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", isAutoBan: true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), isAutoBan: true);
 
         // Assert - Should return false because default config has Enabled=false
         Assert.That(result, Is.False);
@@ -421,7 +422,7 @@ public class BanCelebrationServiceTests
         SetupSuccessfulSendAnimation();
 
         // Act
-        await _sut.SendBanCelebrationAsync(123, "Test Group", 456, "SpammerBob", true);
+        await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Test Group"), new UserIdentity(456, "SpammerBob", null, null), true);
 
         // Assert - Verify the caption sent to Telegram has placeholders replaced
         await _mockMessageService.Received(1).SendAndSaveAnimationAsync(
@@ -460,7 +461,7 @@ public class BanCelebrationServiceTests
         SetupSuccessfulSendAnimation();
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert - Should still succeed, using 0 as fallback ban count
         Assert.That(result, Is.True);
@@ -513,7 +514,7 @@ public class BanCelebrationServiceTests
                 .Returns(sentMessage);
 
             // Act
-            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+            var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
             // Assert
             Assert.That(result, Is.True);
@@ -546,7 +547,7 @@ public class BanCelebrationServiceTests
         SetupSuccessfulSendAnimation("existing_file_id");
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert
         Assert.That(result, Is.True);
@@ -595,7 +596,7 @@ public class BanCelebrationServiceTests
                     _ => successMessage);
 
             // Act
-            var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+            var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
             // Assert
             Assert.That(result, Is.True);
@@ -630,7 +631,7 @@ public class BanCelebrationServiceTests
             .ThrowsAsync(new InvalidOperationException("Database error"));
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert
         Assert.That(result, Is.False, "Should return false when exception occurs");
@@ -666,7 +667,7 @@ public class BanCelebrationServiceTests
             .ThrowsAsync(new Exception("Telegram API rate limited"));
 
         // Act
-        var result = await _sut.SendBanCelebrationAsync(123, "Chat", 456, "User", true);
+        var result = await _sut.SendBanCelebrationAsync(new ChatIdentity(123, "Chat"), new UserIdentity(456, "User", null, null), true);
 
         // Assert - Service handles exception gracefully and returns false
         Assert.That(result, Is.False);

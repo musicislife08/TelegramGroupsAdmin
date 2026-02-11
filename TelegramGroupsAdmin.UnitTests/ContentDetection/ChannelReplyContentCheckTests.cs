@@ -3,6 +3,7 @@ using NSubstitute;
 using TelegramGroupsAdmin.ContentDetection.Checks;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
 
@@ -62,9 +63,8 @@ public class ChannelReplyContentCheckTests
         var request = new ChannelReplyCheckRequest
         {
             Message = "Buy cheap stuff!",
-            UserId = 123,
-            UserName = "TestUser (123)",
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(-1001234567890),
             CancellationToken = CancellationToken.None
         };
 
@@ -83,9 +83,8 @@ public class ChannelReplyContentCheckTests
         new()
         {
             Message = "Test message",
-            UserId = 123,
-            UserName = "TestUser (123)",
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(-1001234567890),
             IsUserTrusted = isUserTrusted,
             IsUserAdmin = isUserAdmin,
             Metadata = new ContentCheckMetadata

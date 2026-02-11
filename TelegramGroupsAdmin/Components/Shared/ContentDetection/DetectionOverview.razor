@@ -476,7 +476,7 @@
 
 @code {
     [Parameter]
-    public long? ChatId { get; set; }
+    public ChatIdentity? Chat { get; set; }
 
     private ContentDetectionConfig _config = new();
     private bool _isSaving;
@@ -490,7 +490,7 @@
     {
         try
         {
-            var chatId = ChatId ?? 0;
+            var chatId = Chat?.Id ?? 0;
             _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
                       ?? new ContentDetectionConfig();
         }
@@ -509,9 +509,9 @@
         {
             _isSaving = true;
 
-            var chatId = ChatId ?? 0;
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, chatId, _config);
-            Snackbar.Add(chatId == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
+            var chat = Chat ?? ChatIdentity.FromId(0);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, chat, _config);
+            Snackbar.Add(chat.Id == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
         }
         catch (Exception ex)
         {
@@ -527,7 +527,7 @@
     {
         var parameters = new DialogParameters<ConfigDialogWrapper>
         {
-            { x => x.ChatId, ChatId },
+            { x => x.Chat, Chat },
             { x => x.ComponentType, typeof(T) }
         };
 

@@ -1,5 +1,5 @@
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
@@ -10,10 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 public class TelegramUserDetail
 {
     // Base user data
-    public long TelegramUserId { get; set; }
-    public string? Username { get; set; }
-    public string? FirstName { get; set; }
-    public string? LastName { get; set; }
+    public UserIdentity User { get; set; } = UserIdentity.FromId(0);
     public string? UserPhotoPath { get; set; }
     public string? PhotoHash { get; set; }
     public bool IsTrusted { get; set; }
@@ -34,7 +31,7 @@ public class TelegramUserDetail
     public List<UserTag> Tags { get; set; } = [];  // Phase 4.12
 
     // Display helpers
-    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);
+    public string DisplayName => User.DisplayName;
     public TelegramUserStatus Status
     {
         get

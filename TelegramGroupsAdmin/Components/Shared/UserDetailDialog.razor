@@ -48,11 +48,11 @@
                         <div style="flex: 1;">
                             <MudText Typo="Typo.h6">@_userDetail.DisplayName</MudText>
                             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                @if (!string.IsNullOrEmpty(_userDetail.Username))
+                                @if (!string.IsNullOrEmpty(_userDetail.User.Username))
                                 {
-                                    <text>@@@_userDetail.Username · </text>
+                                    <text>@@@_userDetail.User.Username · </text>
                                 }
-                                ID: @_userDetail.TelegramUserId
+                                ID: @_userDetail.User.Id
                             </MudText>
                         </div>
 
@@ -194,7 +194,7 @@
                                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                                 <MudText Typo="Typo.body2"
                                                          Style="@(membership.IsBanned ? "text-decoration: line-through; opacity: 0.6;" : "")">
-                                                    @(membership.ChatName ?? $"Chat {membership.ChatId}")
+                                                    @membership.Identity.DisplayName
                                                 </MudText>
                                                 @if (membership.IsBanned)
                                                 {
@@ -486,7 +486,7 @@
         }
 
         var action = _userDetail.IsTrusted ? "remove trust from" : "trust";
-        var success = await UserManagementService.ToggleTrustAsync(_userDetail.TelegramUserId, executor);
+        var success = await UserManagementService.ToggleTrustAsync(_userDetail.User.Id, executor);
 
         if (success)
         {
@@ -531,7 +531,7 @@
             var banResult = await ModerationService.BanUserAsync(
                 new BanIntent
                 {
-                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    User = _userDetail.User,
                     Executor = executor,
                     Reason = "Banned from user detail dialog"
                 });
@@ -584,7 +584,7 @@
             var result = await ModerationService.UnbanUserAsync(
                 new UnbanIntent
                 {
-                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    User = _userDetail.User,
                     Executor = executor,
                     Reason = "Unbanned from user detail dialog",
                     RestoreTrust = false
@@ -613,8 +613,7 @@
         // Show temp ban dialog
         var parameters = new DialogParameters<TempBanDialog>
         {
-            { x => x.UserId, _userDetail.TelegramUserId },
-            { x => x.Username, _userDetail.DisplayName }
+            { x => x.User, _userDetail.User }
         };
 
         var options = new DialogOptions
@@ -648,7 +647,7 @@
             var banResult = await ModerationService.TempBanUserAsync(
                 new TempBanIntent
                 {
-                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    User = _userDetail.User,
                     Executor = executor,
                     Reason = tempBanResult.Reason,
                     Duration = tempBanResult.Duration
@@ -681,8 +680,7 @@
         // Show warn dialog
         var parameters = new DialogParameters<WarnDialog>
         {
-            { x => x.UserId, _userDetail.TelegramUserId },
-            { x => x.Username, _userDetail.DisplayName },
+            { x => x.User, _userDetail.User },
             { x => x.CurrentWarningCount, _userDetail.ActiveWarningCount }
         };
 
@@ -713,17 +711,17 @@
                 return;
             }
 
-            // Use first chat membership as context, or 0 for global
-            var chatId = _userDetail.ChatMemberships.FirstOrDefault()?.ChatId ?? 0;
+            // Use first chat membership as context, or global fallback
+            var chat = _userDetail.ChatMemberships.FirstOrDefault()?.Identity ?? ChatIdentity.FromId(0);
 
             // Call moderation service to warn the user
             var warnResultFromService = await ModerationService.WarnUserAsync(
                 new WarnIntent
                 {
-                    User = UserIdentity.FromId(_userDetail.TelegramUserId),
+                    User = _userDetail.User,
                     Executor = executor,
                     Reason = warnResult.Reason ?? "Warning issued via UI",
-                    Chat = ChatIdentity.FromId(chatId)
+                    Chat = chat
                 });
 
             if (warnResultFromService.Success)
@@ -762,7 +760,7 @@
     private void ViewMessages()
     {
         if (_userDetail == null) return;
-        Navigation.NavigateTo($"/messages?userId={_userDetail.TelegramUserId}");
+        Navigation.NavigateTo($"/messages?userId={_userDetail.User.Id}");
         MudDialog.Close();
     }
 

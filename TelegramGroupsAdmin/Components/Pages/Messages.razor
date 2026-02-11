@@ -6,6 +6,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
@@ -61,11 +62,11 @@
     <div class="telegram-main @(_selectedChatId.HasValue ? "active" : "")">
         @if (_selectedChatId.HasValue)
         {
-            var selectedChat = _managedChats.FirstOrDefault(c => c.ChatId == _selectedChatId.Value);
+            var selectedChat = _managedChats.FirstOrDefault(c => c.Identity.Id == _selectedChatId.Value);
             if (selectedChat != null)
             {
                 @* Chat Header *@
-                <ChatHeader ChatName="@selectedChat.ChatName"
+                <ChatHeader ChatName="@selectedChat.Identity.ChatName"
                             ChatIconPath="@selectedChat.ChatIconPath"
                             ChatDescription="@GetChatDescription(selectedChat)"
                             ShowBackButton="true"
@@ -90,8 +91,8 @@
                                                    DetectionHistory="@messageWrapper.DetectionResults"
                                                    UserTags="@messageWrapper.UserTags"
                                                    UserNotes="@messageWrapper.UserNotes"
-                                                   IsCurrentUser="@IsCurrentUserMessage(messageWrapper.Message.UserId)"
-                                                   IsBotMessage="@IsBotMessage(messageWrapper.Message.UserId)"
+                                                   IsCurrentUser="@IsCurrentUserMessage(messageWrapper.Message.User.Id)"
+                                                   IsBotMessage="@IsBotMessage(messageWrapper.Message.User.Id)"
                                                    OnImageClick="HandleImageClick"
                                                    OnViewEdits="HandleViewEdits"
                                                    OnMarkAsSpam="HandleMarkAsSpam"
@@ -436,10 +437,10 @@
             try
             {
                 // Only add message if it belongs to the currently selected chat
-                if (!_selectedChatId.HasValue || message.ChatId != _selectedChatId.Value)
+                if (!_selectedChatId.HasValue || message.Chat.Id != _selectedChatId.Value)
                 {
                     Logger.LogTrace("Ignoring new message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
-                        message.MessageId, message.ChatId, _selectedChatId);
+                        message.MessageId, message.Chat.Id, _selectedChatId);
                     return;
                 }
 
@@ -476,7 +477,7 @@
                 await Js.InvokeVoidAsync("restoreScrollStateAfterRender", _messagesContainer, scrollState);
 
                 Logger.LogDebug("Added new real-time message {MessageId} to chat {ChatId} view",
-                    message.MessageId, message.ChatId);
+                    message.MessageId, message.Chat.Id);
             }
             catch (Exception ex)
             {
@@ -504,10 +505,10 @@
                 }
 
                 // Only update if message belongs to currently selected chat
-                if (!_selectedChatId.HasValue || updatedMessage.ChatId != _selectedChatId.Value)
+                if (!_selectedChatId.HasValue || updatedMessage.Chat.Id != _selectedChatId.Value)
                 {
                     Logger.LogTrace("Ignoring media update for message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
-                        messageId, updatedMessage.ChatId, _selectedChatId);
+                        messageId, updatedMessage.Chat.Id, _selectedChatId);
                     return;
                 }
 
@@ -586,7 +587,7 @@
         {
             var searchLower = _chatSearchText.ToLower();
             _filteredChats = _managedChats
-                .Where(c => c.ChatName?.ToLower().Contains(searchLower) == true)
+                .Where(c => c.Identity.ChatName?.ToLower().Contains(searchLower) == true)
                 .ToList();
         }
     }
@@ -598,24 +599,24 @@
             foreach (var chat in _managedChats)
             {
                 // Get total message count for this chat
-                var totalCount = await MessageRepository.GetMessageCountByChatIdAsync(chat.ChatId);
-                _chatMessageCounts[chat.ChatId] = totalCount;
+                var totalCount = await MessageRepository.GetMessageCountByChatIdAsync(chat.Identity.Id);
+                _chatMessageCounts[chat.Identity.Id] = totalCount;
 
                 // Get last message preview (only fetch 1 message for preview)
                 if (totalCount > 0)
                 {
-                    var lastMessages = await MessageQueryService.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
+                    var lastMessages = await MessageQueryService.GetMessagesByChatIdAsync(chat.Identity.Id, limit: 1);
                     if (lastMessages.Any())
                     {
                         var lastMessage = lastMessages.First();
                         var hasPhoto = !string.IsNullOrEmpty(lastMessage.PhotoFileId);
                         var preview = lastMessage.MessageText ?? (hasPhoto ? "📷 Photo" : "Message");
-                        _lastMessagePreviews[chat.ChatId] = preview;
+                        _lastMessagePreviews[chat.Identity.Id] = preview;
                     }
                 }
 
                 // TODO: Implement read tracking for unread counts
-                _chatUnreadCounts[chat.ChatId] = 0; // Placeholder
+                _chatUnreadCounts[chat.Identity.Id] = 0; // Placeholder
             }
         }
         catch (Exception ex)
@@ -821,7 +822,7 @@
         if (_filterByUserId.HasValue && !string.IsNullOrEmpty(_filterState.UserName))
         {
             _filteredMessages = _filteredMessages
-                .Where(mw => mw.Message.UserId == _filterByUserId.Value)
+                .Where(mw => mw.Message.User.Id == _filterByUserId.Value)
                 .ToList();
         }
         else if (_filterByUserId.HasValue && string.IsNullOrEmpty(_filterState.UserName))
@@ -925,16 +926,16 @@
             var result = await ModerationService.MarkAsSpamAndBanAsync(
                 new SpamBanIntent
                 {
-                    User = UserIdentity.FromId(message.UserId),
+                    User = message.User,
                     MessageId = message.MessageId,
-                    Chat = ChatIdentity.FromId(message.ChatId),
+                    Chat = message.Chat,
                     Executor = executor,
                     Reason = "Manually marked as spam by admin via UI"
                 });
 
             if (result.Success)
             {
-                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
+                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
 
                 Logger.LogInformation(
                     "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
@@ -988,7 +989,7 @@
                 Confidence = 0, // 0% spam (ham)
                 Reason = reason,
                 AddedBy = executor,
-                UserId = message.UserId,
+                UserId = message.User.Id, // Detection result uses raw ID for DB FK
                 UsedForTraining = false, // History only - training handled by training_labels
                 NetConfidence = -100, // Strong ham signal (manual admin decision)
                 CheckResultsJson = null,
@@ -1016,7 +1017,7 @@
                 var unbanResult = await ModerationService.UnbanUserAsync(
                     new UnbanIntent
                     {
-                        User = UserIdentity.FromId(message.UserId),
+                        User = message.User,
                         Executor = executor,
                         Reason = "False positive correction - message marked as ham by admin via UI",
                         RestoreTrust = true // Restore trust to bypass future spam checks
@@ -1040,7 +1041,7 @@
                     message.MessageId);
             }
 
-            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
+            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
         }
         catch (Exception ex)
         {
@@ -1133,10 +1134,10 @@
     private void HandleFilterByChat(long chatId)
     {
         // Set chat filter
-        var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.ChatId == chatId);
-        if (messageWrapper != null && !string.IsNullOrEmpty(messageWrapper.Message.ChatName))
+        var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.Chat.Id == chatId);
+        if (messageWrapper != null && !string.IsNullOrEmpty(messageWrapper.Message.Chat.ChatName))
         {
-            _filterState.ChatName = messageWrapper.Message.ChatName;
+            _filterState.ChatName = messageWrapper.Message.Chat.ChatName;
             ApplyFilters();
             StateHasChanged();
         }
@@ -1172,9 +1173,9 @@
             var result = await ModerationService.DeleteMessageAsync(
                 new DeleteMessageIntent
                 {
-                    User = UserIdentity.FromId(message.UserId),
+                    User = message.User,
                     MessageId = message.MessageId,
-                    Chat = ChatIdentity.FromId(message.ChatId),
+                    Chat = message.Chat,
                     Executor = executor,
                     Reason = "Manual deletion from Messages UI"
                 });
@@ -1230,8 +1231,7 @@
         // Show temp ban dialog
         var parameters = new DialogParameters<TempBanDialog>
         {
-            { x => x.UserId, message.UserId },
-            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" }
+            { x => x.User, message.User }
         };
 
         var options = new DialogOptions
@@ -1266,7 +1266,7 @@
             var banResult = await ModerationService.TempBanUserAsync(
                 new TempBanIntent
                 {
-                    User = UserIdentity.FromId(message.UserId),
+                    User = message.User,
                     Executor = executor,
                     Reason = tempBanResult.Reason,
                     Duration = tempBanResult.Duration,
@@ -1283,13 +1283,13 @@
 
                 Logger.LogInformation(
                     "{User} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
-                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogInfo(),
                     banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
             }
             else
             {
                 Logger.LogError("Failed to temp ban {User}: {Error}",
-                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogDebug(),
                     banResult.ErrorMessage);
 
                 await DialogService.ShowMessageBox(
@@ -1301,7 +1301,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error temp banning {User}",
-                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
+                message.User.ToLogDebug());
 
             await DialogService.ShowMessageBox(
                 "Error",
@@ -1313,13 +1313,12 @@
     private async Task HandleWarn(MessageRecord message)
     {
         // Get user's current warning count from database
-        var warningCount = await TelegramUserRepository.GetActiveWarningCountAsync(message.UserId);
+        var warningCount = await TelegramUserRepository.GetActiveWarningCountAsync(message.User.Id);
 
         // Show warn dialog
         var parameters = new DialogParameters<WarnDialog>
         {
-            { x => x.UserId, message.UserId },
-            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" },
+            { x => x.User, message.User },
             { x => x.CurrentWarningCount, warningCount }
         };
 
@@ -1354,26 +1353,26 @@
             var warnServiceResult = await ModerationService.WarnUserAsync(
                 new WarnIntent
                 {
-                    User = UserIdentity.FromId(message.UserId),
+                    User = message.User,
                     Executor = executor,
                     Reason = warnResult.Reason ?? "Warning issued via UI",
-                    Chat = ChatIdentity.FromId(message.ChatId),
+                    Chat = message.Chat,
                     MessageId = message.MessageId
                 });
 
             if (warnServiceResult.Success)
             {
-                Snackbar.Add($"Warning issued to {message.UserName ?? message.FirstName ?? $"User {message.UserId}"}", Severity.Success);
+                Snackbar.Add($"Warning issued to {message.User.DisplayName}", Severity.Success);
 
                 Logger.LogInformation(
                     "Warning issued to {User} for message {MessageId}",
-                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogInfo(),
                     message.MessageId);
             }
             else
             {
                 Logger.LogError("Failed to warn {User}: {Error}",
-                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogDebug(),
                     warnServiceResult.ErrorMessage);
 
                 Snackbar.Add($"Failed to warn user: {warnServiceResult.ErrorMessage}", Severity.Error);
@@ -1382,7 +1381,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error warning {User}",
-                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
+                message.User.ToLogDebug());
 
             Snackbar.Add($"Failed to warn user: {ex.Message}", Severity.Error);
         }
@@ -1787,12 +1786,7 @@
         if (replyMessage == null)
             return null;
 
-        return TelegramDisplayName.Format(
-            replyMessage.Message.FirstName,
-            replyMessage.Message.LastName,
-            replyMessage.Message.UserName,
-            replyMessage.Message.UserId,
-            replyMessage.Message.ChatName);
+        return replyMessage.Message.User.DisplayName;
     }
 
     /// <summary>

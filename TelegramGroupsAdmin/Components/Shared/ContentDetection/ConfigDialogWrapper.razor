@@ -26,7 +26,7 @@
     IMudDialogInstance MudDialog { get; set; } = null!;
 
     [Parameter]
-    public long? ChatId { get; set; }
+    public ChatIdentity? Chat { get; set; }
 
     [Parameter]
     public Type ComponentType { get; set; } = null!;
@@ -40,7 +40,7 @@
         // Set up parameters to pass to the child component
         _parameters = new Dictionary<string, object>
         {
-            { "ChatId", ChatId ?? 0L }
+            { "Chat", Chat ?? ChatIdentity.FromId(0) }
         };
     }
 
@@ -76,9 +76,9 @@
             }
 
             // Save via ConfigService (handles caching and proper persistence)
-            var chatId = ChatId.HasValue && ChatId.Value != 0 ? ChatId.Value : 0;
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, chatId, config);
-            Snackbar.Add(chatId == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
+            var chat = Chat ?? ChatIdentity.FromId(0);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, chat, config);
+            Snackbar.Add(chat.Id == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
 
             MudDialog.Close(DialogResult.Ok(true));
         }

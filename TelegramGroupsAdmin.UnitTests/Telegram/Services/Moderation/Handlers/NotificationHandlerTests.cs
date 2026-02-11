@@ -77,10 +77,7 @@ public class NotificationHandlerTests
         {
             Id = 1,
             ChatId = chatId,
-            TelegramId = telegramId,
-            Username = "test_admin",
-            FirstName = "Admin",
-            LastName = "User",
+            User = new UserIdentity(telegramId, "Admin", "User", "test_admin"),
             IsCreator = false,
             PromotedAt = DateTimeOffset.UtcNow.AddDays(-30),
             LastVerifiedAt = DateTimeOffset.UtcNow,
@@ -379,11 +376,8 @@ public class NotificationHandlerTests
     {
         var message = new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "spam_user",
-            FirstName: "Spam",
-            LastName: "User",
-            ChatId: chatId,
+            User: new UserIdentity(userId, "Spam", "User", "spam_user"),
+            Chat: new ChatIdentity(chatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: messageText,
             PhotoFileId: null,
@@ -391,7 +385,6 @@ public class NotificationHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: photoLocalPath,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

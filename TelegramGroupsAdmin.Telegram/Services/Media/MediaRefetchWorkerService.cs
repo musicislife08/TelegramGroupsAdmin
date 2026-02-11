@@ -3,7 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -128,7 +128,7 @@ public class MediaRefetchWorkerService : BackgroundService
             message.MediaFileId,
             request.MediaType!.Value,
             message.MediaFileName,
-            message.ChatId,
+            message.Chat.Id,
             message.MessageId);
 
         if (localPath != null)
@@ -163,6 +163,14 @@ public class MediaRefetchWorkerService : BackgroundService
 
         // Get user's current file_unique_id from database
         var user = await userRepo.GetByIdAsync(request.UserId!.Value);
+
+        if (user is { IsBanned: true } or { IsActive: false })
+        {
+            _logger.LogDebug("Worker {WorkerId} skipping banned/inactive user: {User}",
+                workerId, user.ToLogDebug());
+            return;
+        }
+
         var knownPhotoId = user?.PhotoFileUniqueId;
 
         _logger.LogInformation("Worker {WorkerId} refetching user photo: {User}",

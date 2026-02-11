@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -227,7 +227,7 @@ public class DetectionActionService(
         return new Report(
             Id: 0, // Will be assigned by database
             MessageId: message.MessageId,
-            ChatId: message.Chat.Id,
+            Chat: ChatIdentity.From(message.Chat),
             ReportCommandMessageId: null, // Auto-generated report (not from /report command)
             ReportedByUserId: null, // System-generated (not user-reported)
             ReportedByUserName: "Auto-Detection",

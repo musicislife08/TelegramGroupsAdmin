@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -184,7 +185,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         var cutoffDate = DateTimeOffset.UtcNow.AddDays(-days);
 
         var entities = await context.TelegramUsers
-            .Where(u => u.LastSeenAt >= cutoffDate)
+            .Where(u => u.LastSeenAt >= cutoffDate && !u.IsBanned && u.IsActive)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -720,24 +721,32 @@ public class TelegramUserRepository : ITelegramUserRepository
         var now = DateTimeOffset.UtcNow;
         var isCurrentlyBanned = user.IsBanned && (user.BanExpiresAt == null || user.BanExpiresAt > now);
 
-        var chatMemberships = await (
+        var chatMemberships = (await (
             from m in context.Messages
             where m.UserId == telegramUserId && m.DeletedAt == null
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
             from chat in chatGroup.DefaultIfEmpty()
             group new { m, chat } by new { m.ChatId, ChatName = chat != null ? chat.ChatName : null } into g
-            select new UiModels.UserChatMembership
+            select new
             {
-                ChatId = g.Key.ChatId,
-                ChatName = g.Key.ChatName,
+                g.Key.ChatId,
+                g.Key.ChatName,
                 MessageCount = g.Count(),
                 LastActivityAt = g.Max(x => x.m.Timestamp),
-                FirstSeenAt = g.Min(x => x.m.Timestamp),
-                IsBanned = isCurrentlyBanned // Global ban applies to all chats
+                FirstSeenAt = g.Min(x => x.m.Timestamp)
             }
         )
         .AsNoTracking()
-        .ToListAsync(cancellationToken);
+        .ToListAsync(cancellationToken))
+        .Select(g => new UiModels.UserChatMembership
+        {
+            Identity = new ChatIdentity(g.ChatId, g.ChatName),
+            MessageCount = g.MessageCount,
+            LastActivityAt = g.LastActivityAt,
+            FirstSeenAt = g.FirstSeenAt,
+            IsBanned = isCurrentlyBanned
+        })
+        .ToList();
 
         // Get user actions (warnings, bans, trusts)
         var actions = await context.UserActions
@@ -781,10 +790,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         return new UiModels.TelegramUserDetail
         {
-            TelegramUserId = user.TelegramUserId,
-            Username = user.Username,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
+            User = new UserIdentity(user.TelegramUserId, user.FirstName, user.LastName, user.Username),
             UserPhotoPath = user.UserPhotoPath,
             PhotoHash = user.PhotoHash,
             IsTrusted = user.IsTrusted,

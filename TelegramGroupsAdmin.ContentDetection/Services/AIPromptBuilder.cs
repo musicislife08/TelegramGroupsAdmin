@@ -61,8 +61,8 @@ public static class AIPromptBuilder
 
             {{contextBuilder}}
             <current_message>
-              <username>{{req.UserName}}</username>
-              <user_id>{{req.UserId}}</user_id>
+              <username>{{req.User.DisplayName}}</username>
+              <user_id>{{req.User.Id}}</user_id>
               <content>
             {{effectiveText}}
               </content>

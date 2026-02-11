@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Components.Shared.ChatManagement;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components.ChatManagement;
@@ -14,8 +15,7 @@ public class ChatInfoCellTests : MudBlazorTestContext
         ManagedChatType chatType = ManagedChatType.Supergroup)
     {
         return new ManagedChatRecord(
-            ChatId: chatId,
-            ChatName: chatName,
+            Identity: new ChatIdentity(chatId, chatName),
             ChatType: chatType,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,

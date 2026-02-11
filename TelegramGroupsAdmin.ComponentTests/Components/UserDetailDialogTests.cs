@@ -395,10 +395,7 @@ public class UserDetailDialogTests : MudBlazorTestContext
     {
         return new TelegramUserDetail
         {
-            TelegramUserId = TestUserId,
-            Username = username,
-            FirstName = "Test",
-            LastName = "User",
+            User = new UserIdentity(TestUserId, "Test", "User", username),
             IsTrusted = isTrusted,
             IsBanned = isBanned,
             BotDmEnabled = false,

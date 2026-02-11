@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
@@ -5,8 +7,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// </summary>
 public class UserChatMembership
 {
-    public long ChatId { get; set; }
-    public string? ChatName { get; set; }
+    public ChatIdentity Identity { get; set; } = ChatIdentity.FromId(0);
     public int MessageCount { get; set; }
     public DateTimeOffset LastActivityAt { get; set; }
     public DateTimeOffset FirstSeenAt { get; set; }

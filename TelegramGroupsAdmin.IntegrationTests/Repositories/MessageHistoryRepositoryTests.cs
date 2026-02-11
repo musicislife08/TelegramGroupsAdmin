@@ -153,11 +153,8 @@ public class MessageHistoryRepositoryTests
     {
         return new UiModels.MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "testuser",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: chatId,
+            User: new UserIdentity(userId, "Test", "User", "testuser"),
+            Chat: new ChatIdentity(chatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,
             PhotoFileId: null,
@@ -165,7 +162,6 @@ public class MessageHistoryRepositoryTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -275,7 +271,7 @@ public class MessageHistoryRepositoryTests
         // All messages should belong to target chat
         foreach (var msg in messages)
         {
-            Assert.That(msg.ChatId, Is.EqualTo(targetChatId),
+            Assert.That(msg.Chat.Id, Is.EqualTo(targetChatId),
                 $"Message {msg.MessageId} should belong to chat {targetChatId}");
         }
     }
@@ -717,7 +713,7 @@ public class MessageHistoryRepositoryTests
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.MessageId, Is.EqualTo(999001));
         Assert.That(retrieved.MessageText, Is.EqualTo("Test message for insert"));
-        Assert.That(retrieved.UserId, Is.EqualTo(GoldenDataset.TelegramUsers.User1_TelegramUserId));
+        Assert.That(retrieved.User.Id, Is.EqualTo(GoldenDataset.TelegramUsers.User1_TelegramUserId));
     }
 
     [Test]

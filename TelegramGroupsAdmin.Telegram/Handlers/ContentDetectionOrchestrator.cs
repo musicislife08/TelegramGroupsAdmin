@@ -54,11 +54,10 @@ public class ContentDetectionOrchestrator
         try
         {
             _logger.LogDebug(
-                "Starting content detection for message {MessageId} from user {UserId} (@{Username}) in chat {ChatId} (hasText: {HasText}, hasPhoto: {HasPhoto}, edit: {EditVersion})",
+                "Starting content detection for message {MessageId} from {User} in {Chat} (hasText: {HasText}, hasPhoto: {HasPhoto}, edit: {EditVersion})",
                 message.MessageId,
-                message.From?.Id,
-                message.From?.Username ?? "none",
-                message.Chat.Id,
+                message.From.ToLogDebug(),
+                message.Chat.ToLogDebug(),
                 !string.IsNullOrWhiteSpace(text),
                 !string.IsNullOrEmpty(photoLocalPath),
                 editVersion);
@@ -85,11 +84,8 @@ public class ContentDetectionOrchestrator
             var request = new ContentCheckRequest
             {
                 Message = text ?? "", // Empty string for image-only messages
-                UserId = message.From?.Id ?? 0,
-                // Pass pre-formatted display names for logging
-                UserName = message.From.ToLogDebug(),
-                ChatId = message.Chat.Id,
-                ChatName = message.Chat.ToLogDebug(),
+                User = UserIdentity.From(message.From!),
+                Chat = ChatIdentity.From(message.Chat),
                 PhotoLocalPath = photoFullPath, // Pass full for ImageSpamCheck layers
                 Metadata = new ContentCheckMetadata
                 {
@@ -104,9 +100,9 @@ public class ContentDetectionOrchestrator
             if (result.HasCriticalViolations)
             {
                 _logger.LogWarning(
-                    "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
+                    "Critical check violations detected for message {MessageId} from {User}: {Violations}",
                     message.MessageId,
-                    message.From?.Id,
+                    message.From.ToLogDebug(),
                     string.Join("; ", result.CriticalCheckViolations));
 
                 // Use DetectionActionService to handle critical violations

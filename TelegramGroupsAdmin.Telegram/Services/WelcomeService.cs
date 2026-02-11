@@ -4,7 +4,7 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
@@ -166,7 +166,7 @@ public class WelcomeService(
             await RestrictUserPermissionsAsync(chatMemberUpdate.Chat, user, cancellationToken);
 
             // Step 4: Send verifying message
-            var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+            var username = TelegramDisplayName.FormatMention(user);
             var verifyingText = WelcomeMessageBuilder.FormatVerifyingMessage(username);
             var verifyingMessage = await messageService.SendAndSaveMessageAsync(
                 chatId: chatMemberUpdate.Chat.Id,
@@ -389,8 +389,8 @@ public class WelcomeService(
 
             // Step 9: Schedule timeout via Quartz.NET
             var payload = new WelcomeTimeoutPayload(
-                chatMemberUpdate.Chat.Id,
-                user.Id,
+                UserIdentity.From(user),
+                ChatIdentity.From(chatMemberUpdate.Chat),
                 welcomeMessageId
             );
 
@@ -563,7 +563,7 @@ public class WelcomeService(
     {
         try
         {
-            var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+            var username = TelegramDisplayName.FormatMention(user);
             var warningText = WelcomeMessageBuilder.FormatWrongUserWarning(username);
             var warningMsg = await messageService.SendAndSaveMessageAsync(
                 chatId: chatId,
@@ -1045,7 +1045,7 @@ public class WelcomeService(
         CancellationToken cancellationToken = default)
     {
         var chatName = chat.Title ?? "this chat";
-        var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
+        var username = TelegramDisplayName.FormatMention(user);
 
         // Use extracted builder for rules confirmation message (includes footer)
         var dmText = WelcomeMessageBuilder.FormatRulesConfirmation(config, username, chatName);
@@ -1077,9 +1077,9 @@ public class WelcomeService(
         try
         {
             // Cancel any active exam session
-            if (await examFlowService.HasActiveSessionAsync(chat.Id, user.Id, cancellationToken))
+            if (await examFlowService.HasActiveSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), cancellationToken))
             {
-                await examFlowService.CancelSessionAsync(chat.Id, user.Id, cancellationToken);
+                await examFlowService.CancelSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), cancellationToken);
                 logger.LogDebug(
                     "Cancelled exam session for {User} who left {Chat}",
                     user.ToLogDebug(),

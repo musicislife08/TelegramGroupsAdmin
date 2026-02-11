@@ -1,8 +1,8 @@
 @using TelegramGroupsAdmin.Telegram.Models
 
 <div>
-    <MudText Typo="Typo.body2">@Chat.ChatName</MudText>
-    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Chat.ChatId</MudText>
+    <MudText Typo="Typo.body2">@Chat.Identity.ChatName</MudText>
+    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Chat.Identity.Id</MudText>
 </div>
 @if (!Chat.IsActive)
 {

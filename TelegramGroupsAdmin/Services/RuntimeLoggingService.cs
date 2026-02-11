@@ -1,6 +1,7 @@
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -72,7 +73,7 @@ public class RuntimeLoggingService : IRuntimeLoggingService
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
         // Save to database (global config at chatId=0)
-        await configService.SaveAsync(ConfigType.Log, chatId: 0, config);
+        await configService.SaveAsync(ConfigType.Log, ChatIdentity.FromId(0), config);
 
         // Apply immediately to ILoggerFactory
         ApplyLogLevels(config);
@@ -90,7 +91,7 @@ public class RuntimeLoggingService : IRuntimeLoggingService
 
         // Delete from database (global config, chatId = 0)
         // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
-        await configService.DeleteAsync(ConfigType.Log, chatId: 0);
+        await configService.DeleteAsync(ConfigType.Log, ChatIdentity.FromId(0));
 
         // Get default config
         var defaultConfig = new LogConfig

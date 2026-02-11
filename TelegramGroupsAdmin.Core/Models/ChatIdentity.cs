@@ -5,8 +5,10 @@ namespace TelegramGroupsAdmin.Core.Models;
 /// Constructed once at the call site from whatever source is available (SDK Chat, domain model, or DB fetch),
 /// then flows through the entire handler chain — no handler needs to re-fetch from DB for logging.
 /// </summary>
-public record ChatIdentity(long Id, string? ChatName)
+public sealed record ChatIdentity(long Id, string? ChatName)
 {
+    public string DisplayName { get; } = ChatName ?? $"Chat {Id}";
+
     /// <summary>
     /// Creates an ID-only identity. Internal fallback used by FromAsync when chat isn't in DB.
     /// </summary>

@@ -12,6 +12,8 @@ using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 
@@ -65,7 +67,7 @@ public class ImageContentCheckV2(
         try
         {
             // Load config
-            var config = await _configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
+            var config = await _configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
             var imageConfig = config.ImageSpam;
 
             // Extract OCR text early so it's available for all return paths (for AI veto passthrough)
@@ -177,9 +179,8 @@ public class ImageContentCheckV2(
                 var ocrRequest = new ContentCheckRequest
                 {
                     Message = extractedOcrText,
-                    UserId = req.UserId,
-                    UserName = req.UserName,
-                    ChatId = req.ChatId,
+                    User = req.User,
+                    Chat = req.Chat,
                     Metadata = new ContentCheckMetadata(),
                     CheckOnly = false,
                     HasSpamFlags = false,
@@ -257,7 +258,7 @@ public class ImageContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in ImageSpamCheckV2 for user {UserId}, abstaining", req.UserId);
+            logger.LogError(ex, "Error in ImageSpamCheckV2 for {User}, abstaining", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -328,7 +329,7 @@ public class ImageContentCheckV2(
 
         var prompt = BuildPrompt(req.Message, req.CustomPrompt);
 
-        logger.LogDebug("ImageSpam V2 check for user {UserId}: Calling AI Vision API", req.UserId);
+        logger.LogDebug("ImageSpam V2 check for {User}: Calling AI Vision API", req.User.ToLogDebug());
 
         try
         {
@@ -347,7 +348,7 @@ public class ImageContentCheckV2(
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
-                logger.LogWarning("Empty response from AI Vision for user {UserId}, abstaining", req.UserId);
+                logger.LogWarning("Empty response from AI Vision for {User}, abstaining", req.User.ToLogDebug());
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -359,11 +360,11 @@ public class ImageContentCheckV2(
                 };
             }
 
-            return ParseSpamResponse(result.Content, req.UserId, startTimestamp, extractedOcrText);
+            return ParseSpamResponse(result.Content, req.User, startTimestamp, extractedOcrText);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "AI Vision API error for user {UserId}, abstaining", req.UserId);
+            logger.LogError(ex, "AI Vision API error for {User}, abstaining", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -422,7 +423,7 @@ public class ImageContentCheckV2(
     /// <summary>
     /// Parse AI Vision response and create V2 spam check result with scoring
     /// </summary>
-    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp, string? extractedOcrText)
+    private ContentCheckResponseV2 ParseSpamResponse(string content, UserIdentity user, long startTimestamp, string? extractedOcrText)
     {
         try
         {
@@ -440,8 +441,8 @@ public class ImageContentCheckV2(
 
             if (response == null)
             {
-                logger.LogWarning("Failed to deserialize AI Vision response for user {UserId}: {Content}, abstaining",
-                    userId, content);
+                logger.LogWarning("Failed to deserialize AI Vision response for {User}: {Content}, abstaining",
+                    user.ToLogDebug(), content);
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -453,8 +454,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            logger.LogDebug("AI Vision V2 analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
-                userId, response.Spam, response.Confidence, response.Reason);
+            logger.LogDebug("AI Vision V2 analysis for {User}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
+                user.ToLogDebug(), response.Spam, response.Confidence, response.Reason);
 
             // Build raw Vision text for downstream processing (AI veto)
             var rawVisionText = response.Reason ?? "";
@@ -501,8 +502,8 @@ public class ImageContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error parsing AI Vision response for user {UserId}: {Content}, abstaining",
-                userId, content);
+            logger.LogError(ex, "Error parsing AI Vision response for {User}: {Content}, abstaining",
+                user.ToLogDebug(), content);
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,

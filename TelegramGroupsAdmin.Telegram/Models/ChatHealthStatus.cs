@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// </summary>
 public class ChatHealthStatus
 {
-    public long ChatId { get; set; }
+    public required ChatIdentity Chat { get; set; }
     public bool IsReachable { get; set; }
     public string BotStatus { get; set; } = "Unknown";
     public bool IsAdmin { get; set; }

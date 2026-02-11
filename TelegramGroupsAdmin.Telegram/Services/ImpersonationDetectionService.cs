@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
@@ -10,6 +9,7 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -104,7 +104,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         {
             _logger.LogDebug(
                 "{User} has {MessageCount} messages in {Chat}, threshold {Threshold}, skipping check",
-                user.ToLogDebug(), messageCount, chat.ToLogDebug(), threshold);
+                user.ToLogDebug(), messageCount, (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug(), threshold);
             return false;
         }
 
@@ -242,9 +242,9 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             // 1. Create alert record
             var alert = new ImpersonationAlertRecord
             {
-                SuspectedUserId = result.SuspectedUser.Id,
-                TargetUserId = result.TargetUserId,
-                ChatId = result.DetectionChat.Id,
+                SuspectedUser = UserIdentity.From(result.SuspectedUser),
+                TargetUser = UserIdentity.FromId(result.TargetUserId),
+                Chat = ChatIdentity.From(result.DetectionChat),
                 TotalScore = result.TotalScore,
                 RiskLevel = result.RiskLevel,
                 NameMatch = result.NameMatch,

@@ -6,6 +6,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.ChatManagement;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -67,9 +68,8 @@ public abstract class ChatActionsCellTestContext : BunitContext
     {
         return new ManagedChatInfo
         {
-            Chat = new ManagedChatRecord(
-                ChatId: chatId,
-                ChatName: chatName,
+            Record = new ManagedChatRecord(
+                Identity: new ChatIdentity(chatId, chatName),
                 ChatType: ManagedChatType.Supergroup,
                 BotStatus: BotChatStatus.Administrator,
                 IsAdmin: true,
@@ -82,7 +82,7 @@ public abstract class ChatActionsCellTestContext : BunitContext
             ),
             HealthStatus = new ChatHealthStatus
             {
-                ChatId = chatId,
+                Chat = ChatIdentity.FromId(chatId),
                 Status = ChatHealthStatusType.Healthy,
                 IsReachable = true
             },

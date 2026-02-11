@@ -69,7 +69,7 @@ public class TrainingHandler : ITrainingHandler
                 Confidence = 100,
                 Reason = "Marked as spam by moderator",
                 AddedBy = executor,
-                UserId = message.UserId,
+                UserId = message.User.Id,
                 UsedForTraining = false, // History only - training handled by training_labels table
                 NetConfidence = 100,
                 CheckResultsJson = null,

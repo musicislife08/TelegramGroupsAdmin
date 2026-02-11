@@ -86,7 +86,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         return new Report(
             Id: id,
             MessageId: messageId,
-            ChatId: chatId,
+            Chat: new ChatIdentity(chatId, "TestChat"),
             ReportCommandMessageId: reportedByUserId.HasValue ? 212409 : null,
             ReportedByUserId: reportedByUserId,
             ReportedByUserName: reportedByUserName,
@@ -112,11 +112,8 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "crypto_spam_user",
-            FirstName: "Crypto",
-            LastName: "Spammer",
-            ChatId: -1001329174109,
+            User: new UserIdentity(userId, "Crypto", "Spammer", "crypto_spam_user"),
+            Chat: new ChatIdentity(-1001329174109, "Test Group"),
             Timestamp: DateTimeOffset.UtcNow.AddHours(-3),
             MessageText: messageText,
             PhotoFileId: photoFileId,
@@ -124,7 +121,6 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             Urls: null,
             EditDate: null,
             ContentHash: "abc123",
-            ChatName: "Test Group",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -185,7 +181,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -205,7 +201,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -229,7 +225,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -249,7 +245,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -294,7 +290,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -316,7 +312,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -340,7 +336,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -366,7 +362,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -397,7 +393,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -424,7 +420,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -452,7 +448,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -480,7 +476,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -504,7 +500,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         // Act
@@ -533,7 +529,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(user);
 
         // Act
@@ -553,7 +549,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns((TelegramUser?)null);
 
         // Act
@@ -578,7 +574,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         var cut = Render<ModerationReportCard>(p => p
@@ -609,7 +605,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
             .Returns(message);
-        UserRepository.GetByTelegramIdAsync(message.UserId, Arg.Any<CancellationToken>())
+        UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
 
         var cut = Render<ModerationReportCard>(p => p

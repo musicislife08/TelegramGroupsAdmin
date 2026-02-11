@@ -3,7 +3,9 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -32,10 +34,8 @@ public class BanCelebrationService(
     private readonly string _mediaBasePath = Path.Combine(historyOptions.Value.ImageStoragePath, "media");
 
     public async Task<bool> SendBanCelebrationAsync(
-        long chatId,
-        string chatName,
-        long bannedUserId,
-        string bannedUserName,
+        ChatIdentity chat,
+        UserIdentity bannedUser,
         bool isAutoBan,
         CancellationToken cancellationToken = default)
     {
@@ -43,7 +43,7 @@ public class BanCelebrationService(
         {
             // Get the effective config for this chat (merges global + chat-specific)
             var config = await configService.GetEffectiveAsync<BanCelebrationConfig>(
-                ConfigType.BanCelebration, chatId);
+                ConfigType.BanCelebration, chat.Id);
 
             // Use default config if none exists
             config ??= BanCelebrationConfig.Default;
@@ -51,20 +51,20 @@ public class BanCelebrationService(
             // Check if feature is enabled
             if (!config.Enabled)
             {
-                logger.LogDebug("Ban celebration disabled for chat {ChatId}", chatId);
+                logger.LogDebug("Ban celebration disabled for chat {ChatId}", chat.Id);
                 return false;
             }
 
             // Check trigger type
             if (isAutoBan && !config.TriggerOnAutoBan)
             {
-                logger.LogDebug("Ban celebration skipped for auto-ban in chat {ChatId} (auto-ban trigger disabled)", chatId);
+                logger.LogDebug("Ban celebration skipped for auto-ban in chat {ChatId} (auto-ban trigger disabled)", chat.Id);
                 return false;
             }
 
             if (!isAutoBan && !config.TriggerOnManualBan)
             {
-                logger.LogDebug("Ban celebration skipped for manual ban in chat {ChatId} (manual ban trigger disabled)", chatId);
+                logger.LogDebug("Ban celebration skipped for manual ban in chat {ChatId} (manual ban trigger disabled)", chat.Id);
                 return false;
             }
 
@@ -88,10 +88,14 @@ public class BanCelebrationService(
             var banCount = await GetTodaysBanCountAsync(cancellationToken);
 
             // Build the chat caption with placeholders replaced
-            var chatCaption = ReplacePlaceholders(caption.Text, bannedUserName, chatName, banCount);
+            var chatCaption = ReplacePlaceholders(
+                caption.Text,
+                bannedUser.DisplayName,
+                chat.ChatName ?? chat.Id.ToString(),
+                banCount);
 
             // Send the GIF to the chat
-            var sentMessage = await SendGifToChatAsync(chatId, gif, chatCaption, cancellationToken);
+            var sentMessage = await SendGifToChatAsync(chat, gif, chatCaption, cancellationToken);
             if (sentMessage == null)
             {
                 return false;
@@ -104,14 +108,14 @@ public class BanCelebrationService(
             }
 
             logger.LogInformation(
-                "Ban celebration sent to chat {ChatId}: GIF={GifId}, Caption={CaptionId}, User={UserId}",
-                chatId, gif.Id, caption.Id, bannedUserId);
+                "Ban celebration sent to {Chat}: GIF={GifId}, Caption={CaptionId}, User={User}",
+                chat.ToLogInfo(), gif.Id, caption.Id, bannedUser.ToLogInfo());
 
             // Optionally send DM to banned user
             if (config.SendToBannedUser)
             {
                 await TrySendDmToBannedUserAsync(
-                    chatId, bannedUserId, gif, caption, chatName, banCount, cancellationToken);
+                    chat, bannedUser, gif, caption, banCount, cancellationToken);
             }
 
             return true;
@@ -119,7 +123,8 @@ public class BanCelebrationService(
         catch (Exception ex)
         {
             // Never fail the ban operation due to celebration errors
-            logger.LogWarning(ex, "Failed to send ban celebration for chat {ChatId}, user {UserId}", chatId, bannedUserId);
+            logger.LogWarning(ex, "Failed to send ban celebration for {Chat}, user {User}",
+                chat.ToLogDebug(), bannedUser.ToLogDebug());
             return false;
         }
     }
@@ -200,7 +205,7 @@ public class BanCelebrationService(
     }
 
     private async Task<Message?> SendGifToChatAsync(
-        long chatId,
+        ChatIdentity chat,
         BanCelebrationGif gif,
         string caption,
         CancellationToken cancellationToken)
@@ -216,7 +221,7 @@ public class BanCelebrationService(
                     logger.LogDebug("Using cached file_id for GIF {GifId}", gif.Id);
 
                     return await messageService.SendAndSaveAnimationAsync(
-                        chatId,
+                        chat.Id,
                         inputFile,
                         caption,
                         ParseMode.Markdown,
@@ -246,7 +251,7 @@ public class BanCelebrationService(
             logger.LogDebug("Uploading GIF from disk: {Path}", fullPath);
 
             return await messageService.SendAndSaveAnimationAsync(
-                chatId,
+                chat.Id,
                 localInputFile,
                 caption,
                 ParseMode.Markdown,
@@ -254,41 +259,40 @@ public class BanCelebrationService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to send GIF to chat {ChatId}", chatId);
+            logger.LogWarning(ex, "Failed to send GIF to {Chat}", chat.ToLogDebug());
             return null;
         }
     }
 
     private async Task TrySendDmToBannedUserAsync(
-        long chatId,
-        long bannedUserId,
+        ChatIdentity chat,
+        UserIdentity bannedUser,
         BanCelebrationGif gif,
         BanCelebrationCaption caption,
-        string chatName,
         int banCount,
         CancellationToken cancellationToken)
     {
         try
         {
             // Check if the chat has DM-based welcome mode (required for DM delivery)
-            var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId);
+            var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
             if (welcomeConfig == null || !welcomeConfig.Enabled)
             {
-                logger.LogDebug("Skipping DM to banned user: welcome system not enabled for chat {ChatId}", chatId);
+                logger.LogDebug("Skipping DM to banned user: welcome system not enabled for chat {ChatId}", chat.Id);
                 return;
             }
 
             // Only DM if welcome mode is DM-based (DmWelcome or EntranceExam)
             if (welcomeConfig.Mode != WelcomeMode.DmWelcome && welcomeConfig.Mode != WelcomeMode.EntranceExam)
             {
-                logger.LogDebug("Skipping DM to banned user: chat {ChatId} uses chat-based welcome mode", chatId);
+                logger.LogDebug("Skipping DM to banned user: chat {ChatId} uses chat-based welcome mode", chat.Id);
                 return;
             }
 
             // Build the DM caption (uses "You" grammar)
             // Escape for MarkdownV2 since DmDeliveryService uses that parse mode
             var dmCaption = TelegramTextUtilities.EscapeMarkdownV2(
-                ReplacePlaceholders(caption.DmText, "You", chatName, banCount));
+                ReplacePlaceholders(caption.DmText, "You", chat.ChatName ?? chat.Id.ToString(), banCount));
 
             // Get the full path to the GIF
             var fullPath = gifRepository.GetFullPath(gif.FilePath);
@@ -315,7 +319,7 @@ public class BanCelebrationService(
             }
 
             var result = await dmDeliveryService.SendDmWithMediaAsync(
-                bannedUserId,
+                bannedUser.Id,
                 "ban_celebration",
                 dmCaption,
                 photoPath,
@@ -324,18 +328,18 @@ public class BanCelebrationService(
 
             if (result.DmSent)
             {
-                logger.LogInformation("Ban celebration DM sent to banned user {UserId}", bannedUserId);
+                logger.LogInformation("Ban celebration DM sent to banned user {User}", bannedUser.ToLogInfo());
             }
             else
             {
                 logger.LogDebug("Ban celebration DM failed for user {UserId}: {Error}",
-                    bannedUserId, result.ErrorMessage ?? "Unknown error");
+                    bannedUser.Id, result.ErrorMessage ?? "Unknown error");
             }
         }
         catch (Exception ex)
         {
             // DM failures are expected (user blocked bot, never started, etc.) - just log and continue
-            logger.LogDebug(ex, "Failed to send ban celebration DM to user {UserId}", bannedUserId);
+            logger.LogDebug(ex, "Failed to send ban celebration DM to user {UserId}", bannedUser.Id);
         }
     }
 

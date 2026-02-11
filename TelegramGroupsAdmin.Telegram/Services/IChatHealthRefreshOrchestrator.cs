@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
@@ -11,7 +13,7 @@ public interface IChatHealthRefreshOrchestrator
     /// <summary>
     /// Perform health check on a specific chat and update cache.
     /// </summary>
-    Task RefreshHealthForChatAsync(long chatId, CancellationToken cancellationToken = default);
+    Task RefreshHealthForChatAsync(ChatIdentity chat, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Refresh health for all active managed chats (excludes chats where bot was removed).
@@ -23,5 +25,5 @@ public interface IChatHealthRefreshOrchestrator
     /// Refresh a single chat (for manual UI refresh button).
     /// Includes admin list, health check, and optionally chat icon.
     /// </summary>
-    Task RefreshSingleChatAsync(long chatId, bool includeIcon = true, CancellationToken cancellationToken = default);
+    Task RefreshSingleChatAsync(ChatIdentity chat, bool includeIcon = true, CancellationToken cancellationToken = default);
 }

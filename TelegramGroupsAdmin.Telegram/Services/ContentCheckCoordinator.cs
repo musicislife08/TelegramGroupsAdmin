@@ -5,7 +5,7 @@ using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -38,12 +38,12 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         // System accounts are used for channel posts, anonymous admin posts, etc.
         // Must bypass ALL checks (including database queries) to avoid race condition
         // on first message before user record is created
-        if (TelegramConstants.IsSystemUser(request.UserId))
+        if (TelegramConstants.IsSystemUser(request.User.Id))
         {
             _logger.LogDebug(
                 "Skipping all content detection for Telegram system account ({User}) in {Chat}",
-                request.UserName,
-                request.ChatName);
+                request.User.DisplayName,
+                request.Chat.DisplayName);
 
             return new ContentCheckCoordinatorResult
             {
@@ -67,26 +67,26 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
 
         // REFACTOR-5: Check if user is explicitly trusted (source of truth: telegram_users.is_trusted)
         isUserTrusted = await userRepository.IsTrustedAsync(
-            request.UserId,
+            request.User.Id,
             cancellationToken);
 
         // Check if user is a chat admin
-        isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, cancellationToken);
+        isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.Chat.Id, request.User.Id, cancellationToken);
 
         _logger.LogDebug(
             "{User} status in {Chat}: Trusted={Trusted}, Admin={Admin}",
-            request.UserName,
-            request.ChatName,
+            request.User.DisplayName,
+            request.Chat.DisplayName,
             isUserTrusted,
             isUserAdmin);
 
         // Phase 4.14: 2-Phase Detection
         // Phase 1: Get list of critical checks (always_run=true) using optimized JSONB query
-        var criticalCheckNames = await configService.GetCriticalCheckNamesAsync(request.ChatId, cancellationToken);
+        var criticalCheckNames = await configService.GetCriticalCheckNamesAsync(request.Chat.Id, cancellationToken);
 
         _logger.LogDebug(
             "{Chat} has {Count} critical (always_run) checks configured: {Checks}",
-            request.ChatName,
+            request.Chat.DisplayName,
             criticalCheckNames.Count,
             criticalCheckNames.Count > 0 ? string.Join(", ", criticalCheckNames) : "none");
 
@@ -101,8 +101,8 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
 
             _logger.LogDebug(
                 "Skipping all spam detection for {User} in {Chat}: {Reason}",
-                request.UserName,
-                request.ChatName,
+                request.User.DisplayName,
+                request.Chat.DisplayName,
                 skipReason);
 
             return new ContentCheckCoordinatorResult
@@ -125,8 +125,8 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
 
         _logger.LogDebug(
             "Running full spam detection pipeline for {User} in {Chat}: {Reason}",
-            request.UserName,
-            request.ChatName,
+            request.User.DisplayName,
+            request.Chat.DisplayName,
             detectionReason);
 
         // PERF-3 Option B: Pass trust context to individual checks
@@ -155,8 +155,8 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                     _logger.LogWarning(
                         "Critical check violation: {CheckName} flagged {User} in {Chat}: {Details}",
                         checkResult.CheckName,
-                        request.UserName,
-                        request.ChatName,
+                        request.User.DisplayName,
+                        request.Chat.DisplayName,
                         checkResult.Details);
                 }
             }
@@ -173,8 +173,8 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
 
             _logger.LogDebug(
                 "✓ Critical checks passed, skipping regular spam detection for {User} in {Chat}: {Reason}",
-                request.UserName,
-                request.ChatName,
+                request.User.DisplayName,
+                request.Chat.DisplayName,
                 skipReason);
 
             return new ContentCheckCoordinatorResult

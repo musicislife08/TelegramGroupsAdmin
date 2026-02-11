@@ -5,8 +5,9 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -101,8 +102,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         // Arrange & Act - With Chat means per-chat mode
         var testChat = new ManagedChatRecord(
-            ChatId: 123456L,
-            ChatName: "Test Chat",
+            Identity: new ChatIdentity(123456L, "Test Chat"),
             ChatType: ManagedChatType.Supergroup,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,
@@ -428,8 +428,7 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     {
         // Arrange & Act - Per-chat mode (has Chat)
         var testChat = new ManagedChatRecord(
-            ChatId: 123456L,
-            ChatName: "Test Chat",
+            Identity: new ChatIdentity(123456L, "Test Chat"),
             ChatType: ManagedChatType.Supergroup,
             BotStatus: BotChatStatus.Administrator,
             IsAdmin: true,

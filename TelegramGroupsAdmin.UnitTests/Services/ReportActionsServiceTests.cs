@@ -34,6 +34,8 @@ public class ReportActionsServiceTests
     private const long TestChatId = -100123456789L;
     private const long TestUserId = 789L;
     private const string TestReviewerId = "reviewer-user-id";
+    private const string TestReviewerEmail = "reviewer@test.com";
+    private static readonly Actor TestExecutor = Actor.FromWebUser(TestReviewerId, TestReviewerEmail);
 
     private IReportsRepository _mockReportsRepo = null!;
     private IMessageHistoryRepository _mockMessageRepo = null!;
@@ -82,7 +84,7 @@ public class ReportActionsServiceTests
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
 
         // Act
-        await _service.HandleSpamActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleSpamActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockModerationService.Received(1).MarkAsSpamAndBanAsync(
@@ -96,7 +98,7 @@ public class ReportActionsServiceTests
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
-            TestReviewerId,
+            TestReviewerEmail,
             "spam",
             Arg.Is<string>(s => s.Contains("5 chats")),
             Arg.Any<CancellationToken>());
@@ -111,7 +113,7 @@ public class ReportActionsServiceTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleSpamActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleSpamActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain($"Report {TestReportId} not found"));
     }
 
@@ -127,7 +129,7 @@ public class ReportActionsServiceTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleSpamActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleSpamActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain($"Message {TestMessageId} not found"));
     }
 
@@ -146,7 +148,7 @@ public class ReportActionsServiceTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleSpamActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleSpamActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain("User is admin"));
     }
 
@@ -160,7 +162,7 @@ public class ReportActionsServiceTests
         SetupSuccessfulModeration();
 
         // Act
-        await _service.HandleSpamActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleSpamActionAsync(TestReportId, TestExecutor);
 
         // Assert - human-readable format: "Marked as spam (report #123, affected 5 chats)"
         await _mockAuditService.Received(1).LogEventAsync(
@@ -181,7 +183,7 @@ public class ReportActionsServiceTests
         SetupSuccessfulModeration();
 
         // Act
-        await _service.HandleSpamActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleSpamActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockCallbackContextRepo.Received(1)
@@ -206,7 +208,7 @@ public class ReportActionsServiceTests
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
         // Act
-        await _service.HandleBanActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleBanActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockModerationService.Received(1).BanUserAsync(
@@ -238,7 +240,7 @@ public class ReportActionsServiceTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleBanActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleBanActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain("Rate limited"));
     }
 
@@ -263,13 +265,13 @@ public class ReportActionsServiceTests
             .ThrowsAsync(new Exception("Message already deleted"));
 
         // Act - should not throw
-        await _service.HandleBanActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleBanActionAsync(TestReportId, TestExecutor);
 
         // Assert - report status still updated
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
-            TestReviewerId,
+            TestReviewerEmail,
             "ban",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -293,7 +295,7 @@ public class ReportActionsServiceTests
             .Returns(new ModerationResult { Success = true, WarningCount = 2 });
 
         // Act
-        await _service.HandleWarnActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleWarnActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockModerationService.Received(1).WarnUserAsync(
@@ -307,7 +309,7 @@ public class ReportActionsServiceTests
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
-            TestReviewerId,
+            TestReviewerEmail,
             "warn",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -328,7 +330,7 @@ public class ReportActionsServiceTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleWarnActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleWarnActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain("User not found"));
     }
 
@@ -346,7 +348,7 @@ public class ReportActionsServiceTests
             .Returns(new ModerationResult { Success = true, WarningCount = 3 });
 
         // Act
-        await _service.HandleWarnActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleWarnActionAsync(TestReportId, TestExecutor);
 
         // Assert - human-readable format: "Warned user (report #123, 3 warnings total)"
         await _mockAuditService.Received(1).LogEventAsync(
@@ -370,7 +372,7 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId, "Not spam");
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor, "Not spam");
 
         // Assert - no moderation action
         await _mockModerationService.DidNotReceive()
@@ -382,7 +384,7 @@ public class ReportActionsServiceTests
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
-            TestReviewerId,
+            TestReviewerEmail,
             "dismiss",
             "Not spam",
             Arg.Any<CancellationToken>());
@@ -397,13 +399,13 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId, null);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor, null);
 
         // Assert
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
-            TestReviewerId,
+            TestReviewerEmail,
             "dismiss",
             "No action needed",
             Arg.Any<CancellationToken>());
@@ -418,7 +420,7 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor);
 
         // Assert - reply sent to reported message (not command message)
         await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
@@ -439,7 +441,7 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor);
 
         // Assert - /report command deleted
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
@@ -467,13 +469,13 @@ public class ReportActionsServiceTests
             .ThrowsAsync(new Exception("Message deleted"));
 
         // Act - should not throw
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor);
 
         // Assert - report status still updated
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
-            TestReviewerId,
+            TestReviewerEmail,
             "dismiss",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -488,7 +490,7 @@ public class ReportActionsServiceTests
         return new Report(
             Id: TestReportId,
             MessageId: (int)TestMessageId,
-            ChatId: TestChatId,
+            Chat: new ChatIdentity(TestChatId, "TestChat"),
             ReportCommandMessageId: reportCommandMessageId,
             ReportedByUserId: 11111L,
             ReportedByUserName: "reporter",
@@ -504,11 +506,8 @@ public class ReportActionsServiceTests
     {
         return new MessageRecord(
             MessageId: TestMessageId,
-            UserId: TestUserId,
-            UserName: "testuser",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: TestChatId,
+            User: new UserIdentity(TestUserId, "Test", "User", "testuser"),
+            Chat: new ChatIdentity(TestChatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow.AddMinutes(-15),
             MessageText: "Spam message content",
             PhotoFileId: null,
@@ -516,7 +515,6 @@ public class ReportActionsServiceTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

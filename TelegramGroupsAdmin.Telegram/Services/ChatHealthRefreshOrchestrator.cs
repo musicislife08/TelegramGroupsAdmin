@@ -2,9 +2,9 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -37,37 +37,35 @@ public class ChatHealthRefreshOrchestrator(
     /// <summary>
     /// Perform health check on a specific chat and update cache
     /// </summary>
-    public async Task RefreshHealthForChatAsync(long chatId, CancellationToken cancellationToken = default)
+    public async Task RefreshHealthForChatAsync(ChatIdentity chat, CancellationToken cancellationToken = default)
     {
-        string? chatName = null; // Captured early for error logging
         try
         {
-            var (health, chatName_) = await PerformHealthCheckAsync(chatId, cancellationToken);
-            chatName = chatName_;
-            healthCache.SetHealth(chatId, health);
+            var health = await PerformHealthCheckAsync(chat, cancellationToken);
+            healthCache.SetHealth(chat.Id, health);
 
-            // Update chat name in database if we got a valid title from Telegram
-            if (health.IsReachable && !string.IsNullOrEmpty(chatName))
+            // Update chat name in database if Telegram returned a fresher name
+            var freshName = health.Chat.ChatName;
+            if (health.IsReachable && !string.IsNullOrEmpty(freshName))
             {
-                var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+                var existingChat = await managedChatsRepository.GetByChatIdAsync(chat.Id, cancellationToken);
 
-                if (existingChat != null && existingChat.ChatName != chatName)
+                if (existingChat != null && existingChat.Identity.ChatName != freshName)
                 {
-                    // Update with fresh chat name from Telegram
-                    var updatedChat = existingChat with { ChatName = chatName };
+                    var updatedChat = existingChat with { Identity = existingChat.Identity with { ChatName = freshName } };
                     await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
-                    logger.LogDebug("Updated chat name: {OldName} -> {NewName} ({ChatId})",
-                        existingChat.ChatName, chatName, chatId);
+                    logger.LogDebug("Updated chat name: {OldName} -> {NewName} for {Chat}",
+                        existingChat.Identity.ChatName, freshName, health.Chat.ToLogDebug());
                 }
             }
 
             logger.LogDebug("Health check completed for {Chat}: {Status}",
-                LogDisplayName.ChatDebug(chatName, chatId), health.Status);
+                health.Chat.ToLogDebug(), health.Status);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to perform health check for {Chat}",
-                LogDisplayName.ChatDebug(chatName, chatId));
+                chat.ToLogDebug());
         }
     }
 
@@ -75,41 +73,40 @@ public class ChatHealthRefreshOrchestrator(
     /// Perform health check on a chat (check reachability, permissions, etc.)
     /// Returns tuple of (health status, chat name)
     /// </summary>
-    private async Task<(ChatHealthStatus Health, string? ChatName)> PerformHealthCheckAsync(long chatId, CancellationToken cancellationToken = default)
+    private async Task<ChatHealthStatus> PerformHealthCheckAsync(ChatIdentity chat, CancellationToken cancellationToken = default)
     {
         var health = new ChatHealthStatus
         {
-            ChatId = chatId,
+            Chat = chat,
             IsReachable = false,
             Status = ChatHealthStatusType.Unknown
         };
-        string? chatName = null;
 
         try
         {
-            // Try to get chat info
-            var chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
+            // Try to get chat info (may return fresher name than what we have)
+            var sdkChat = await chatHandler.GetChatAsync(chat.Id, cancellationToken);
             health.IsReachable = true;
-            chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
+            health.Chat = ChatIdentity.From(sdkChat);
 
             // Cache SDK Chat for use by other services (e.g., NotificationHandler)
-            chatCache.UpdateChat(chat);
+            chatCache.UpdateChat(sdkChat);
 
             // Skip health check for private chats (only relevant for groups)
-            if (chat.Type == ChatType.Private)
+            if (sdkChat.Type == ChatType.Private)
             {
                 health.Status = ChatHealthStatusType.NotApplicable;
                 health.Warnings.Add("Health checks not applicable to private chats");
                 logger.LogDebug("Skipping health check for private chat {Chat}",
-                    LogDisplayName.ChatDebug(chatName, chatId));
-                return (health, chatName);
+                    health.Chat.ToLogDebug());
+                return health;
             }
 
             // Get bot's member status (may fail if chat has hidden members and bot isn't admin)
             try
             {
                 var botId = await userService.GetBotIdAsync(cancellationToken);
-                var botMember = await userHandler.GetChatMemberAsync(chatId, botId, cancellationToken);
+                var botMember = await userHandler.GetChatMemberAsync(chat.Id, botId, cancellationToken);
                 health.BotStatus = botMember.Status.ToString();
                 health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
 
@@ -126,7 +123,7 @@ public class ChatHealthRefreshOrchestrator(
             {
                 // Hidden members enabled and bot isn't admin - can't check own status
                 logger.LogDebug("{Chat} has hidden members and bot is not admin",
-                    LogDisplayName.ChatDebug(chatName, chatId));
+                    health.Chat.ToLogDebug());
                 health.BotStatus = "Unknown (hidden members)";
                 health.IsAdmin = false;
             }
@@ -134,16 +131,16 @@ public class ChatHealthRefreshOrchestrator(
             // Get admin count and refresh admin cache (only if bot is admin - these APIs require admin privileges)
             if (health.IsAdmin)
             {
-                var admins = await chatHandler.GetChatAdministratorsAsync(chatId, cancellationToken);
+                var admins = await chatHandler.GetChatAdministratorsAsync(chat.Id, cancellationToken);
                 health.AdminCount = admins.Length;
 
                 // Refresh admin cache in database (for permission checks in commands)
-                await chatService.RefreshChatAdminsAsync(chatId, cancellationToken);
+                await chatService.RefreshChatAdminsAsync(health.Chat, cancellationToken);
 
                 // Validate and refresh cached invite link (all groups - public and private)
-                if (chat.Type is ChatType.Supergroup or ChatType.Group)
+                if (sdkChat.Type is ChatType.Supergroup or ChatType.Group)
                 {
-                    await ValidateInviteLinkAsync(chat, cancellationToken);
+                    await ValidateInviteLinkAsync(sdkChat, cancellationToken);
                 }
             }
             else
@@ -178,8 +175,8 @@ public class ChatHealthRefreshOrchestrator(
 
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatHealthWarning,
-                    subject: $"Chat Health Warning: {chatName ?? chatId.ToString()}",
-                    message: $"Health check detected issues with chat '{chatName ?? chatId.ToString()}'.\n\n" +
+                    subject: $"Chat Health Warning: {health.Chat.ChatName ?? chat.Id.ToString()}",
+                    message: $"Health check detected issues with chat '{health.Chat.ChatName ?? chat.Id.ToString()}'.\n\n" +
                              $"Status: {health.Status}\n" +
                              $"Bot Admin: {health.IsAdmin}\n" +
                              $"Warnings:\n- {warningsText}\n\n" +
@@ -192,7 +189,7 @@ public class ChatHealthRefreshOrchestrator(
             // Timeout or cancellation - transient error, don't send notification
             // Includes TaskCanceledException from HTTP client timeouts
             logger.LogWarning(cancelEx, "Request timeout/cancellation during health check for {Chat} - will retry on next cycle",
-                LogDisplayName.ChatDebug(chatName, chatId));
+                health.Chat.ToLogDebug());
             health.IsReachable = false;
             health.Status = ChatHealthStatusType.Error;
             health.Warnings.Add($"Request timeout: {cancelEx.Message}");
@@ -202,7 +199,7 @@ public class ChatHealthRefreshOrchestrator(
             // Transient network error - log warning but don't send notification
             // These are usually temporary API connectivity issues that resolve on their own
             logger.LogWarning(httpEx, "Transient network error during health check for {Chat} - will retry on next cycle",
-                LogDisplayName.ChatDebug(chatName, chatId));
+                health.Chat.ToLogDebug());
             health.IsReachable = false;
             health.Status = ChatHealthStatusType.Error;
             health.Warnings.Add($"Temporary network issue: {httpEx.Message}");
@@ -215,7 +212,7 @@ public class ChatHealthRefreshOrchestrator(
             if (isTransient)
             {
                 logger.LogWarning(ex, "Transient network error during health check for {Chat} - will retry on next cycle",
-                    LogDisplayName.ChatDebug(chatName, chatId));
+                    health.Chat.ToLogDebug());
                 health.IsReachable = false;
                 health.Status = ChatHealthStatusType.Error;
                 health.Warnings.Add($"Temporary network issue: {ex.Message}");
@@ -224,7 +221,7 @@ public class ChatHealthRefreshOrchestrator(
             {
                 // Critical error - likely bot kicked or permission denied
                 logger.LogError(ex, "Health check failed for {Chat}",
-                    LogDisplayName.ChatDebug(chatName, chatId));
+                    health.Chat.ToLogDebug());
                 health.IsReachable = false;
                 health.Status = ChatHealthStatusType.Error;
                 health.Warnings.Add($"Cannot reach chat: {ex.Message}");
@@ -233,15 +230,15 @@ public class ChatHealthRefreshOrchestrator(
                 // Only send notifications for non-transient errors (e.g., bot kicked, permission issues)
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatHealthWarning,
-                    subject: $"Chat Health Check Failed: {chatName ?? chatId.ToString()}",
-                    message: $"Critical: Health check failed for chat '{chatName ?? chatId.ToString()}'.\n\n" +
+                    subject: $"Chat Health Check Failed: {health.Chat.ChatName ?? chat.Id.ToString()}",
+                    message: $"Critical: Health check failed for chat '{health.Chat.ChatName ?? chat.Id.ToString()}'.\n\n" +
                              $"Error: {ex.Message}\n\n" +
                              $"The bot may have been removed from the chat or lost permissions.",
                     cancellationToken: cancellationToken);
             }
         }
 
-        return (health, chatName);
+        return health;
     }
 
     /// <summary>
@@ -265,7 +262,7 @@ public class ChatHealthRefreshOrchestrator(
 
             foreach (var chat in chats)
             {
-                await RefreshHealthForChatAsync(chat.ChatId, cancellationToken);
+                await RefreshHealthForChatAsync(chat.Identity, cancellationToken);
             }
 
             logger.LogDebug("Completed health check for {Count} chats", chats.Count);
@@ -286,7 +283,7 @@ public class ChatHealthRefreshOrchestrator(
             logger.LogInformation("Syncing linked channels for {Count} managed chats", chats.Count);
             foreach (var chat in chats)
             {
-                await FetchLinkedChannelAsync(chat.ChatId, cancellationToken);
+                await FetchLinkedChannelAsync(chat.Identity, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -300,45 +297,35 @@ public class ChatHealthRefreshOrchestrator(
     /// Includes admin list, health check, and optionally chat icon
     /// </summary>
     public async Task RefreshSingleChatAsync(
-        long chatId,
+        ChatIdentity chat,
         bool includeIcon = true,
         CancellationToken cancellationToken = default)
     {
-        // Fetch chat from DB for logging context and icon update
-        ManagedChatRecord? chat = null;
         try
         {
-            chat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-        }
-        catch
-        {
-            // Non-fatal - continue with ID-only logging if DB fetch fails
-        }
-
-        try
-        {
-            logger.LogDebug("Refreshing single chat {Chat}",
-                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
+            logger.LogDebug("Refreshing single chat {Chat}", chat.ToLogDebug());
 
             // Refresh admin list
-            await chatService.RefreshChatAdminsAsync(chatId, cancellationToken);
+            await chatService.RefreshChatAdminsAsync(chat, cancellationToken);
 
             // Refresh health check
-            await RefreshHealthForChatAsync(chatId, cancellationToken);
+            await RefreshHealthForChatAsync(chat, cancellationToken);
 
             // Optionally fetch fresh chat icon
-            if (includeIcon && chat != null)
+            if (includeIcon)
             {
-                await FetchChatIconAsync(chat, cancellationToken);
+                var chatRecord = await managedChatsRepository.GetByChatIdAsync(chat.Id, cancellationToken);
+                if (chatRecord != null)
+                {
+                    await FetchChatIconAsync(chatRecord, cancellationToken);
+                }
             }
 
-            logger.LogDebug("✅ Single chat refresh completed for {Chat}",
-                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
+            logger.LogDebug("Single chat refresh completed for {Chat}", chat.ToLogDebug());
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to refresh single chat {Chat}",
-                LogDisplayName.ChatDebug(chat?.ChatName, chatId));
+            logger.LogError(ex, "Failed to refresh single chat {Chat}", chat.ToLogDebug());
             throw;
         }
     }
@@ -352,24 +339,22 @@ public class ChatHealthRefreshOrchestrator(
         ManagedChatRecord chat,
         CancellationToken cancellationToken = default)
     {
-        var (chatId, chatName) = (chat.ChatId, chat.ChatName);
         try
         {
-            var iconPath = await photoService.GetChatIconAsync(chatId);
+            var iconPath = await photoService.GetChatIconAsync(chat.Identity);
 
             if (iconPath != null)
             {
                 // Save icon path to database
                 var updatedChat = chat with { ChatIconPath = iconPath };
                 await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
-                logger.LogInformation("✅ Cached chat icon for {Chat}",
-                    LogDisplayName.ChatInfo(chatName, chatId));
+                logger.LogInformation("Cached chat icon for {Chat}", chat.Identity.ToLogInfo());
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to fetch chat icon for {Chat} (non-fatal)",
-                LogDisplayName.ChatDebug(chatName, chatId));
+                chat.Identity.ToLogDebug());
             // Non-fatal - don't throw
         }
     }
@@ -411,34 +396,34 @@ public class ChatHealthRefreshOrchestrator(
     /// Creates/updates the linked channel record if chat has one, deletes stale record if channel was unlinked.
     /// </summary>
     private async Task FetchLinkedChannelAsync(
-        long chatId,
+        ChatIdentity chat,
         CancellationToken cancellationToken = default)
     {
-        ChatFullInfo? chat = null; // Captured early for error logging
         try
         {
             // Get chat info to check for linked channel
-            chat = await chatHandler.GetChatAsync(chatId, cancellationToken);
+            var sdkChat = await chatHandler.GetChatAsync(chat.Id, cancellationToken);
 
-            if (chat.LinkedChatId.HasValue)
+            if (sdkChat.LinkedChatId.HasValue)
             {
                 // Chat has a linked channel - fetch channel info
-                var linkedChannelId = chat.LinkedChatId.Value;
+                var linkedChannelId = sdkChat.LinkedChatId.Value;
 
                 try
                 {
                     var linkedChannel = await chatHandler.GetChatAsync(linkedChannelId, cancellationToken);
+                    var linkedChannelIdentity = ChatIdentity.From(linkedChannel);
 
                     // Fetch and save channel icon
                     string? iconPath = null;
                     try
                     {
-                        iconPath = await photoService.GetChatIconAsync(linkedChannelId);
+                        iconPath = await photoService.GetChatIconAsync(linkedChannelIdentity);
                     }
                     catch (Exception iconEx)
                     {
                         logger.LogWarning(iconEx, "Failed to fetch channel icon for {Channel} (non-fatal)",
-                            linkedChannel.ToLogDebug());
+                            linkedChannelIdentity.ToLogDebug());
                     }
 
                     // Compute photo hash for impersonation comparison
@@ -452,14 +437,14 @@ public class ChatHealthRefreshOrchestrator(
                         catch (Exception hashEx)
                         {
                             logger.LogWarning(hashEx, "Failed to compute photo hash for {Channel} (non-fatal)",
-                                linkedChannel.ToLogDebug());
+                                linkedChannelIdentity.ToLogDebug());
                         }
                     }
 
                     // Upsert linked channel record
                     var record = new LinkedChannelRecord(
                         Id: 0, // DB will assign or upsert will match existing
-                        ManagedChatId: chatId,
+                        ManagedChatId: chat.Id,
                         ChannelId: linkedChannelId,
                         ChannelName: linkedChannel.Title,
                         ChannelIconPath: iconPath,
@@ -471,31 +456,28 @@ public class ChatHealthRefreshOrchestrator(
 
                     logger.LogDebug(
                         "Synced linked channel {Channel} for {Chat}",
-                        LogDisplayName.ChatDebug(linkedChannel.Title, linkedChannelId),
-                        LogDisplayName.ChatDebug(chat.Title, chatId));
+                        linkedChannelIdentity.ToLogDebug(),
+                        chat.ToLogDebug());
                 }
                 catch (ApiRequestException apiEx) when (apiEx.ErrorCode == 403)
                 {
-                    // Expected: bot is not a member of a private linked channel
-                    // Log at Debug level - this is normal, not an error condition
                     logger.LogDebug(
                         "Linked channel {ChannelId} for {Chat} is inaccessible (private channel, bot not a member)",
                         linkedChannelId,
-                        LogDisplayName.ChatDebug(chat.Title, chatId));
+                        chat.ToLogDebug());
                 }
                 catch (Exception channelEx)
                 {
-                    // Unexpected error - log at Warning level
                     logger.LogWarning(channelEx,
                         "Failed to fetch linked channel {ChannelId} for {Chat}",
                         linkedChannelId,
-                        LogDisplayName.ChatDebug(chat.Title, chatId));
+                        chat.ToLogDebug());
                 }
             }
             else
             {
                 // No linked channel - remove any stale record
-                await linkedChannelsRepository.DeleteByChatIdAsync(chatId, cancellationToken);
+                await linkedChannelsRepository.DeleteByChatIdAsync(chat.Id, cancellationToken);
             }
         }
         catch (Exception ex)

@@ -2,6 +2,8 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
@@ -107,6 +109,7 @@ public class BotDmService(
         long telegramUserId,
         string notificationType,
         string messageText,
+        ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default)
     {
         var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
@@ -117,6 +120,7 @@ public class BotDmService(
             await messageHandler.SendAsync(
                 chatId: telegramUserId,
                 text: messageText,
+                parseMode: parseMode,
                 ct: cancellationToken);
 
             logger.LogInformation(
@@ -211,7 +215,7 @@ public class BotDmService(
             logger.LogInformation(
                 "Sent fallback message {MessageId} in {Chat}{DeleteInfo}",
                 fallbackMessage.MessageId,
-                chat.ToLogInfo(chatId),
+                (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogInfo(),
                 autoDeleteSeconds.HasValue ? $", will delete in {autoDeleteSeconds.Value} seconds" : "");
 
             // Schedule auto-delete if requested
@@ -246,14 +250,14 @@ public class BotDmService(
             {
                 logger.LogWarning(
                     "Failed to send fallback message in {Chat} - network unavailable",
-                    chat.ToLogDebug(chatId));
+                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
             }
             else
             {
                 logger.LogError(
                     ex,
                     "Failed to send fallback message in {Chat}",
-                    chat.ToLogDebug(chatId));
+                    (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug());
             }
 
             return new DmDeliveryResult

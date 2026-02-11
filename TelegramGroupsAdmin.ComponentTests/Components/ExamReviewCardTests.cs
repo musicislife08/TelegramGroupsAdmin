@@ -5,7 +5,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Reports;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
@@ -129,8 +129,6 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         return new ExamFailureRecord
         {
             Id = id,
-            ChatId = chatId,
-            UserId = userId,
             McAnswers = mcAnswers ?? new Dictionary<int, string> { { 0, "A" }, { 1, "B" } },
             ShuffleState = shuffleState ?? new Dictionary<int, int[]>
             {
@@ -601,8 +599,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         var managedChats = new List<ManagedChatRecord>
         {
             new(
-                ChatId: -1001111111111,
-                ChatName: "Other Group",
+                Identity: new ChatIdentity(-1001111111111, "Other Group"),
                 ChatType: Telegram.Models.ManagedChatType.Group,
                 BotStatus: Telegram.Models.BotChatStatus.Administrator,
                 IsAdmin: true,

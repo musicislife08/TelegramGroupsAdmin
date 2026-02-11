@@ -6,6 +6,7 @@ using NUnit.Framework;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using Testably.Abstractions.Testing;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramBot = Telegram.Bot;
 using TelegramBotTypes = Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
@@ -252,7 +253,7 @@ public class BotMediaServiceTests
         _mockFileSystem.File.WriteAllText(cachedFilePath, "fake icon data");
 
         // Act
-        var result = await _service.GetChatIconAsync(TestChatId);
+        var result = await _service.GetChatIconAsync(ChatIdentity.FromId(TestChatId));
 
         // Assert - Returns cached path without fetching from API
         Assert.That(result, Is.EqualTo($"chat_icons/{Math.Abs(TestChatId)}.jpg"));
@@ -269,7 +270,7 @@ public class BotMediaServiceTests
         SetupFileDownload(TestFileId, TestFilePath);
 
         // Act
-        var result = await _service.GetChatIconAsync(TestChatId);
+        var result = await _service.GetChatIconAsync(ChatIdentity.FromId(TestChatId));
 
         // Assert - Full flow completed successfully
         Assert.That(result, Is.EqualTo($"chat_icons/{Math.Abs(TestChatId)}.jpg"));
@@ -298,7 +299,7 @@ public class BotMediaServiceTests
         _mockChatHandler.GetChatAsync(TestChatId, Arg.Any<CancellationToken>()).Returns(chatInfo);
 
         // Act
-        var result = await _service.GetChatIconAsync(TestChatId);
+        var result = await _service.GetChatIconAsync(ChatIdentity.FromId(TestChatId));
 
         // Assert
         Assert.That(result, Is.Null);

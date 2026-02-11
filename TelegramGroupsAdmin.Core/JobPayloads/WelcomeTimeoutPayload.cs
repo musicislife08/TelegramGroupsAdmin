@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// Kicks user if they haven't accepted the welcome message within the configured timeout
 /// </summary>
 public record WelcomeTimeoutPayload(
-    long ChatId,
-    long UserId,
+    UserIdentity User,
+    ChatIdentity Chat,
     int WelcomeMessageId
 );
