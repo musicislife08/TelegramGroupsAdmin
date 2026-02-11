@@ -4,7 +4,7 @@
     <DialogContent>
         <MudStack Spacing="3">
             <MudText Typo="Typo.body1">
-                Temporarily ban <strong>@Username</strong> from the group?
+                Temporarily ban <strong>@User.DisplayName</strong> from the group?
             </MudText>
 
             <MudText Typo="Typo.body2" Color="Color.Secondary">
@@ -85,8 +85,7 @@
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter] public long UserId { get; set; }
-    [Parameter] public string Username { get; set; } = string.Empty;
+    [Parameter] public UserIdentity User { get; set; } = UserIdentity.FromId(0);
 
     private TimeSpan _selectedDuration = TimeSpan.Zero;
     private int _customMinutes = 60;

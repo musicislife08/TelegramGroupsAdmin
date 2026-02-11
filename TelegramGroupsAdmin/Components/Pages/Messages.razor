@@ -1231,8 +1231,7 @@
         // Show temp ban dialog
         var parameters = new DialogParameters<TempBanDialog>
         {
-            { x => x.UserId, message.User.Id },
-            { x => x.Username, message.User.DisplayName }
+            { x => x.User, message.User }
         };
 
         var options = new DialogOptions
@@ -1319,8 +1318,7 @@
         // Show warn dialog
         var parameters = new DialogParameters<WarnDialog>
         {
-            { x => x.UserId, message.User.Id },
-            { x => x.Username, message.User.DisplayName },
+            { x => x.User, message.User },
             { x => x.CurrentWarningCount, warningCount }
         };
 
