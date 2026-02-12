@@ -44,6 +44,9 @@ public class UserDetailDialogTests : MudBlazorTestContext
         JSInterop.SetupVoid("mudPopover.connect", _ => true).SetVoidResult();
         JSInterop.SetupVoid("mudPopover.disconnect", _ => true).SetVoidResult();
 
+        // Add WebUser cascading value (mirrors MainLayout where CascadingValue wraps MudDialogProvider)
+        this.AddTestWebUser();
+
         // Create mocks for services used by the dialog
         _mockUserService = Substitute.For<ITelegramUserManagementService>();
         _mockModerationService = Substitute.For<IBotModerationService>();
@@ -78,14 +81,11 @@ public class UserDetailDialogTests : MudBlazorTestContext
         return provider;
     }
 
-    private static readonly WebUserIdentity TestWebUser = new("test-user", "test@example.com", PermissionLevel.Owner);
-
     private Task<IDialogReference> OpenDialogAsync(long userId)
     {
         var parameters = new DialogParameters<UserDetailDialog>
         {
-            { x => x.UserId, userId },
-            { x => x.WebUser, TestWebUser }
+            { x => x.UserId, userId }
         };
 
         var options = new DialogOptions

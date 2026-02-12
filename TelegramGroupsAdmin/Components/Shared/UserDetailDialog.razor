@@ -419,7 +419,7 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
-    [Parameter] public WebUserIdentity? WebUser { get; set; }
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
     [Parameter] public long UserId { get; set; }
 
     private TelegramUserDetail? _userDetail;

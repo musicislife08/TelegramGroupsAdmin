@@ -10,38 +10,38 @@
 
 <MudThemeProvider Theme="@_currentTheme" IsDarkMode="true" />
 <MudPopoverProvider />
-<MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="1">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((_) => DrawerToggle())" />
-        <MudText Typo="Typo.h6">Telegram Groups Admin</MudText>
-        @if (_isDevelopment)
-        {
-            <MudChip T="string" Color="Color.Error" Size="Size.Small" Class="ml-3">DEV</MudChip>
-        }
-        <MudSpacer />
-        @if (_isAuthenticated)
-        {
-            <NotificationBell />
-        }
-        @if (!string.IsNullOrEmpty(_userEmail))
-        {
-            <MudText Typo="Typo.body2" Class="mr-4 ml-2">@_userEmail</MudText>
-        }
-    </MudAppBar>
-    <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
-        <NavMenu />
-    </MudDrawer>
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
-            <CascadingValue Value="_webUser">
+<CascadingValue Value="_webUser">
+    <MudDialogProvider />
+    <MudLayout>
+        <MudAppBar Elevation="1">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((_) => DrawerToggle())" />
+            <MudText Typo="Typo.h6">Telegram Groups Admin</MudText>
+            @if (_isDevelopment)
+            {
+                <MudChip T="string" Color="Color.Error" Size="Size.Small" Class="ml-3">DEV</MudChip>
+            }
+            <MudSpacer />
+            @if (_isAuthenticated)
+            {
+                <NotificationBell />
+            }
+            @if (!string.IsNullOrEmpty(_userEmail))
+            {
+                <MudText Typo="Typo.body2" Class="mr-4 ml-2">@_userEmail</MudText>
+            }
+        </MudAppBar>
+        <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+            <NavMenu />
+        </MudDrawer>
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
                 @Body
-            </CascadingValue>
-        </MudContainer>
-    </MudMainContent>
-</MudLayout>
+            </MudContainer>
+        </MudMainContent>
+    </MudLayout>
+</CascadingValue>
 
 @code {
     private bool _drawerOpen = true;
