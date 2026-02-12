@@ -90,7 +90,8 @@ public class AuthCookieService : IAuthCookieService
             new(CustomClaimTypes.PermissionLevel, ((int)user.PermissionLevel).ToString())
         };
 
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme,
+            nameType: ClaimTypes.Email, roleType: ClaimTypes.Role);
         return new ClaimsPrincipal(identity);
     }
 
