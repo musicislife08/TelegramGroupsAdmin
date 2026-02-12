@@ -102,7 +102,7 @@
         if (user.Identity?.IsAuthenticated ?? false)
         {
             _isAuthenticated = true;
-            _userEmail = user.Identity.Name;
+            _userEmail = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
             _userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
             var permissionLevel = PermissionLevel.Admin;
