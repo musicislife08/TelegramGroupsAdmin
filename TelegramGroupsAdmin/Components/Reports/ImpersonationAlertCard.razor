@@ -329,10 +329,9 @@
                Color.Default;
     }
 
-    private string GetPhotoUrl(string photoPath)
+    private string? GetPhotoUrl(string photoPath)
     {
-        var fileName = Path.GetFileName(photoPath);
-        return $"/api/photos/{fileName}";
+        return MediaPathUtilities.GetPhotoWebPath(photoPath);
     }
 
     private async Task OnConfirm()
