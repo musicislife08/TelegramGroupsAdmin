@@ -42,7 +42,7 @@ public static class AuthEndpoints
             if (result.RequiresTotp)
             {
                 // Generate intermediate authentication token (valid for 5 minutes)
-                var intermediateToken = intermediateAuthService.CreateToken(result.UserId!);
+                var intermediateToken = intermediateAuthService.CreateToken(result.UserId!, request.Email);
 
                 return Results.Json(new
                 {
@@ -57,7 +57,7 @@ public static class AuthEndpoints
             if (result.TotpEnabled)
             {
                 // Generate intermediate authentication token for TOTP setup flow
-                var intermediateToken = intermediateAuthService.CreateToken(result.UserId!);
+                var intermediateToken = intermediateAuthService.CreateToken(result.UserId!, request.Email);
 
                 return Results.Json(new
                 {

@@ -18,7 +18,7 @@ public class IntermediateAuthService : IIntermediateAuthService
         _logger = logger;
     }
 
-    public string CreateToken(string userId)
+    public string CreateToken(string userId, string? email = null)
     {
         // Generate cryptographically secure random token (32 bytes = 256 bits)
         var tokenBytes = RandomNumberGenerator.GetBytes(AuthenticationConstants.IntermediateTokenByteLength);
@@ -26,13 +26,14 @@ public class IntermediateAuthService : IIntermediateAuthService
 
         var tokenData = new TokenData(
             UserId: userId,
+            Email: email,
             ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.IntermediateTokenLifetime)
         );
 
         _tokens[token] = tokenData;
 
-        _logger.LogInformation("Created intermediate auth token for user {UserId}, expires at {ExpiresAt}",
-            userId, tokenData.ExpiresAt);
+        _logger.LogInformation("Created intermediate auth token for {Email} ({UserId}), expires at {ExpiresAt}",
+            tokenData.Email, userId, tokenData.ExpiresAt);
 
         // Clean up expired tokens (fire and forget)
         _ = Task.Run(() =>
@@ -144,5 +145,5 @@ public class IntermediateAuthService : IIntermediateAuthService
         }
     }
 
-    private record TokenData(string UserId, DateTimeOffset ExpiresAt);
+    private record TokenData(string UserId, string? Email, DateTimeOffset ExpiresAt);
 }
