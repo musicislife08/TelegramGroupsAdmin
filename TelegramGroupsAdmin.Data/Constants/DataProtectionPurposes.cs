@@ -35,4 +35,10 @@ public static class DataProtectionPurposes
     /// Used for Web Push notification authentication
     /// </summary>
     public const string VapidPrivateKey = "VapidPrivateKey";
+
+    /// <summary>
+    /// Purpose for encrypting Telegram User API Hash in configs.user_api_hash_encrypted column
+    /// Used for WTelegram/MTProto authentication
+    /// </summary>
+    public const string UserApiHash = "UserApiHash";
 }

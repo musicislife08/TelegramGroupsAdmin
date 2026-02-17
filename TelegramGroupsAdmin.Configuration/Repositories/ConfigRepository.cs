@@ -42,6 +42,8 @@ public class ConfigRepository(IDbContextFactory<AppDbContext> contextFactory) : 
             existing.SendGridConfig = config.SendGridConfig;
             existing.ServiceMessageDeletionConfig = config.ServiceMessageDeletionConfig;
             existing.BanCelebrationConfig = config.BanCelebrationConfig;
+            existing.UserApiConfig = config.UserApiConfig;
+            existing.UserApiHashEncrypted = config.UserApiHashEncrypted;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
             // Immutable properties NOT copied: Id (primary key), ChatId (natural key used for query), CreatedAt (database default)
         }

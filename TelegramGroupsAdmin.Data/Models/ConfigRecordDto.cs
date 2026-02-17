@@ -185,6 +185,24 @@ public class ConfigRecordDto
     public string? BanCelebrationConfig { get; set; }
 
     /// <summary>
+    /// Telegram User API configuration (JSONB)
+    /// Stores API ID and other non-sensitive WTelegram settings
+    /// Only used for global config (chat_id = 0)
+    /// </summary>
+    [Column("user_api_config", TypeName = "jsonb")]
+    public string? UserApiConfig { get; set; }
+
+    /// <summary>
+    /// Telegram User API Hash (encrypted TEXT, not JSONB)
+    /// Encrypted at rest with Data Protection, automatically decrypted during backup export and re-encrypted during restore
+    /// Only used for global config (chat_id = 0)
+    /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON
+    /// </summary>
+    [Column("user_api_hash_encrypted")]
+    [ProtectedData(Purpose = DataProtectionPurposes.UserApiHash)]
+    public string? UserApiHashEncrypted { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]
