@@ -1,12 +1,16 @@
 @page "/profile"
 @using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Telegram.Services.UserApi
 @using QRCoder
 @inject IUserRepository UserRepository
 @inject IAuthService AuthService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramLinkTokenRepository TelegramLinkTokenRepository
+@inject ITelegramAuthService TelegramAuth
+@inject ISystemConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @attribute [Authorize]
@@ -222,6 +226,125 @@
                 </MudPaper>
             </MudItem>
 
+            <!-- Telegram User API Connection -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Telegram User API</MudText>
+
+                    @if (!_userApiAvailable)
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            API credentials must be configured by an Owner in Settings &rarr; Telegram &rarr; User API before you can connect.
+                        </MudAlert>
+                    }
+                    else if (_connectionStatus is { IsConnected: true })
+                    {
+                        <!-- Connected state -->
+                        <MudAlert Severity="Severity.Success" Class="mb-3">Connected</MudAlert>
+                        <MudStack Spacing="2">
+                            <MudTextField Label="Display Name" Value="@_connectionStatus.DisplayName" ReadOnly="true" Variant="Variant.Outlined" />
+                            <MudTextField Label="Telegram ID" Value="@_connectionStatus.TelegramUserId?.ToString()" ReadOnly="true" Variant="Variant.Outlined" />
+                            <MudTextField Label="Connected Since" Value="@FormatDate(_connectionStatus.ConnectedAt)" ReadOnly="true" Variant="Variant.Outlined" />
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Error"
+                                      OnClick="@DisconnectAsync"
+                                      Disabled="@_authBusy">
+                                Disconnect
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else if (_authStep == AuthStep.CodeSent)
+                    {
+                        <!-- Verification code input -->
+                        <MudAlert Severity="Severity.Info" Class="mb-3">A verification code was sent to your Telegram app.</MudAlert>
+                        <MudStack Spacing="2">
+                            <MudTextField @bind-Value="_verificationCode"
+                                         Label="Verification Code"
+                                         Variant="Variant.Outlined"
+                                         MaxLength="10" />
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Filled"
+                                          Color="Color.Primary"
+                                          OnClick="@SubmitCodeAsync"
+                                          Disabled="@_authBusy">
+                                    @if (_authBusy)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        <text>Verifying...</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Verify</text>
+                                    }
+                                </MudButton>
+                                <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@CancelAuthAsync">Cancel</MudButton>
+                            </MudStack>
+                        </MudStack>
+                    }
+                    else if (_authStep == AuthStep.Requires2FA)
+                    {
+                        <!-- 2FA password input -->
+                        <MudAlert Severity="Severity.Info" Class="mb-3">Your account has two-factor authentication enabled.</MudAlert>
+                        <MudStack Spacing="2">
+                            <MudTextField @bind-Value="_twoFactorPassword"
+                                         Label="2FA Password"
+                                         Variant="Variant.Outlined"
+                                         InputType="InputType.Password" />
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Filled"
+                                          Color="Color.Primary"
+                                          OnClick="@Submit2FAAsync"
+                                          Disabled="@_authBusy">
+                                    @if (_authBusy)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        <text>Submitting...</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Submit</text>
+                                    }
+                                </MudButton>
+                                <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@CancelAuthAsync">Cancel</MudButton>
+                            </MudStack>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <!-- Disconnected — phone input -->
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                            Connect your Telegram account to enable profile scanning and advanced features.
+                        </MudText>
+                        <MudStack Spacing="2">
+                            <MudTextField @bind-Value="_phoneNumber"
+                                         Label="Phone Number"
+                                         Variant="Variant.Outlined"
+                                         Placeholder="+1234567890"
+                                         HelperText="International format with country code" />
+                            <MudButton Variant="Variant.Filled"
+                                      Color="Color.Primary"
+                                      OnClick="@StartAuthAsync"
+                                      Disabled="@_authBusy">
+                                @if (_authBusy)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <text>Connecting...</text>
+                                }
+                                else
+                                {
+                                    <text>Connect</text>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_authError))
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mt-3">@_authError</MudAlert>
+                    }
+                </MudPaper>
+            </MudItem>
+
             <!-- Notification Preferences -->
             <MudItem xs="12">
                 <NotificationPreferencesCard UserId="@_user.WebUser.Id" UserPermissionLevel="@_user.PermissionLevelInt" />
@@ -373,6 +496,15 @@
     private bool _showLinkToken;
     private TelegramLinkTokenRecord? _currentLinkToken;
 
+    // Telegram User API
+    private string _phoneNumber = "";
+    private string _verificationCode = "";
+    private string _twoFactorPassword = "";
+    private bool _authBusy;
+    private AuthStep _authStep = AuthStep.Disconnected;
+    private string? _authError;
+    private ConnectionStatus? _connectionStatus;
+    private bool _userApiAvailable;
 
     protected override async Task OnInitializedAsync()
     {
@@ -380,6 +512,7 @@
 
         await LoadUserAsync();
         await LoadLinkedAccountsAsync();
+        await LoadConnectionStatusAsync();
     }
 
     private async Task LoadUserAsync()
@@ -772,5 +905,176 @@
         {
             Snackbar.Add("Please copy the token manually", Severity.Warning);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Telegram User API
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private async Task LoadConnectionStatusAsync()
+    {
+        if (WebUser is null) return;
+
+        try
+        {
+            _userApiAvailable = await ConfigRepository.HasUserApiCredentialsAsync();
+            if (_userApiAvailable)
+                _connectionStatus = await TelegramAuth.GetStatusAsync(WebUser.Id, default);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading connection status: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task StartAuthAsync()
+    {
+        if (WebUser is null) return;
+
+        if (string.IsNullOrWhiteSpace(_phoneNumber))
+        {
+            Snackbar.Add("Please enter your phone number", Severity.Warning);
+            return;
+        }
+
+        _authBusy = true;
+        _authError = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await TelegramAuth.StartAuthAsync(WebUser.Id, _phoneNumber.Trim(), default);
+            _authStep = result.Step;
+            _authError = result.ErrorMessage;
+        }
+        catch (Exception ex)
+        {
+            _authError = $"Error starting authentication: {ex.Message}";
+        }
+        finally
+        {
+            _authBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SubmitCodeAsync()
+    {
+        if (WebUser is null) return;
+
+        if (string.IsNullOrWhiteSpace(_verificationCode))
+        {
+            Snackbar.Add("Please enter the verification code", Severity.Warning);
+            return;
+        }
+
+        _authBusy = true;
+        _authError = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await TelegramAuth.SubmitCodeAsync(WebUser.Id, _verificationCode.Trim(), default);
+            _authStep = result.Step;
+            _authError = result.ErrorMessage;
+
+            if (result.Step == AuthStep.Connected)
+            {
+                await OnAuthConnected();
+            }
+        }
+        catch (Exception ex)
+        {
+            _authError = $"Error submitting code: {ex.Message}";
+        }
+        finally
+        {
+            _authBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Submit2FAAsync()
+    {
+        if (WebUser is null) return;
+
+        if (string.IsNullOrWhiteSpace(_twoFactorPassword))
+        {
+            Snackbar.Add("Please enter your 2FA password", Severity.Warning);
+            return;
+        }
+
+        _authBusy = true;
+        _authError = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await TelegramAuth.Submit2FAAsync(WebUser.Id, _twoFactorPassword, default);
+            _authStep = result.Step;
+            _authError = result.ErrorMessage;
+
+            if (result.Step == AuthStep.Connected)
+            {
+                await OnAuthConnected();
+            }
+        }
+        catch (Exception ex)
+        {
+            _authError = $"Error submitting 2FA password: {ex.Message}";
+        }
+        finally
+        {
+            _authBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnAuthConnected()
+    {
+        _phoneNumber = "";
+        _verificationCode = "";
+        _twoFactorPassword = "";
+        _authStep = AuthStep.Disconnected;
+        Snackbar.Add("Telegram account connected successfully!", Severity.Success);
+        await LoadConnectionStatusAsync();
+        await LoadLinkedAccountsAsync();
+    }
+
+    private async Task DisconnectAsync()
+    {
+        if (WebUser is null) return;
+
+        _authBusy = true;
+        StateHasChanged();
+
+        try
+        {
+            await TelegramAuth.DisconnectAsync(WebUser.Id, default);
+            _connectionStatus = null;
+            _authStep = AuthStep.Disconnected;
+            Snackbar.Add("Telegram account disconnected", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error disconnecting: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _authBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelAuthAsync()
+    {
+        if (WebUser is null) return;
+
+        await TelegramAuth.CancelAuthAsync(WebUser.Id);
+        _authStep = AuthStep.Disconnected;
+        _authError = null;
+        _verificationCode = "";
+        _twoFactorPassword = "";
+        StateHasChanged();
     }
 }

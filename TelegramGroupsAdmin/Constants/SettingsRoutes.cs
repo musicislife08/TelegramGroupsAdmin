@@ -50,6 +50,9 @@ public static class SettingsRoutes
         public const string BotConfig = "bot-config";
         public const string BotConfigTitle = "Bot Configuration";
 
+        public const string UserApi = "user-api";
+        public const string UserApiTitle = "User API";
+
         public const string ServiceMessages = "service-messages";
         public const string ServiceMessagesTitle = "Service Messages";
     }

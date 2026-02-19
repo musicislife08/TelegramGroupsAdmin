@@ -178,6 +178,26 @@ public sealed class TelegramAuthService(
         }
     }
 
+    public async Task DisconnectAsync(string webUserId, CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
+        var auditService = scope.ServiceProvider.GetRequiredService<IAuditService>();
+
+        var session = await sessionRepo.GetActiveSessionAsync(webUserId, ct);
+        if (session is null) return;
+
+        await sessionRepo.DeactivateSessionAsync(session.Id, ct);
+
+        await auditService.LogEventAsync(
+            AuditEventType.TelegramAccountDisconnected,
+            Actor.FromWebUser(webUserId),
+            value: "Disconnected by user",
+            cancellationToken: ct);
+
+        logger.LogInformation("WTelegram session disconnected by web user {WebUserId}", webUserId);
+    }
+
     public async Task<ConnectionStatus> GetStatusAsync(string webUserId, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();

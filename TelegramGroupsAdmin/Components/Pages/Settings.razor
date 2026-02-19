@@ -46,6 +46,7 @@
                     @if (_canEditInfrastructure)
                     {
                         <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.BotConfig)" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.BotConfigTitle</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.UserApi)" Icon="@Icons.Material.Filled.Api" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.UserApiTitle</MudNavLink>
                     }
                     <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.ServiceMessages)" Icon="@Icons.Material.Filled.CleaningServices" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.ServiceMessagesTitle</MudNavLink>
                 </MudNavGroup>
@@ -200,6 +201,16 @@
                             @if (_canEditInfrastructure)
                             {
                                 <TelegramBotSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                        case SettingsRoutes.Telegram.UserApi:
+                            @if (_canEditInfrastructure)
+                            {
+                                <UserApiSettings />
                             }
                             else
                             {
@@ -383,6 +394,7 @@
 
             // Telegram
             (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.BotConfig) => SettingsRoutes.Telegram.BotConfigTitle,
+            (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.UserApi) => SettingsRoutes.Telegram.UserApiTitle,
             (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.ServiceMessages) => SettingsRoutes.Telegram.ServiceMessagesTitle,
 
             // Notifications
