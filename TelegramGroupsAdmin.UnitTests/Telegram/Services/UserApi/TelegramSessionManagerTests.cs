@@ -82,7 +82,6 @@ public class TelegramSessionManagerTests
     {
         // Arrange
         SetupScope();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>())
             .Returns((TelegramSession?)null);
 
@@ -122,7 +121,6 @@ public class TelegramSessionManagerTests
             ConnectedAt = DateTimeOffset.UtcNow
         };
 
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>())
             .Returns(session);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
@@ -160,7 +158,6 @@ public class TelegramSessionManagerTests
         // Arrange — seed the cache by creating a connected session first
         SetupScope();
         var session = MakeSession();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>())
             .Returns(session);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
@@ -202,7 +199,6 @@ public class TelegramSessionManagerTests
         // Arrange — seed the cache with a client that will become disconnected
         SetupScope();
         var session = MakeSession();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         // First call returns session (for seeding), subsequent calls return null (session deactivated)
         var sessionCallCount = 0;
@@ -257,7 +253,6 @@ public class TelegramSessionManagerTests
         // Arrange — seed cache so _clients is non-empty
         SetupScope();
         var session = MakeSession();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>())
             .Returns(session);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
@@ -279,7 +274,7 @@ public class TelegramSessionManagerTests
 
         // Assert — should short-circuit on non-empty cache without hitting DB
         Assert.That(result, Is.True);
-        await _mockSessionRepo.DidNotReceive().GetAllActiveSessionsAsync(Arg.Any<CancellationToken>());
+        await _mockSessionRepo.DidNotReceive().AnyActiveSessionExistsAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -287,15 +282,15 @@ public class TelegramSessionManagerTests
     {
         // Arrange — empty cache, DB has active sessions
         SetupScope();
-        _mockSessionRepo.GetAllActiveSessionsAsync(Arg.Any<CancellationToken>())
-            .Returns([MakeSession()]);
+        _mockSessionRepo.AnyActiveSessionExistsAsync(Arg.Any<CancellationToken>())
+            .Returns(true);
 
         // Act
         var result = await _sut.HasAnyActiveSessionAsync(CancellationToken.None);
 
         // Assert
         Assert.That(result, Is.True);
-        await _mockSessionRepo.Received(1).GetAllActiveSessionsAsync(Arg.Any<CancellationToken>());
+        await _mockSessionRepo.Received(1).AnyActiveSessionExistsAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -303,8 +298,8 @@ public class TelegramSessionManagerTests
     {
         // Arrange — empty cache, no DB sessions
         SetupScope();
-        _mockSessionRepo.GetAllActiveSessionsAsync(Arg.Any<CancellationToken>())
-            .Returns(new List<TelegramSession>());
+        _mockSessionRepo.AnyActiveSessionExistsAsync(Arg.Any<CancellationToken>())
+            .Returns(false);
 
         // Act
         var result = await _sut.HasAnyActiveSessionAsync(CancellationToken.None);
@@ -323,7 +318,6 @@ public class TelegramSessionManagerTests
         // Arrange — seed cache
         SetupScope();
         var session = MakeSession();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>())
             .Returns(session);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
@@ -356,7 +350,6 @@ public class TelegramSessionManagerTests
         var session = MakeSession();
         _mockSessionRepo.GetAllActiveSessionsAsync(Arg.Any<CancellationToken>())
             .Returns([session]);
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockSessionRepo.GetActiveSessionAsync(TestWebUserId, Arg.Any<CancellationToken>())
             .Returns(session);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
@@ -404,7 +397,6 @@ public class TelegramSessionManagerTests
         // Arrange — seed cache
         SetupScope();
         var session = MakeSession();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         // First call returns session (for seeding + disconnect lookup), after that null (deactivated)
         var sessionCallCount = 0;
@@ -491,7 +483,6 @@ public class TelegramSessionManagerTests
             return scope;
         });
 
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
             .Returns(new UserApiConfig { ApiId = 12345 });
         _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())

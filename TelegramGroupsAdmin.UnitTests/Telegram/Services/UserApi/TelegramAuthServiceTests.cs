@@ -88,7 +88,10 @@ public class TelegramAuthServiceTests
     {
         // Arrange
         SetupScope();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(false);
+        _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
+            .Returns(new UserApiConfig { ApiId = 0 });
+        _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
+            .Returns((string?)null);
 
         // Act
         var result = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", CancellationToken.None);
@@ -104,7 +107,6 @@ public class TelegramAuthServiceTests
         // Arrange — prime the static dictionary with a fake flow context by calling StartAuthAsync
         // with credentials that pass the gate but whose client blocks indefinitely on login.
         SetupScope();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
             .Returns(new UserApiConfig { ApiId = 12345 });
         _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
@@ -177,7 +179,6 @@ public class TelegramAuthServiceTests
     {
         // Arrange — simulate an in-progress flow by starting one with blocking client
         SetupScope();
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(true);
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
             .Returns(new UserApiConfig { ApiId = 12345 });
         _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
@@ -207,7 +208,10 @@ public class TelegramAuthServiceTests
         // Assert — a subsequent StartAuthAsync for the same user should not hit the "already in progress" guard.
         // We verify by checking that the dictionary no longer blocks a new flow.
         // Configure a second flow that will immediately fail on credentials.
-        _mockConfigRepo.HasUserApiCredentialsAsync(Arg.Any<CancellationToken>()).Returns(false);
+        _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
+            .Returns(new UserApiConfig { ApiId = 0 });
+        _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
+            .Returns((string?)null);
         var secondStart = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", CancellationToken.None);
 
         // If CancelAuthAsync worked, the second call should return "No credentials" failure,
@@ -264,64 +268,6 @@ public class TelegramAuthServiceTests
         Assert.That(result.DisplayName, Is.EqualTo("Alice Smith"));
         Assert.That(result.TelegramUserId, Is.EqualTo(123456789L));
         Assert.That(result.ConnectedAt, Is.EqualTo(connectedAt));
-    }
-
-    #endregion
-
-    #region DisconnectAsync
-
-    [Test]
-    public async Task DisconnectAsync_ActiveSession_DeactivatesAndAudits()
-    {
-        // Arrange
-        SetupScope();
-        var session = new TelegramSession
-        {
-            Id = 77L,
-            WebUserId = _testWebUserId,
-            TelegramUserId = 987654321L,
-            DisplayName = "Bob Jones",
-            SessionData = [],
-            IsActive = true,
-            ConnectedAt = DateTimeOffset.UtcNow.AddDays(-1)
-        };
-        _mockSessionRepo.GetActiveSessionAsync(_testWebUserId, Arg.Any<CancellationToken>())
-            .Returns(session);
-
-        // Act
-        await _sut.DisconnectAsync(_testWebUserId, CancellationToken.None);
-
-        // Assert — session deactivated
-        await _mockSessionRepo.Received(1).DeactivateSessionAsync(77L, Arg.Any<CancellationToken>());
-
-        // Assert — audit event logged with correct actor type
-        await _mockAuditService.Received(1).LogEventAsync(
-            AuditEventType.TelegramAccountDisconnected,
-            Arg.Is<Actor>(a => a.Type == ActorType.WebUser && a.WebUserId == _testWebUserId),
-            Arg.Any<Actor?>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task DisconnectAsync_NoSession_DoesNothing()
-    {
-        // Arrange
-        SetupScope();
-        _mockSessionRepo.GetActiveSessionAsync(_testWebUserId, Arg.Any<CancellationToken>())
-            .Returns((TelegramSession?)null);
-
-        // Act — should complete without throwing
-        await _sut.DisconnectAsync(_testWebUserId, CancellationToken.None);
-
-        // Assert — nothing deactivated or audited
-        await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
-        await _mockAuditService.DidNotReceive().LogEventAsync(
-            Arg.Any<AuditEventType>(),
-            Arg.Any<Actor>(),
-            Arg.Any<Actor?>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
     }
 
     #endregion

@@ -19,6 +19,11 @@ public interface ITelegramSessionRepository
     Task<List<TelegramSession>> GetAllActiveSessionsAsync(CancellationToken ct);
 
     /// <summary>
+    /// Check if any active session exists without materializing rows or decrypting session data
+    /// </summary>
+    Task<bool> AnyActiveSessionExistsAsync(CancellationToken ct);
+
+    /// <summary>
     /// Create a new session record. Returns the generated ID.
     /// </summary>
     Task<long> CreateSessionAsync(TelegramSession session, CancellationToken ct);

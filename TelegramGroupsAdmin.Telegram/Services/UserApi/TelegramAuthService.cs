@@ -33,15 +33,25 @@ public sealed class TelegramAuthService(
     {
         public required IWTelegramApiClient Client { get; init; }
         public required string PhoneNumber { get; init; }
+
+        // Cross-thread synchronization (ARM64 memory visibility)
+        public readonly Lock Lock = new();
         public TaskCompletionSource<string>? PendingInput { get; set; }
         public AuthStep CurrentStep { get; set; } = AuthStep.CodeSent;
         public Task? LoginTask { get; set; }
         public string? ErrorMessage { get; set; }
         public byte[] SessionData { get; set; } = [];
 
+        /// <summary>Signal fired when the background login flow changes state (needs input, completes, fails).</summary>
+        public TaskCompletionSource StepSignal { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Auto-cancel after 5 minutes to prevent abandoned flows from leaking resources.</summary>
+        public CancellationTokenSource FlowTimeout { get; } = new(TimeSpan.FromMinutes(5));
+
         public async ValueTask DisposeAsync()
         {
             PendingInput?.TrySetCanceled();
+            FlowTimeout.Dispose();
             try { await Client.DisposeAsync(); }
             catch { /* best-effort */ }
         }
@@ -49,20 +59,13 @@ public sealed class TelegramAuthService(
 
     public async Task<AuthFlowState> StartAuthAsync(string webUserId, string phoneNumber, CancellationToken ct)
     {
-        // Reject if another flow is already in progress for this user
-        if (ActiveFlows.ContainsKey(webUserId))
-            return new AuthFlowState(AuthStep.Failed, "An authentication flow is already in progress. Cancel it first.");
-
         await using var scope = scopeFactory.CreateAsyncScope();
         var configRepo = scope.ServiceProvider.GetRequiredService<ISystemConfigRepository>();
-
-        if (!await configRepo.HasUserApiCredentialsAsync(ct))
-            return new AuthFlowState(AuthStep.Failed, "API credentials must be configured by an Owner in Settings first.");
 
         var config = await configRepo.GetUserApiConfigAsync(ct);
         var apiHash = await configRepo.GetUserApiHashAsync(ct);
         if (config.ApiId == 0 || string.IsNullOrEmpty(apiHash))
-            return new AuthFlowState(AuthStep.Failed, "API credentials are incomplete.");
+            return new AuthFlowState(AuthStep.Failed, "API credentials must be configured by an Owner in Settings first.");
 
         var context = new AuthFlowContext
         {
@@ -86,48 +89,79 @@ public sealed class TelegramAuthService(
             try
             {
                 await context.Client.LoginUserIfNeeded();
-                context.CurrentStep = AuthStep.Connected;
+                using (context.Lock.EnterScope())
+                    context.CurrentStep = AuthStep.Connected;
             }
             catch (TaskCanceledException)
             {
-                context.CurrentStep = AuthStep.Failed;
-                context.ErrorMessage = "Authentication was cancelled.";
+                using (context.Lock.EnterScope())
+                {
+                    context.CurrentStep = AuthStep.Failed;
+                    context.ErrorMessage = "Authentication was cancelled.";
+                }
             }
             catch (TL.RpcException ex) when (ex.Message.Contains("PHONE_NUMBER_INVALID"))
             {
-                context.CurrentStep = AuthStep.Failed;
-                context.ErrorMessage = "Invalid phone number format.";
+                using (context.Lock.EnterScope())
+                {
+                    context.CurrentStep = AuthStep.Failed;
+                    context.ErrorMessage = "Invalid phone number format.";
+                }
             }
             catch (TL.RpcException ex) when (ex.Message.Contains("PHONE_CODE_INVALID"))
             {
-                context.CurrentStep = AuthStep.Failed;
-                context.ErrorMessage = "Invalid verification code.";
+                using (context.Lock.EnterScope())
+                {
+                    context.CurrentStep = AuthStep.Failed;
+                    context.ErrorMessage = "Invalid verification code.";
+                }
             }
             catch (TL.RpcException ex) when (ex.Message.Contains("PASSWORD_HASH_INVALID"))
             {
-                context.CurrentStep = AuthStep.Failed;
-                context.ErrorMessage = "Incorrect 2FA password.";
+                using (context.Lock.EnterScope())
+                {
+                    context.CurrentStep = AuthStep.Failed;
+                    context.ErrorMessage = "Incorrect 2FA password.";
+                }
             }
             catch (ApplicationException ex) when (ex.Message.Contains("no Telegram account"))
             {
-                context.CurrentStep = AuthStep.Failed;
-                context.ErrorMessage = "This phone number does not have a Telegram account.";
+                using (context.Lock.EnterScope())
+                {
+                    context.CurrentStep = AuthStep.Failed;
+                    context.ErrorMessage = "This phone number does not have a Telegram account.";
+                }
             }
             catch (Exception ex)
             {
-                context.CurrentStep = AuthStep.Failed;
-                context.ErrorMessage = $"Authentication failed: {ex.Message}";
+                using (context.Lock.EnterScope())
+                {
+                    context.CurrentStep = AuthStep.Failed;
+                    context.ErrorMessage = "Authentication failed due to an unexpected error. Check server logs for details.";
+                }
                 logger.LogError(ex, "WTelegram auth flow failed for web user {WebUserId}", webUserId);
             }
-        }, CancellationToken.None);
+            finally
+            {
+                // Signal completion so WaitForStepChangeAsync can exit
+                context.StepSignal.TrySetResult();
+            }
+        }, CancellationToken.None); // WTelegram.Client has internal network timeouts; FlowTimeout covers user-input waits only
 
-        // Give the login flow a moment to request the phone and send the code
-        await Task.Delay(2000, ct);
+        // Wait for the login flow to either request verification code or fail
+        await WaitForStepChangeAsync(context, ct);
 
-        if (context.CurrentStep == AuthStep.Failed)
+        AuthStep step;
+        string? error;
+        using (context.Lock.EnterScope())
+        {
+            step = context.CurrentStep;
+            error = context.ErrorMessage;
+        }
+
+        if (step == AuthStep.Failed)
         {
             ActiveFlows.TryRemove(webUserId, out _);
-            var error = context.ErrorMessage;
             await context.DisposeAsync();
             return new AuthFlowState(AuthStep.Failed, error);
         }
@@ -140,12 +174,17 @@ public sealed class TelegramAuthService(
         if (!ActiveFlows.TryGetValue(webUserId, out var context))
             return new AuthFlowState(AuthStep.Failed, "No authentication flow in progress.");
 
-        if (context.PendingInput is null)
-            return new AuthFlowState(AuthStep.Failed, "Not waiting for verification code.");
+        TaskCompletionSource<string>? tcs;
+        using (context.Lock.EnterScope())
+        {
+            tcs = context.PendingInput;
+            if (tcs is null)
+                return new AuthFlowState(AuthStep.Failed, "Not waiting for verification code.");
+            context.PendingInput = null;
+        }
 
         // Resolve the TaskCompletionSource — LoginUserIfNeeded continues
-        context.PendingInput.TrySetResult(code);
-        context.PendingInput = null;
+        tcs.TrySetResult(code);
 
         // Wait for login to advance (it will either complete, request 2FA, or fail)
         await WaitForStepChangeAsync(context, ct);
@@ -158,11 +197,16 @@ public sealed class TelegramAuthService(
         if (!ActiveFlows.TryGetValue(webUserId, out var context))
             return new AuthFlowState(AuthStep.Failed, "No authentication flow in progress.");
 
-        if (context.PendingInput is null)
-            return new AuthFlowState(AuthStep.Failed, "Not waiting for 2FA password.");
+        TaskCompletionSource<string>? tcs;
+        using (context.Lock.EnterScope())
+        {
+            tcs = context.PendingInput;
+            if (tcs is null)
+                return new AuthFlowState(AuthStep.Failed, "Not waiting for 2FA password.");
+            context.PendingInput = null;
+        }
 
-        context.PendingInput.TrySetResult(password);
-        context.PendingInput = null;
+        tcs.TrySetResult(password);
 
         await WaitForStepChangeAsync(context, ct);
 
@@ -176,26 +220,6 @@ public sealed class TelegramAuthService(
             await context.DisposeAsync();
             logger.LogInformation("Cancelled WTelegram auth flow for web user {WebUserId}", webUserId);
         }
-    }
-
-    public async Task DisconnectAsync(string webUserId, CancellationToken ct)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
-        var auditService = scope.ServiceProvider.GetRequiredService<IAuditService>();
-
-        var session = await sessionRepo.GetActiveSessionAsync(webUserId, ct);
-        if (session is null) return;
-
-        await sessionRepo.DeactivateSessionAsync(session.Id, ct);
-
-        await auditService.LogEventAsync(
-            AuditEventType.TelegramAccountDisconnected,
-            Actor.FromWebUser(webUserId),
-            value: "Disconnected by user",
-            cancellationToken: ct);
-
-        logger.LogInformation("WTelegram session disconnected by web user {WebUserId}", webUserId);
     }
 
     public async Task<ConnectionStatus> GetStatusAsync(string webUserId, CancellationToken ct)
@@ -216,7 +240,15 @@ public sealed class TelegramAuthService(
 
     private async Task<AuthFlowState> HandleStepResult(string webUserId, AuthFlowContext context, CancellationToken ct)
     {
-        switch (context.CurrentStep)
+        AuthStep step;
+        string? error;
+        using (context.Lock.EnterScope())
+        {
+            step = context.CurrentStep;
+            error = context.ErrorMessage;
+        }
+
+        switch (step)
         {
             case AuthStep.Connected:
                 await FinalizeConnectionAsync(webUserId, context, ct);
@@ -227,12 +259,11 @@ public sealed class TelegramAuthService(
 
             case AuthStep.Failed:
                 ActiveFlows.TryRemove(webUserId, out _);
-                var error = context.ErrorMessage;
                 await context.DisposeAsync();
                 return new AuthFlowState(AuthStep.Failed, error);
 
             default:
-                return new AuthFlowState(context.CurrentStep);
+                return new AuthFlowState(step);
         }
     }
 
@@ -345,34 +376,81 @@ public sealed class TelegramAuthService(
         if (!ActiveFlows.TryGetValue(webUserId, out var context))
             throw new OperationCanceledException("Auth flow was cancelled.");
 
-        context.CurrentStep = step;
-        context.PendingInput = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource<string> tcs;
+        using (context.Lock.EnterScope())
+        {
+            context.CurrentStep = step;
+            tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            context.PendingInput = tcs;
+
+            // Signal that the flow needs user input — WaitForStepChangeAsync is watching
+            context.StepSignal.TrySetResult();
+            context.StepSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
 
         // Block the config callback thread until the UI submits the value
-        return context.PendingInput.Task.GetAwaiter().GetResult();
+        // Use the flow timeout to prevent indefinite hangs if user navigates away
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.FlowTimeout.Token);
+        try
+        {
+            return tcs.Task.WaitAsync(cts.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            throw new OperationCanceledException("Auth flow timed out waiting for user input.");
+        }
     }
 
     private void CaptureSessionData(string webUserId, byte[] data)
     {
         if (ActiveFlows.TryGetValue(webUserId, out var context))
-            context.SessionData = data;
+        {
+            using (context.Lock.EnterScope())
+                context.SessionData = data;
+        }
     }
 
     private static async Task WaitForStepChangeAsync(AuthFlowContext context, CancellationToken ct)
     {
-        // Wait for the login task to advance — either it completes, requests more input, or fails
-        var timeout = Task.Delay(30_000, ct);
-        while (context.LoginTask is not null
-               && !context.LoginTask.IsCompleted
-               && context.PendingInput is null
-               && context.CurrentStep is not AuthStep.Failed)
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(60));
+
+        try
         {
-            var completed = await Task.WhenAny(context.LoginTask, timeout);
-            if (completed == timeout)
+            while (true)
+            {
+                // Read state under lock for ARM64 visibility
+                bool loginCompleted;
+                bool hasPendingInput;
+                AuthStep step;
+                Task stepSignalTask;
+                Task? loginTask;
+
+                using (context.Lock.EnterScope())
+                {
+                    loginTask = context.LoginTask;
+                    loginCompleted = loginTask?.IsCompleted ?? true;
+                    hasPendingInput = context.PendingInput is not null;
+                    step = context.CurrentStep;
+                    stepSignalTask = context.StepSignal.Task;
+                }
+
+                if (loginCompleted || hasPendingInput || step is AuthStep.Failed or AuthStep.Connected)
+                    break;
+
+                // Wait for: login task completion, step signal (input needed), or timeout
+                await Task.WhenAny(loginTask!, stepSignalTask, Task.Delay(Timeout.Infinite, cts.Token));
+
+                // Task.WhenAny doesn't throw on cancellation — check explicitly to avoid busy-spin
+                cts.Token.ThrowIfCancellationRequested();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            using (context.Lock.EnterScope())
             {
                 context.CurrentStep = AuthStep.Failed;
                 context.ErrorMessage = "Authentication timed out waiting for Telegram response.";
-                break;
             }
         }
     }

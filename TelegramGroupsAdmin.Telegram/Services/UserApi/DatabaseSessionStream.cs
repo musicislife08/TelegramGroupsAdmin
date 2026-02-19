@@ -32,20 +32,23 @@ public sealed class DatabaseSessionStream : MemoryStream
     public override void Flush()
     {
         base.Flush();
-        _ = PersistAsync();
+        var snapshot = ToArray(); // capture on calling thread — serialized with Write()
+        // Fire-and-forget: sync Flush() can't await. PersistSnapshotAsync logs failures internally.
+        // Next flush retries with latest state, so a missed save is self-healing.
+        _ = PersistSnapshotAsync(snapshot);
     }
 
     public override async Task FlushAsync(CancellationToken cancellationToken)
     {
         await base.FlushAsync(cancellationToken);
-        await PersistAsync();
+        await PersistSnapshotAsync(ToArray());
     }
 
-    private async Task PersistAsync()
+    private async Task PersistSnapshotAsync(byte[] data)
     {
         try
         {
-            await _saveCallback(ToArray());
+            await _saveCallback(data);
         }
         catch (Exception ex)
         {

@@ -41,4 +41,10 @@ public static class DataProtectionPurposes
     /// Used for WTelegram/MTProto authentication
     /// </summary>
     public const string UserApiHash = "UserApiHash";
+
+    /// <summary>
+    /// Purpose for encrypting WTelegram/MTProto session data in telegram_sessions.session_data column
+    /// Session data is equivalent to a logged-in credential — must be encrypted at rest
+    /// </summary>
+    public const string TelegramSession = "TelegramSession";
 }

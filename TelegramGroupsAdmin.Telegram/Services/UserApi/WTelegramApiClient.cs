@@ -34,6 +34,5 @@ public sealed class WTelegramApiClient(Client client) : IWTelegramApiClient
     public async ValueTask DisposeAsync()
     {
         await client.DisposeAsync();
-        GC.SuppressFinalize(this);
     }
 }

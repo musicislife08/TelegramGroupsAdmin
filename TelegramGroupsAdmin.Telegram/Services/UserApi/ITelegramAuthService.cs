@@ -21,9 +21,6 @@ public interface ITelegramAuthService
     /// <summary>Cancel an in-progress auth flow (user navigated away or wants to retry).</summary>
     Task CancelAuthAsync(string webUserId);
 
-    /// <summary>Disconnect an existing session (deactivate + audit log).</summary>
-    Task DisconnectAsync(string webUserId, CancellationToken ct);
-
     /// <summary>Get current connection status for a user.</summary>
     Task<ConnectionStatus> GetStatusAsync(string webUserId, CancellationToken ct);
 }

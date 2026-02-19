@@ -10,6 +10,7 @@
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramLinkTokenRepository TelegramLinkTokenRepository
 @inject ITelegramAuthService TelegramAuth
+@inject ITelegramSessionManager TelegramSessionManager
 @inject ISystemConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
@@ -1050,7 +1051,7 @@
 
         try
         {
-            await TelegramAuth.DisconnectAsync(WebUser.Id, default);
+            await TelegramSessionManager.DisconnectAsync(WebUser.Id, default);
             _connectionStatus = null;
             _authStep = AuthStep.Disconnected;
             Snackbar.Add("Telegram account disconnected", Severity.Success);

@@ -4,6 +4,7 @@
 @inject ISystemConfigRepository ConfigRepository
 @inject IAuditService AuditService
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <MudGrid>
     <MudItem xs="12">
@@ -158,6 +159,19 @@
 
     private async Task ClearAsync()
     {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, "This will remove the API credentials and break any active Telegram connections. Are you sure?" },
+            { x => x.ButtonText, "Clear Credentials" },
+            { x => x.Color, Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Clear API Credentials", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: true })
+            return;
+
         _isSaving = true;
         StateHasChanged();
 

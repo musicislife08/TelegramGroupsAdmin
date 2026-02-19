@@ -24,6 +24,7 @@ public sealed class TelegramSessionManager(
     ILogger<TelegramSessionManager> logger) : ITelegramSessionManager
 {
     private readonly ConcurrentDictionary<string, CachedClient> _clients = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _reconnectLocks = new();
 
     private sealed record CachedClient(IWTelegramApiClient ApiClient, long SessionId, DatabaseSessionStream SessionStream);
 
@@ -44,20 +45,22 @@ public sealed class TelegramSessionManager(
             return null;
         }
 
-        return await TryReconnectAsync(webUserId, ct);
+        return await ReconnectWithLockAsync(webUserId, ct);
     }
 
     public async Task<bool> HasAnyActiveSessionAsync(CancellationToken ct)
     {
-        // Check cache first
-        if (!_clients.IsEmpty)
-            return true;
+        // Check cache first — only count non-disconnected clients
+        foreach (var kvp in _clients)
+        {
+            if (!kvp.Value.ApiClient.Disconnected)
+                return true;
+        }
 
-        // Fall back to DB
+        // Fall back to DB — lightweight existence check, no row materialization or decryption
         await using var scope = scopeFactory.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
-        var sessions = await sessionRepo.GetAllActiveSessionsAsync(ct);
-        return sessions.Count > 0;
+        return await sessionRepo.AnyActiveSessionExistsAsync(ct);
     }
 
     public async Task<IWTelegramApiClient?> GetAnyClientAsync(CancellationToken ct)
@@ -76,12 +79,34 @@ public sealed class TelegramSessionManager(
 
         foreach (var session in sessions)
         {
-            var client = await TryReconnectAsync(session.WebUserId, ct);
+            var client = await ReconnectWithLockAsync(session.WebUserId, ct);
             if (client is not null)
                 return client;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Per-user lock around TryReconnectAsync to prevent concurrent reconnects
+    /// creating duplicate clients (where the first is orphaned and never disposed).
+    /// </summary>
+    private async Task<IWTelegramApiClient?> ReconnectWithLockAsync(string webUserId, CancellationToken ct)
+    {
+        var userLock = _reconnectLocks.GetOrAdd(webUserId, _ => new SemaphoreSlim(1, 1));
+        await userLock.WaitAsync(ct);
+        try
+        {
+            // Re-check cache — another thread may have populated it while we waited
+            if (_clients.TryGetValue(webUserId, out var justAdded) && !justAdded.ApiClient.Disconnected)
+                return justAdded.ApiClient;
+
+            return await TryReconnectAsync(webUserId, ct);
+        }
+        finally
+        {
+            userLock.Release();
+        }
     }
 
     public async Task DisconnectAsync(string webUserId, CancellationToken ct)
@@ -110,14 +135,23 @@ public sealed class TelegramSessionManager(
         }
     }
 
+    /// <summary>
+    /// Best-effort cleanup at app shutdown. Iterating ConcurrentDictionary while removing
+    /// could theoretically miss entries added concurrently, but this only runs during
+    /// IHost shutdown when no new requests are being accepted — safe for our singleton lifecycle.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         foreach (var kvp in _clients)
         {
             if (_clients.TryRemove(kvp.Key, out var cached))
-            {
                 await DisposeClientAsync(cached);
-            }
+        }
+
+        foreach (var kvp in _reconnectLocks)
+        {
+            if (_reconnectLocks.TryRemove(kvp.Key, out var semaphore))
+                semaphore.Dispose();
         }
     }
 
@@ -126,10 +160,6 @@ public sealed class TelegramSessionManager(
         await using var scope = scopeFactory.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
         var configRepo = scope.ServiceProvider.GetRequiredService<ISystemConfigRepository>();
-
-        // Check credentials gate
-        if (!await configRepo.HasUserApiCredentialsAsync(ct))
-            return null;
 
         var session = await sessionRepo.GetActiveSessionAsync(webUserId, ct);
         if (session is null)
