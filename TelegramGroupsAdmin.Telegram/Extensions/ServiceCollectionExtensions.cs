@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using Testably.Abstractions;
 
 namespace TelegramGroupsAdmin.Telegram.Extensions;
@@ -53,6 +54,12 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageTranslationService, MessageTranslationService>();
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+
+            // User API (WTelegram) services
+            services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
+            services.AddSingleton<IWTelegramClientFactory, WTelegramClientFactory>();
+            services.AddSingleton<ITelegramSessionManager, TelegramSessionManager>();
+            services.AddScoped<ITelegramAuthService, TelegramAuthService>();
 
             // Telegram infrastructure
             services.AddSingleton<ITelegramBotClientFactory, TelegramBotClientFactory>();
