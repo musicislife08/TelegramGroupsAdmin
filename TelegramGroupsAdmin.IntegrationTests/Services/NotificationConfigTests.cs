@@ -300,6 +300,8 @@ public class NotificationConfigTests
         Assert.That(allEvents, Contains.Item(NotificationEventType.BackupFailed));
         Assert.That(allEvents, Contains.Item(NotificationEventType.MalwareDetected));
         Assert.That(allEvents, Contains.Item(NotificationEventType.ChatAdminChanged));
+        Assert.That(allEvents, Contains.Item(NotificationEventType.ExamFailed));
+        Assert.That(allEvents, Contains.Item(NotificationEventType.TelegramSessionRevoked));
     }
 
     #endregion
