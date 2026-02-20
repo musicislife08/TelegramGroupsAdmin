@@ -791,7 +791,7 @@ public class ReportCallbackService : IReportCallbackService
             await reportsRepo.TryUpdateStatusAsync(
                 sibling.Id,
                 ReportStatus.Reviewed,
-                "System",
+                Actor.ProfileScan.GetDisplayText(),
                 $"Auto-{actionName ?? "resolved"}",
                 note,
                 cancellationToken);

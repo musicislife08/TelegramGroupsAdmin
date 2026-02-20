@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
@@ -25,6 +26,7 @@ public class ExamFlowServiceTests
         var botDmService = Substitute.For<IBotDmService>();
         var botChatService = Substitute.For<IBotChatService>();
         var examEvaluationService = Substitute.For<IExamEvaluationService>();
+        var admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
 
         _service = new ExamFlowService(
             logger,
@@ -32,7 +34,8 @@ public class ExamFlowServiceTests
             botMessageService,
             botDmService,
             botChatService,
-            examEvaluationService);
+            examEvaluationService,
+            admissionHandler);
     }
 
     #region IsExamCallback Tests

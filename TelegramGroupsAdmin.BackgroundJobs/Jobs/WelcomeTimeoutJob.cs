@@ -8,6 +8,8 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -20,12 +22,14 @@ public class WelcomeTimeoutJob(
     ILogger<WelcomeTimeoutJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
     IBotModerationService moderationService,
-    IBotMessageService messageService) : IJob
+    IBotMessageService messageService,
+    IReportsRepository reportsRepository) : IJob
 {
     private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
     private readonly IBotModerationService _moderationService = moderationService;
     private readonly IBotMessageService _messageService = messageService;
+    private readonly IReportsRepository _reportsRepository = reportsRepository;
 
     /// <summary>
     /// Quartz.NET entry point - extracts payload and delegates to ExecuteAsync
@@ -133,6 +137,9 @@ public class WelcomeTimeoutJob(
                 payload.User.DisplayName,
                 payload.Chat.DisplayName);
 
+            // Clean up orphaned ProfileScanAlert reports for this user+chat
+            await CleanupOrphanedProfileScanAlertsAsync(payload, cancellationToken);
+
             success = true;
         }
         catch (Exception ex)
@@ -157,6 +164,43 @@ public class WelcomeTimeoutJob(
 
             TelemetryConstants.JobExecutions.Add(1, tags);
             TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+        }
+    }
+
+    /// <summary>
+    /// Close any pending ProfileScanAlert reports for this user in the timed-out chat.
+    /// When a user times out, the profile review is moot — they've been kicked.
+    /// </summary>
+    private async Task CleanupOrphanedProfileScanAlertsAsync(
+        WelcomeTimeoutPayload payload,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pendingAlerts = await _reportsRepository.GetPendingProfileScanAlertsForUserAsync(
+                payload.User.Id, cancellationToken);
+
+            var chatAlerts = pendingAlerts.Where(a => a.Chat.Id == payload.Chat.Id).ToList();
+
+            foreach (var alert in chatAlerts)
+            {
+                await _reportsRepository.TryUpdateStatusAsync(
+                    alert.Id,
+                    ReportStatus.Reviewed,
+                    reviewedBy: Actor.WelcomeFlow.GetDisplayText(),
+                    actionTaken: "Auto-resolved: user timed out",
+                    cancellationToken: cancellationToken);
+
+                _logger.LogInformation(
+                    "Auto-closed ProfileScanAlert #{ReportId} for {User} in {Chat} (welcome timeout)",
+                    alert.Id, payload.User.DisplayName, payload.Chat.DisplayName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to clean up orphaned ProfileScanAlerts for {User} in {Chat} (non-fatal)",
+                payload.User.DisplayName, payload.Chat.Id);
         }
     }
 }
