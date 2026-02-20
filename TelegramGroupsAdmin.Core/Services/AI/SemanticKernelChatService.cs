@@ -128,6 +128,60 @@ public class SemanticKernelChatService : IChatService
     }
 
     /// <inheritdoc />
+    public async Task<ChatCompletionResult?> GetVisionCompletionAsync(
+        AIFeatureType feature,
+        string systemPrompt,
+        string userPrompt,
+        IReadOnlyList<ImageInput> images,
+        ChatCompletionOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var lookupResult = await GetOrCreateKernelAsync(feature, cancellationToken);
+        if (lookupResult == null)
+        {
+            _logger.LogDebug("Feature {Feature} is not configured, skipping AI multi-image vision call", feature);
+            return null;
+        }
+
+        var kernelInfo = lookupResult.Kernel;
+        var featureConfig = lookupResult.FeatureConfig;
+
+        try
+        {
+            var chatHistory = new ChatHistory();
+            chatHistory.AddSystemMessage(systemPrompt);
+
+            // Build message with text + all images
+            var contentItems = new ChatMessageContentItemCollection
+            {
+                new TextContent(userPrompt)
+            };
+            foreach (var image in images)
+            {
+                contentItems.Add(new ImageContent(image.Data, image.MimeType));
+            }
+            chatHistory.AddUserMessage(contentItems);
+
+            var effectiveOptions = ApplyFeatureConfigDefaults(options, featureConfig);
+            var executionSettings = CreateExecutionSettings(effectiveOptions);
+
+            var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
+                chatHistory,
+                executionSettings,
+                kernel: kernelInfo.Kernel,
+                cancellationToken: cancellationToken);
+
+            return CreateResult(response, kernelInfo.ModelId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting multi-image vision completion from {Model} for feature {Feature}",
+                kernelInfo.ModelId, feature);
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<bool> IsFeatureAvailableAsync(AIFeatureType feature, CancellationToken cancellationToken = default)
     {
         var config = await _configRepository.GetAIProviderConfigAsync(cancellationToken);

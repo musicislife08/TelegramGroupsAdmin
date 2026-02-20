@@ -46,6 +46,12 @@ public interface IWTelegramApiClient : IAsyncDisposable
     /// <summary>Get a user's profile photos.</summary>
     Task<Photos_Photos> Photos_GetUserPhotos(InputUserBase user, int offset = 0, long maxId = 0, int limit = 100);
 
+    /// <summary>Get full channel info including about/description text.</summary>
+    Task<Messages_ChatFull> Channels_GetFullChannel(InputChannelBase channel);
+
+    /// <summary>Get pinned stories for a peer (user or channel).</summary>
+    Task<Stories_PeerStories> Stories_GetPeerStories(InputPeer peer);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // DIALOG / CHAT OPERATIONS
     // ═══════════════════════════════════════════════════════════════════════════
