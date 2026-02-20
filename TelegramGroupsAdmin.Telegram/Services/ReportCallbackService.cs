@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -133,6 +134,8 @@ public class ReportCallbackService : IReportCallbackService
                     moderationService, report, userIdentity, actionInt, executor, cancellationToken),
                 ReportType.ExamFailure => await HandleExamActionAsync(
                     examFlowService, report, userIdentity, chatIdentity, actionInt, executor, cancellationToken),
+                ReportType.ProfileScanAlert => await HandleProfileScanActionAsync(
+                    moderationService, report, userIdentity, chatIdentity, actionInt, executor, cancellationToken),
                 _ => new ReviewActionResult(Success: false, Message: $"Unknown review type: {reportType}")
             };
         }
@@ -176,7 +179,7 @@ public class ReportCallbackService : IReportCallbackService
         // Cleanup: type-specific post-action tasks
         if (result.Success)
         {
-            await CleanupAfterReportAsync(report, reportType, result.ActionName, cancellationToken);
+            await CleanupAfterReportAsync(report, reportType, userIdentity, result.ActionName, cancellationToken);
         }
     }
 
@@ -564,11 +567,134 @@ public class ReportCallbackService : IReportCallbackService
 
     #endregion
 
+    #region Profile Scan Actions
+
+    private async Task<ReviewActionResult> HandleProfileScanActionAsync(
+        IBotModerationService moderationService,
+        ReportBase report,
+        UserIdentity user,
+        ChatIdentity chat,
+        int actionInt,
+        Core.Models.Actor executor,
+        CancellationToken cancellationToken)
+    {
+        if (actionInt < 0 || actionInt > (int)ProfileScanAction.Kick)
+        {
+            _logger.LogWarning("Invalid profile scan action value: {ActionInt}", actionInt);
+            return new ReviewActionResult(Success: false, Message: "Invalid action");
+        }
+
+        var action = (ProfileScanAction)actionInt;
+
+        return action switch
+        {
+            ProfileScanAction.Allow => await HandleProfileAllowAsync(
+                report, user, chat, executor, cancellationToken),
+            ProfileScanAction.Ban => await HandleProfileBanAsync(
+                moderationService, report, user, executor, cancellationToken),
+            ProfileScanAction.Kick => await HandleProfileKickAsync(
+                moderationService, report, user, chat, executor, cancellationToken),
+            _ => new ReviewActionResult(Success: false, Message: "Unknown action")
+        };
+    }
+
+    private async Task<ReviewActionResult> HandleProfileAllowAsync(
+        ReportBase report,
+        UserIdentity user,
+        ChatIdentity chat,
+        Core.Models.Actor executor,
+        CancellationToken cancellationToken)
+    {
+        // Clear the profile gate and attempt admission
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var admissionHandler = scope.ServiceProvider.GetRequiredService<IWelcomeAdmissionHandler>();
+
+        var admissionResult = await admissionHandler.TryAdmitUserAsync(
+            user, chat, executor,
+            $"Profile scan alert #{report.Id} allowed by admin",
+            cancellationToken);
+
+        _logger.LogInformation(
+            "Profile scan review {ReviewId}: User {User} allowed by {Executor} (admission: {Result})",
+            report.Id, user.ToLogInfo(), executor.DisplayName, admissionResult);
+
+        var message = admissionResult == AdmissionResult.Admitted
+            ? "User allowed — permissions restored"
+            : "User allowed — awaiting welcome gate completion";
+
+        return new ReviewActionResult(Success: true, Message: message, ActionName: "Allow");
+    }
+
+    private async Task<ReviewActionResult> HandleProfileBanAsync(
+        IBotModerationService moderationService,
+        ReportBase report,
+        UserIdentity user,
+        Core.Models.Actor executor,
+        CancellationToken cancellationToken)
+    {
+        var result = await moderationService.BanUserAsync(
+            new BanIntent
+            {
+                User = user,
+                Executor = executor,
+                Reason = $"Profile scan alert #{report.Id} — banned by admin"
+            },
+            cancellationToken);
+
+        if (result.Success)
+        {
+            _logger.LogInformation(
+                "Profile scan review {ReviewId}: User {User} banned by {Executor}",
+                report.Id, user.ToLogInfo(), executor.DisplayName);
+            return new ReviewActionResult(
+                Success: true,
+                Message: $"User banned from {result.ChatsAffected} chat(s)",
+                ActionName: "Ban");
+        }
+
+        return new ReviewActionResult(Success: false, Message: $"Ban failed: {result.ErrorMessage}");
+    }
+
+    private async Task<ReviewActionResult> HandleProfileKickAsync(
+        IBotModerationService moderationService,
+        ReportBase report,
+        UserIdentity user,
+        ChatIdentity chat,
+        Core.Models.Actor executor,
+        CancellationToken cancellationToken)
+    {
+        var result = await moderationService.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = user,
+                Chat = chat,
+                Executor = executor,
+                Reason = $"Profile scan alert #{report.Id} — kicked by admin"
+            },
+            cancellationToken);
+
+        if (result.Success)
+        {
+            _logger.LogInformation(
+                "Profile scan review {ReviewId}: User {User} kicked from {Chat} by {Executor}",
+                report.Id, user.ToLogInfo(), chat.ToLogInfo(), executor.DisplayName);
+            return new ReviewActionResult(
+                Success: true,
+                Message: "User kicked from chat",
+                ActionName: "Kick");
+        }
+
+        return new ReviewActionResult(Success: false, Message: $"Kick failed: {result.ErrorMessage}");
+    }
+
+    #endregion
+
     #region Helpers
 
     private async Task CleanupAfterReportAsync(
         ReportBase report,
         ReportType reportType,
+        UserIdentity user,
         string? actionName,
         CancellationToken cancellationToken)
     {
@@ -577,7 +703,10 @@ public class ReportCallbackService : IReportCallbackService
         {
             await CleanupAfterContentReportAsync(report, actionName, cancellationToken);
         }
-        // Other types don't have specific cleanup yet
+        else if (reportType == ReportType.ProfileScanAlert)
+        {
+            await CleanupSiblingProfileScanAlertsAsync(report, user, actionName, cancellationToken);
+        }
     }
 
     private async Task CleanupAfterContentReportAsync(
@@ -633,6 +762,46 @@ public class ReportCallbackService : IReportCallbackService
                     report.MessageId);
             }
         }
+    }
+
+    /// <summary>
+    /// Auto-close sibling ProfileScanAlerts for the same user across all chats.
+    /// On Allow: profile reviewed once = approved everywhere.
+    /// On Ban/Kick: user handled = other alerts obsolete.
+    /// </summary>
+    private async Task CleanupSiblingProfileScanAlertsAsync(
+        ReportBase report,
+        UserIdentity user,
+        string? actionName,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+
+        var siblingAlerts = await reportsRepo.GetPendingProfileScanAlertsForUserAsync(
+            user.Id, cancellationToken);
+
+        if (siblingAlerts.Count == 0)
+            return;
+
+        var note = $"Auto-resolved: user {actionName?.ToLowerInvariant() ?? "handled"} via profile scan alert #{report.Id}";
+
+        foreach (var sibling in siblingAlerts)
+        {
+            await reportsRepo.TryUpdateStatusAsync(
+                sibling.Id,
+                ReportStatus.Reviewed,
+                "System",
+                $"Auto-{actionName ?? "resolved"}",
+                note,
+                cancellationToken);
+
+            _logger.LogDebug("Auto-closed sibling profile scan alert #{SiblingId} for {User}",
+                sibling.Id, user.ToLogDebug());
+        }
+
+        _logger.LogInformation("Profile scan cleanup: auto-closed {Count} sibling alert(s) for {User}",
+            siblingAlerts.Count, user.ToLogInfo());
     }
 
     private static string FormatAlreadyHandledMessage(string? reviewedBy, string? actionTaken, DateTimeOffset? reviewedAt)

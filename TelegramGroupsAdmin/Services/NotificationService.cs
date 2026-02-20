@@ -1,5 +1,6 @@
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
@@ -397,6 +398,18 @@ public class NotificationService : INotificationService
                 new[]
                 {
                     InlineKeyboardButton.WithCallbackData("🤝 Trust User", $"rev:{contextId}:{(int)ImpersonationAction.Trust}")
+                }
+            }),
+            ReportType.ProfileScanAlert => new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("✓ Allow", $"rev:{contextId}:{(int)ProfileScanAction.Allow}"),
+                    InlineKeyboardButton.WithCallbackData("⛔ Ban", $"rev:{contextId}:{(int)ProfileScanAction.Ban}")
+                },
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("👢 Kick", $"rev:{contextId}:{(int)ProfileScanAction.Kick}")
                 }
             }),
             _ => throw new ArgumentOutOfRangeException(nameof(reportType), reportType, "Unknown report type")
