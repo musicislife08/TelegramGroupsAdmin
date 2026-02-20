@@ -188,6 +188,77 @@ public class TelegramUserDto
     [Column("updated_at")]
     public DateTimeOffset UpdatedAt { get; set; }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Profile Scan Fields (populated by User API profile scan)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// User's "about" text from their Telegram profile
+    /// </summary>
+    [Column("bio")]
+    public string? Bio { get; set; }
+
+    /// <summary>
+    /// Linked personal channel ID (from UserFull.personal_channel_id)
+    /// </summary>
+    [Column("personal_channel_id")]
+    public long? PersonalChannelId { get; set; }
+
+    /// <summary>
+    /// Resolved personal channel title
+    /// </summary>
+    [Column("personal_channel_title")]
+    [MaxLength(255)]
+    public string? PersonalChannelTitle { get; set; }
+
+    /// <summary>
+    /// Resolved personal channel description/about text
+    /// </summary>
+    [Column("personal_channel_about")]
+    public string? PersonalChannelAbout { get; set; }
+
+    /// <summary>
+    /// Whether user has pinned stories on their profile
+    /// </summary>
+    [Column("has_pinned_stories")]
+    public bool HasPinnedStories { get; set; } = false;
+
+    /// <summary>
+    /// Concatenated pinned story captions (for keyword/URL scanning)
+    /// </summary>
+    [Column("pinned_story_captions")]
+    public string? PinnedStoryCaptions { get; set; }
+
+    /// <summary>
+    /// Telegram-flagged scam account
+    /// </summary>
+    [Column("is_scam")]
+    public bool IsScam { get; set; } = false;
+
+    /// <summary>
+    /// Telegram-flagged fake account
+    /// </summary>
+    [Column("is_fake")]
+    public bool IsFake { get; set; } = false;
+
+    /// <summary>
+    /// Telegram-verified account (blue checkmark)
+    /// </summary>
+    [Column("is_verified")]
+    public bool IsVerified { get; set; } = false;
+
+    /// <summary>
+    /// When last profile scan completed (null = never scanned)
+    /// </summary>
+    [Column("profile_scanned_at")]
+    public DateTimeOffset? ProfileScannedAt { get; set; }
+
+    /// <summary>
+    /// Computed risk score from profile scan (0.0-5.0, null = never scanned)
+    /// </summary>
+    [Column("profile_scan_score")]
+    public decimal? ProfileScanScore { get; set; }
+
     // Navigation properties
 
     /// <summary>

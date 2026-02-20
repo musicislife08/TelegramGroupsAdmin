@@ -22,7 +22,19 @@ public record TelegramUser(
     DateTimeOffset LastSeenAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    bool IsActive = true
+    bool IsActive = true,
+    // Profile scan fields (populated by User API profile scan)
+    string? Bio = null,
+    long? PersonalChannelId = null,
+    string? PersonalChannelTitle = null,
+    string? PersonalChannelAbout = null,
+    bool HasPinnedStories = false,
+    string? PinnedStoryCaptions = null,
+    bool IsScam = false,
+    bool IsFake = false,
+    bool IsVerified = false,
+    DateTimeOffset? ProfileScannedAt = null,
+    decimal? ProfileScanScore = null
 )
 {
     /// <summary>

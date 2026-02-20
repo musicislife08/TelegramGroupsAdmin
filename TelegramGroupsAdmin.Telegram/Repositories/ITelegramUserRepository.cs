@@ -93,4 +93,26 @@ public interface ITelegramUserRepository
     /// Used by the Inactive Users UI tab.
     /// </summary>
     Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
+
+    // ============================================================================
+    // Profile Scan Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Atomically update all profile scan columns for a user.
+    /// Called after a User API profile scan completes.
+    /// </summary>
+    Task UpdateProfileScanDataAsync(
+        long telegramUserId,
+        string? bio,
+        long? personalChannelId,
+        string? personalChannelTitle,
+        string? personalChannelAbout,
+        bool hasPinnedStories,
+        string? pinnedStoryCaptions,
+        bool isScam,
+        bool isFake,
+        bool isVerified,
+        decimal profileScanScore,
+        CancellationToken cancellationToken = default);
 }

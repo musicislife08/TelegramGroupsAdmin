@@ -355,7 +355,10 @@ public class TelegramUserRepository : ITelegramUserRepository
                 IsBanned = false,
                 HasWarnings = false,
                 IsTagged = false,
-                IsAdmin = false
+                IsAdmin = false,
+                ProfileScanScore = u.ProfileScanScore,
+                IsScam = u.IsScam,
+                IsFake = u.IsFake
             })
             .OrderBy(u => u.Username ?? u.FirstName ?? u.LastName ?? u.TelegramUserId.ToString())
             .ToListAsync(cancellationToken);
@@ -481,7 +484,10 @@ public class TelegramUserRepository : ITelegramUserRepository
                 IsBanned = false,
                 HasWarnings = false,
                 IsTagged = false,
-                IsAdmin = false
+                IsAdmin = false,
+                ProfileScanScore = u.ProfileScanScore,
+                IsScam = u.IsScam,
+                IsFake = u.IsFake
             })
             .OrderBy(u => u.Username ?? u.FirstName ?? u.LastName ?? u.TelegramUserId.ToString())
             .ToListAsync(cancellationToken);
@@ -798,6 +804,17 @@ public class TelegramUserRepository : ITelegramUserRepository
             BotDmEnabled = user.BotDmEnabled,
             FirstSeenAt = user.FirstSeenAt,
             LastSeenAt = user.LastSeenAt,
+            Bio = user.Bio,
+            PersonalChannelId = user.PersonalChannelId,
+            PersonalChannelTitle = user.PersonalChannelTitle,
+            PersonalChannelAbout = user.PersonalChannelAbout,
+            HasPinnedStories = user.HasPinnedStories,
+            PinnedStoryCaptions = user.PinnedStoryCaptions,
+            IsScam = user.IsScam,
+            IsFake = user.IsFake,
+            IsVerified = user.IsVerified,
+            ProfileScannedAt = user.ProfileScannedAt,
+            ProfileScanScore = user.ProfileScanScore,
             ChatMemberships = chatMemberships,
             Actions = actions.Select(a => a.ToModel()).ToList(),
             Warnings = activeWarnings,
@@ -1009,8 +1026,48 @@ public class TelegramUserRepository : ITelegramUserRepository
                 IsBanned = u.IsBanned,
                 HasWarnings = false,
                 IsTagged = false,
-                IsAdmin = false
+                IsAdmin = false,
+                ProfileScanScore = u.ProfileScanScore,
+                IsScam = u.IsScam,
+                IsFake = u.IsFake
             })
             .ToListAsync(cancellationToken);
+    }
+
+    // ============================================================================
+    // Profile Scan Methods
+    // ============================================================================
+
+    /// <inheritdoc />
+    public async Task UpdateProfileScanDataAsync(
+        long telegramUserId,
+        string? bio,
+        long? personalChannelId,
+        string? personalChannelTitle,
+        string? personalChannelAbout,
+        bool hasPinnedStories,
+        string? pinnedStoryCaptions,
+        bool isScam,
+        bool isFake,
+        bool isVerified,
+        decimal profileScanScore,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.Bio, bio)
+                .SetProperty(u => u.PersonalChannelId, personalChannelId)
+                .SetProperty(u => u.PersonalChannelTitle, personalChannelTitle)
+                .SetProperty(u => u.PersonalChannelAbout, personalChannelAbout)
+                .SetProperty(u => u.HasPinnedStories, hasPinnedStories)
+                .SetProperty(u => u.PinnedStoryCaptions, pinnedStoryCaptions)
+                .SetProperty(u => u.IsScam, isScam)
+                .SetProperty(u => u.IsFake, isFake)
+                .SetProperty(u => u.IsVerified, isVerified)
+                .SetProperty(u => u.ProfileScanScore, profileScanScore)
+                .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
+                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
     }
 }

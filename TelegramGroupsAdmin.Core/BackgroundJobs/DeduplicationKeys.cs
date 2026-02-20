@@ -46,4 +46,11 @@ public static class DeduplicationKeys
     /// </summary>
     public static string TempbanExpiry(long userId)
         => $"TempbanExpiry_{userId}";
+
+    /// <summary>
+    /// Dedup key for profile scan jobs.
+    /// Only one profile scan per user will be scheduled at a time.
+    /// </summary>
+    public static string ProfileScan(long userId)
+        => $"ProfileScan_{userId}";
 }

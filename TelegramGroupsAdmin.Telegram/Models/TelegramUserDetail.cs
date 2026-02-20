@@ -23,6 +23,19 @@ public class TelegramUserDetail
     public DateTimeOffset? BanExpiresAt { get; set; }
     public List<WarningEntry> Warnings { get; set; } = [];  // JSONB from telegram_users
 
+    // Profile scan data
+    public string? Bio { get; set; }
+    public long? PersonalChannelId { get; set; }
+    public string? PersonalChannelTitle { get; set; }
+    public string? PersonalChannelAbout { get; set; }
+    public bool HasPinnedStories { get; set; }
+    public string? PinnedStoryCaptions { get; set; }
+    public bool IsScam { get; set; }
+    public bool IsFake { get; set; }
+    public bool IsVerified { get; set; }
+    public DateTimeOffset? ProfileScannedAt { get; set; }
+    public decimal? ProfileScanScore { get; set; }
+
     // Related data
     public List<UserChatMembership> ChatMemberships { get; set; } = [];
     public List<UserActionRecord> Actions { get; set; } = [];  // Audit history (read-only)

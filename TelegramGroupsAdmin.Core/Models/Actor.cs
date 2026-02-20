@@ -52,6 +52,7 @@ public record Actor
     public static readonly Actor WelcomeFlow = FromSystem("welcome_flow"); // Welcome/rules flow completion
     public static readonly Actor TempbanExpiry = FromSystem("tempban_expiry"); // Scheduled tempban expiry
     public static readonly Actor Unknown = FromSystem("unknown");
+    public static readonly Actor ProfileScan = FromSystem("profile_scan");
 
     /// <summary>
     /// Create actor from web user
@@ -107,6 +108,7 @@ public record Actor
             "welcome_flow" => "Welcome Flow",
             "tempban_expiry" => "Tempban Expiry",
             "unknown" => "Unknown",
+            "profile_scan" => "Profile Scan",
             _ => systemIdentifier
         };
 

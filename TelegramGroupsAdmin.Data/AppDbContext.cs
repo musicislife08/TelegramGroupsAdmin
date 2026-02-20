@@ -583,6 +583,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(tu => tu.IsActive)
             .HasFilter("is_active = false")
             .HasDatabaseName("ix_telegram_users_is_active"); // Partial index for inactive users (UI filtering)
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.ProfileScannedAt)
+            .HasDatabaseName("ix_telegram_users_profile_scanned_at"); // Background re-scan job ordering
 
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()
@@ -878,6 +881,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TelegramUserDto>()
             .Property(u => u.IsBanned)
             .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.HasPinnedStories)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsScam)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsFake)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsVerified)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.ProfileScanScore)
+            .HasPrecision(3, 1);
 
         // Users (web users): Set database defaults for columns added in later migrations
         modelBuilder.Entity<UserRecordDto>()
