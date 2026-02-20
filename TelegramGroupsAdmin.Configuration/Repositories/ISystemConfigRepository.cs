@@ -105,6 +105,52 @@ public interface ISystemConfigRepository
     Task<bool> HasVapidKeysAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get Telegram User API configuration (global only - chat_id = 0)
+    /// Configuration stored in configs.user_api_config JSONB column
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>User API config or default if not configured</returns>
+    Task<UserApiConfig> GetUserApiConfigAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save Telegram User API configuration (global only - chat_id = 0)
+    /// </summary>
+    /// <param name="config">User API configuration to save</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveUserApiConfigAsync(UserApiConfig config, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get Telegram User API Hash (global only - chat_id = 0)
+    /// Decrypted from configs.user_api_hash_encrypted column
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Decrypted API Hash or null if not configured</returns>
+    Task<string?> GetUserApiHashAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save Telegram User API Hash (global only - chat_id = 0)
+    /// Encrypted and stored in configs.user_api_hash_encrypted column
+    /// </summary>
+    /// <param name="apiHash">API Hash from my.telegram.org</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveUserApiHashAsync(string apiHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Check if Telegram User API credentials are fully configured (both API ID and API Hash)
+    /// This is the master gate — if false, all WTelegram features are disabled
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if both API ID and API Hash are configured</returns>
+    Task<bool> HasUserApiCredentialsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clear Telegram User API credentials (both config and hash)
+    /// Used when an Owner removes the API credentials from Settings
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task ClearUserApiCredentialsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get AI provider configuration (global only - chat_id = NULL)
     /// Multi-provider support: OpenAI, Azure OpenAI, local/OpenAI-compatible endpoints
     /// Configuration stored in configs.ai_provider_config JSONB column

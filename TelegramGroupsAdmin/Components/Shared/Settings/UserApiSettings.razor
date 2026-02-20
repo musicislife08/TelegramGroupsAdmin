@@ -1,0 +1,202 @@
+@using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Services
+@inject ISystemConfigRepository ConfigRepository
+@inject IAuditService AuditService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>Telegram User API</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Configure MTProto User API credentials to enable profile scanning and advanced user data access.
+                These credentials are shared across all admins — individual admins connect their own Telegram
+                accounts from their Profile page.
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.h6">API Credentials</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Obtain from my.telegram.org — API development tools
+                        </MudText>
+                    </div>
+                    <MudChip Color="@(_isConfigured ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                        @(_isConfigured ? "Configured" : "Not Configured")
+                    </MudChip>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <MudNumericField @bind-Value="_apiId"
+                                Label="API ID"
+                                Variant="Variant.Outlined"
+                                Min="0"
+                                HelperText="Numeric application ID from my.telegram.org" />
+
+                <MudTextField @bind-Value="_apiHash"
+                             Label="API Hash"
+                             Variant="Variant.Outlined"
+                             InputType="@(_showApiHash ? InputType.Text : InputType.Password)"
+                             HelperText="Application secret hash from my.telegram.org"
+                             Adornment="Adornment.End"
+                             AdornmentIcon="@(_showApiHash ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                             OnAdornmentClick="@(() => _showApiHash = !_showApiHash)" />
+
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              OnClick="@SaveAsync"
+                              Disabled="@_isSaving"
+                              StartIcon="@Icons.Material.Filled.Save">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Saving...</text>
+                        }
+                        else
+                        {
+                            <text>Save Settings</text>
+                        }
+                    </MudButton>
+
+                    @if (_isConfigured)
+                    {
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Error"
+                                  OnClick="@ClearAsync"
+                                  Disabled="@_isSaving"
+                                  StartIcon="@Icons.Material.Filled.Delete">
+                            Clear Credentials
+                        </MudButton>
+                    }
+                </MudStack>
+
+                @if (!_isConfigured)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        <strong>Not Configured:</strong> Until API credentials are set, admins cannot connect
+                        their Telegram accounts and profile scanning is unavailable.
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
+    private int _apiId;
+    private string? _apiHash;
+    private bool _showApiHash;
+    private bool _isSaving;
+    private bool _isConfigured;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (WebUser is null) return;
+        await LoadConfigAsync();
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        try
+        {
+            var config = await ConfigRepository.GetUserApiConfigAsync();
+            _apiId = config.ApiId;
+            _apiHash = await ConfigRepository.GetUserApiHashAsync();
+            _isConfigured = await ConfigRepository.HasUserApiCredentialsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_apiId <= 0 || string.IsNullOrWhiteSpace(_apiHash))
+        {
+            Snackbar.Add("Both API ID and API Hash are required", Severity.Warning);
+            return;
+        }
+
+        _isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            var config = new Configuration.Models.UserApiConfig { ApiId = _apiId };
+            await ConfigRepository.SaveUserApiConfigAsync(config);
+            await ConfigRepository.SaveUserApiHashAsync(_apiHash!);
+
+            await AuditService.LogEventAsync(
+                AuditEventType.TelegramApiConfigured,
+                WebUser!.ToActor(),
+                value: "Telegram User API credentials saved");
+
+            _isConfigured = true;
+            Snackbar.Add("User API credentials saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, "This will remove the API credentials and break any active Telegram connections. Are you sure?" },
+            { x => x.ButtonText, "Clear Credentials" },
+            { x => x.Color, Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Clear API Credentials", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: true })
+            return;
+
+        _isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            await ConfigRepository.ClearUserApiCredentialsAsync();
+
+            await AuditService.LogEventAsync(
+                AuditEventType.TelegramApiConfigured,
+                WebUser!.ToActor(),
+                value: "Telegram User API credentials cleared");
+
+            _apiId = 0;
+            _apiHash = null;
+            _isConfigured = false;
+            Snackbar.Add("User API credentials cleared", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error clearing credentials: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
+    }
+}

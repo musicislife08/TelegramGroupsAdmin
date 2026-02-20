@@ -41,6 +41,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LinkedChannelRecordDto> LinkedChannels => Set<LinkedChannelRecordDto>();
     public DbSet<ChatAdminRecordDto> ChatAdmins => Set<ChatAdminRecordDto>();
 
+    // WTelegram session tables
+    public DbSet<TelegramSessionDto> TelegramSessions => Set<TelegramSessionDto>();
+
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
     public DbSet<ReportDto> Reports => Set<ReportDto>();
@@ -448,6 +451,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(its => its.MarkedByTelegramUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // TelegramSessions → Users (many-to-one)
+        modelBuilder.Entity<TelegramSessionDto>()
+            .HasOne(ts => ts.User)
+            .WithMany()
+            .HasForeignKey(ts => ts.WebUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // PushSubscriptions → Users (one-to-many)
         modelBuilder.Entity<PushSubscriptionDto>()
             .HasOne<UserRecordDto>()
@@ -723,6 +733,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ReportCallbackContextDto>()
             .HasIndex(rcc => rcc.CreatedAt)
             .HasDatabaseName("ix_report_callback_contexts_created_at");  // Expiry cleanup job
+
+        // TelegramSessions indexes
+        // Unique partial index: one active session per web user
+        modelBuilder.Entity<TelegramSessionDto>()
+            .HasIndex(ts => ts.WebUserId)
+            .HasFilter("is_active = true")
+            .IsUnique()
+            .HasDatabaseName("ix_telegram_sessions_unique_active_per_user");
+
+        // Index on is_active for GetAllActiveSessionsAsync queries
+        modelBuilder.Entity<TelegramSessionDto>()
+            .HasIndex(ts => ts.IsActive)
+            .HasFilter("is_active = true")
+            .HasDatabaseName("ix_telegram_sessions_active");
 
         // BanCelebrationGifs indexes
         modelBuilder.Entity<BanCelebrationGifDto>()
