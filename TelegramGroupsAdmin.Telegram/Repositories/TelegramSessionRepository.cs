@@ -80,7 +80,7 @@ public sealed class TelegramSessionRepository(
             .ExecuteUpdateAsync(s => s
                 .SetProperty(ts => ts.IsActive, false)
                 .SetProperty(ts => ts.DisconnectedAt, DateTimeOffset.UtcNow)
-                .SetProperty(ts => ts.SessionData, Array.Empty<byte>()), ct);
+                .SetProperty(ts => ts.SessionData, (byte[])[]), ct);
     }
 
     private byte[] EncryptSessionData(byte[] data)

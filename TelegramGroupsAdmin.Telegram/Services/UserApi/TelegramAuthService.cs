@@ -348,7 +348,7 @@ public sealed class TelegramAuthService(
         await mappingRepo.InsertAsync(mapping, ct);
 
         await auditService.LogEventAsync(
-            AuditEventType.TelegramAccountConnected,
+            AuditEventType.TelegramAccountLinked,
             Actor.FromWebUser(webUserId),
             value: $"Auto-linked Telegram account (ID: {telegramUserId})",
             cancellationToken: ct);

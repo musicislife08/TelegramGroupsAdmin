@@ -124,5 +124,8 @@ public enum AuditEventType
     TelegramAccountDisconnected = 36,
 
     /// <summary>Owner configured or cleared Telegram User API credentials</summary>
-    TelegramApiConfigured = 37
+    TelegramApiConfigured = 37,
+
+    /// <summary>Admin's web account auto-linked to their Telegram account after User API auth</summary>
+    TelegramAccountLinked = 38
 }
