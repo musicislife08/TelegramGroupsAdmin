@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -39,8 +40,8 @@ public sealed class WelcomeAdmissionHandler(
 
         if (hasProfileHold)
         {
-            logger.LogDebug("Admission: user {UserId} in chat {ChatId} blocked by profile scan gate",
-                user.Id, chat.Id);
+            logger.LogDebug("Admission: {User} in {Chat} blocked by profile scan gate",
+                user.ToLogDebug(), chat.ToLogDebug());
             return AdmissionResult.StillWaiting;
         }
 
@@ -53,8 +54,8 @@ public sealed class WelcomeAdmissionHandler(
         // Pending = user hasn't accepted yet = gate blocked
         if (welcomeResponse is { Response: WelcomeResponseType.Pending })
         {
-            logger.LogDebug("Admission: user {UserId} in chat {ChatId} blocked by welcome gate (response pending)",
-                user.Id, chat.Id);
+            logger.LogDebug("Admission: {User} in {Chat} blocked by welcome gate (response pending)",
+                user.ToLogDebug(), chat.ToLogDebug());
             return AdmissionResult.StillWaiting;
         }
 
@@ -70,8 +71,8 @@ public sealed class WelcomeAdmissionHandler(
 
         await moderationService.RestoreUserPermissionsAsync(intent, ct);
 
-        logger.LogInformation("Admission: user {UserId} admitted to chat {ChatId} — all gates clear ({Reason})",
-            user.Id, chat.Id, reason);
+        logger.LogInformation("Admission: {User} admitted to {Chat} — all gates clear ({Reason})",
+            user.ToLogInfo(), chat.ToLogInfo(), reason);
 
         return AdmissionResult.Admitted;
     }

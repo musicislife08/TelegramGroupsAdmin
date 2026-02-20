@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 
@@ -66,8 +67,8 @@ internal sealed class ProfileScoringEngine(
 
         if (ruleScore >= banThreshold)
         {
-            logger.LogInformation("Profile scan for user {UserId}: rule-based score {Score} >= ban threshold {Threshold}, skipping AI",
-                profile.UserId, ruleScore, banThreshold);
+            logger.LogInformation("Profile scan for {User}: rule-based score {Score} >= ban threshold {Threshold}, skipping AI",
+                profile.User.ToLogInfo(), ruleScore, banThreshold);
             return (Cap(ruleScore), ProfileScanOutcome.Banned, "Rule-based detection triggered ban threshold", null);
         }
 
@@ -82,8 +83,8 @@ internal sealed class ProfileScoringEngine(
                 : ProfileScanOutcome.Clean;
 
         logger.LogInformation(
-            "Profile scan for user {UserId}: rule={RuleScore}, ai={AiScore}, total={TotalScore}, outcome={Outcome}",
-            profile.UserId, ruleScore, aiScore, totalScore, outcome);
+            "Profile scan for {User}: rule={RuleScore}, ai={AiScore}, total={TotalScore}, outcome={Outcome}",
+            profile.User.ToLogInfo(), ruleScore, aiScore, totalScore, outcome);
 
         return (totalScore, outcome, aiReason, aiSignals);
     }
@@ -99,8 +100,8 @@ internal sealed class ProfileScoringEngine(
         // Telegram-flagged accounts → instant max score
         if (profile.IsScam || profile.IsFake)
         {
-            logger.LogInformation("Profile scan for user {UserId}: Telegram-flagged (is_scam={IsScam}, is_fake={IsFake})",
-                profile.UserId, profile.IsScam, profile.IsFake);
+            logger.LogInformation("Profile scan for {User}: Telegram-flagged (is_scam={IsScam}, is_fake={IsFake})",
+                profile.User.ToLogInfo(), profile.IsScam, profile.IsFake);
             return MaxScore;
         }
 
@@ -113,8 +114,8 @@ internal sealed class ProfileScoringEngine(
         var hardBlock = await urlPreFilter.CheckHardBlockAsync(allText, profile.Chat, ct);
         if (hardBlock.ShouldBlock)
         {
-            logger.LogInformation("Profile scan for user {UserId}: blocked URL detected ({Domain})",
-                profile.UserId, hardBlock.BlockedDomain);
+            logger.LogInformation("Profile scan for {User}: blocked URL detected ({Domain})",
+                profile.User.ToLogInfo(), hardBlock.BlockedDomain);
             score += 3.0m;
         }
 
@@ -126,8 +127,8 @@ internal sealed class ProfileScoringEngine(
             var matchedWords = stopWords.Where(w => lowerText.Contains(w.ToLowerInvariant())).ToList();
             if (matchedWords.Count > 0)
             {
-                logger.LogInformation("Profile scan for user {UserId}: stop words detected: {Words}",
-                    profile.UserId, string.Join(", ", matchedWords));
+                logger.LogInformation("Profile scan for {User}: stop words detected: {Words}",
+                    profile.User.ToLogInfo(), string.Join(", ", matchedWords));
                 score += 1.5m;
             }
         }
@@ -190,21 +191,21 @@ internal sealed class ProfileScoringEngine(
 
         if (result == null)
         {
-            logger.LogWarning("Profile scan AI call returned null for user {UserId}", profile.UserId);
+            logger.LogWarning("Profile scan AI call returned null for {User}", profile.User.ToLogDebug());
             return (0.0m, null, null);
         }
 
-        return ParseAiResponse(result.Content, profile.UserId);
+        return ParseAiResponse(result.Content, profile.User);
     }
 
-    private (decimal Score, string? Reason, string[]? Signals) ParseAiResponse(string content, long userId)
+    private (decimal Score, string? Reason, string[]? Signals) ParseAiResponse(string content, UserIdentity user)
     {
         try
         {
             var response = JsonSerializer.Deserialize<ProfileScanAIResponse>(content, JsonOptions);
             if (response == null)
             {
-                logger.LogWarning("Profile scan AI response deserialized to null for user {UserId}", userId);
+                logger.LogWarning("Profile scan AI response deserialized to null for {User}", user.ToLogDebug());
                 return (0.0m, null, null);
             }
 
@@ -223,8 +224,8 @@ internal sealed class ProfileScoringEngine(
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "Failed to parse profile scan AI response for user {UserId}: {Content}",
-                userId, content[..Math.Min(content.Length, 200)]);
+            logger.LogWarning(ex, "Failed to parse profile scan AI response for {User}: {Content}",
+                user.ToLogDebug(), content[..Math.Min(content.Length, 200)]);
             return (0.0m, null, null);
         }
     }
@@ -237,7 +238,7 @@ internal sealed class ProfileScoringEngine(
 /// Decouples scoring from the WTelegram API types.
 /// </summary>
 internal record ProfileData(
-    long UserId,
+    UserIdentity User,
     ChatIdentity Chat,
     string? FirstName,
     string? LastName,

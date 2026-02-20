@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
@@ -35,7 +36,7 @@ public sealed class ProfileScanService(
     private static readonly TimeSpan ScanFreshnessWindow = TimeSpan.FromSeconds(60);
 
     public async Task<ProfileScanResult> ScanUserProfileAsync(
-        long telegramUserId,
+        UserIdentity user,
         ChatIdentity? triggeringChat,
         CancellationToken ct)
     {
@@ -43,17 +44,17 @@ public sealed class ProfileScanService(
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
         // ── Multi-chat dedup: skip if recently scanned ──
-        var existingUser = await userRepo.GetByTelegramIdAsync(telegramUserId, ct);
+        var existingUser = await userRepo.GetByTelegramIdAsync(user.Id, ct);
         if (existingUser?.ProfileScannedAt is { } lastScan
             && DateTimeOffset.UtcNow - lastScan < ScanFreshnessWindow
             && existingUser.ProfileScanScore.HasValue)
         {
-            logger.LogDebug("Profile scan for user {UserId}: recently scanned ({LastScan}), reusing cached score {Score}",
-                telegramUserId, lastScan, existingUser.ProfileScanScore);
+            logger.LogDebug("Profile scan for {User}: recently scanned ({LastScan}), reusing cached score {Score}",
+                user.ToLogDebug(), lastScan, existingUser.ProfileScanScore);
 
             var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
             return new ProfileScanResult(
-                telegramUserId,
+                user.Id,
                 existingUser.Bio, existingUser.PersonalChannelId,
                 existingUser.PersonalChannelTitle, existingUser.PersonalChannelAbout,
                 existingUser.HasPinnedStories, existingUser.PinnedStoryCaptions,
@@ -65,24 +66,24 @@ public sealed class ProfileScanService(
         var client = await sessionManager.GetAnyClientAsync(ct);
         if (client == null)
         {
-            logger.LogWarning("No User API client available for profile scan of user {UserId}", telegramUserId);
-            return EmptyResult(telegramUserId);
+            logger.LogWarning("No User API client available for profile scan of {User}", user.ToLogDebug());
+            return EmptyResult(user.Id);
         }
 
         // ── Step 1: Fetch full user info ──
         Users_UserFull fullUser;
         try
         {
-            fullUser = await client.Users_GetFullUser(new InputUser(telegramUserId, 0));
+            fullUser = await client.Users_GetFullUser(new InputUser(user.Id, 0));
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to get full user info for {UserId}", telegramUserId);
-            return EmptyResult(telegramUserId);
+            logger.LogWarning(ex, "Failed to get full user info for {User}", user.ToLogDebug());
+            return EmptyResult(user.Id);
         }
 
         var userInfo = fullUser.full_user;
-        var tlUser = fullUser.users.Values.OfType<TL.User>().FirstOrDefault(u => u.id == telegramUserId);
+        var tlUser = fullUser.users.Values.OfType<TL.User>().FirstOrDefault(u => u.id == user.Id);
 
         var bio = userInfo?.about;
         var personalChannelId = userInfo?.personal_channel_id;
@@ -108,8 +109,8 @@ public sealed class ProfileScanService(
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Failed to resolve personal channel {ChannelId} for user {UserId}",
-                    personalChannelId, telegramUserId);
+                logger.LogDebug(ex, "Failed to resolve personal channel {ChannelId} for {User}",
+                    personalChannelId, user.ToLogDebug());
             }
         }
 
@@ -121,7 +122,7 @@ public sealed class ProfileScanService(
         {
             try
             {
-                var peerStories = await client.Stories_GetPeerStories(new InputPeerUser(telegramUserId, 0));
+                var peerStories = await client.Stories_GetPeerStories(new InputPeerUser(user.Id, 0));
                 var stories = peerStories.stories?.stories;
                 if (stories is { Length: > 0 })
                 {
@@ -137,7 +138,7 @@ public sealed class ProfileScanService(
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Failed to fetch pinned stories for user {UserId}", telegramUserId);
+                logger.LogDebug(ex, "Failed to fetch pinned stories for {User}", user.ToLogDebug());
             }
         }
 
@@ -147,7 +148,7 @@ public sealed class ProfileScanService(
         // ── Step 5: Run scoring engine ──
         var chat = triggeringChat ?? ChatIdentity.FromId(0);
         var profileData = new ProfileData(
-            telegramUserId, chat,
+            user, chat,
             tlUser?.first_name, tlUser?.last_name, tlUser?.MainUsername,
             bio, personalChannelId, channelTitle, channelAbout,
             hasPinnedStories, pinnedStoryCaptions, storyCount, storyCaptions,
@@ -170,30 +171,30 @@ public sealed class ProfileScanService(
 
         // ── Step 6: Persist results ──
         await userRepo.UpdateProfileScanDataAsync(
-            telegramUserId, bio, personalChannelId, channelTitle, channelAbout,
+            user.Id, bio, personalChannelId, channelTitle, channelAbout,
             hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
             scoreResult.Score, ct);
 
         var result = new ProfileScanResult(
-            telegramUserId, bio, personalChannelId, channelTitle, channelAbout,
+            user.Id, bio, personalChannelId, channelTitle, channelAbout,
             hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
             scoreResult.Score, scoreResult.Outcome, scoreResult.AiReason, scoreResult.AiSignals);
 
         // ── Step 7: Take moderation action ──
         if (scoreResult.Outcome == ProfileScanOutcome.Banned && triggeringChat != null)
         {
-            await HandleBanAsync(telegramUserId, triggeringChat, result, scope.ServiceProvider, ct);
+            await HandleBanAsync(user, triggeringChat, result, scope.ServiceProvider, ct);
         }
         else if (scoreResult.Outcome == ProfileScanOutcome.HeldForReview && triggeringChat != null)
         {
-            await CreateProfileScanAlertAsync(telegramUserId, triggeringChat, result, scope.ServiceProvider, ct);
+            await CreateProfileScanAlertAsync(user, triggeringChat, result, scope.ServiceProvider, ct);
         }
 
         return result;
     }
 
     private async Task HandleBanAsync(
-        long userId,
+        UserIdentity user,
         ChatIdentity chat,
         ProfileScanResult result,
         IServiceProvider sp,
@@ -201,16 +202,16 @@ public sealed class ProfileScanService(
     {
         // Fresh read to avoid duplicate bans
         var userRepo = sp.GetRequiredService<ITelegramUserRepository>();
-        if (await userRepo.IsBannedAsync(userId, ct))
+        if (await userRepo.IsBannedAsync(user.Id, ct))
         {
-            logger.LogDebug("Profile scan: user {UserId} already banned, skipping ban action", userId);
+            logger.LogDebug("Profile scan: {User} already banned, skipping ban action", user.ToLogDebug());
             return;
         }
 
         var moderationService = sp.GetRequiredService<IBotModerationService>();
         var intent = new BanIntent
         {
-            User = UserIdentity.FromId(userId),
+            User = user,
             Executor = Actor.ProfileScan,
             Reason = $"Profile scan: score {result.Score:F1}/5.0 — {result.AiReason ?? "rule-based detection"}",
             Chat = chat
@@ -219,13 +220,13 @@ public sealed class ProfileScanService(
         await moderationService.BanUserAsync(intent, ct);
 
         // Censor explicit profile photo if banned for adult content
-        await CensorProfilePhotoAsync(userId, ct);
+        await CensorProfilePhotoAsync(user, ct);
 
-        logger.LogInformation("Profile scan: banned user {UserId} (score {Score})", userId, result.Score);
+        logger.LogInformation("Profile scan: banned {User} (score {Score})", user.ToLogInfo(), result.Score);
     }
 
     private async Task CreateProfileScanAlertAsync(
-        long userId,
+        UserIdentity user,
         ChatIdentity chat,
         ProfileScanResult result,
         IServiceProvider sp,
@@ -234,15 +235,16 @@ public sealed class ProfileScanService(
         var reportsRepo = sp.GetRequiredService<IReportsRepository>();
 
         // Check for existing pending alert for this user in this chat
-        if (await reportsRepo.HasPendingProfileScanAlertAsync(userId, chat.Id, ct))
+        if (await reportsRepo.HasPendingProfileScanAlertAsync(user.Id, chat.Id, ct))
         {
-            logger.LogDebug("Profile scan: pending alert already exists for user {UserId} in chat {ChatId}", userId, chat.Id);
+            logger.LogDebug("Profile scan: pending alert already exists for {User} in {Chat}",
+                user.ToLogDebug(), chat.ToLogDebug());
             return;
         }
 
         var alert = new ProfileScanAlertRecord
         {
-            User = UserIdentity.FromId(userId),
+            User = user,
             Chat = chat,
             Score = result.Score,
             Outcome = result.Outcome,
@@ -270,18 +272,18 @@ public sealed class ProfileScanService(
             Subject: $"Profile Scan Alert — Score {result.Score:F1}/5.0",
             Message: $"User profile flagged for review.\nReason: {result.AiReason ?? signals}",
             ReportId: reportId,
-            ReportedUserId: userId,
+            ReportedUserId: user.Id,
             ReportType: ReportType.ProfileScanAlert);
 
         await jobTrigger.TriggerNowAsync("SendChatNotificationJob", payload, ct);
 
-        logger.LogInformation("Profile scan: created alert #{ReportId} for user {UserId} (score {Score})",
-            reportId, userId, result.Score);
+        logger.LogInformation("Profile scan: created alert #{ReportId} for {User} in {Chat} (score {Score})",
+            reportId, user.ToLogInfo(), chat.ToLogInfo(), result.Score);
     }
 
-    private async Task CensorProfilePhotoAsync(long userId, CancellationToken ct)
+    private async Task CensorProfilePhotoAsync(UserIdentity user, CancellationToken ct)
     {
-        var photoPath = Path.Combine("/data", "media", "user_photos", $"{userId}.jpg");
+        var photoPath = Path.Combine("/data", "media", "user_photos", $"{user.Id}.jpg");
         if (!File.Exists(photoPath))
             return;
 
@@ -290,11 +292,11 @@ public sealed class ProfileScanService(
             using var image = await Image.LoadAsync(photoPath, ct);
             image.Mutate(x => x.GaussianBlur(40));
             await image.SaveAsJpegAsync(photoPath, ct);
-            logger.LogInformation("Profile scan: censored profile photo for banned user {UserId}", userId);
+            logger.LogInformation("Profile scan: censored profile photo for banned {User}", user.ToLogInfo());
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Profile scan: failed to censor profile photo for user {UserId}", userId);
+            logger.LogWarning(ex, "Profile scan: failed to censor profile photo for {User}", user.ToLogDebug());
         }
     }
 

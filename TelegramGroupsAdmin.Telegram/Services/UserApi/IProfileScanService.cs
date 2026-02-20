@@ -11,9 +11,9 @@ public interface IProfileScanService
     /// <summary>
     /// Scan a user's profile and take appropriate action (ban, report, or pass).
     /// </summary>
-    /// <param name="telegramUserId">Telegram user ID to scan.</param>
+    /// <param name="user">Identity of the Telegram user to scan.</param>
     /// <param name="triggeringChat">Chat that triggered the scan (for reports). Null for background scans.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Scan result with extracted data, score, and outcome.</returns>
-    Task<ProfileScanResult> ScanUserProfileAsync(long telegramUserId, ChatIdentity? triggeringChat, CancellationToken ct);
+    Task<ProfileScanResult> ScanUserProfileAsync(UserIdentity user, ChatIdentity? triggeringChat, CancellationToken ct);
 }
