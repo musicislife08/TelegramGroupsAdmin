@@ -99,4 +99,20 @@ public static class BackgroundJobNames
     /// Quartz Job: SendChatNotificationJob
     /// </summary>
     public const string SendChatNotification = "SendChatNotification";
+
+    /// <summary>
+    /// On-demand profile scan triggered by profile diff detection or manual re-scan.
+    /// Quartz Job: ProfileScanJob
+    /// </summary>
+    public const string ProfileScan = "ProfileScan";
+
+    // ============================================
+    // Scheduled Jobs (cron-based, UI-configurable)
+    // ============================================
+
+    /// <summary>
+    /// Periodic re-scan of user profiles to detect changes (bio, channel, stories).
+    /// Quartz Job: ProfileRescanJob
+    /// </summary>
+    public const string ProfileRescan = "ProfileRescanJob";
 }

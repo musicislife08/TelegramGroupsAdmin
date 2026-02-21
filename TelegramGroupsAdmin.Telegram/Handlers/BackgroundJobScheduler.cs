@@ -84,7 +84,7 @@ public class BackgroundJobScheduler
         var payload = new ProfileScanPayload(userId, chatId);
 
         await _jobScheduler.ScheduleJobAsync(
-            "ProfileScan",
+            BackgroundJobNames.ProfileScan,
             payload,
             delaySeconds: 0,
             deduplicationKey: ProfileScan(userId),
