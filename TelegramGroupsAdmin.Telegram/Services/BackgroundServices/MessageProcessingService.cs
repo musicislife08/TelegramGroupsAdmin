@@ -670,6 +670,10 @@ public partial class MessageProcessingService(
 
             // Upsert user into telegram_users table (centralized user tracking)
             var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+            // Fetch existing user for profile diff detection (before upsert overwrites fields)
+            var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From!.Id, cancellationToken);
+
             var telegramUser = new TelegramUser(
                 TelegramUserId: message.From!.Id,
                 Username: message.From.Username,
@@ -689,8 +693,20 @@ public partial class MessageProcessingService(
             );
             await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
 
-            // Note: Impersonation detection moved to WelcomeService (runs on user join with photo fetch)
-            // Users who joined before the bot was added are legacy and not checked on message
+            // Profile change detection: compare Bot API User fields against stored values
+            // New users (existingUser == null) get scanned on join, not here.
+            // Trusted/admin users are already skipped by contentCheckSkipReason.
+            if (existingUser is not null
+                && contentCheckSkipReason == ContentCheckSkipReason.NotSkipped
+                && ProfileDiffDetected(existingUser, message.From))
+            {
+                var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
+                await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
+
+                logger.LogDebug(
+                    "Profile change detected for {User}, scheduled background scan",
+                    message.From.ToLogDebug());
+            }
 
             // Raise event for real-time UI updates
             OnNewMessage?.Invoke(messageRecord);
@@ -804,6 +820,18 @@ public partial class MessageProcessingService(
                 "Error handling edit for message {MessageId}",
                 editedMessage.MessageId);
         }
+    }
+
+    /// <summary>
+    /// Compare Bot API User fields against stored values to detect profile changes.
+    /// Pure in-memory comparison — zero DB or API cost.
+    /// Premium status deliberately excluded (weak signal, scammers buy it).
+    /// </summary>
+    private static bool ProfileDiffDetected(TelegramUser existing, global::Telegram.Bot.Types.User current)
+    {
+        return !string.Equals(existing.FirstName, current.FirstName, StringComparison.Ordinal)
+            || !string.Equals(existing.LastName, current.LastName, StringComparison.Ordinal)
+            || !string.Equals(existing.Username, current.Username, StringComparison.Ordinal);
     }
 
     // REFACTOR-2: Extracted methods to specialized handlers
