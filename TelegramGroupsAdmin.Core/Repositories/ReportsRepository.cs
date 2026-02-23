@@ -497,39 +497,11 @@ public class ReportsRepository : IReportsRepository
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Reports
+        var view = await context.EnrichedReports
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ProfileScanAlert, cancellationToken);
 
-        if (entity?.Context == null) return null;
-
-        var alertContext = JsonSerializer.Deserialize<ProfileScanAlertContext>(entity.Context, JsonOptions);
-        if (alertContext == null) return null;
-
-        var outcome = Enum.TryParse<ProfileScanOutcome>(alertContext.Outcome, out var parsed)
-            ? parsed
-            : ProfileScanOutcome.HeldForReview;
-
-        return new ProfileScanAlertRecord
-        {
-            Id = entity.Id,
-            User = UserIdentity.FromId(alertContext.UserId),
-            Chat = new ChatIdentity(entity.ChatId, null),
-            Score = alertContext.Score,
-            Outcome = outcome,
-            AiReason = alertContext.AiReason,
-            AiSignalsDetected = alertContext.AiSignals,
-            Bio = alertContext.Bio,
-            PersonalChannelTitle = alertContext.PersonalChannelTitle,
-            HasPinnedStories = alertContext.HasPinnedStories,
-            IsScam = alertContext.IsScam,
-            IsFake = alertContext.IsFake,
-            DetectedAt = entity.ReportedAt,
-            ReviewedByUserId = entity.WebUserId,
-            ReviewedAt = entity.ReviewedAt,
-            ReviewedByEmail = entity.ReviewedBy,
-            ActionTaken = entity.ActionTaken
-        };
+        return view?.ToProfileScanAlert();
     }
 
     public async Task<bool> HasPendingProfileScanAlertAsync(
@@ -546,9 +518,8 @@ public class ReportsRepository : IReportsRepository
         if (chatId.HasValue)
             query = query.Where(r => r.ChatId == chatId.Value);
 
-        // Filter by userId from JSONB context
-        var userIdPattern = $"\"userId\":{userId}";
-        query = query.Where(r => r.Context != null && r.Context.Contains(userIdPattern));
+        // Filter by userId from JSONB context using proper containment operator (@>)
+        query = query.Where(r => EF.Functions.JsonContains(r.Context!, $"{{\"userId\":{userId}}}"));
 
         return await query.AnyAsync(cancellationToken);
     }
@@ -558,49 +529,42 @@ public class ReportsRepository : IReportsRepository
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var userIdPattern = $"\"userId\":{userId}";
-
-        var entities = await context.Reports
+        var results = await context.EnrichedReports
             .AsNoTracking()
             .Where(r => r.Type == (short)ReportType.ProfileScanAlert
                         && r.Status == (int)ReportStatus.Pending
-                        && r.Context != null && r.Context.Contains(userIdPattern))
+                        && r.ProfileUserId == userId)
             .ToListAsync(cancellationToken);
 
-        var results = new List<ProfileScanAlertRecord>();
-        foreach (var entity in entities)
-        {
-            if (entity.Context == null) continue;
-            var alertContext = JsonSerializer.Deserialize<ProfileScanAlertContext>(entity.Context, JsonOptions);
-            if (alertContext == null) continue;
+        return results
+            .Select(r => r.ToProfileScanAlert())
+            .Where(r => r != null)
+            .Cast<ProfileScanAlertRecord>()
+            .ToList();
+    }
 
-            var outcome = Enum.TryParse<ProfileScanOutcome>(alertContext.Outcome, out var parsed)
-                ? parsed
-                : ProfileScanOutcome.HeldForReview;
+    public async Task<List<ProfileScanAlertRecord>> GetProfileScanAlertsAsync(
+        bool pendingOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-            results.Add(new ProfileScanAlertRecord
-            {
-                Id = entity.Id,
-                User = UserIdentity.FromId(alertContext.UserId),
-                Chat = new ChatIdentity(entity.ChatId, null),
-                Score = alertContext.Score,
-                Outcome = outcome,
-                AiReason = alertContext.AiReason,
-                AiSignalsDetected = alertContext.AiSignals,
-                Bio = alertContext.Bio,
-                PersonalChannelTitle = alertContext.PersonalChannelTitle,
-                HasPinnedStories = alertContext.HasPinnedStories,
-                IsScam = alertContext.IsScam,
-                IsFake = alertContext.IsFake,
-                DetectedAt = entity.ReportedAt,
-                ReviewedByUserId = entity.WebUserId,
-                ReviewedAt = entity.ReviewedAt,
-                ReviewedByEmail = entity.ReviewedBy,
-                ActionTaken = entity.ActionTaken
-            });
-        }
+        var query = context.EnrichedReports
+            .AsNoTracking()
+            .Where(r => r.Type == (short)ReportType.ProfileScanAlert);
 
-        return results;
+        if (pendingOnly)
+            query = query.Where(r => r.Status == (int)ReportStatus.Pending);
+
+        var results = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .ToListAsync(cancellationToken);
+
+        return results
+            .Select(r => r.ToProfileScanAlert())
+            .Where(r => r != null)
+            .Cast<ProfileScanAlertRecord>()
+            .ToList();
     }
 
     // ============================================================

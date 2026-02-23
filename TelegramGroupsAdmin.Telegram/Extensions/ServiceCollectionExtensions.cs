@@ -56,11 +56,15 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
+            // Profile scan results
+            services.AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>();
+
             // User API (WTelegram) services
             services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
             services.AddSingleton<IWTelegramClientFactory, WTelegramClientFactory>();
             services.AddSingleton<ITelegramSessionManager, TelegramSessionManager>();
             services.AddScoped<ITelegramAuthService, TelegramAuthService>();
+            services.AddSingleton<IProfileScanService, ProfileScanService>();
 
             // Telegram infrastructure
             services.AddSingleton<ITelegramBotClientFactory, TelegramBotClientFactory>();

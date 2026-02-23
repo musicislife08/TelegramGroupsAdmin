@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -24,12 +25,14 @@ public class ProfileRescanJob(
     ILogger<ProfileRescanJob> logger,
     IServiceScopeFactory scopeFactory,
     IBackgroundJobConfigService jobConfigService,
-    ITelegramSessionManager sessionManager) : IJob
+    ITelegramSessionManager sessionManager,
+    IProfileScanService profileScanService) : IJob
 {
     private readonly ILogger<ProfileRescanJob> _logger = logger;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly IBackgroundJobConfigService _jobConfigService = jobConfigService;
     private readonly ITelegramSessionManager _sessionManager = sessionManager;
+    private readonly IProfileScanService _profileScanService = profileScanService;
 
     public async Task Execute(IJobExecutionContext context)
     {
@@ -67,7 +70,7 @@ public class ProfileRescanJob(
             // Query eligible users
             await using var dbContext = await GetDbContextAsync(cancellationToken);
             var userIds = await dbContext.TelegramUsers
-                .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted)
+                .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted && !u.ProfileScanExcluded)
                 .Where(u => u.ProfileScannedAt == null || u.ProfileScannedAt < cutoff)
                 .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
                 .Take(batchSize)
@@ -84,19 +87,36 @@ public class ProfileRescanJob(
             _logger.LogInformation("Profile rescan: found {Count} users to scan", userIds.Count);
 
             var scanned = 0;
+            var skipped = 0;
+            var aborted = false;
             foreach (var userId in userIds)
             {
                 try
                 {
+                    // Look up the user's most recently active chat for alert/notification targeting
                     using var scope = _scopeFactory.CreateScope();
-                    var profileScanService = scope.ServiceProvider.GetRequiredService<IProfileScanService>();
+                    var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                    var chat = await userRepo.GetFirstChatForUserAsync(userId, cancellationToken);
 
-                    await profileScanService.ScanUserProfileAsync(
+                    var result = await _profileScanService.ScanUserProfileAsync(
                         UserIdentity.FromId(userId),
-                        triggeringChat: null,
+                        triggeringChat: chat,
                         cancellationToken);
 
-                    scanned++;
+                    // Session lost mid-batch — no point hammering reconnect for every remaining user
+                    if (result.SkipReason is not null && result.SkipReason.Contains("No User API session", StringComparison.Ordinal))
+                    {
+                        aborted = true;
+                        break;
+                    }
+
+                    if (result.SkipReason is null)
+                        scanned++;
+                    else
+                        skipped++;
+
+                    // Throttle to avoid Telegram FLOOD_WAIT rate limits
+                    await Task.Delay(500, cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -104,7 +124,12 @@ public class ProfileRescanJob(
                 }
             }
 
-            _logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users", scanned, userIds.Count);
+            if (aborted)
+                _logger.LogWarning("Profile rescan: aborted — User API session unavailable ({Scanned} scanned, {Remaining} remaining)",
+                    scanned, userIds.Count - scanned - skipped);
+            else
+                _logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users ({Skipped} skipped)",
+                    scanned, userIds.Count, skipped);
             success = true;
         }
         catch (Exception ex)

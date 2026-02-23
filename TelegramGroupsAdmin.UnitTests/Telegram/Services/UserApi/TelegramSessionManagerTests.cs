@@ -421,7 +421,8 @@ public class TelegramSessionManagerTests
         await _sut.GetClientAsync(TestWebUserId, CancellationToken.None);
 
         // Act
-        await _sut.DisconnectAsync(TestWebUserId, CancellationToken.None);
+        var executor = Actor.FromWebUser(TestWebUserId, "test@example.com");
+        await _sut.DisconnectAsync(TestWebUserId, executor, CancellationToken.None);
 
         // Assert
         await _mockSessionRepo.Received(1).DeactivateSessionAsync(TestSessionId, Arg.Any<CancellationToken>());
@@ -449,7 +450,8 @@ public class TelegramSessionManagerTests
             .Returns((TelegramSession?)null);
 
         // Act
-        await _sut.DisconnectAsync(TestWebUserId, CancellationToken.None);
+        var executor = Actor.FromWebUser(TestWebUserId, "test@example.com");
+        await _sut.DisconnectAsync(TestWebUserId, executor, CancellationToken.None);
 
         // Assert — no deactivation or audit log because there was nothing to disconnect
         await _mockSessionRepo.DidNotReceive().DeactivateSessionAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());

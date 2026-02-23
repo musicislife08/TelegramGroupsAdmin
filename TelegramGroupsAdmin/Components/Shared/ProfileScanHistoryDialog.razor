@@ -1,0 +1,136 @@
+@inject IProfileScanResultsRepository ScanResultsRepository
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">Profile Scan History — @UserDisplayName</MudText>
+
+        @if (_loading)
+        {
+            <div class="d-flex justify-center align-center pa-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (_results.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No profile scan history available for this user.</MudAlert>
+        }
+        else
+        {
+            <MudTimeline TimelineOrientation="TimelineOrientation.Vertical" TimelinePosition="TimelinePosition.Start">
+                @foreach (var result in _results)
+                {
+                    <MudTimelineItem Color="@GetOutcomeColor(result.Outcome)" Size="Size.Small">
+                        <ItemOpposite>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <span class="local-timestamp" data-utc="@result.ScannedAt.ToString("o")">@result.ScannedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                            </MudText>
+                        </ItemOpposite>
+                        <ItemContent>
+                            <MudCard Elevation="2" Class="pa-3">
+                                <MudStack Spacing="2">
+                                    @* Chips row: outcome, score *@
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="@GetOutcomeColor(result.Outcome)">
+                                            @FormatOutcome(result.Outcome)
+                                        </MudChip>
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="@GetScoreColor(result.Score)">
+                                            Score: @result.Score.ToString("F1")/5.0
+                                        </MudChip>
+                                    </MudStack>
+
+                                    @* Score breakdown *@
+                                    <MudText Typo="Typo.body2">
+                                        <strong>Rule:</strong> @result.RuleScore.ToString("F1")
+                                        | <strong>AI:</strong> @result.AiScore.ToString("F1")
+                                        @if (result.AiConfidence.HasValue)
+                                        {
+                                            <text> (confidence: @result.AiConfidence%)</text>
+                                        }
+                                    </MudText>
+
+                                    @* AI Reason *@
+                                    @if (!string.IsNullOrEmpty(result.AiReason))
+                                    {
+                                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">
+                                            @result.AiReason
+                                        </MudText>
+                                    }
+
+                                    @* AI Signals *@
+                                    @if (!string.IsNullOrEmpty(result.AiSignals))
+                                    {
+                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                            @foreach (var signal in result.AiSignals.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                                            {
+                                                <MudChip T="string"
+                                                         Size="Size.Small"
+                                                         Variant="Variant.Outlined"
+                                                         Color="Color.Warning">
+                                                    @signal
+                                                </MudChip>
+                                            }
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                            </MudCard>
+                        </ItemContent>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter, EditorRequired] public long UserId { get; set; }
+    [Parameter, EditorRequired] public string UserDisplayName { get; set; } = "";
+
+    private List<ProfileScanResultRecord> _results = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _results = await ScanResultsRepository.GetByUserIdAsync(UserId, CancellationToken.None);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private static Color GetOutcomeColor(ProfileScanOutcome outcome) => outcome switch
+    {
+        ProfileScanOutcome.Clean => Color.Success,
+        ProfileScanOutcome.HeldForReview => Color.Warning,
+        ProfileScanOutcome.Banned => Color.Error,
+        _ => Color.Default
+    };
+
+    private static string FormatOutcome(ProfileScanOutcome outcome) => outcome switch
+    {
+        ProfileScanOutcome.Clean => "Clean",
+        ProfileScanOutcome.HeldForReview => "Held for Review",
+        ProfileScanOutcome.Banned => "Banned",
+        _ => outcome.ToString()
+    };
+
+    private static Color GetScoreColor(decimal score) => score switch
+    {
+        >= 4.0m => Color.Error,
+        >= 2.0m => Color.Warning,
+        _ => Color.Success
+    };
+}

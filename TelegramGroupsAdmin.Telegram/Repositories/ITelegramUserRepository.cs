@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -97,6 +98,20 @@ public interface ITelegramUserRepository
     // ============================================================================
     // Profile Scan Methods
     // ============================================================================
+
+    /// <summary>
+    /// Get the most recently active chat for a user (by message activity).
+    /// Returns null if the user has no message history in any managed chat.
+    /// Used by the profile rescan job to associate alerts with a real chat.
+    /// </summary>
+    Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Set whether a user is excluded from automatic profile re-scans.
+    /// Set when the user cannot be resolved via Telegram API (likely deleted account).
+    /// Cleared when a manual rescan successfully resolves the user.
+    /// </summary>
+    Task SetProfileScanExcludedAsync(long telegramUserId, bool excluded, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Atomically update all profile scan columns for a user.

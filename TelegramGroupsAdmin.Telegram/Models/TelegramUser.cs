@@ -33,6 +33,7 @@ public record TelegramUser(
     bool IsScam = false,
     bool IsFake = false,
     bool IsVerified = false,
+    bool ProfileScanExcluded = false,
     DateTimeOffset? ProfileScannedAt = null,
     decimal? ProfileScanScore = null
 )

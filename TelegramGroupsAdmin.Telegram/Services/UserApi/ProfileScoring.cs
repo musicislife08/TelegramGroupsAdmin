@@ -27,7 +27,18 @@ public record ProfileScanResult(
     decimal Score,
     ProfileScanOutcome Outcome,
     string? AiReason,
-    string[]? AiSignalsDetected);
+    string[]? AiSignalsDetected,
+    string? SkipReason = null);
+
+/// <summary>Result from the full two-layer scoring pipeline.</summary>
+internal record ScoringResult(
+    decimal Score,
+    ProfileScanOutcome Outcome,
+    decimal RuleScore,
+    decimal AiScore,
+    int? AiConfidence,
+    string? AiReason,
+    string[]? AiSignals);
 
 /// <summary>
 /// Two-layer scoring engine for profile risk assessment.
@@ -40,6 +51,16 @@ internal sealed class ProfileScoringEngine(
     IChatService chatService,
     ILogger logger)
 {
+    /// <summary>Result from AI vision analysis (Layer 2).</summary>
+    private record AiScoringResult(
+        decimal Score,
+        int? Confidence,
+        string? Reason,
+        string[]? Signals)
+    {
+        public static readonly AiScoringResult Empty = new(0.0m, null, null, null);
+    }
+
     private const decimal MaxScore = 5.0m;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -52,12 +73,14 @@ internal sealed class ProfileScoringEngine(
     /// </summary>
     /// <param name="profile">Extracted profile data (bio, channel, stories, flags).</param>
     /// <param name="images">Profile photo + story frames + channel photo for vision analysis.</param>
+    /// <param name="imageLabels">Labels describing each image (e.g. "Image 1: profile photo, Image 2: pinned story").</param>
     /// <param name="banThreshold">Score at or above which the user should be auto-banned.</param>
     /// <param name="notifyThreshold">Score at or above which admins should be notified.</param>
     /// <param name="ct">Cancellation token.</param>
-    internal async Task<(decimal Score, ProfileScanOutcome Outcome, string? AiReason, string[]? AiSignals)> ScoreAsync(
+    internal async Task<ScoringResult> ScoreAsync(
         ProfileData profile,
         IReadOnlyList<ImageInput> images,
+        string? imageLabels,
         decimal banThreshold,
         decimal notifyThreshold,
         CancellationToken ct)
@@ -69,12 +92,19 @@ internal sealed class ProfileScoringEngine(
         {
             logger.LogInformation("Profile scan for {User}: rule-based score {Score} >= ban threshold {Threshold}, skipping AI",
                 profile.User.ToLogInfo(), ruleScore, banThreshold);
-            return (Cap(ruleScore), ProfileScanOutcome.Banned, "Rule-based detection triggered ban threshold", null);
+            return new ScoringResult(
+                Score: Cap(ruleScore),
+                Outcome: ProfileScanOutcome.Banned,
+                RuleScore: ruleScore,
+                AiScore: 0.0m,
+                AiConfidence: null,
+                AiReason: "Rule-based detection triggered ban threshold",
+                AiSignals: null);
         }
 
         // ── Layer 2: AI vision analysis ──
-        var (aiScore, aiReason, aiSignals) = await RunAiScoringAsync(profile, images, ct);
-        var totalScore = Cap(ruleScore + aiScore);
+        var aiResult = await RunAiScoringAsync(profile, images, imageLabels, ct);
+        var totalScore = Cap(ruleScore + aiResult.Score);
 
         var outcome = totalScore >= banThreshold
             ? ProfileScanOutcome.Banned
@@ -84,9 +114,16 @@ internal sealed class ProfileScoringEngine(
 
         logger.LogInformation(
             "Profile scan for {User}: rule={RuleScore}, ai={AiScore}, total={TotalScore}, outcome={Outcome}",
-            profile.User.ToLogInfo(), ruleScore, aiScore, totalScore, outcome);
+            profile.User.ToLogInfo(), ruleScore, aiResult.Score, totalScore, outcome);
 
-        return (totalScore, outcome, aiReason, aiSignals);
+        return new ScoringResult(
+            Score: totalScore,
+            Outcome: outcome,
+            RuleScore: ruleScore,
+            AiScore: aiResult.Score,
+            AiConfidence: aiResult.Confidence,
+            AiReason: aiResult.Reason,
+            AiSignals: aiResult.Signals);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -150,15 +187,16 @@ internal sealed class ProfileScoringEngine(
     // Layer 2: AI vision analysis
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private async Task<(decimal Score, string? Reason, string[]? Signals)> RunAiScoringAsync(
+    private async Task<AiScoringResult> RunAiScoringAsync(
         ProfileData profile,
         IReadOnlyList<ImageInput> images,
+        string? imageLabels,
         CancellationToken ct)
     {
         if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, ct))
         {
             logger.LogWarning("ProfileScan AI feature not configured — only rule-based scoring active");
-            return (0.0m, null, null);
+            return AiScoringResult.Empty;
         }
 
         var systemPrompt = ProfileScanPrompts.BuildSystemPrompt();
@@ -167,7 +205,7 @@ internal sealed class ProfileScoringEngine(
             profile.Bio,
             profile.PersonalChannelTitle, profile.PersonalChannelAbout,
             profile.StoryCount, profile.StoryCaptions,
-            images.Count);
+            images.Count, imageLabels);
 
         ChatCompletionResult? result;
         var options = new ChatCompletionOptions { JsonMode = true };
@@ -192,13 +230,13 @@ internal sealed class ProfileScoringEngine(
         if (result == null)
         {
             logger.LogWarning("Profile scan AI call returned null for {User}", profile.User.ToLogDebug());
-            return (0.0m, null, null);
+            return AiScoringResult.Empty;
         }
 
         return ParseAiResponse(result.Content, profile.User);
     }
 
-    private (decimal Score, string? Reason, string[]? Signals) ParseAiResponse(string content, UserIdentity user)
+    private AiScoringResult ParseAiResponse(string content, UserIdentity user)
     {
         try
         {
@@ -206,27 +244,27 @@ internal sealed class ProfileScoringEngine(
             if (response == null)
             {
                 logger.LogWarning("Profile scan AI response deserialized to null for {User}", user.ToLogDebug());
-                return (0.0m, null, null);
+                return AiScoringResult.Empty;
             }
 
             if (!response.Spam)
-                return (0.0m, response.Reason, response.SignalsDetected);
+                return new AiScoringResult(0.0m, response.Confidence, response.Reason, response.SignalsDetected);
 
-            // Map confidence to points
+            // Map confidence to points (aligned with prompt tiers)
             var score = response.Confidence switch
             {
-                >= 80 => 4.5m,  // High confidence explicit/spam
-                >= 60 => 2.5m,  // Suspicious — flag for review
-                _ => 0.0m       // Low confidence — treat as clean
+                >= 80 => 4.5m,  // Definitive spam/explicit → auto-ban
+                >= 40 => 2.5m,  // Suspicious/suggestive → admin review
+                _ => 0.0m       // Minor signals — treat as clean
             };
 
-            return (score, response.Reason, response.SignalsDetected);
+            return new AiScoringResult(score, response.Confidence, response.Reason, response.SignalsDetected);
         }
         catch (JsonException ex)
         {
             logger.LogWarning(ex, "Failed to parse profile scan AI response for {User}: {Content}",
                 user.ToLogDebug(), content[..Math.Min(content.Length, 200)]);
-            return (0.0m, null, null);
+            return AiScoringResult.Empty;
         }
     }
 

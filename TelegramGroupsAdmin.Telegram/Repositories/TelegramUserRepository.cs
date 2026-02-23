@@ -290,13 +290,13 @@ public class TelegramUserRepository : ITelegramUserRepository
         // REFACTOR-5: Warnings are now JSONB on telegram_users, not a separate table
         var usersWithWarnings = await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => u.Warnings != null)
+            .Where(u => u.Warnings!.Count > 0)
             .Select(u => new { u.TelegramUserId, u.Warnings })
             .ToListAsync(cancellationToken);
 
         // Compute active warning counts in-memory (JSONB filtering not supported in EF Core)
         var warningCounts = usersWithWarnings
-            .Where(u => u.Warnings != null)
+            .Where(u => u.Warnings!.Count > 0)
             .ToDictionary(
                 u => u.TelegramUserId,
                 u => u.Warnings!.Count(w => w.ExpiresAt == null || w.ExpiresAt > now));
@@ -415,13 +415,13 @@ public class TelegramUserRepository : ITelegramUserRepository
         // REFACTOR-5: Warnings are now JSONB on telegram_users, not a separate table
         var usersWithWarnings = await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => userIdsInChats.Contains(u.TelegramUserId) && u.Warnings != null)
+            .Where(u => userIdsInChats.Contains(u.TelegramUserId) && u.Warnings!.Count > 0)
             .Select(u => new { u.TelegramUserId, u.Warnings })
             .ToListAsync(cancellationToken);
 
         // Compute active warning counts in-memory (JSONB filtering not supported in EF Core)
         var warningCounts = usersWithWarnings
-            .Where(u => u.Warnings != null)
+            .Where(u => u.Warnings!.Count > 0)
             .ToDictionary(
                 u => u.TelegramUserId,
                 u => u.Warnings!.Count(w => w.ExpiresAt == null || w.ExpiresAt > now));
@@ -681,7 +681,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Warned users count (from JSONB - fetch users with warnings and filter in-memory)
         var usersWithWarnings = await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => u.Warnings != null)
+            .Where(u => u.Warnings!.Count > 0)
             .Select(u => u.Warnings)
             .ToListAsync(cancellationToken);
 
@@ -793,6 +793,13 @@ public class TelegramUserRepository : ITelegramUserRepository
             .OrderByDescending(w => w.IssuedAt)
             .ToList();
 
+        // Get latest profile scan result for AI reason/signals display
+        var latestScanResult = await context.ProfileScanResults
+            .AsNoTracking()
+            .Where(r => r.UserId == telegramUserId)
+            .OrderByDescending(r => r.ScannedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return new UiModels.TelegramUserDetail
         {
             User = new UserIdentity(user.TelegramUserId, user.FirstName, user.LastName, user.Username),
@@ -813,8 +820,11 @@ public class TelegramUserRepository : ITelegramUserRepository
             IsScam = user.IsScam,
             IsFake = user.IsFake,
             IsVerified = user.IsVerified,
+            ProfileScanExcluded = user.ProfileScanExcluded,
             ProfileScannedAt = user.ProfileScannedAt,
             ProfileScanScore = user.ProfileScanScore,
+            LatestAiReason = latestScanResult?.AiReason,
+            LatestAiSignals = latestScanResult?.AiSignals,
             ChatMemberships = chatMemberships,
             Actions = actions.Select(a => a.ToModel()).ToList(),
             Warnings = activeWarnings,
@@ -1037,6 +1047,36 @@ public class TelegramUserRepository : ITelegramUserRepository
     // ============================================================================
     // Profile Scan Methods
     // ============================================================================
+
+    /// <inheritdoc />
+    public async Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var result = await (
+            from m in context.Messages
+            where m.UserId == telegramUserId && m.DeletedAt == null
+            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+            from chat in chatGroup.DefaultIfEmpty()
+            group new { m, chat } by new { m.ChatId, ChatName = chat != null ? chat.ChatName : null } into g
+            orderby g.Max(x => x.m.Timestamp) descending
+            select new { g.Key.ChatId, g.Key.ChatName }
+        )
+        .AsNoTracking()
+        .FirstOrDefaultAsync(cancellationToken);
+
+        return result is null ? null : new ChatIdentity(result.ChatId, result.ChatName);
+    }
+
+    /// <inheritdoc />
+    public async Task SetProfileScanExcludedAsync(long telegramUserId, bool excluded, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.ProfileScanExcluded, excluded)
+                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
 
     /// <inheritdoc />
     public async Task UpdateProfileScanDataAsync(

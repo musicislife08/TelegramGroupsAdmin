@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260221173440_AddSessionPhoneNumber")]
+    partial class AddSessionPhoneNumber
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1538,26 +1541,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("message_id");
 
-                    b.Property<string>("ProfileFirstName")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_first_name");
-
-                    b.Property<string>("ProfileLastName")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_last_name");
-
-                    b.Property<string>("ProfilePhotoPath")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_photo_path");
-
-                    b.Property<long?>("ProfileUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("profile_user_id");
-
-                    b.Property<string>("ProfileUsername")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_username");
-
                     b.Property<int?>("ReportCommandMessageId")
                         .HasColumnType("integer")
                         .HasColumnName("report_command_message_id");
@@ -2373,63 +2356,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("pending_notifications");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ProfileScanResultDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<int?>("AiConfidence")
-                        .HasColumnType("integer")
-                        .HasColumnName("ai_confidence");
-
-                    b.Property<string>("AiReason")
-                        .HasColumnType("text")
-                        .HasColumnName("ai_reason");
-
-                    b.Property<decimal>("AiScore")
-                        .HasPrecision(3, 1)
-                        .HasColumnType("numeric(3,1)")
-                        .HasColumnName("ai_score");
-
-                    b.Property<string>("AiSignals")
-                        .HasColumnType("text")
-                        .HasColumnName("ai_signals");
-
-                    b.Property<int>("Outcome")
-                        .HasColumnType("integer")
-                        .HasColumnName("outcome");
-
-                    b.Property<decimal>("RuleScore")
-                        .HasPrecision(3, 1)
-                        .HasColumnType("numeric(3,1)")
-                        .HasColumnName("rule_score");
-
-                    b.Property<DateTimeOffset>("ScannedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("scanned_at");
-
-                    b.Property<decimal>("Score")
-                        .HasPrecision(3, 1)
-                        .HasColumnType("numeric(3,1)")
-                        .HasColumnName("score");
-
-                    b.Property<long>("UserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "ScannedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("ix_profile_scan_results_user_id_scanned_at");
-
-                    b.ToTable("profile_scan_results");
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PromptVersionDto", b =>
                 {
                     b.Property<long>("Id")
@@ -2997,10 +2923,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<string>("PinnedStoryCaptions")
                         .HasColumnType("text")
                         .HasColumnName("pinned_story_captions");
-
-                    b.Property<bool>("ProfileScanExcluded")
-                        .HasColumnType("boolean")
-                        .HasColumnName("profile_scan_excluded");
 
                     b.Property<decimal?>("ProfileScanScore")
                         .HasPrecision(3, 1)
@@ -4364,17 +4286,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Navigation("Message");
 
                     b.Navigation("MessageEdit");
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ProfileScanResultDto", b =>
-                {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PushSubscriptionDto", b =>

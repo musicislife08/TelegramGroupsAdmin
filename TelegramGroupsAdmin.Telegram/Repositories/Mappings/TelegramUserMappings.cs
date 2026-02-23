@@ -36,6 +36,7 @@ public static class TelegramUserMappings
             IsScam: data.IsScam,
             IsFake: data.IsFake,
             IsVerified: data.IsVerified,
+            ProfileScanExcluded: data.ProfileScanExcluded,
             ProfileScannedAt: data.ProfileScannedAt,
             ProfileScanScore: data.ProfileScanScore
         );
@@ -70,6 +71,7 @@ public static class TelegramUserMappings
             IsScam = ui.IsScam,
             IsFake = ui.IsFake,
             IsVerified = ui.IsVerified,
+            ProfileScanExcluded = ui.ProfileScanExcluded,
             ProfileScannedAt = ui.ProfileScannedAt,
             ProfileScanScore = ui.ProfileScanScore
         };

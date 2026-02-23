@@ -40,6 +40,7 @@
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Spam">Moderation Reports</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Impersonation">Impersonation Alerts</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ExamFailure">Exam Reviews</MudSelectItem>
+                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ProfileScan">Profile Scan Alerts</MudSelectItem>
             </MudSelect>
 
             <MudSelect T="StatusFilter"
@@ -82,6 +83,12 @@
                         @_pendingExamCount Exam
                     </MudChip>
                 }
+                @if (_pendingProfileScanCount > 0)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.PersonSearch">
+                        @_pendingProfileScanCount Profile
+                    </MudChip>
+                }
             </MudStack>
         </MudStack>
     </MudPaper>
@@ -113,6 +120,11 @@
                     <ExamReviewCard ExamFailure="@item.ExamFailure"
                                     OnAction="@HandleExamAction" />
                 }
+                else if (item.ProfileScanAlert != null)
+                {
+                    <ProfileScanAlertCard Alert="@item.ProfileScanAlert"
+                                          OnAction="@HandleProfileScanAction" />
+                }
             }
         </MudStack>
     }
@@ -140,7 +152,7 @@
 @implements IDisposable
 
 @code {
-    private enum ReportTypeFilter { All, Spam, Impersonation, ExamFailure }
+    private enum ReportTypeFilter { All, Spam, Impersonation, ExamFailure, ProfileScan }
     private enum StatusFilter { Pending, All }
 
     private List<ReportQueueItem> _allReports = [];
@@ -153,6 +165,7 @@
     private int _pendingSpamCount;
     private int _pendingImpersonationCount;
     private int _pendingExamCount;
+    private int _pendingProfileScanCount;
     private readonly CancellationTokenSource _cts = new();
 
     protected override async Task OnInitializedAsync()
@@ -250,6 +263,24 @@
                 });
             }
 
+            // Load all profile scan alerts
+            var profileScanAlerts = await ReportsRepository.GetProfileScanAlertsAsync(
+                pendingOnly: false, cancellationToken: _cts.Token);
+            foreach (var alert in profileScanAlerts.Where(a => accessibleChatIds.Contains(a.Chat.Id)))
+            {
+                unifiedQueue.Add(new ReportQueueItem
+                {
+                    Type = ReportType.ProfileScanAlert,
+                    Timestamp = alert.DetectedAt,
+                    Priority = CalculateProfileScanPriority(alert),
+                    IsPending = !alert.ReviewedAt.HasValue,
+                    DisplayTitle = "Profile Scan Alert",
+                    UserId = alert.User.Id,
+                    UserName = alert.User.Username,
+                    ProfileScanAlert = alert
+                });
+            }
+
             // Sort by priority (high → low), then timestamp (new → old)
             _allReports = unifiedQueue
                 .OrderByDescending(x => x.Priority)
@@ -260,6 +291,7 @@
             _pendingSpamCount = unifiedQueue.Count(x => x.Type == ReportType.ContentReport && x.IsPending);
             _pendingImpersonationCount = unifiedQueue.Count(x => x.Type == ReportType.ImpersonationAlert && x.IsPending);
             _pendingExamCount = unifiedQueue.Count(x => x.Type == ReportType.ExamFailure && x.IsPending);
+            _pendingProfileScanCount = unifiedQueue.Count(x => x.Type == ReportType.ProfileScanAlert && x.IsPending);
 
             ApplyFilters();
         }
@@ -287,6 +319,7 @@
                 ReportTypeFilter.Spam => ReportType.ContentReport,
                 ReportTypeFilter.Impersonation => ReportType.ImpersonationAlert,
                 ReportTypeFilter.ExamFailure => ReportType.ExamFailure,
+                ReportTypeFilter.ProfileScan => ReportType.ProfileScanAlert,
                 _ => ReportType.ContentReport
             };
             filtered = filtered.Where(x => x.Type == targetType);
@@ -342,6 +375,82 @@
         // Higher priority for recent failures (users waiting for approval)
         var age = (DateTimeOffset.UtcNow - examFailure.FailedAt).TotalHours;
         return (int)(200 - age); // Higher base priority than reports
+    }
+
+    private int CalculateProfileScanPriority(ProfileScanAlertRecord alert)
+    {
+        if (alert.ReviewedAt.HasValue) return 0;
+
+        // Banned outcome (auto-ban happened) = lower priority since action already taken
+        // HeldForReview = higher priority since admin decision needed
+        var basePriority = alert.Outcome == ProfileScanOutcome.HeldForReview ? 300 : 100;
+        return basePriority + (int)(alert.Score * 100);
+    }
+
+    private async Task HandleProfileScanAction((ProfileScanAlertRecord Alert, ProfileScanAction Action) args)
+    {
+        try
+        {
+            var executor = WebUser!.ToActor();
+
+            switch (args.Action)
+            {
+                case ProfileScanAction.Allow:
+                    await ReportsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Dismissed,
+                        WebUser!.DisplayName,
+                        "allow",
+                        "User allowed after profile scan review");
+                    Snackbar.Add("User allowed", Severity.Success);
+                    break;
+
+                case ProfileScanAction.Ban:
+                    await ModerationOrchestrator.BanUserAsync(
+                        new BanIntent
+                        {
+                            User = args.Alert.User,
+                            Executor = executor,
+                            Reason = $"Profile scan alert #{args.Alert.Id} confirmed — score {args.Alert.Score:F1}"
+                        });
+                    await ReportsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Reviewed,
+                        WebUser!.DisplayName,
+                        "ban",
+                        "Banned after profile scan review");
+                    Snackbar.Add("User banned globally", Severity.Success);
+                    break;
+
+                case ProfileScanAction.Kick:
+                    if (args.Alert.Chat.Id != 0)
+                    {
+                        await ModerationOrchestrator.KickUserFromChatAsync(
+                            new KickIntent
+                            {
+                                User = args.Alert.User,
+                                Chat = args.Alert.Chat,
+                                Executor = executor,
+                                Reason = $"Profile scan alert #{args.Alert.Id} — kicked after review"
+                            });
+                    }
+                    await ReportsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Reviewed,
+                        WebUser!.DisplayName,
+                        "kick",
+                        args.Alert.Chat.Id == 0 ? "Kick not applicable (global alert)" : "Kicked from chat after review");
+                    Snackbar.Add(args.Alert.Chat.Id == 0 ? "Alert resolved (no chat to kick from)" : "User kicked from chat", Severity.Warning);
+                    break;
+            }
+
+            await LoadReportsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error handling profile scan action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
+            Snackbar.Add($"Failed to process alert: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task HandleSpamAction((Report Report, ReportAction Action) args)

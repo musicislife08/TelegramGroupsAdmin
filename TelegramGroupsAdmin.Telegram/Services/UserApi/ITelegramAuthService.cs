@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 public interface ITelegramAuthService
 {
     /// <summary>Start auth flow: send verification code to phone.</summary>
-    Task<AuthFlowState> StartAuthAsync(string webUserId, string phoneNumber, CancellationToken ct);
+    Task<AuthFlowState> StartAuthAsync(string webUserId, string phoneNumber, Actor executor, CancellationToken ct);
 
     /// <summary>Submit verification code.</summary>
     Task<AuthFlowState> SubmitCodeAsync(string webUserId, string code, CancellationToken ct);

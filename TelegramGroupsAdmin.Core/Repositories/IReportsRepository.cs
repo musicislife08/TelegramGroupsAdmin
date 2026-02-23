@@ -191,6 +191,13 @@ public interface IReportsRepository
         long userId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Get profile scan alerts, optionally filtered by status.
+    /// </summary>
+    Task<List<ProfileScanAlertRecord>> GetProfileScanAlertsAsync(
+        bool pendingOnly = true,
+        CancellationToken cancellationToken = default);
+
     // ============================================================
     // ExamFailure-specific operations (Type = ExamFailure)
     // ============================================================

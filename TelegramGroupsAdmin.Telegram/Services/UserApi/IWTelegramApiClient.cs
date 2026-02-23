@@ -46,11 +46,23 @@ public interface IWTelegramApiClient : IAsyncDisposable
     /// <summary>Get a user's profile photos.</summary>
     Task<Photos_Photos> Photos_GetUserPhotos(InputUserBase user, int offset = 0, long maxId = 0, int limit = 100);
 
+    /// <summary>Resolve a public username to a peer (user or channel).</summary>
+    Task<Contacts_ResolvedPeer> Contacts_ResolveUsername(string username);
+
+    /// <summary>Search for users/chats by name substring. Returns up to <paramref name="limit"/> results.</summary>
+    Task<Contacts_Found> Contacts_Search(string query, int limit = 20);
+
     /// <summary>Get full channel info including about/description text.</summary>
     Task<Messages_ChatFull> Channels_GetFullChannel(InputChannelBase channel);
 
     /// <summary>Get pinned stories for a peer (user or channel).</summary>
     Task<Stories_PeerStories> Stories_GetPeerStories(InputPeer peer);
+
+    /// <summary>Download a photo to a stream. Returns the file type (jpeg, png, etc.).</summary>
+    Task<Storage_FileType> DownloadFileAsync(Photo photo, Stream outputStream);
+
+    /// <summary>Download a peer's profile/channel photo. Works with User, Chat, Channel (all implement IPeerInfo).</summary>
+    Task<Storage_FileType> DownloadProfilePhotoAsync(IPeerInfo peer, Stream outputStream, bool big = false);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // DIALOG / CHAT OPERATIONS

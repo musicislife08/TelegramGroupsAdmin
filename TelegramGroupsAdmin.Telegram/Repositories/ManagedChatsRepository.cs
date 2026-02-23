@@ -246,7 +246,23 @@ public class ManagedChatsRepository : IManagedChatsRepository
         // GlobalAdmin (1) and Owner (2) see all chats (active + inactive)
         if (permissionLevel >= PermissionLevel.GlobalAdmin)
         {
-            return await GetAllChatsAsync(includeDeleted, cancellationToken);
+            var allChats = await GetAllChatsAsync(includeDeleted, cancellationToken);
+
+            // Add synthetic "Global" entry so chat_id=0 reports (not tied to any specific chat)
+            // pass the standard accessibleChatIds.Contains() filter on all pages.
+            allChats.Add(new ManagedChatRecord(
+                Identity: new ChatIdentity(0, "Global"),
+                ChatType: ManagedChatType.Group,
+                BotStatus: BotChatStatus.Member,
+                IsAdmin: false,
+                AddedAt: DateTimeOffset.MinValue,
+                IsActive: false,
+                IsDeleted: false,
+                LastSeenAt: null,
+                SettingsJson: null,
+                ChatIconPath: null));
+
+            return allChats;
         }
 
         // Admin (0) sees only chats where their linked Telegram account is admin

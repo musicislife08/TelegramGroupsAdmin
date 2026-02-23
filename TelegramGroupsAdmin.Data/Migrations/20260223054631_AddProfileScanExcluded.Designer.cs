@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260223054631_AddProfileScanExcluded")]
+    partial class AddProfileScanExcluded
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1537,26 +1540,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<int>("MessageId")
                         .HasColumnType("integer")
                         .HasColumnName("message_id");
-
-                    b.Property<string>("ProfileFirstName")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_first_name");
-
-                    b.Property<string>("ProfileLastName")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_last_name");
-
-                    b.Property<string>("ProfilePhotoPath")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_photo_path");
-
-                    b.Property<long?>("ProfileUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("profile_user_id");
-
-                    b.Property<string>("ProfileUsername")
-                        .HasColumnType("text")
-                        .HasColumnName("profile_username");
 
                     b.Property<int?>("ReportCommandMessageId")
                         .HasColumnType("integer")

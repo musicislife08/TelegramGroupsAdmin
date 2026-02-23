@@ -40,6 +40,13 @@ public class TelegramSessionDto
     public string? DisplayName { get; set; }
 
     /// <summary>
+    /// Phone number used for authentication (needed for session reconnect).
+    /// Encrypted at rest via Data Protection (stored alongside session_data).
+    /// </summary>
+    [Column("phone_number")]
+    public string? PhoneNumber { get; set; }
+
+    /// <summary>
     /// Encrypted MTProto session data (Data Protection encrypted bytes).
     /// WTelegram uses this to reconnect without re-authentication.
     /// </summary>

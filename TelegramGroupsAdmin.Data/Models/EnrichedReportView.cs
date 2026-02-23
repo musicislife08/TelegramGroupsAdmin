@@ -63,6 +63,13 @@ public class EnrichedReportView
             exam_user.last_name AS exam_last_name,
             exam_user.user_photo_path AS exam_photo_path,
 
+            -- ProfileScanAlert: User (type = 3)
+            profile_user.telegram_user_id AS profile_user_id,
+            profile_user.username AS profile_username,
+            profile_user.first_name AS profile_first_name,
+            profile_user.last_name AS profile_last_name,
+            profile_user.user_photo_path AS profile_photo_path,
+
             -- Reviewer (all types with web_user_id)
             reviewer.email AS reviewer_email
 
@@ -85,6 +92,11 @@ public class EnrichedReportView
         LEFT JOIN telegram_users exam_user
             ON r.type = 2
             AND exam_user.telegram_user_id = (r.context->>'userId')::bigint
+
+        -- ProfileScanAlert user (only for type = 3)
+        LEFT JOIN telegram_users profile_user
+            ON r.type = 3
+            AND profile_user.telegram_user_id = (r.context->>'userId')::bigint
 
         -- Reviewer (all types)
         LEFT JOIN users reviewer ON r.web_user_id = reviewer.id;
@@ -207,6 +219,25 @@ public class EnrichedReportView
 
     [Column("exam_photo_path")]
     public string? ExamPhotoPath { get; set; }
+
+    #endregion
+
+    #region ProfileScanAlert: User (type = 3)
+
+    [Column("profile_user_id")]
+    public long? ProfileUserId { get; set; }
+
+    [Column("profile_username")]
+    public string? ProfileUsername { get; set; }
+
+    [Column("profile_first_name")]
+    public string? ProfileFirstName { get; set; }
+
+    [Column("profile_last_name")]
+    public string? ProfileLastName { get; set; }
+
+    [Column("profile_photo_path")]
+    public string? ProfilePhotoPath { get; set; }
 
     #endregion
 

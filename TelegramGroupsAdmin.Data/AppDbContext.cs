@@ -83,6 +83,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<FileScanResultRecord> FileScanResults => Set<FileScanResultRecord>();
     public DbSet<FileScanQuotaRecord> FileScanQuotas => Set<FileScanQuotaRecord>();
 
+    // Profile scan results
+    public DbSet<ProfileScanResultDto> ProfileScanResults => Set<ProfileScanResultDto>();
+
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
@@ -751,6 +754,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasFilter("is_active = true")
             .HasDatabaseName("ix_telegram_sessions_active");
 
+        // ProfileScanResults indexes
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .HasIndex(psr => new { psr.UserId, psr.ScannedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_profile_scan_results_user_id_scanned_at");
+
         // BanCelebrationGifs indexes
         modelBuilder.Entity<BanCelebrationGifDto>()
             .HasIndex(g => g.CreatedAt)
@@ -895,6 +904,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasDefaultValue(false);
         modelBuilder.Entity<TelegramUserDto>()
             .Property(u => u.ProfileScanScore)
+            .HasPrecision(3, 1);
+
+        // ProfileScanResults: decimal precision for scores
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.Score)
+            .HasPrecision(3, 1);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.RuleScore)
+            .HasPrecision(3, 1);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.AiScore)
             .HasPrecision(3, 1);
 
         // Users (web users): Set database defaults for columns added in later migrations

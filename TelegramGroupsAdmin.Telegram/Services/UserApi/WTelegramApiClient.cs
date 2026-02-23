@@ -25,11 +25,23 @@ public sealed class WTelegramApiClient(Client client) : IWTelegramApiClient
     public Task<Photos_Photos> Photos_GetUserPhotos(InputUserBase user, int offset = 0, long maxId = 0, int limit = 100)
         => client.Photos_GetUserPhotos(user, offset, maxId, limit);
 
+    public Task<Contacts_ResolvedPeer> Contacts_ResolveUsername(string username)
+        => client.Contacts_ResolveUsername(username);
+
+    public Task<Contacts_Found> Contacts_Search(string query, int limit = 20)
+        => client.Contacts_Search(query, limit);
+
     public Task<Messages_ChatFull> Channels_GetFullChannel(InputChannelBase channel)
         => client.Channels_GetFullChannel(channel);
 
     public Task<Stories_PeerStories> Stories_GetPeerStories(InputPeer peer)
         => client.Stories_GetPeerStories(peer);
+
+    public Task<Storage_FileType> DownloadFileAsync(Photo photo, Stream outputStream)
+        => client.DownloadFileAsync(photo, outputStream);
+
+    public Task<Storage_FileType> DownloadProfilePhotoAsync(IPeerInfo peer, Stream outputStream, bool big = false)
+        => client.DownloadProfilePhotoAsync(peer, outputStream, big);
 
     public Task<Messages_Dialogs> Messages_GetAllDialogs()
         => client.Messages_GetAllDialogs();

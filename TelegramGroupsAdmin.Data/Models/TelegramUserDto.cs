@@ -248,6 +248,14 @@ public class TelegramUserDto
     public bool IsVerified { get; set; } = false;
 
     /// <summary>
+    /// When true, this user is excluded from automatic profile re-scans.
+    /// Set when the user cannot be resolved via Telegram API (likely deleted account).
+    /// Can be manually toggled by admins in the user detail dialog.
+    /// </summary>
+    [Column("profile_scan_excluded")]
+    public bool ProfileScanExcluded { get; set; }
+
+    /// <summary>
     /// When last profile scan completed (null = never scanned)
     /// </summary>
     [Column("profile_scanned_at")]

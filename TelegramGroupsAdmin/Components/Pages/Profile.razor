@@ -944,7 +944,7 @@
 
         try
         {
-            var result = await TelegramAuth.StartAuthAsync(WebUser.Id, _phoneNumber.Trim(), default);
+            var result = await TelegramAuth.StartAuthAsync(WebUser.Id, _phoneNumber.Trim(), WebUser.ToActor(), default);
             _authStep = result.Step;
             _authError = result.ErrorMessage;
         }
@@ -1051,7 +1051,7 @@
 
         try
         {
-            await TelegramSessionManager.DisconnectAsync(WebUser.Id, default);
+            await TelegramSessionManager.DisconnectAsync(WebUser.Id, WebUser.ToActor(), default);
             _connectionStatus = null;
             _authStep = AuthStep.Disconnected;
             Snackbar.Add("Telegram account disconnected", Severity.Success);

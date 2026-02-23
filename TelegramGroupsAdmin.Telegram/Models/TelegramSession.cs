@@ -10,6 +10,7 @@ public record TelegramSession
     public required string WebUserId { get; init; }
     public long? TelegramUserId { get; init; }
     public string? DisplayName { get; init; }
+    public string? PhoneNumber { get; init; }
     public byte[] SessionData { get; init; } = [];
     public string? MemberChats { get; init; }
     public bool IsActive { get; init; }

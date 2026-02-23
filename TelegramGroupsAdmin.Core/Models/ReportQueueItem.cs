@@ -11,10 +11,11 @@ public record ReportQueueItem
     public required int Priority { get; init; } // Higher = more urgent
     public required bool IsPending { get; init; }
 
-    // One of Report, ImpersonationAlertRecord, or ExamFailureRecord is populated
+    // One of Report, ImpersonationAlertRecord, ExamFailureRecord, or ProfileScanAlertRecord is populated
     public Report? SpamReport { get; init; }
     public ImpersonationAlertRecord? ImpersonationAlert { get; init; }
     public ExamFailureRecord? ExamFailure { get; init; }
+    public ProfileScanAlertRecord? ProfileScanAlert { get; init; }
 
     // Common display properties
     public required string DisplayTitle { get; init; }

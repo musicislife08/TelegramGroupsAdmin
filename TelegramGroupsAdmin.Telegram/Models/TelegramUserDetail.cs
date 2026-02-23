@@ -33,8 +33,11 @@ public class TelegramUserDetail
     public bool IsScam { get; set; }
     public bool IsFake { get; set; }
     public bool IsVerified { get; set; }
+    public bool ProfileScanExcluded { get; set; }
     public DateTimeOffset? ProfileScannedAt { get; set; }
     public decimal? ProfileScanScore { get; set; }
+    public string? LatestAiReason { get; set; }
+    public string? LatestAiSignals { get; set; }
 
     // Related data
     public List<UserChatMembership> ChatMemberships { get; set; } = [];
