@@ -194,6 +194,9 @@
                 cancellationToken: _cts.Token);
             var accessibleChatIds = accessibleChats.Select(c => c.Identity.Id).ToHashSet();
 
+            // GlobalAdmin/Owner can see reports with sentinel chat_id=0 (e.g., background profile scan alerts)
+            var isElevated = WebUser.PermissionLevel >= Core.Models.PermissionLevel.GlobalAdmin;
+
             var unifiedQueue = new List<ReportQueueItem>();
 
             // Load each type using type-specific repository methods
@@ -206,7 +209,7 @@
                 limit: 100,
                 cancellationToken: _cts.Token);
 
-            foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.Chat.Id)))
+            foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.Chat.Id) || (isElevated && r.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -226,7 +229,7 @@
             // Load all impersonation alerts (filter by status is done client-side in ApplyFilters)
             var alerts = await ReportsRepository.GetImpersonationAlertsAsync(
                 pendingOnly: false, cancellationToken: _cts.Token);
-            foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.Chat.Id)))
+            foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -246,7 +249,7 @@
             // Load all exam failures (filter by status is done client-side in ApplyFilters)
             var examFailures = await ReportsRepository.GetExamFailuresAsync(
                 pendingOnly: false, cancellationToken: _cts.Token);
-            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.Chat.Id)))
+            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.Chat.Id) || (isElevated && e.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -266,7 +269,7 @@
             // Load all profile scan alerts
             var profileScanAlerts = await ReportsRepository.GetProfileScanAlertsAsync(
                 pendingOnly: false, cancellationToken: _cts.Token);
-            foreach (var alert in profileScanAlerts.Where(a => accessibleChatIds.Contains(a.Chat.Id)))
+            foreach (var alert in profileScanAlerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
