@@ -31,7 +31,7 @@ public record ProfileScanResult(
     string? SkipReason = null);
 
 /// <summary>Result from the full two-layer scoring pipeline.</summary>
-internal record ScoringResult(
+public record ScoringResult(
     decimal Score,
     ProfileScanOutcome Outcome,
     decimal RuleScore,
@@ -45,11 +45,11 @@ internal record ScoringResult(
 /// Layer 1: Cheap rule-based pre-filters (instant, run first).
 /// Layer 2: AI vision analysis (expensive, skipped if Layer 1 already hits ban threshold).
 /// </summary>
-internal sealed class ProfileScoringEngine(
+public sealed class ProfileScoringEngine(
     IUrlPreFilterService urlPreFilter,
     IStopWordsRepository stopWordsRepository,
     IChatService chatService,
-    ILogger logger)
+    ILogger<ProfileScoringEngine> logger) : IProfileScoringEngine
 {
     /// <summary>Result from AI vision analysis (Layer 2).</summary>
     private record AiScoringResult(
@@ -77,7 +77,7 @@ internal sealed class ProfileScoringEngine(
     /// <param name="banThreshold">Score at or above which the user should be auto-banned.</param>
     /// <param name="notifyThreshold">Score at or above which admins should be notified.</param>
     /// <param name="ct">Cancellation token.</param>
-    internal async Task<ScoringResult> ScoreAsync(
+    public async Task<ScoringResult> ScoreAsync(
         ProfileData profile,
         IReadOnlyList<ImageInput> images,
         string? imageLabels,
@@ -275,7 +275,7 @@ internal sealed class ProfileScoringEngine(
 /// Extracted profile data passed to the scoring engine.
 /// Decouples scoring from the WTelegram API types.
 /// </summary>
-internal record ProfileData(
+public record ProfileData(
     UserIdentity User,
     ChatIdentity Chat,
     string? FirstName,

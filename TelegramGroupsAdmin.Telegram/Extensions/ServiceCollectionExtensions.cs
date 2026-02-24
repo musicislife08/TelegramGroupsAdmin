@@ -65,6 +65,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<ITelegramSessionManager, TelegramSessionManager>();
             services.AddScoped<ITelegramAuthService, TelegramAuthService>();
             services.AddSingleton<IProfileScanService, ProfileScanService>();
+            services.AddScoped<IProfileScoringEngine, ProfileScoringEngine>();
 
             // Telegram infrastructure
             services.AddSingleton<ITelegramBotClientFactory, TelegramBotClientFactory>();

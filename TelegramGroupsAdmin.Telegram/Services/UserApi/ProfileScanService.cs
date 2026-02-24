@@ -4,8 +4,6 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
@@ -211,11 +209,7 @@ public sealed class ProfileScanService(
         var banThreshold = profileScanConfig?.BanThreshold ?? ProfileScanConfig.DefaultBanThreshold;
         var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;
 
-        var scoringEngine = new ProfileScoringEngine(
-            scope.ServiceProvider.GetRequiredService<IUrlPreFilterService>(),
-            scope.ServiceProvider.GetRequiredService<IStopWordsRepository>(),
-            scope.ServiceProvider.GetRequiredService<IChatService>(),
-            logger);
+        var scoringEngine = scope.ServiceProvider.GetRequiredService<IProfileScoringEngine>();
 
         var scoreResult = await scoringEngine.ScoreAsync(
             profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, ct);
