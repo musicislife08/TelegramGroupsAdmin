@@ -37,10 +37,6 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.3" />
 
-    <!-- MSBuild SDK -->
-    <PackageVersion Include="Microsoft.Build.Tasks.Core" Version="18.3.3" />
-    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.3.3" />
-
     <!-- AI / ML -->
     <PackageVersion Include="Microsoft.ML" Version="5.0.0" />
     <PackageVersion Include="Microsoft.SemanticKernel" Version="1.72.0" />

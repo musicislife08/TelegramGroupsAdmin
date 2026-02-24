@@ -27,10 +27,6 @@
         <PackageReference Include="Markdig" />
         <PackageReference Include="Markdown.ColorCode" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
-        <PackageReference Include="Microsoft.Build.Tasks.Core" />
-        <PackageReference Include="Microsoft.Build.Utilities.Core" />
-        <!-- WORKAROUND: Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in Microsoft.EntityFrameworkCore.Design transitive deps
-             Remove when Microsoft.EntityFrameworkCore.Design updates to 17.14.28+ (Oct 2025) -->
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
           <PrivateAssets>all</PrivateAssets>

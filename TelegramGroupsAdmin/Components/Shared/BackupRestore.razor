@@ -130,14 +130,15 @@ else
                             Select Backup File
                         </MudButton>
                     </CustomContent>
+                    <SelectedTemplate Context="file">
+                        @if (file != null)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2">
+                                <strong>@file.Name</strong> (@FormatBytes(file.Size))
+                            </MudText>
+                        }
+                    </SelectedTemplate>
                 </MudFileUpload>
-
-                @if (_selectedFile != null)
-                {
-                    <MudText Typo="Typo.body2" Class="mt-2">
-                        <strong>@_selectedFile.Name</strong> (@FormatBytes(_selectedFile.Size))
-                    </MudText>
-                }
 
                 @if (_backupBytes != null && !_isRestoring)
                 {

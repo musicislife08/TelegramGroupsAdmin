@@ -81,21 +81,22 @@
             <MudText Typo="Typo.subtitle2" Class="mb-2">Media (optional)</MudText>
             <MudFileUpload T="IBrowserFile" Accept="image/*,video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska" @bind-Files="_selectedMedia" MaximumFileCount="1">
                 <CustomContent Context="fileUpload">
-                    <MudButton HtmlTag="label"
-                               Variant="Variant.Outlined"
+                    <MudButton Variant="Variant.Outlined"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.CloudUpload"
                                OnClick="@fileUpload.OpenFilePickerAsync">
                         Upload Image/Video or Paste (Ctrl+V)
                     </MudButton>
                 </CustomContent>
+                <SelectedTemplate Context="file">
+                    @if (file != null)
+                    {
+                        <MudChip T="string" Color="Color.Success" Icon="@GetMediaIcon(file.ContentType)" OnClose="@ClearMedia" Class="mt-2">
+                            @file.Name (@FormatFileSize(file.Size)) · @GetMediaType(file.ContentType)
+                        </MudChip>
+                    }
+                </SelectedTemplate>
             </MudFileUpload>
-            @if (_selectedMedia != null)
-            {
-                <MudChip T="string" Color="Color.Success" Icon="@GetMediaIcon(_selectedMedia.ContentType)" OnClose="@ClearMedia" Class="mt-2">
-                    @_selectedMedia.Name (@FormatFileSize(_selectedMedia.Size)) • @GetMediaType(_selectedMedia.ContentType)
-                </MudChip>
-            }
             @if (_pastedImageData?.Length > 0)
             {
                 <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.ContentPaste" OnClose="@ClearPastedImage" Class="mt-2">
@@ -112,28 +113,29 @@
             <MudText Typo="Typo.subtitle2" Class="mb-2">File Attachment (optional)</MudText>
             <MudFileUpload T="IBrowserFile" @bind-Files="_selectedFile" MaximumFileCount="1">
                 <CustomContent Context="fileUpload">
-                    <MudButton HtmlTag="label"
-                               Variant="Variant.Outlined"
+                    <MudButton Variant="Variant.Outlined"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.UploadFile"
                                OnClick="@fileUpload.OpenFilePickerAsync">
                         Upload File (for malware scanning)
                     </MudButton>
                 </CustomContent>
+                <SelectedTemplate Context="file">
+                    @if (file != null)
+                    {
+                        <MudPaper Class="pa-3 mt-3" Outlined="true">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@GetFileIcon(file.Name)" Size="Size.Large" Color="Color.Primary" />
+                                <MudStack Spacing="0" Style="flex: 1;">
+                                    <MudText Typo="Typo.body1"><strong>@file.Name</strong></MudText>
+                                    <MudText Typo="Typo.caption">@FormatFileSize(file.Size) · @file.ContentType</MudText>
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@ClearFile" />
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </SelectedTemplate>
             </MudFileUpload>
-            @if (_selectedFile != null)
-            {
-                <MudPaper Class="pa-3 mt-3" Outlined="true">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@GetFileIcon(_selectedFile.Name)" Size="Size.Large" Color="Color.Primary" />
-                        <MudStack Spacing="0" Style="flex: 1;">
-                            <MudText Typo="Typo.body1"><strong>@_selectedFile.Name</strong></MudText>
-                            <MudText Typo="Typo.caption">@FormatFileSize(_selectedFile.Size) • @_selectedFile.ContentType</MudText>
-                        </MudStack>
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@ClearFile" />
-                    </MudStack>
-                </MudPaper>
-            }
             <MudText Typo="Typo.caption" Class="mt-1">
                 Upload files to test malware scanning (ClamAV + VirusTotal). Test with eicar.com test file.
             </MudText>
