@@ -449,7 +449,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling profile scan action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
-            Snackbar.Add($"Failed to process alert: {ex.Message}", Severity.Error);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
         }
     }
 
@@ -487,7 +487,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling spam action {Action} for report {ReportId}", args.Action, args.Report.Id);
-            Snackbar.Add($"Failed to process report: {ex.Message}", Severity.Error);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
         }
     }
 
@@ -557,7 +557,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling impersonation action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
-            Snackbar.Add($"Failed to process alert: {ex.Message}", Severity.Error);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
         }
     }
 
@@ -648,7 +648,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling exam action {Action} for exam failure {ExamId}", args.Action, args.ExamFailure.Id);
-            Snackbar.Add($"Failed to process exam review: {ex.Message}", Severity.Error);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
         }
     }
 

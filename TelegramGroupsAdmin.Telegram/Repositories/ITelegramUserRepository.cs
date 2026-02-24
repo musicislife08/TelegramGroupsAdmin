@@ -114,6 +114,13 @@ public interface ITelegramUserRepository
     Task SetProfileScanExcludedAsync(long telegramUserId, bool excluded, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get user IDs eligible for periodic profile re-scanning.
+    /// Filters out banned/bot/trusted/excluded users and returns those with stale or missing scans.
+    /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users prioritized).
+    /// </summary>
+    Task<List<long>> GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset rescanCutoff, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Atomically update all profile scan columns for a user.
     /// Called after a User API profile scan completes.
     /// </summary>

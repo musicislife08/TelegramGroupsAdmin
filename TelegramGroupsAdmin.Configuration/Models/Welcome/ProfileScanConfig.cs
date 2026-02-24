@@ -10,15 +10,18 @@ public class ProfileScanConfig
     /// </summary>
     public bool Enabled { get; set; } = false;
 
+    public const decimal DefaultBanThreshold = 4.0m;
+    public const decimal DefaultNotifyThreshold = 2.0m;
+
     /// <summary>
     /// Score threshold for automatic ban (0.0-5.0)
     /// </summary>
-    public decimal BanThreshold { get; set; } = 4.0m;
+    public decimal BanThreshold { get; set; } = DefaultBanThreshold;
 
     /// <summary>
     /// Score threshold for admin notification/review (0.0-5.0)
     /// </summary>
-    public decimal NotifyThreshold { get; set; } = 2.0m;
+    public decimal NotifyThreshold { get; set; } = DefaultNotifyThreshold;
 
     /// <summary>
     /// Whether to scan user profiles when they join a chat

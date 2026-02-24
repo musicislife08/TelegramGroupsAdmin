@@ -154,7 +154,7 @@
                                 {
                                     <MudChip T="string"
                                              Size="Size.Small"
-                                             Color="@GetScoreColor(_userDetail.ProfileScanScore.Value)">
+                                             Color="@ProfileScanDisplayHelpers.GetScoreColor(_userDetail.ProfileScanScore.Value)">
                                         Score: @_userDetail.ProfileScanScore.Value.ToString("F1")/5.0
                                     </MudChip>
                                 }
@@ -1233,13 +1233,6 @@
 
         await DialogService.ShowAsync<ProfileScanHistoryDialog>("Profile Scan History", parameters, options);
     }
-
-    private static Color GetScoreColor(decimal score) => score switch
-    {
-        >= 4.0m => Color.Error,
-        >= 2.0m => Color.Warning,
-        _ => Color.Success
-    };
 
     // ============================================================================
     // Warning Removal (Phase 4.11)

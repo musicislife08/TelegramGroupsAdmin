@@ -1079,6 +1079,18 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<long>> GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset rescanCutoff, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.TelegramUsers
+            .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted && !u.ProfileScanExcluded)
+            .Where(u => u.ProfileScannedAt == null || u.ProfileScannedAt < rescanCutoff)
+            .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
+            .Take(batchSize)
+            .Select(u => u.TelegramUserId)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task UpdateProfileScanDataAsync(
         long telegramUserId,
         string? bio,

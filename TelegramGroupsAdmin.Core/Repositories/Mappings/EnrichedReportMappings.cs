@@ -170,17 +170,13 @@ internal static class EnrichedReportMappings
         if (alertContext == null)
             return null;
 
-        var outcome = Enum.TryParse<ProfileScanOutcome>(alertContext.Outcome, out var parsed)
-            ? parsed
-            : ProfileScanOutcome.HeldForReview;
-
         return new ProfileScanAlertRecord
         {
             Id = view.Id,
             User = new UserIdentity(alertContext.UserId, view.ProfileFirstName, view.ProfileLastName, view.ProfileUsername),
             Chat = new ChatIdentity(view.ChatId, view.ChatName),
             Score = alertContext.Score,
-            Outcome = outcome,
+            Outcome = (ProfileScanOutcome)alertContext.Outcome,
             AiReason = alertContext.AiReason,
             AiSignalsDetected = alertContext.AiSignals,
             Bio = alertContext.Bio,

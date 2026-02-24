@@ -78,9 +78,9 @@ internal static class ProfileScanPrompts
             var sanitizedCaptions = storyCaptions
                 .Select(c => $"    <caption>{SanitizeForPrompt(c)}</caption>");
             captionsBlock = $$"""
-              <captions>
+                <captions>
             {{string.Join("\n", sanitizedCaptions)}}
-              </captions>
+                </captions>
             """;
         }
 

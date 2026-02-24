@@ -463,7 +463,7 @@ public class ReportsRepository : IReportsRepository
         {
             UserId = alert.User.Id,
             Score = alert.Score,
-            Outcome = alert.Outcome.ToString(),
+            Outcome = (int)alert.Outcome,
             AiReason = alert.AiReason,
             AiSignals = alert.AiSignalsDetected,
             Bio = alert.Bio,

@@ -1,3 +1,4 @@
+@using TelegramGroupsAdmin.Helpers
 @inject IProfileScanResultsRepository ScanResultsRepository
 
 <MudDialog>
@@ -19,7 +20,7 @@
             <MudTimeline TimelineOrientation="TimelineOrientation.Vertical" TimelinePosition="TimelinePosition.Start">
                 @foreach (var result in _results)
                 {
-                    <MudTimelineItem Color="@GetOutcomeColor(result.Outcome)" Size="Size.Small">
+                    <MudTimelineItem Color="@ProfileScanDisplayHelpers.GetOutcomeColor(result.Outcome)" Size="Size.Small">
                         <ItemOpposite>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 <span class="local-timestamp" data-utc="@result.ScannedAt.ToString("o")">@result.ScannedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
@@ -32,12 +33,12 @@
                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                                         <MudChip T="string"
                                                  Size="Size.Small"
-                                                 Color="@GetOutcomeColor(result.Outcome)">
+                                                 Color="@ProfileScanDisplayHelpers.GetOutcomeColor(result.Outcome)">
                                             @FormatOutcome(result.Outcome)
                                         </MudChip>
                                         <MudChip T="string"
                                                  Size="Size.Small"
-                                                 Color="@GetScoreColor(result.Score)">
+                                                 Color="@ProfileScanDisplayHelpers.GetScoreColor(result.Score)">
                                             Score: @result.Score.ToString("F1")/5.0
                                         </MudChip>
                                     </MudStack>
@@ -111,14 +112,6 @@
 
     private void Close() => MudDialog.Close();
 
-    private static Color GetOutcomeColor(ProfileScanOutcome outcome) => outcome switch
-    {
-        ProfileScanOutcome.Clean => Color.Success,
-        ProfileScanOutcome.HeldForReview => Color.Warning,
-        ProfileScanOutcome.Banned => Color.Error,
-        _ => Color.Default
-    };
-
     private static string FormatOutcome(ProfileScanOutcome outcome) => outcome switch
     {
         ProfileScanOutcome.Clean => "Clean",
@@ -127,10 +120,4 @@
         _ => outcome.ToString()
     };
 
-    private static Color GetScoreColor(decimal score) => score switch
-    {
-        >= 4.0m => Color.Error,
-        >= 2.0m => Color.Warning,
-        _ => Color.Success
-    };
 }

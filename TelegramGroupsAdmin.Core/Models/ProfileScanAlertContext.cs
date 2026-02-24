@@ -14,7 +14,7 @@ public record ProfileScanAlertContext
     public decimal Score { get; init; }
 
     [JsonPropertyName("outcome")]
-    public string? Outcome { get; init; }
+    public int Outcome { get; init; }
 
     [JsonPropertyName("aiReason")]
     public string? AiReason { get; init; }

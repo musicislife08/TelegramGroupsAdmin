@@ -184,8 +184,8 @@ public sealed class ProfileScanService(
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
         var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan;
-        var banThreshold = profileScanConfig?.BanThreshold ?? 4.0m;
-        var notifyThreshold = profileScanConfig?.NotifyThreshold ?? 2.0m;
+        var banThreshold = profileScanConfig?.BanThreshold ?? ProfileScanConfig.DefaultBanThreshold;
+        var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;
 
         var scoringEngine = new ProfileScoringEngine(
             scope.ServiceProvider.GetRequiredService<IUrlPreFilterService>(),
@@ -546,8 +546,8 @@ public sealed class ProfileScanService(
         var configService = sp.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat?.Id ?? 0);
         var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan;
-        var banThreshold = profileScanConfig?.BanThreshold ?? 4.0m;
-        var notifyThreshold = profileScanConfig?.NotifyThreshold ?? 2.0m;
+        var banThreshold = profileScanConfig?.BanThreshold ?? ProfileScanConfig.DefaultBanThreshold;
+        var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;
 
         return score >= banThreshold
             ? ProfileScanOutcome.Banned

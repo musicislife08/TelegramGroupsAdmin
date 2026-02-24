@@ -1,5 +1,6 @@
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Constants
@@ -14,7 +15,7 @@
                 <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Color="@GetIconColor()" Size="Size.Small" />
                 <MudText Typo="Typo.h6">Profile Scan Alert</MudText>
                 <MudSpacer />
-                <MudChip T="string" Size="Size.Small" Color="@GetOutcomeColor()">
+                <MudChip T="string" Size="Size.Small" Color="@ProfileScanDisplayHelpers.GetOutcomeColor(Alert.Outcome)">
                     @Alert.Outcome.ToString()
                 </MudChip>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -30,7 +31,7 @@
                 <MudStack Row="true" Spacing="4" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                     <MudStack Spacing="1">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Score</MudText>
-                        <MudText Typo="Typo.h5" Color="@GetScoreColor()"><b>@Alert.Score.ToString("F1")/5.0</b></MudText>
+                        <MudText Typo="Typo.h5" Color="@ProfileScanDisplayHelpers.GetScoreColor(Alert.Score)"><b>@Alert.Score.ToString("F1")/5.0</b></MudText>
                     </MudStack>
                     <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
                         @if (Alert.IsScam)
@@ -251,41 +252,42 @@
         };
     }
 
-    private Color GetOutcomeColor()
-    {
-        return Alert.Outcome switch
-        {
-            ProfileScanOutcome.Banned => Color.Error,
-            ProfileScanOutcome.HeldForReview => Color.Warning,
-            _ => Color.Success
-        };
-    }
-
-    private Color GetScoreColor()
-    {
-        return Alert.Score >= 4.0m ? Color.Error :
-               Alert.Score >= 2.5m ? Color.Warning :
-               Color.Default;
-    }
-
     private async Task OnAllow()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, ProfileScanAction.Allow));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ProfileScanAction.Allow));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnBan()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, ProfileScanAction.Ban));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ProfileScanAction.Ban));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnKick()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, ProfileScanAction.Kick));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ProfileScanAction.Kick));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 }

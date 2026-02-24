@@ -337,21 +337,39 @@
     private async Task OnConfirm()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, ImpersonationAction.Confirm));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ImpersonationAction.Confirm));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnDismiss()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, ImpersonationAction.Dismiss));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ImpersonationAction.Dismiss));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnTrust()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Alert, ImpersonationAction.Trust));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ImpersonationAction.Trust));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 }

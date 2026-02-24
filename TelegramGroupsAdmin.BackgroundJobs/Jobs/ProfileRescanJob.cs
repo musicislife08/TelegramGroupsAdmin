@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
@@ -9,7 +7,6 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
@@ -23,15 +20,15 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 [DisallowConcurrentExecution]
 public class ProfileRescanJob(
     ILogger<ProfileRescanJob> logger,
-    IServiceScopeFactory scopeFactory,
     IBackgroundJobConfigService jobConfigService,
     ITelegramSessionManager sessionManager,
+    ITelegramUserRepository userRepository,
     IProfileScanService profileScanService) : IJob
 {
     private readonly ILogger<ProfileRescanJob> _logger = logger;
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly IBackgroundJobConfigService _jobConfigService = jobConfigService;
     private readonly ITelegramSessionManager _sessionManager = sessionManager;
+    private readonly ITelegramUserRepository _userRepository = userRepository;
     private readonly IProfileScanService _profileScanService = profileScanService;
 
     public async Task Execute(IJobExecutionContext context)
@@ -67,15 +64,8 @@ public class ProfileRescanJob(
                 "Profile rescan: starting batch (size={BatchSize}, rescanAfter={RescanAfter}, cutoff={Cutoff})",
                 batchSize, settings.RescanAfter, cutoff);
 
-            // Query eligible users
-            await using var dbContext = await GetDbContextAsync(cancellationToken);
-            var userIds = await dbContext.TelegramUsers
-                .Where(u => !u.IsBanned && !u.IsBot && !u.IsTrusted && !u.ProfileScanExcluded)
-                .Where(u => u.ProfileScannedAt == null || u.ProfileScannedAt < cutoff)
-                .OrderBy(u => u.ProfileScannedAt) // NULLS FIRST is PostgreSQL default for ASC
-                .Take(batchSize)
-                .Select(u => u.TelegramUserId)
-                .ToListAsync(cancellationToken);
+            // Query eligible users via repository
+            var userIds = await _userRepository.GetEligibleUsersForRescanAsync(batchSize, cutoff, cancellationToken);
 
             if (userIds.Count == 0)
             {
@@ -94,9 +84,7 @@ public class ProfileRescanJob(
                 try
                 {
                     // Look up the user's most recently active chat for alert/notification targeting
-                    using var scope = _scopeFactory.CreateScope();
-                    var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                    var chat = await userRepo.GetFirstChatForUserAsync(userId, cancellationToken);
+                    var chat = await _userRepository.GetFirstChatForUserAsync(userId, cancellationToken);
 
                     var result = await _profileScanService.ScanUserProfileAsync(
                         UserIdentity.FromId(userId),
@@ -150,12 +138,5 @@ public class ProfileRescanJob(
             TelemetryConstants.JobExecutions.Add(1, tags);
             TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
         }
-    }
-
-    private async Task<AppDbContext> GetDbContextAsync(CancellationToken ct)
-    {
-        var scope = _scopeFactory.CreateScope();
-        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-        return await factory.CreateDbContextAsync(ct);
     }
 }
