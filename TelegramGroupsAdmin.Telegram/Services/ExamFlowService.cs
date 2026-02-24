@@ -30,6 +30,7 @@ public class ExamFlowService : IExamFlowService
     private readonly IBotDmService _dmService;
     private readonly IBotChatService _chatService;
     private readonly IExamEvaluationService _examEvaluationService;
+    private readonly IWelcomeAdmissionHandler _admissionHandler;
 
     public ExamFlowService(
         ILogger<ExamFlowService> logger,
@@ -37,13 +38,15 @@ public class ExamFlowService : IExamFlowService
         IBotMessageService messageService,
         IBotDmService dmService,
         IBotChatService chatService,
-        IExamEvaluationService examEvaluationService)
+        IExamEvaluationService examEvaluationService,
+        IWelcomeAdmissionHandler admissionHandler)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _messageService = messageService;
         _dmService = dmService;
         _chatService = chatService;
+        _admissionHandler = admissionHandler;
         _examEvaluationService = examEvaluationService;
     }
 
@@ -707,41 +710,12 @@ public class ExamFlowService : IExamFlowService
         var welcomeResponsesRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
         var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
-        // 1. Restore user permissions via orchestrator (audit trail for both flows)
-        var restoreResult = await orchestrator.RestoreUserPermissionsAsync(
-            new RestorePermissionsIntent
-            {
-                User = user,
-                Chat = chat,
-                Executor = executor,
-                Reason = reason
-            },
-            cancellationToken);
-
-        if (!restoreResult.Success)
-        {
-            return restoreResult;
-        }
-
         var chatName = chat.ChatName ?? "the chat";
 
-        // 2. Delete teaser and update welcome response
+        // 1. Update welcome response to accepted FIRST (admission gate checks this)
         var welcomeResponse = await welcomeResponsesRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
         if (welcomeResponse != null)
         {
-            // Delete teaser message via orchestrator (audit trail)
-            await orchestrator.DeleteMessageAsync(
-                new DeleteMessageIntent
-                {
-                    MessageId = welcomeResponse.WelcomeMessageId,
-                    Chat = chat,
-                    User = user,
-                    Executor = executor,
-                    Reason = "Exam teaser cleanup after approval"
-                },
-                cancellationToken);
-
-            // Update welcome response to accepted
             await welcomeResponsesRepo.UpdateResponseAsync(
                 welcomeResponse.Id,
                 WelcomeResponseType.Accepted,
@@ -750,13 +724,71 @@ public class ExamFlowService : IExamFlowService
                 cancellationToken);
         }
 
-        // 3. Mark user as active
-        await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
+        // 2. Attempt admission via centralized gate (checks profile + welcome gates)
+        var admissionResult = await _admissionHandler.TryAdmitUserAsync(
+            user, chat, executor, reason, cancellationToken);
 
-        // 4. Build deeplink to return to chat (DB-cached invite link handles both public and private chats)
+        if (admissionResult == AdmissionResult.Admitted)
+        {
+            // 3. Delete teaser message
+            if (welcomeResponse != null)
+            {
+                await orchestrator.DeleteMessageAsync(
+                    new DeleteMessageIntent
+                    {
+                        MessageId = welcomeResponse.WelcomeMessageId,
+                        Chat = chat,
+                        User = user,
+                        Executor = executor,
+                        Reason = "Exam teaser cleanup after approval"
+                    },
+                    cancellationToken);
+            }
+
+            // 4. Mark user as active
+            await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
+
+            // 5. Send success DM with deeplink to return to chat
+            await SendExamApprovalDmAsync(user, chat, chatName, isManualApproval, cancellationToken);
+        }
+        else
+        {
+            // Profile gate still pending — notify user exam passed but awaiting review
+            try
+            {
+                await _dmService.SendDmAsync(user.Id,
+                    $"✅ You've passed the entrance exam for {chatName}! ⏳ Your profile is under admin review — you'll be able to participate once approved.",
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to send exam hold DM to {User}", user.ToLogDebug());
+            }
+
+            _logger.LogInformation(
+                "Exam passed for {User} in {Chat} but held for profile review",
+                user.ToLogInfo(), chat.ToLogInfo());
+        }
+
+        _logger.LogInformation(
+            "Exam approved for {User} in {Chat} by {Executor} (admission: {Result})",
+            user.ToLogInfo(),
+            chat.ToLogInfo(),
+            executor.DisplayName,
+            admissionResult);
+
+        return new ModerationResult { Success = true };
+    }
+
+    private async Task SendExamApprovalDmAsync(
+        UserIdentity user,
+        ChatIdentity chat,
+        string chatName,
+        bool isManualApproval,
+        CancellationToken cancellationToken)
+    {
         var chatDeepLink = await _chatService.GetInviteLinkAsync(chat.Id, cancellationToken);
 
-        // 5. Send success DM to user
         InlineKeyboardMarkup? keyboard = null;
         if (chatDeepLink != null)
         {
@@ -780,17 +812,8 @@ public class ExamFlowService : IExamFlowService
         }
         catch (Exception ex)
         {
-            // Non-fatal - user may have blocked bot
-            _logger.LogDebug(ex, "Failed to send exam approval DM to user {User}", user.ToLogDebug());
+            _logger.LogDebug(ex, "Failed to send exam approval DM to {User}", user.ToLogDebug());
         }
-
-        _logger.LogInformation(
-            "Exam approved for {User} in {Chat} by {Executor}",
-            user.ToLogInfo(),
-            chat.ToLogInfo(),
-            executor.DisplayName);
-
-        return new ModerationResult { Success = true };
     }
 
     /// <inheritdoc />

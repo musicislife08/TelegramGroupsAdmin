@@ -24,7 +24,7 @@ public class AIProviderConfigTests
     }
 
     [Test]
-    public void Constructor_InitializesAllFiveFeatures()
+    public void Constructor_InitializesAllFeatures()
     {
         // Act
         var config = new AIProviderConfig();
@@ -33,12 +33,13 @@ public class AIProviderConfigTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(config.Features, Is.Not.Null);
-            Assert.That(config.Features.Count, Is.EqualTo(5));
+            Assert.That(config.Features.Count, Is.EqualTo(6));
             Assert.That(config.Features.ContainsKey(AIFeatureType.SpamDetection), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.Translation), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.ImageAnalysis), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.VideoAnalysis), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.PromptBuilder), Is.True);
+            Assert.That(config.Features.ContainsKey(AIFeatureType.ProfileScan), Is.True);
         }
     }
 

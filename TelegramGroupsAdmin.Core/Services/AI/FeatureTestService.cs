@@ -74,6 +74,7 @@ public class FeatureTestService(
                 AIFeatureType.ImageAnalysis => await TestVisionAsync(connectionId, model, azureDeploymentName, "image", tokens, cancellationToken),
                 AIFeatureType.VideoAnalysis => await TestVisionAsync(connectionId, model, azureDeploymentName, "video frame", tokens, cancellationToken),
                 AIFeatureType.PromptBuilder => await TestPromptBuilderAsync(connectionId, model, azureDeploymentName, tokens, cancellationToken),
+                AIFeatureType.ProfileScan => await TestVisionAsync(connectionId, model, azureDeploymentName, "profile scan", tokens, cancellationToken),
                 _ => FeatureTestResult.Fail($"Unknown feature type: {featureType}")
             };
         }

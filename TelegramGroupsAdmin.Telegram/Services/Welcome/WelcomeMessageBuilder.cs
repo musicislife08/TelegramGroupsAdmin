@@ -105,6 +105,17 @@ public static class WelcomeMessageBuilder
             config.TimeoutSeconds);
     }
 
+    /// <summary>
+    /// Formats the profile hold message shown when a user's profile is held for admin review.
+    /// The user remains muted until an admin acts on the profile scan alert.
+    /// </summary>
+    /// <param name="username">User's @username or first name</param>
+    /// <returns>Profile hold message text</returns>
+    public static string FormatProfileHoldMessage(string username)
+    {
+        return $"{username} ⏳ Your profile is under admin review. Please wait...";
+    }
+
     private static string SubstituteVariables(
         string template,
         string username,

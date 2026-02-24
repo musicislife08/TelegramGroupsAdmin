@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -136,6 +137,7 @@ public class ExamFlowServiceTests
         services.AddSingleton(_mockDmService);
         services.AddScoped(_ => mockExamEvaluationService);  // Scoped in main app
         services.AddScoped(_ => mockConfigService);  // Scoped in main app
+        services.AddSingleton(Substitute.For<IWelcomeAdmissionHandler>());
 
         // The service under test
         services.AddScoped<IExamFlowService, ExamFlowService>();

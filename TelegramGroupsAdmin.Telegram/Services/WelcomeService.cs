@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -37,6 +38,9 @@ public class WelcomeService(
     IJobScheduler jobScheduler,
     ICasCheckService casCheckService,
     TelegramPhotoService photoService,
+    IProfileScanService profileScanService,
+    ITelegramSessionManager sessionManager,
+    IWelcomeAdmissionHandler admissionHandler,
     ILogger<WelcomeService> logger) : IWelcomeService
 {
     // Deletion source constants for audit tracking
@@ -175,11 +179,13 @@ public class WelcomeService(
 
             // ═══════════════════════════════════════════════════════════════════
             // SECURITY CHECKS (always run regardless of config.Enabled)
-            // Order: CAS (fail fast) → Photo fetch → Impersonation (uses photo)
+            // Order: CAS (fail fast) → Photo fetch → Impersonation → Profile scan
+            // Trusted users skip CAS + profile scan (trust is global)
             // ═══════════════════════════════════════════════════════════════════
 
             // Step 5: CAS (Combot Anti-Spam) check - auto-ban known spammers FIRST (fail fast)
-            if (config.JoinSecurity.Cas.Enabled)
+            // Skip trusted users — trust is global, applied across all groups
+            if (config.JoinSecurity.Cas.Enabled && existingUser?.IsTrusted != true)
             {
                 var casResult = await casCheckService.CheckUserAsync(user.Id, config.JoinSecurity.Cas, cancellationToken);
                 if (casResult.IsBanned)
@@ -217,10 +223,10 @@ public class WelcomeService(
             }
 
             // Step 6: Photo fetch (sync, ~1.8s) - enables full impersonation detection
-            string? userPhotoPath = existingUser.UserPhotoPath;
+            string? userPhotoPath = existingUser?.UserPhotoPath;
             var photoResult = await photoService.GetUserPhotoWithMetadataAsync(
                 user.Id,
-                knownPhotoId: existingUser.PhotoFileUniqueId,
+                knownPhotoId: existingUser?.PhotoFileUniqueId,
                 existingUser,
                 cancellationToken);
 
@@ -295,39 +301,90 @@ public class WelcomeService(
                 logger.LogDebug("Impersonation detection disabled, skipping for {User}", user.ToLogDebug());
             }
 
+            // Step 8: Profile scan via User API (skip trusted users)
+            if (config.JoinSecurity.ProfileScan.Enabled
+                && config.JoinSecurity.ProfileScan.ScanOnJoin
+                && existingUser?.IsTrusted != true)
+            {
+                if (await sessionManager.HasAnyActiveSessionAsync(cancellationToken))
+                {
+                    var scanResult = await profileScanService.ScanUserProfileAsync(
+                        UserIdentity.From(user),
+                        ChatIdentity.From(chatMemberUpdate.Chat),
+                        cancellationToken);
+
+                    if (scanResult.Outcome == ProfileScanOutcome.Banned)
+                    {
+                        await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+
+                        logger.LogInformation(
+                            "{User} auto-banned by profile scan (score {Score}), skipping welcome flow",
+                            user.ToLogInfo(), scanResult.Score);
+                        return; // User already banned by ProfileScanService
+                    }
+
+                    if (scanResult.Outcome == ProfileScanOutcome.HeldForReview)
+                    {
+                        // Update verifying message — user waits for admin + welcome gate
+                        var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
+                            TelegramDisplayName.FormatMention(user));
+                        await TryEditMessageAsync(
+                            chatMemberUpdate.Chat.Id, verifyingMessageId.Value, holdText, cancellationToken);
+
+                        logger.LogInformation(
+                            "{User} held for profile scan review (score {Score}), continuing welcome flow",
+                            user.ToLogInfo(), scanResult.Score);
+                        // Fall through — exam will run below if configured (dual-gate: both must pass)
+                    }
+                }
+                else
+                {
+                    logger.LogDebug("No User API session available, skipping profile scan for {User}",
+                        user.ToLogDebug());
+                }
+            }
+
             // ═══════════════════════════════════════════════════════════════════
             // SECURITY CHECKS PASSED - Branch based on welcome config
             // ═══════════════════════════════════════════════════════════════════
 
             if (!config.Enabled)
             {
-                // Welcome DISABLED: Security checks passed, unmute and clean up
+                // Welcome DISABLED: Attempt admission (profile gate may still block)
                 logger.LogDebug(
-                    "Welcome system disabled for {Chat}, security passed - unmuting {User}",
+                    "Welcome system disabled for {Chat}, attempting admission for {User}",
                     chatMemberUpdate.Chat.ToLogDebug(),
                     user.ToLogDebug());
 
-                // Restore user permissions via moderation service
-                await moderationService.RestoreUserPermissionsAsync(
-                    new RestorePermissionsIntent
-                    {
-                        User = UserIdentity.From(user),
-                        Chat = ChatIdentity.From(chatMemberUpdate.Chat),
-                        Executor = Actor.WelcomeFlow,
-                        Reason = ReasonSecurityPassed
-                    },
+                var admissionResult = await admissionHandler.TryAdmitUserAsync(
+                    UserIdentity.From(user),
+                    ChatIdentity.From(chatMemberUpdate.Chat),
+                    Actor.WelcomeFlow,
+                    ReasonSecurityPassed,
                     cancellationToken);
 
-                // Mark user as active (security passed, no welcome flow)
-                await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
+                if (admissionResult == AdmissionResult.Admitted)
+                {
+                    // Mark user as active (security passed, no welcome flow)
+                    await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
 
-                // Delete verifying message
-                await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+                    // Delete verifying message
+                    await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
 
-                logger.LogInformation(
-                    "{User} passed security checks in {Chat} (welcome disabled)",
-                    user.ToLogInfo(),
-                    chatMemberUpdate.Chat.ToLogInfo());
+                    logger.LogInformation(
+                        "{User} passed security checks in {Chat} (welcome disabled)",
+                        user.ToLogInfo(),
+                        chatMemberUpdate.Chat.ToLogInfo());
+                }
+                else
+                {
+                    // Profile gate still pending — user stays muted until admin acts
+                    // Verifying message already updated to profile hold text (if held)
+                    logger.LogInformation(
+                        "{User} held for admin review in {Chat} (welcome disabled, profile gate pending)",
+                        user.ToLogInfo(),
+                        chatMemberUpdate.Chat.ToLogInfo());
+                }
                 return;
             }
 
@@ -448,6 +505,18 @@ public class WelcomeService(
         catch (Exception ex)
         {
             logger.LogDebug(ex, "Failed to delete message {MessageId} (non-fatal)", messageId);
+        }
+    }
+
+    private async Task TryEditMessageAsync(long chatId, int messageId, string text, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await messageService.EditAndUpdateMessageAsync(chatId, messageId, text, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to edit message {MessageId} (non-fatal)", messageId);
         }
     }
 
@@ -793,36 +862,10 @@ public class WelcomeService(
             dmSent,
             dmFallback);
 
-        // Step 4: Restore user permissions via moderation service (audit trail)
-        var restoreResult = await moderationService.RestoreUserPermissionsAsync(
-            new RestorePermissionsIntent
-            {
-                User = UserIdentity.From(user),
-                Chat = ChatIdentity.From(chat),
-                Executor = Actor.WelcomeFlow,
-                Reason = ReasonCompletedWelcome
-            },
-            cancellationToken);
-
-        if (!restoreResult.Success)
-        {
-            logger.LogWarning(
-                "Failed to restore permissions for {User} in {Chat}: {Error}",
-                user.ToLogInfo(),
-                chat.ToLogInfo(),
-                restoreResult.ErrorMessage);
-        }
-
-        // Step 4b: Mark user as active (completed welcome flow)
-        await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
-
-        // Step 5: Delete welcome message
-        await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
-
-        // Step 6: Update or create response record
+        // Step 4: Update or create response record (MUST happen before admission check —
+        // TryAdmitUserAsync checks the welcome gate, which reads this record)
         if (existingResponse != null)
         {
-            // Update existing record
             await welcomeResponsesRepository.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Accepted, dmSent, dmFallback, cancellationToken);
         }
         else
@@ -842,6 +885,31 @@ public class WelcomeService(
                 TimeoutJobId: null
             );
             await welcomeResponsesRepository.InsertAsync(newResponse, cancellationToken);
+        }
+
+        // Step 5: Attempt admission via centralized gate (checks profile + welcome gates)
+        var admissionResult = await admissionHandler.TryAdmitUserAsync(
+            UserIdentity.From(user),
+            ChatIdentity.From(chat),
+            Actor.WelcomeFlow,
+            ReasonCompletedWelcome,
+            cancellationToken);
+
+        if (admissionResult == AdmissionResult.Admitted)
+        {
+            await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
+            await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
+        }
+        else
+        {
+            // Profile gate still pending — update welcome message to show hold status
+            var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
+                TelegramDisplayName.FormatMention(user));
+            await TryEditMessageAsync(chat.Id, welcomeMessageId, holdText, cancellationToken);
+
+            logger.LogInformation(
+                "{User} completed welcome in {Chat} but held for profile review",
+                user.ToLogInfo(), chat.ToLogInfo());
         }
     }
 
@@ -954,40 +1022,39 @@ public class WelcomeService(
             }
         }
 
-        // Step 4: Restore user permissions in group via moderation service (audit trail)
-        var restoreResult = await moderationService.RestoreUserPermissionsAsync(
-            new RestorePermissionsIntent
-            {
-                User = UserIdentity.From(user),
-                Chat = ChatIdentity.From(groupChat),
-                Executor = Actor.WelcomeFlow,
-                Reason = ReasonCompletedWelcomeDm
-            },
-            cancellationToken);
-
-        if (!restoreResult.Success)
-        {
-            logger.LogError(
-                "Failed to restore permissions for {User} in {Chat}: {Error}",
-                user.ToLogInfo(),
-                groupChat.ToLogInfo(),
-                restoreResult.ErrorMessage);
-
-            // Send error to user in DM
-            await dmDeliveryService.SendDmAsync(user.Id, ErrorPermissionsFailed, cancellationToken: cancellationToken);
-            return;
-        }
-
-        // Step 4b: Mark user as active (completed welcome flow via DM)
-        await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
-
-        // Step 5: Delete welcome message in group
-        await TryDeleteMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, cancellationToken);
-
-        // Step 6: Update welcome response record (mark as accepted via DM)
+        // Step 4: Update welcome response record FIRST (admission gate checks this)
         await welcomeResponsesRepository.UpdateResponseAsync(welcomeResponse.Id, WelcomeResponseType.Accepted, dmSent: true, dmFallback: false, cancellationToken);
 
-        // Step 7: Send confirmation to user in DM with button to return to chat
+        // Step 5: Attempt admission via centralized gate (checks profile + welcome gates)
+        var admissionResult = await admissionHandler.TryAdmitUserAsync(
+            UserIdentity.From(user),
+            ChatIdentity.From(groupChat),
+            Actor.WelcomeFlow,
+            ReasonCompletedWelcomeDm,
+            cancellationToken);
+
+        if (admissionResult == AdmissionResult.Admitted)
+        {
+            await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
+            await TryDeleteMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, cancellationToken);
+        }
+        else
+        {
+            // Profile gate still pending — update group message and notify user in DM
+            var holdText = WelcomeMessageBuilder.FormatProfileHoldMessage(
+                TelegramDisplayName.FormatMention(user));
+            await TryEditMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, holdText, cancellationToken);
+            await dmDeliveryService.SendDmAsync(user.Id,
+                "⏳ Your profile is under admin review. You'll be able to participate once approved.",
+                cancellationToken: cancellationToken);
+
+            logger.LogInformation(
+                "{User} completed welcome DM in {Chat} but held for profile review",
+                user.ToLogInfo(), groupChat.ToLogInfo());
+            return; // Skip confirmation DM — sent hold notice instead
+        }
+
+        // Step 6: Send confirmation to user in DM with button to return to chat
         try
         {
             var chatName = groupChat.Title ?? "the chat";

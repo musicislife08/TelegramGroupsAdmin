@@ -23,7 +23,11 @@ public sealed class TelegramSessionRepository(
 
         if (dto is null) return null;
 
-        return dto.ToModel() with { SessionData = DecryptSessionData(dto.SessionData) };
+        return dto.ToModel() with
+        {
+            SessionData = DecryptSessionData(dto.SessionData),
+            PhoneNumber = DecryptPhoneNumber(dto.PhoneNumber)
+        };
     }
 
     public async Task<List<TelegramSession>> GetAllActiveSessionsAsync(CancellationToken ct)
@@ -34,7 +38,11 @@ public sealed class TelegramSessionRepository(
             .Where(ts => ts.IsActive)
             .ToListAsync(ct);
 
-        return dtos.Select(d => d.ToModel() with { SessionData = DecryptSessionData(d.SessionData) }).ToList();
+        return dtos.Select(d => d.ToModel() with
+        {
+            SessionData = DecryptSessionData(d.SessionData),
+            PhoneNumber = DecryptPhoneNumber(d.PhoneNumber)
+        }).ToList();
     }
 
     public async Task<bool> AnyActiveSessionExistsAsync(CancellationToken ct)
@@ -48,6 +56,7 @@ public sealed class TelegramSessionRepository(
         await using var context = await contextFactory.CreateDbContextAsync(ct);
         var dto = session.ToDto();
         dto.SessionData = EncryptSessionData(dto.SessionData);
+        dto.PhoneNumber = EncryptPhoneNumber(dto.PhoneNumber);
 
         context.TelegramSessions.Add(dto);
         await context.SaveChangesAsync(ct);
@@ -93,5 +102,17 @@ public sealed class TelegramSessionRepository(
     {
         if (data.Length == 0) return data;
         return _protector.Unprotect(data);
+    }
+
+    private string? EncryptPhoneNumber(string? phoneNumber)
+    {
+        if (string.IsNullOrEmpty(phoneNumber)) return phoneNumber;
+        return _protector.Protect(phoneNumber);
+    }
+
+    private string? DecryptPhoneNumber(string? encryptedPhoneNumber)
+    {
+        if (string.IsNullOrEmpty(encryptedPhoneNumber)) return encryptedPhoneNumber;
+        return _protector.Unprotect(encryptedPhoneNumber);
     }
 }

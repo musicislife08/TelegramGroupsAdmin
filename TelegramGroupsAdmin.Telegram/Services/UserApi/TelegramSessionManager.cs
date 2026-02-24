@@ -109,7 +109,7 @@ public sealed class TelegramSessionManager(
         }
     }
 
-    public async Task DisconnectAsync(string webUserId, CancellationToken ct)
+    public async Task DisconnectAsync(string webUserId, Actor executor, CancellationToken ct)
     {
         if (_clients.TryRemove(webUserId, out var cached))
         {
@@ -127,7 +127,7 @@ public sealed class TelegramSessionManager(
             var auditService = scope.ServiceProvider.GetRequiredService<IAuditService>();
             await auditService.LogEventAsync(
                 AuditEventType.TelegramAccountDisconnected,
-                Actor.FromWebUser(webUserId),
+                executor,
                 value: "Disconnected by user",
                 cancellationToken: ct);
 
@@ -185,12 +185,17 @@ public sealed class TelegramSessionManager(
         {
             "api_id" => config.ApiId.ToString(),
             "api_hash" => apiHash,
+            "phone_number" => session.PhoneNumber,
+            // If WTelegram asks for verification_code or password, the session is truly expired
+            "verification_code" or "password" =>
+                throw new InvalidOperationException("Session requires re-authentication"),
             _ => null
         };
 
+        IWTelegramApiClient? apiClient = null;
         try
         {
-            var apiClient = clientFactory.Create(ConfigCallback, sessionStream);
+            apiClient = clientFactory.Create(ConfigCallback, sessionStream);
             await apiClient.LoginUserIfNeeded();
 
             var cached = new CachedClient(apiClient, sessionId, sessionStream);
@@ -204,12 +209,16 @@ public sealed class TelegramSessionManager(
         {
             logger.LogWarning("WTelegram session {SessionId} revoked for web user {WebUserId}: {Error}", sessionId, webUserId, ex.Message);
             await DeactivateAndAuditRevokedSessionAsync(webUserId, sessionId, ex.Message, ct);
+            // Dispose client first (stops background thread), then stream
+            if (apiClient != null) await apiClient.DisposeAsync();
             await sessionStream.DisposeAsync();
             return null;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to reconnect WTelegram session {SessionId} for web user {WebUserId}", sessionId, webUserId);
+            // Dispose client first (stops background thread), then stream
+            if (apiClient != null) await apiClient.DisposeAsync();
             await sessionStream.DisposeAsync();
             return null;
         }

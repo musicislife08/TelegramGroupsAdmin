@@ -33,6 +33,7 @@ public sealed class TelegramAuthService(
     {
         public required IWTelegramApiClient Client { get; init; }
         public required string PhoneNumber { get; init; }
+        public required Actor Executor { get; init; }
 
         // Cross-thread synchronization (ARM64 memory visibility)
         public readonly Lock Lock = new();
@@ -57,7 +58,7 @@ public sealed class TelegramAuthService(
         }
     }
 
-    public async Task<AuthFlowState> StartAuthAsync(string webUserId, string phoneNumber, CancellationToken ct)
+    public async Task<AuthFlowState> StartAuthAsync(string webUserId, string phoneNumber, Actor executor, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var configRepo = scope.ServiceProvider.GetRequiredService<ISystemConfigRepository>();
@@ -73,7 +74,8 @@ public sealed class TelegramAuthService(
                 what => ConfigCallback(what, webUserId, config.ApiId, apiHash, phoneNumber),
                 startSession: [],
                 saveSession: data => CaptureSessionData(webUserId, data)),
-            PhoneNumber = phoneNumber
+            PhoneNumber = phoneNumber,
+            Executor = executor
         };
 
         if (!ActiveFlows.TryAdd(webUserId, context))
@@ -291,6 +293,7 @@ public sealed class TelegramAuthService(
             WebUserId = webUserId,
             TelegramUserId = telegramUserId,
             DisplayName = displayName,
+            PhoneNumber = context.PhoneNumber,
             SessionData = context.SessionData,
             IsActive = true,
             ConnectedAt = DateTimeOffset.UtcNow
@@ -301,12 +304,12 @@ public sealed class TelegramAuthService(
         // Audit: account connected
         await auditService.LogEventAsync(
             AuditEventType.TelegramAccountConnected,
-            Actor.FromWebUser(webUserId),
+            context.Executor,
             value: $"Connected as {displayName} (ID: {telegramUserId})",
             cancellationToken: ct);
 
-        logger.LogInformation("WTelegram auth completed for web user {WebUserId} as {DisplayName} (TG ID: {TelegramUserId})",
-            webUserId, displayName, telegramUserId);
+        logger.LogInformation("WTelegram auth completed for {Executor} as {DisplayName} (TG ID: {TelegramUserId})",
+            context.Executor.GetDisplayText(), displayName, telegramUserId);
 
         // Auto-link Telegram account mapping if not already linked
         await TryAutoLinkAccountAsync(webUserId, telegramUserId, telegramUser, mappingRepo, auditService, ct);

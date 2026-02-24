@@ -429,21 +429,39 @@
     private async Task OnApprove()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, ExamAction.Approve));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((ExamFailure, ExamAction.Approve));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnDeny()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, ExamAction.Deny));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((ExamFailure, ExamAction.Deny));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnDenyAndBan()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, ExamAction.DenyAndBan));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((ExamFailure, ExamAction.DenyAndBan));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 }

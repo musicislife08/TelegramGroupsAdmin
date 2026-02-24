@@ -39,11 +39,13 @@ public class TelegramAuthServiceTests
     private ISystemConfigRepository _mockConfigRepo = null!;
     private IAuditService _mockAuditService = null!;
     private TelegramAuthService _sut = null!;
+    private Actor _testExecutor = null!;
 
     [SetUp]
     public void SetUp()
     {
         _testWebUserId = Guid.NewGuid().ToString();
+        _testExecutor = Actor.FromWebUser(_testWebUserId, "test@example.com");
 
         _mockScopeFactory = Substitute.For<IServiceScopeFactory>();
         _mockClientFactory = Substitute.For<IWTelegramClientFactory>();
@@ -94,7 +96,7 @@ public class TelegramAuthServiceTests
             .Returns((string?)null);
 
         // Act
-        var result = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", CancellationToken.None);
+        var result = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, CancellationToken.None);
 
         // Assert
         Assert.That(result.Step, Is.EqualTo(AuthStep.Failed));
@@ -154,13 +156,13 @@ public class TelegramAuthServiceTests
         // and cancel it quickly.
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
         // We don't await — let it run in background to insert into ActiveFlows
-        var firstCall = _sut.StartAuthAsync(_testWebUserId, "+1234567890", cts.Token);
+        var firstCall = _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, cts.Token);
 
         // Give just enough time for the ContainsKey/TryAdd path to execute
         await Task.Delay(50);
 
         // Now call with the second service instance sharing the same static dict
-        var result = await secondSut.StartAuthAsync(_testWebUserId, "+9999999999", CancellationToken.None);
+        var result = await secondSut.StartAuthAsync(_testWebUserId, "+9999999999", _testExecutor, CancellationToken.None);
 
         // Await the first call to avoid unobserved task exceptions
         try { await firstCall; } catch { /* expected: task cancelled or delay interrupted */ }
@@ -195,7 +197,7 @@ public class TelegramAuthServiceTests
             .Returns(blockingClient);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-        var startTask = _sut.StartAuthAsync(_testWebUserId, "+1234567890", cts.Token);
+        var startTask = _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, cts.Token);
 
         // Brief pause to let TryAdd execute
         await Task.Delay(20);
@@ -212,7 +214,7 @@ public class TelegramAuthServiceTests
             .Returns(new UserApiConfig { ApiId = 0 });
         _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
             .Returns((string?)null);
-        var secondStart = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", CancellationToken.None);
+        var secondStart = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, CancellationToken.None);
 
         // If CancelAuthAsync worked, the second call should return "No credentials" failure,
         // NOT "already in progress" failure.

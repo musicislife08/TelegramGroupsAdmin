@@ -24,6 +24,9 @@ public class TelegramUserListItem
     public bool HasWarnings { get; set; }
     public bool IsTagged { get; set; }  // Has notes or tags for tracking
     public bool IsAdmin { get; set; }  // Is admin in at least one managed chat
+    public decimal? ProfileScanScore { get; set; }
+    public bool IsScam { get; set; }
+    public bool IsFake { get; set; }
 
     // Display helpers
     public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);

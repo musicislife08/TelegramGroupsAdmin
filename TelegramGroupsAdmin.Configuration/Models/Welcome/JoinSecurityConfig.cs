@@ -16,5 +16,8 @@ public class JoinSecurityConfig
     /// </summary>
     public ImpersonationConfig Impersonation { get; set; } = new();
 
-    // Future: ProfileCheckConfig for Phase 2
+    /// <summary>
+    /// User API profile scanning configuration.
+    /// </summary>
+    public ProfileScanConfig ProfileScan { get; set; } = new();
 }

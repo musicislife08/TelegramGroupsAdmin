@@ -153,4 +153,42 @@ internal static class EnrichedReportMappings
             AdminNotes = view.AdminNotes
         };
     }
+
+    /// <summary>
+    /// Maps EnrichedReportView to ProfileScanAlertRecord.
+    /// User data comes from view joins; scan details from JSONB context.
+    /// </summary>
+    public static ProfileScanAlertRecord? ToProfileScanAlert(this EnrichedReportView view)
+    {
+        if (view.Type != (short)ReportType.ProfileScanAlert)
+            return null;
+
+        if (string.IsNullOrEmpty(view.Context))
+            return null;
+
+        var alertContext = JsonSerializer.Deserialize<ProfileScanAlertContext>(view.Context, JsonOptions);
+        if (alertContext == null)
+            return null;
+
+        return new ProfileScanAlertRecord
+        {
+            Id = view.Id,
+            User = new UserIdentity(alertContext.UserId, view.ProfileFirstName, view.ProfileLastName, view.ProfileUsername),
+            Chat = new ChatIdentity(view.ChatId, view.ChatName),
+            Score = alertContext.Score,
+            Outcome = (ProfileScanOutcome)alertContext.Outcome,
+            AiReason = alertContext.AiReason,
+            AiSignalsDetected = alertContext.AiSignals,
+            Bio = alertContext.Bio,
+            PersonalChannelTitle = alertContext.PersonalChannelTitle,
+            HasPinnedStories = alertContext.HasPinnedStories,
+            IsScam = alertContext.IsScam,
+            IsFake = alertContext.IsFake,
+            DetectedAt = view.ReportedAt,
+            ReviewedByUserId = view.WebUserId,
+            ReviewedAt = view.ReviewedAt,
+            ReviewedByEmail = view.ReviewerEmail ?? view.ReviewedBy,
+            ActionTaken = view.ActionTaken
+        };
+    }
 }

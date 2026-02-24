@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -68,6 +69,9 @@ public class UserDetailDialogTests : MudBlazorTestContext
         Services.AddSingleton(_mockTagDefinitionsRepo);
         Services.AddSingleton(_mockActionsRepo);
         Services.AddSingleton(_mockSnackbar);
+        Services.AddSingleton(Substitute.For<IProfileScanService>());
+        Services.AddSingleton(Substitute.For<ITelegramSessionManager>());
+        Services.AddSingleton(Substitute.For<ITelegramUserRepository>());
 
         // Default setup for tag definitions
         _mockTagDefinitionsRepo.GetAllAsync(Arg.Any<CancellationToken>())
@@ -379,6 +383,168 @@ public class UserDetailDialogTests : MudBlazorTestContext
         });
 
         // Verify no exception was thrown during dialog open (exception is caught internally)
+        Assert.That(dialogTask.Exception, Is.Null);
+    }
+
+    #endregion
+
+    #region Profile Scan Display Tests
+
+    [Test]
+    public void ShowsRescanButton_InQuickActions()
+    {
+        // Arrange
+        var userDetail = CreateUserDetail();
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
+
+        var provider = RenderDialogProvider();
+
+        // Act
+        var dialogTask = OpenDialogAsync(TestUserId);
+
+        // Assert
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Re-scan Profile"));
+        });
+
+        Assert.That(dialogTask.Exception, Is.Null);
+    }
+
+    [Test]
+    public void ShowsProfileScanSection_WhenScanned()
+    {
+        // Arrange
+        var userDetail = CreateUserDetail();
+        userDetail.ProfileScannedAt = DateTimeOffset.UtcNow.AddHours(-2);
+        userDetail.ProfileScanScore = 1.5m;
+        userDetail.Bio = "Test bio content";
+
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
+
+        var provider = RenderDialogProvider();
+
+        // Act
+        var dialogTask = OpenDialogAsync(TestUserId);
+
+        // Assert
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Profile Scan"));
+            Assert.That(provider.Markup, Does.Contain("1.5/5.0"));
+            Assert.That(provider.Markup, Does.Contain("Test bio content"));
+        });
+
+        Assert.That(dialogTask.Exception, Is.Null);
+    }
+
+    [Test]
+    public void ShowsScamAndFakeBadges_WhenFlagged()
+    {
+        // Arrange
+        var userDetail = CreateUserDetail();
+        userDetail.ProfileScannedAt = DateTimeOffset.UtcNow;
+        userDetail.ProfileScanScore = 5.0m;
+        userDetail.IsScam = true;
+        userDetail.IsFake = true;
+
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
+
+        var provider = RenderDialogProvider();
+
+        // Act
+        var dialogTask = OpenDialogAsync(TestUserId);
+
+        // Assert
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Scam"));
+            Assert.That(provider.Markup, Does.Contain("Fake"));
+        });
+
+        Assert.That(dialogTask.Exception, Is.Null);
+    }
+
+    [Test]
+    public void ShowsPersonalChannel_WhenPresent()
+    {
+        // Arrange
+        var userDetail = CreateUserDetail();
+        userDetail.ProfileScannedAt = DateTimeOffset.UtcNow;
+        userDetail.PersonalChannelId = 123456;
+        userDetail.PersonalChannelTitle = "My Spam Channel";
+        userDetail.PersonalChannelAbout = "Channel description here";
+
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
+
+        var provider = RenderDialogProvider();
+
+        // Act
+        var dialogTask = OpenDialogAsync(TestUserId);
+
+        // Assert
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Personal Channel"));
+            Assert.That(provider.Markup, Does.Contain("My Spam Channel"));
+            Assert.That(provider.Markup, Does.Contain("Channel description here"));
+            Assert.That(provider.Markup, Does.Contain("123456"));
+        });
+
+        Assert.That(dialogTask.Exception, Is.Null);
+    }
+
+    [Test]
+    public void ShowsPinnedStoryCaptions_WhenPresent()
+    {
+        // Arrange
+        var userDetail = CreateUserDetail();
+        userDetail.ProfileScannedAt = DateTimeOffset.UtcNow;
+        userDetail.HasPinnedStories = true;
+        userDetail.PinnedStoryCaptions = "Check out my link";
+
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
+
+        var provider = RenderDialogProvider();
+
+        // Act
+        var dialogTask = OpenDialogAsync(TestUserId);
+
+        // Assert
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Pinned Stories"));
+            Assert.That(provider.Markup, Does.Contain("Check out my link"));
+        });
+
+        Assert.That(dialogTask.Exception, Is.Null);
+    }
+
+    [Test]
+    public void DoesNotShowProfileScanSection_WhenNeverScanned()
+    {
+        // Arrange — no ProfileScannedAt or ProfileScanScore set
+        var userDetail = CreateUserDetail();
+        _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
+
+        var provider = RenderDialogProvider();
+
+        // Act
+        var dialogTask = OpenDialogAsync(TestUserId);
+
+        // Assert — Re-scan button is in Quick Actions, but no "Profile Scan" info section
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Contain("Re-scan Profile"));
+            Assert.That(provider.Markup, Does.Not.Contain("Score:"));
+        });
+
         Assert.That(dialogTask.Exception, Is.Null);
     }
 

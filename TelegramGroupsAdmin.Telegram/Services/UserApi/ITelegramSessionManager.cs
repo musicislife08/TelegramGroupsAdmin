@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 /// <summary>
@@ -19,5 +21,5 @@ public interface ITelegramSessionManager : IAsyncDisposable
     Task<IWTelegramApiClient?> GetAnyClientAsync(CancellationToken ct);
 
     /// <summary>Disconnect and cleanup a session. Deactivates in DB, disposes client, removes from cache.</summary>
-    Task DisconnectAsync(string webUserId, CancellationToken ct);
+    Task DisconnectAsync(string webUserId, Actor executor, CancellationToken ct);
 }

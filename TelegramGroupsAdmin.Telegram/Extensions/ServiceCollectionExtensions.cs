@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 using Testably.Abstractions;
 
 namespace TelegramGroupsAdmin.Telegram.Extensions;
@@ -55,11 +56,16 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
+            // Profile scan results
+            services.AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>();
+
             // User API (WTelegram) services
             services.AddScoped<ITelegramSessionRepository, TelegramSessionRepository>();
             services.AddSingleton<IWTelegramClientFactory, WTelegramClientFactory>();
             services.AddSingleton<ITelegramSessionManager, TelegramSessionManager>();
             services.AddScoped<ITelegramAuthService, TelegramAuthService>();
+            services.AddSingleton<IProfileScanService, ProfileScanService>();
+            services.AddScoped<IProfileScoringEngine, ProfileScoringEngine>();
 
             // Telegram infrastructure
             services.AddSingleton<ITelegramBotClientFactory, TelegramBotClientFactory>();
@@ -126,6 +132,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITelegramUserManagementService, TelegramUserManagementService>(); // Orchestrates Telegram user operations
             services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
             services.AddScoped<IWelcomeService, WelcomeService>();
+            services.AddSingleton<IWelcomeAdmissionHandler, WelcomeAdmissionHandler>(); // Dual-gate admission (profile scan + welcome)
             services.AddSingleton<IBanCallbackService, BanCallbackService>(); // Ban user selection callbacks
             services.AddSingleton<IReportCallbackService, ReportCallbackService>(); // Report moderation action callbacks
             services.AddScoped<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban

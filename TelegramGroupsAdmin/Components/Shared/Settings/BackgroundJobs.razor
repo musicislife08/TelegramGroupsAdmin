@@ -198,6 +198,24 @@
                         Run ANALYZE (update query planner statistics)
                     </MudCheckBox>
                 }
+                else if (_editingJob.JobName == BackgroundJobNames.ProfileRescan)
+                {
+                    <MudDivider />
+                    <MudText Typo="Typo.subtitle2">Re-Scan Settings</MudText>
+
+                    <MudNumericField @bind-Value="_editProfileRescanBatchSize"
+                                     Label="Batch Size"
+                                     Variant="Variant.Outlined"
+                                     Min="1" Max="500"
+                                     HelperText="Maximum users to scan per job run (1-500)" />
+
+                    <MudTextField @bind-Value="_editProfileRescanAfter"
+                                  Label="Re-Scan After"
+                                  Variant="Variant.Outlined"
+                                  HelperText="Only re-scan profiles older than this. e.g., 1d, 3d, 1w, 2w"
+                                  Error="@(!ValidateRetention(_editProfileRescanAfter))"
+                                  ErrorText="Invalid format. Use: 1d, 3d, 1w, 2w" />
+                }
             </MudStack>
         }
     </DialogContent>
@@ -223,6 +241,10 @@
     // Database maintenance settings
     private bool _editRunVacuum = true;
     private bool _editRunAnalyze = true;
+
+    // Profile Re-Scan settings
+    private int _editProfileRescanBatchSize = 100;
+    private string _editProfileRescanAfter = "1w";
 
     // Data Cleanup retention settings (duration strings)
     private string _editMessageRetention = "30d";
@@ -339,6 +361,12 @@
             _editContextRetention = settings.CallbackContextRetention;
             _editNotificationRetention = settings.WebNotificationRetention;
         }
+        else if (job.JobName == BackgroundJobNames.ProfileRescan)
+        {
+            var settings = job.ProfileRescan ?? new ProfileRescanSettings();
+            _editProfileRescanBatchSize = settings.BatchSize;
+            _editProfileRescanAfter = settings.RescanAfter;
+        }
 
         _showConfigDialog = true;
     }
@@ -398,6 +426,20 @@
                     ReportRetention = _editReportRetention,
                     CallbackContextRetention = _editContextRetention,
                     WebNotificationRetention = _editNotificationRetention
+                };
+            }
+            else if (_editingJob.JobName == BackgroundJobNames.ProfileRescan)
+            {
+                if (!ValidateRetention(_editProfileRescanAfter))
+                {
+                    Snackbar.Add("Invalid re-scan duration format. Use formats like: 1d, 3d, 1w, 2w", Severity.Error);
+                    return;
+                }
+
+                _editingJob.ProfileRescan = new ProfileRescanSettings
+                {
+                    BatchSize = _editProfileRescanBatchSize,
+                    RescanAfter = _editProfileRescanAfter
                 };
             }
 

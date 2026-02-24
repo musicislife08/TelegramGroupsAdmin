@@ -572,6 +572,15 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 Description = "Retrain ML.NET SDCA spam classifier with latest training data",
                 Enabled = true,
                 Schedule = "every 8 hours"
+            },
+            [BackgroundJobNames.ProfileRescan] = new BackgroundJobConfig
+            {
+                JobName = BackgroundJobNames.ProfileRescan,
+                DisplayName = "Profile Re-Scan",
+                Description = "Periodically re-scan user profiles via User API to detect changes in bio, personal channel, and pinned stories",
+                Enabled = false,
+                Schedule = "every 6 hours",
+                ProfileRescan = new()
             }
         };
     }

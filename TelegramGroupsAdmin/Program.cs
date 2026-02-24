@@ -86,6 +86,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .MinimumLevel.Override("Npgsql", config.GetSwitch("Npgsql"))
         .MinimumLevel.Override("System", config.GetSwitch("System"))
         .MinimumLevel.Override("TelegramGroupsAdmin", config.GetSwitch("TelegramGroupsAdmin"))
+        .MinimumLevel.Override("WTelegram", config.GetSwitch("WTelegram"))
         .Enrich.FromLogContext()
         .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
 

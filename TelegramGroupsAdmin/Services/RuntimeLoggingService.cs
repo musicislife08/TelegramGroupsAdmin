@@ -19,6 +19,7 @@ public class RuntimeLoggingService : IRuntimeLoggingService
         "TelegramGroupsAdmin.Telegram",
         "TelegramGroupsAdmin.ContentDetection",
         "TelegramGroupsAdmin.Data",
+        "WTelegram",
         "Microsoft",
         "Microsoft.EntityFrameworkCore",
         "Microsoft.AspNetCore",

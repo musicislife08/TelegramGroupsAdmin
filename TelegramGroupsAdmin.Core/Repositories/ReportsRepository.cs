@@ -450,6 +450,124 @@ public class ReportsRepository : IReportsRepository
     }
 
     // ============================================================
+    // ProfileScanAlert-specific operations (Type = ProfileScanAlert)
+    // ============================================================
+
+    public async Task<long> InsertProfileScanAlertAsync(
+        ProfileScanAlertRecord alert,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var alertContext = new ProfileScanAlertContext
+        {
+            UserId = alert.User.Id,
+            Score = alert.Score,
+            Outcome = (int)alert.Outcome,
+            AiReason = alert.AiReason,
+            AiSignals = alert.AiSignalsDetected,
+            Bio = alert.Bio,
+            PersonalChannelTitle = alert.PersonalChannelTitle,
+            HasPinnedStories = alert.HasPinnedStories,
+            IsScam = alert.IsScam,
+            IsFake = alert.IsFake
+        };
+
+        var entity = new ReportDto
+        {
+            Type = (short)ReportType.ProfileScanAlert,
+            ChatId = alert.Chat.Id,
+            ReportedAt = alert.DetectedAt,
+            Status = (int)ReportStatus.Pending,
+            Context = JsonSerializer.Serialize(alertContext, JsonOptions)
+        };
+
+        context.Reports.Add(entity);
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Created profile scan alert #{ReportId}: user {UserId} score {Score} ({Outcome})",
+            entity.Id, alert.User.Id, alert.Score, alert.Outcome);
+
+        return entity.Id;
+    }
+
+    public async Task<ProfileScanAlertRecord?> GetProfileScanAlertAsync(
+        long id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var view = await context.EnrichedReports
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ProfileScanAlert, cancellationToken);
+
+        return view?.ToProfileScanAlert();
+    }
+
+    public async Task<bool> HasPendingProfileScanAlertAsync(
+        long userId,
+        long? chatId = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.Reports
+            .AsNoTracking()
+            .Where(r => r.Type == (short)ReportType.ProfileScanAlert
+                        && r.Status == (int)ReportStatus.Pending);
+
+        if (chatId.HasValue)
+            query = query.Where(r => r.ChatId == chatId.Value);
+
+        // Filter by userId from JSONB context using proper containment operator (@>)
+        query = query.Where(r => EF.Functions.JsonContains(r.Context!, $"{{\"userId\":{userId}}}"));
+
+        return await query.AnyAsync(cancellationToken);
+    }
+
+    public async Task<List<ProfileScanAlertRecord>> GetPendingProfileScanAlertsForUserAsync(
+        long userId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var results = await context.EnrichedReports
+            .AsNoTracking()
+            .Where(r => r.Type == (short)ReportType.ProfileScanAlert
+                        && r.Status == (int)ReportStatus.Pending
+                        && r.ProfileUserId == userId)
+            .ToListAsync(cancellationToken);
+
+        return results
+            .Select(r => r.ToProfileScanAlert())
+            .Where(r => r != null)
+            .Cast<ProfileScanAlertRecord>()
+            .ToList();
+    }
+
+    public async Task<List<ProfileScanAlertRecord>> GetProfileScanAlertsAsync(
+        bool pendingOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.EnrichedReports
+            .AsNoTracking()
+            .Where(r => r.Type == (short)ReportType.ProfileScanAlert);
+
+        if (pendingOnly)
+            query = query.Where(r => r.Status == (int)ReportStatus.Pending);
+
+        var results = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .ToListAsync(cancellationToken);
+
+        return results
+            .Select(r => r.ToProfileScanAlert())
+            .Where(r => r != null)
+            .Cast<ProfileScanAlertRecord>()
+            .ToList();
+    }
+
+    // ============================================================
     // ExamFailure-specific operations (Type = ExamFailure)
     // ============================================================
 

@@ -110,6 +110,56 @@
                                 </MudText>
                             </ChildContent>
                         </MudExpansionPanel>
+
+                        <MudExpansionPanel Text="Profile Scan" Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>Profile Scan (User API)</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(_config.JoinSecurity.ProfileScan.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.JoinSecurity.ProfileScan.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                                    Scans user profiles via Telegram User API on join. Detects spam signals in bios,
+                                    personal channels, and pinned stories. Requires an active User API session.
+                                </MudText>
+                                <MudGrid>
+                                    <MudItem xs="6">
+                                        <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.BanThreshold"
+                                                         Label="Auto-Ban Threshold"
+                                                         Variant="Variant.Outlined"
+                                                         Min="1.0m" Max="5.0m" Step="0.5m"
+                                                         HelperText="Score at which users are auto-banned (default: 4.0)"
+                                                         Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.NotifyThreshold"
+                                                         Label="Admin Notify Threshold"
+                                                         Variant="Variant.Outlined"
+                                                         Min="0.5m" Max="5.0m" Step="0.5m"
+                                                         HelperText="Score at which admins are notified for review (default: 2.0)"
+                                                         Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.ScanOnJoin"
+                                                   Color="Color.Primary"
+                                                   Label="Scan on join"
+                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.ScanOnProfileChange"
+                                                   Color="Color.Primary"
+                                                   Label="Scan on profile change"
+                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                </MudGrid>
+                            </ChildContent>
+                        </MudExpansionPanel>
                     </MudExpansionPanels>
                 </MudItem>
 

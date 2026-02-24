@@ -245,9 +245,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
         // GlobalAdmin (1) and Owner (2) see all chats (active + inactive)
         if (permissionLevel >= PermissionLevel.GlobalAdmin)
-        {
             return await GetAllChatsAsync(includeDeleted, cancellationToken);
-        }
 
         // Admin (0) sees only chats where their linked Telegram account is admin
         // Query: managed_chats JOIN chat_admins ON chat_id WHERE telegram_id IN (user's linked accounts)
