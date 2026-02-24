@@ -34,11 +34,17 @@ public sealed class WTelegramApiClient(Client client) : IWTelegramApiClient
     public Task<Messages_ChatFull> Channels_GetFullChannel(InputChannelBase channel)
         => client.Channels_GetFullChannel(channel);
 
-    public Task<Stories_PeerStories> Stories_GetPeerStories(InputPeer peer)
-        => client.Stories_GetPeerStories(peer);
+    public Task<Stories_Stories> Stories_GetPinnedStories(InputPeer peer, int offset_id = 0, int limit = 20)
+        => client.Stories_GetPinnedStories(peer, offset_id, limit);
+
+    public Task<Stories_Stories> Stories_GetStoriesByID(InputPeer peer, params int[] id)
+        => client.Stories_GetStoriesByID(peer, id);
 
     public Task<Storage_FileType> DownloadFileAsync(Photo photo, Stream outputStream)
         => client.DownloadFileAsync(photo, outputStream);
+
+    public Task<string?> DownloadFileAsync(Document document, Stream outputStream, PhotoSizeBase? thumbSize = null)
+        => client.DownloadFileAsync(document, outputStream, thumbSize);
 
     public Task<Storage_FileType> DownloadProfilePhotoAsync(IPeerInfo peer, Stream outputStream, bool big = false)
         => client.DownloadProfilePhotoAsync(peer, outputStream, big);

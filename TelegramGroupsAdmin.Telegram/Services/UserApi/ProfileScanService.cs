@@ -138,33 +138,75 @@ public sealed class ProfileScanService(
             }
         }
 
-        // ── Step 4: Fetch pinned stories ──
+        // ── Step 4: Collect active + pinned stories, resolve min stories for captions ──
         string? pinnedStoryCaptions = null;
         int storyCount = 0;
         List<string>? storyCaptions = null;
         StoryItem[]? storyItems = null;
+
+        var hasActiveStories = userInfo?.flags.HasFlag(UserFull.Flags.has_stories) == true;
+
+        // Merge stories from both sources, dedupe by story ID
+        var allStoryItems = new Dictionary<int, StoryItem>();
+
+        // 4a. Active stories from UserFull (already available — no extra API call)
+        if (hasActiveStories && userInfo?.stories?.stories is { Length: > 0 } activeStories)
+        {
+            foreach (var s in activeStories.OfType<StoryItem>())
+                allStoryItems.TryAdd(s.id, s);
+        }
+
+        // 4b. Pinned stories (separate API call)
         if (hasPinnedStories)
         {
             try
             {
-                var peerStories = await client.Stories_GetPeerStories(resolvedUser);
-                var stories = peerStories.stories?.stories;
-                if (stories is { Length: > 0 })
+                var pinned = await client.Stories_GetPinnedStories(resolvedUser);
+                if (pinned.stories is { Length: > 0 } pinnedStories)
                 {
-                    storyCount = stories.Length;
-                    storyItems = stories.OfType<StoryItem>().ToArray();
-                    storyCaptions = storyItems
-                        .Where(s => !string.IsNullOrEmpty(s.caption))
-                        .Select(s => s.caption)
-                        .ToList();
-                    if (storyCaptions.Count > 0)
-                        pinnedStoryCaptions = string.Join("\n", storyCaptions);
+                    foreach (var s in pinnedStories.OfType<StoryItem>())
+                        allStoryItems.TryAdd(s.id, s);
                 }
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to fetch pinned stories for {User}", user.ToLogDebug());
             }
+        }
+
+        // 4c. Re-fetch min stories to get full data (captions are omitted on min stories)
+        var minStoryIds = allStoryItems.Values
+            .Where(s => s.flags.HasFlag(StoryItem.Flags.min))
+            .Select(s => s.id)
+            .ToArray();
+
+        if (minStoryIds.Length > 0)
+        {
+            try
+            {
+                var fullStories = await client.Stories_GetStoriesByID(resolvedUser, minStoryIds);
+                if (fullStories.stories is { Length: > 0 })
+                {
+                    foreach (var s in fullStories.stories.OfType<StoryItem>())
+                        allStoryItems[s.id] = s; // Replace min version with full version
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to resolve min stories for {User}", user.ToLogDebug());
+            }
+        }
+
+        if (allStoryItems.Count > 0)
+        {
+            storyCount = allStoryItems.Count;
+            storyItems = [.. allStoryItems.Values];
+            storyCaptions = storyItems
+                .Where(s => !string.IsNullOrEmpty(s.caption))
+                .Select(s => s.caption)
+                .ToList();
+            if (storyCaptions.Count > 0)
+                pinnedStoryCaptions = string.Join("\n", storyCaptions);
         }
 
         // ── Diff check: skip expensive Steps 5-8 if profile is unchanged ──
@@ -451,7 +493,7 @@ public sealed class ProfileScanService(
 
     private record ImageCollectionResult(List<ImageInput> Images, string? Labels);
 
-    private const int MaxStoryImages = 3;
+    private const int MaxStoryImages = 4;
     private const int VisionMaxDimension = 512;
 
     private async Task<ImageCollectionResult> CollectImagesAsync(
@@ -498,27 +540,48 @@ public sealed class ProfileScanService(
             }
         }
 
-        // 3. Pinned story images (up to MaxStoryImages)
+        // 3. Story images — photos + video thumbnails (up to MaxStoryImages)
         if (stories is { Length: > 0 })
         {
-            var storyPhotoCount = 0;
+            var storyImageCount = 0;
             foreach (var story in stories)
             {
-                if (storyPhotoCount >= MaxStoryImages) break;
-                if (story.media is not MessageMediaPhoto { photo: Photo photo }) continue;
+                if (storyImageCount >= MaxStoryImages) break;
 
                 try
                 {
-                    using var ms = new MemoryStream();
-                    var fileType = await client.DownloadFileAsync(photo, ms);
-                    var resized = await ResizeForVisionAsync(ms.ToArray());
-                    images.Add(new ImageInput(resized, ToMimeType(fileType)));
-                    labels.Add("pinned story");
-                    storyPhotoCount++;
+                    switch (story.media)
+                    {
+                        case MessageMediaPhoto { photo: Photo photo }:
+                        {
+                            using var ms = new MemoryStream();
+                            var fileType = await client.DownloadFileAsync(photo, ms);
+                            var resized = await ResizeForVisionAsync(ms.ToArray());
+                            images.Add(new ImageInput(resized, ToMimeType(fileType)));
+                            labels.Add("story photo");
+                            storyImageCount++;
+                            break;
+                        }
+                        case MessageMediaDocument { document: Document doc }
+                            when doc.mime_type?.StartsWith("video/") == true:
+                        {
+                            // Download video thumbnail — no full video download needed
+                            var thumb = doc.LargestThumbSize;
+                            if (thumb == null) continue;
+
+                            using var ms = new MemoryStream();
+                            await client.DownloadFileAsync(doc, ms, thumb);
+                            var resized = await ResizeForVisionAsync(ms.ToArray());
+                            images.Add(new ImageInput(resized, "image/jpeg"));
+                            labels.Add("story video thumbnail");
+                            storyImageCount++;
+                            break;
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogDebug(ex, "Failed to download story image for vision");
+                    logger.LogDebug(ex, "Failed to download story media for vision");
                 }
             }
         }

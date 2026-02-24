@@ -55,11 +55,17 @@ public interface IWTelegramApiClient : IAsyncDisposable
     /// <summary>Get full channel info including about/description text.</summary>
     Task<Messages_ChatFull> Channels_GetFullChannel(InputChannelBase channel);
 
-    /// <summary>Get pinned stories for a peer (user or channel).</summary>
-    Task<Stories_PeerStories> Stories_GetPeerStories(InputPeer peer);
+    /// <summary>Get pinned stories for a peer. Returns stories permanently displayed on their profile.</summary>
+    Task<Stories_Stories> Stories_GetPinnedStories(InputPeer peer, int offset_id = 0, int limit = 20);
+
+    /// <summary>Get full story data by IDs. Use to resolve min stories that have omitted captions/media.</summary>
+    Task<Stories_Stories> Stories_GetStoriesByID(InputPeer peer, params int[] id);
 
     /// <summary>Download a photo to a stream. Returns the file type (jpeg, png, etc.).</summary>
     Task<Storage_FileType> DownloadFileAsync(Photo photo, Stream outputStream);
+
+    /// <summary>Download a document (or its thumbnail) to a stream. Returns MIME type string.</summary>
+    Task<string?> DownloadFileAsync(Document document, Stream outputStream, PhotoSizeBase? thumbSize = null);
 
     /// <summary>Download a peer's profile/channel photo. Works with User, Chat, Channel (all implement IPeerInfo).</summary>
     Task<Storage_FileType> DownloadProfilePhotoAsync(IPeerInfo peer, Stream outputStream, bool big = false);
