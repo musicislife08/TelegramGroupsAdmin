@@ -836,14 +836,8 @@ public class ProfileScoringEngineTests
     public async Task ScoreAsync_CombinedRuleAndAiScoreExceedsFive_CappedAtFive()
     {
         // Arrange — blocked URL (3.0) + AI spam confidence 95 (4.5) = 7.5 raw, capped at 5.0
+        // Rule score 3.0 < banThreshold 4.0 so AI layer is reached.
         var profile = BuildProfile(bio: "spam site link");
-        _urlPreFilter
-            .CheckHardBlockAsync(Arg.Any<string>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(new HardBlockResult(false, null, null)); // No block — ensure AI layer runs
-
-        // The rule score alone (3.0) is below banThreshold (4.0) so AI runs.
-        // But to keep the test reliable, let's set rule score below ban threshold, then AI pushes it over.
-        // Actually, blocked URL alone = 3.0, no stop words → AI runs, AI returns 4.5 → total = 7.5 → capped at 5.0
         _urlPreFilter
             .CheckHardBlockAsync(Arg.Any<string>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
             .Returns(new HardBlockResult(true, "Blocked", "spam.example"));
