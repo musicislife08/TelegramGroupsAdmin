@@ -245,7 +245,7 @@
 
     private async Task DeleteStopWord(StopWordItem stopWord)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete Stop Word",
             $"Are you sure you want to permanently delete the stop word '{stopWord.Word}'? This action cannot be undone.",
             yesText: "Delete",

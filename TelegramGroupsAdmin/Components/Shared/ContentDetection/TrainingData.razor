@@ -350,7 +350,7 @@
     private async Task DeleteTrainingSample(DetectionResultRecord sample)
     {
         var messagePreview = sample.MessageText ?? "";
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove from Training Data",
             $"Remove this {(sample.IsSpam ? "SPAM" : "HAM")} sample from training data?\n\n" +
             $"\"{messagePreview[..Math.Min(messagePreview.Length, 100)]}{(messagePreview.Length > 100 ? "..." : "")}\"\n\n" +

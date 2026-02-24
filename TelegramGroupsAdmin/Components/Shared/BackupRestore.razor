@@ -120,15 +120,16 @@ else
                 }
 
                 <MudFileUpload T="IBrowserFile" FilesChanged="@OnFileSelected" Accept=".tar.gz,.gz">
-                    <ActivatorContent>
+                    <CustomContent Context="fileUpload">
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Upload"
                                    Disabled="@_isRestoring"
-                                   FullWidth="true">
+                                   FullWidth="true"
+                                   OnClick="@fileUpload.OpenFilePickerAsync">
                             Select Backup File
                         </MudButton>
-                    </ActivatorContent>
+                    </CustomContent>
                 </MudFileUpload>
 
                 @if (_selectedFile != null)
@@ -568,7 +569,7 @@ else
     private async Task RestoreFromBrowser(BackupFileInfo backup)
     {
         // Confirm wipe
-        bool? confirmResult = await DialogService.ShowMessageBox(
+        bool? confirmResult = await DialogService.ShowMessageBoxAsync(
             "Confirm Restore",
             $"Are you sure you want to restore from {backup.FileName}? This will PERMANENTLY DELETE all current data.",
             yesText: "WIPE & RESTORE", cancelText: "Cancel",

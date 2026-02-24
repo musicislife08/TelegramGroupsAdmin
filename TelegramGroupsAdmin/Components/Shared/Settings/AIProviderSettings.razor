@@ -184,7 +184,7 @@
 
     private async Task DeleteConnectionAsync(AIConnection connection)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete Connection",
             $"Are you sure you want to delete the connection '{connection.Id}'? This cannot be undone.",
             yesText: "Delete",

@@ -18,7 +18,8 @@
                   Visible="@(NotificationState.UnreadCount > 0)">
             <MudIconButton Icon="@Icons.Material.Filled.Notifications"
                            Color="@(NotificationState.UnreadCount > 0 ? Color.Warning : Color.Inherit)"
-                           Size="Size.Medium" />
+                           Size="Size.Medium"
+                           OnClick="@context.ToggleAsync" />
         </MudBadge>
     </ActivatorContent>
 

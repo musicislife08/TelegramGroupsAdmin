@@ -239,7 +239,7 @@
 
     private async Task RemoveSample(TrainingSampleDto sample)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove from Training",
             $"Remove this {(sample.IsSpam ? "SPAM" : "HAM")} sample from training data?\n\nThis preserves detection history but excludes it from Bayes training.",
             yesText: "Remove", cancelText: "Cancel");
@@ -273,7 +273,7 @@
     private async Task RemoveGroupDuplicates(DuplicateGroup group)
     {
         var duplicatesToRemove = group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id).Count();
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove Duplicates",
             $"Remove {duplicatesToRemove} duplicate sample(s) from this group?\n\nThe recommended sample (highest confidence, most recent) will be kept.\n\nThis preserves detection history but excludes duplicates from Bayes training.",
             yesText: "Remove Duplicates", cancelText: "Cancel");
@@ -314,7 +314,7 @@
         if (_result == null) return;
 
         var totalDuplicates = groups.Sum(g => g.Samples.Count(s => s.Id != g.RecommendedKeep?.Id));
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Remove All Duplicates",
             $"Remove {totalDuplicates} duplicate sample(s) across {groups.Count} groups?\n\nFor each group, the recommended sample (highest confidence, most recent) will be kept.\n\nThis preserves detection history but excludes duplicates from Bayes training.",
             yesText: "Remove All Duplicates", cancelText: "Cancel");

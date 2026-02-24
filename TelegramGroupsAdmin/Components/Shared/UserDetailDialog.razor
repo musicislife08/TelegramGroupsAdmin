@@ -643,7 +643,7 @@
         if (_userDetail == null) return;
 
         // Show confirmation dialog
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Confirm Permanent Ban",
             $"Are you sure you want to permanently ban {_userDetail.DisplayName}? This will ban them from all managed chats.",
             yesText: "Ban",
@@ -686,7 +686,7 @@
         if (_userDetail == null) return;
 
         // Show confirmation dialog
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Confirm Unban",
             $"Are you sure you want to unban {_userDetail.DisplayName}?",
             yesText: "Unban",

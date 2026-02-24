@@ -22,7 +22,7 @@
     }
     else if (_config != null)
     {
-        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4">
             @foreach (var channel in Enum.GetValues<NotificationChannel>())
             {
                 var isConfigured = IsChannelConfigured(channel);

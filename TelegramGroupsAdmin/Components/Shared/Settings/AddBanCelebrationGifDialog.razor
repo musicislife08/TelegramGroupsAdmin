@@ -29,14 +29,15 @@
                                   Accept=".gif,.mp4"
                                   FilesChanged="OnFileSelected"
                                   MaximumFileCount="1">
-                        <ActivatorContent>
+                        <CustomContent Context="fileUpload">
                             <MudButton Variant="Variant.Outlined"
                                       Color="Color.Primary"
                                       StartIcon="@Icons.Material.Filled.CloudUpload"
-                                      FullWidth="true">
+                                      FullWidth="true"
+                                      OnClick="@fileUpload.OpenFilePickerAsync">
                                 @(_selectedFile == null ? "Select GIF or MP4 file" : _selectedFile.Name)
                             </MudButton>
-                        </ActivatorContent>
+                        </CustomContent>
                     </MudFileUpload>
 
                     @if (_selectedFile != null)

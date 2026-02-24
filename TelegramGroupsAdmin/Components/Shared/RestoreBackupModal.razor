@@ -26,15 +26,16 @@
         }
 
         <MudFileUpload T="IBrowserFile" FilesChanged="@OnFileSelected" Accept=".tar.gz,.gz">
-            <ActivatorContent>
+            <CustomContent Context="fileUpload">
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Upload"
                            Disabled="@_isRestoring"
-                           FullWidth="true">
+                           FullWidth="true"
+                           OnClick="@fileUpload.OpenFilePickerAsync">
                     Select Backup File
                 </MudButton>
-            </ActivatorContent>
+            </CustomContent>
         </MudFileUpload>
 
         @if (_selectedFile != null)
