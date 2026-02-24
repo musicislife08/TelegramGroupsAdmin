@@ -169,6 +169,30 @@ public sealed class ProfileScanService(
             }
         }
 
+        // ── Diff check: skip expensive Steps 5-8 if profile is unchanged ──
+        var profilePhotoId = (tlUser?.photo as UserProfilePhoto)?.photo_id;
+        var channelPhotoId = (personalChannel?.photo as ChatPhoto)?.photo_id;
+        var pinnedStoryIdString = storyItems is { Length: > 0 }
+            ? string.Join(",", storyItems.Select(s => s.id).Order())
+            : null;
+
+        if (existingUser?.ProfileScannedAt != null && existingUser.ProfileScanScore.HasValue
+            && !HasProfileChanged(existingUser, tlUser, bio, personalChannelId, channelTitle, channelAbout,
+                hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
+                profilePhotoId, channelPhotoId, pinnedStoryIdString))
+        {
+            logger.LogInformation("Profile unchanged for {User}, skipping AI scoring (last score {Score})",
+                user.ToLogInfo(), existingUser.ProfileScanScore);
+
+            await userRepo.UpdateProfileScannedAtAsync(user.Id, ct);
+
+            var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
+            return new ProfileScanResult(
+                user.Id, bio, personalChannelId, channelTitle, channelAbout,
+                hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
+                existingUser.ProfileScanScore.Value, cachedOutcome, null, null);
+        }
+
         // ── Step 5: Collect images for AI vision ──
         var imageResult = await CollectImagesAsync(client, tlUser, personalChannel, storyItems, ct);
 
@@ -200,7 +224,7 @@ public sealed class ProfileScanService(
         await userRepo.UpdateProfileScanDataAsync(
             user.Id, bio, personalChannelId, channelTitle, channelAbout,
             hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
-            scoreResult.Score, ct);
+            scoreResult.Score, profilePhotoId, channelPhotoId, pinnedStoryIdString, ct);
 
         // Clear exclusion flag on successful scan (user is accessible again)
         if (existingUser?.ProfileScanExcluded == true)
@@ -554,6 +578,50 @@ public sealed class ProfileScanService(
             : score >= notifyThreshold
                 ? ProfileScanOutcome.HeldForReview
                 : ProfileScanOutcome.Clean;
+    }
+
+    /// <summary>
+    /// Compare fetched profile metadata against stored values to detect changes.
+    /// Returns true if any field differs — meaning a full rescan (images + AI) is needed.
+    /// </summary>
+    private static bool HasProfileChanged(
+        Models.TelegramUser existing,
+        TL.User? tlUser,
+        string? bio,
+        long? personalChannelId,
+        string? channelTitle,
+        string? channelAbout,
+        bool hasPinnedStories,
+        string? pinnedStoryCaptions,
+        bool isScam,
+        bool isFake,
+        bool isVerified,
+        long? profilePhotoId,
+        long? channelPhotoId,
+        string? pinnedStoryIds)
+    {
+        // Text/flag fields already stored on user
+        if (bio != existing.Bio) return true;
+        if (personalChannelId != existing.PersonalChannelId) return true;
+        if (channelTitle != existing.PersonalChannelTitle) return true;
+        if (channelAbout != existing.PersonalChannelAbout) return true;
+        if (hasPinnedStories != existing.HasPinnedStories) return true;
+        if (pinnedStoryCaptions != existing.PinnedStoryCaptions) return true;
+        if (isScam != existing.IsScam) return true;
+        if (isFake != existing.IsFake) return true;
+        if (isVerified != existing.IsVerified) return true;
+
+        // Name/username changes (stored on user record, not in profile scan columns)
+        if (tlUser?.first_name != existing.FirstName) return true;
+        if (tlUser?.last_name != existing.LastName) return true;
+        if (tlUser?.MainUsername != existing.Username) return true;
+
+        // Telegram ID-based fields (detect image/story changes without downloading)
+        if (profilePhotoId != existing.ProfilePhotoId) return true;
+        if (channelPhotoId != existing.PersonalChannelPhotoId) return true;
+        if (pinnedStoryIds != existing.PinnedStoryIds) return true;
+
+        return false;
     }
 
     private static ProfileScanResult EmptyResult(long userId, string? skipReason = null) =>

@@ -38,7 +38,10 @@ public static class TelegramUserMappings
             IsVerified: data.IsVerified,
             ProfileScanExcluded: data.ProfileScanExcluded,
             ProfileScannedAt: data.ProfileScannedAt,
-            ProfileScanScore: data.ProfileScanScore
+            ProfileScanScore: data.ProfileScanScore,
+            ProfilePhotoId: data.ProfilePhotoId,
+            PersonalChannelPhotoId: data.PersonalChannelPhotoId,
+            PinnedStoryIds: data.PinnedStoryIds
         );
     }
 
@@ -73,7 +76,10 @@ public static class TelegramUserMappings
             IsVerified = ui.IsVerified,
             ProfileScanExcluded = ui.ProfileScanExcluded,
             ProfileScannedAt = ui.ProfileScannedAt,
-            ProfileScanScore = ui.ProfileScanScore
+            ProfileScanScore = ui.ProfileScanScore,
+            ProfilePhotoId = ui.ProfilePhotoId,
+            PersonalChannelPhotoId = ui.PersonalChannelPhotoId,
+            PinnedStoryIds = ui.PinnedStoryIds
         };
     }
 }

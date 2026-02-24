@@ -136,5 +136,14 @@ public interface ITelegramUserRepository
         bool isFake,
         bool isVerified,
         decimal profileScanScore,
+        long? profilePhotoId,
+        long? personalChannelPhotoId,
+        string? pinnedStoryIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bump ProfileScannedAt + UpdatedAt without changing any other fields.
+    /// Used when diff detection finds no profile changes — marks the user as freshly scanned.
+    /// </summary>
+    Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default);
 }

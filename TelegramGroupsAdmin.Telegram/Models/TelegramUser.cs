@@ -35,7 +35,10 @@ public record TelegramUser(
     bool IsVerified = false,
     bool ProfileScanExcluded = false,
     DateTimeOffset? ProfileScannedAt = null,
-    decimal? ProfileScanScore = null
+    decimal? ProfileScanScore = null,
+    long? ProfilePhotoId = null,
+    long? PersonalChannelPhotoId = null,
+    string? PinnedStoryIds = null
 )
 {
     /// <summary>

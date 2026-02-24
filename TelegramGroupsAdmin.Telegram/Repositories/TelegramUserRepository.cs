@@ -1103,6 +1103,9 @@ public class TelegramUserRepository : ITelegramUserRepository
         bool isFake,
         bool isVerified,
         decimal profileScanScore,
+        long? profilePhotoId,
+        long? personalChannelPhotoId,
+        string? pinnedStoryIds,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -1119,6 +1122,20 @@ public class TelegramUserRepository : ITelegramUserRepository
                 .SetProperty(u => u.IsFake, isFake)
                 .SetProperty(u => u.IsVerified, isVerified)
                 .SetProperty(u => u.ProfileScanScore, profileScanScore)
+                .SetProperty(u => u.ProfilePhotoId, profilePhotoId)
+                .SetProperty(u => u.PersonalChannelPhotoId, personalChannelPhotoId)
+                .SetProperty(u => u.PinnedStoryIds, pinnedStoryIds)
+                .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
+                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
     }

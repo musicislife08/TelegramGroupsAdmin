@@ -267,6 +267,27 @@ public class TelegramUserDto
     [Column("profile_scan_score")]
     public decimal? ProfileScanScore { get; set; }
 
+    /// <summary>
+    /// MTProto photo_id from UserProfilePhoto — stable identifier that changes when photo is updated.
+    /// Used for diff detection: compare against fetched value to skip expensive image downloads.
+    /// </summary>
+    [Column("profile_photo_id")]
+    public long? ProfilePhotoId { get; set; }
+
+    /// <summary>
+    /// MTProto photo_id from personal channel's ChatPhoto — stable identifier for channel photo.
+    /// Used for diff detection: compare against fetched value to skip expensive image downloads.
+    /// </summary>
+    [Column("personal_channel_photo_id")]
+    public long? PersonalChannelPhotoId { get; set; }
+
+    /// <summary>
+    /// Comma-separated sorted list of pinned story IDs (StoryItem.id).
+    /// Used for diff detection: compare against fetched values to detect story changes.
+    /// </summary>
+    [Column("pinned_story_ids")]
+    public string? PinnedStoryIds { get; set; }
+
     // Navigation properties
 
     /// <summary>
