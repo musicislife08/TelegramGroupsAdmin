@@ -59,7 +59,7 @@
                 <MudTextField Value="@_activePromptText"
                              Label="Active System Prompt"
                              Lines="4"
-                             AutoGrow="true"
+                             Sizing="InputSizing.Auto"
                              Variant="Variant.Outlined"
                              ReadOnly="true"
                              HelperText="Use AI Prompt Builder below to generate or modify prompts" />
@@ -293,7 +293,7 @@
 
     private async Task ViewVersion(PromptVersion version)
     {
-        await DialogService.ShowMessageBox(
+        await DialogService.ShowMessageBoxAsync(
             $"Prompt Version {version.Version}",
             version.PromptText,
             "Close");

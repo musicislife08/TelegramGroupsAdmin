@@ -1109,7 +1109,7 @@
     private async Task HandleDeleteMessage(MessageRecord message)
     {
         // Confirm deletion
-        bool? confirm = await DialogService.ShowMessageBox(
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
             "Delete Message",
             $"Are you sure you want to delete this message? This will remove it from Telegram (if still present) and mark it as deleted in the database.",
             yesText: "Delete",
@@ -1163,7 +1163,7 @@
             {
                 Logger.LogError("Failed to delete message {MessageId}: {Error}", message.MessageId, result.ErrorMessage);
 
-                await DialogService.ShowMessageBox(
+                await DialogService.ShowMessageBoxAsync(
                     "Error",
                     $"Failed to delete message: {result.ErrorMessage}",
                     yesText: "OK");
@@ -1173,7 +1173,7 @@
         {
             Logger.LogError(ex, "Error deleting message {MessageId}", message.MessageId);
 
-            await DialogService.ShowMessageBox(
+            await DialogService.ShowMessageBoxAsync(
                 "Error",
                 $"Failed to delete message: {ex.Message}",
                 yesText: "OK");
@@ -1221,7 +1221,7 @@
             if (banResult.Success)
             {
                 var expiryTime = DateTimeOffset.UtcNow.Add(tempBanResult.Duration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
-                await DialogService.ShowMessageBox(
+                await DialogService.ShowMessageBoxAsync(
                     "Success",
                     $"User temporarily banned for {FormatDuration(tempBanResult.Duration)}. They will be automatically unbanned at {expiryTime}.",
                     yesText: "OK");
@@ -1237,7 +1237,7 @@
                     message.User.ToLogDebug(),
                     banResult.ErrorMessage);
 
-                await DialogService.ShowMessageBox(
+                await DialogService.ShowMessageBoxAsync(
                     "Error",
                     $"Failed to temp ban user: {banResult.ErrorMessage}",
                     yesText: "OK");
@@ -1248,7 +1248,7 @@
             Logger.LogError(ex, "Error temp banning {User}",
                 message.User.ToLogDebug());
 
-            await DialogService.ShowMessageBox(
+            await DialogService.ShowMessageBoxAsync(
                 "Error",
                 $"Failed to temp ban user: {ex.Message}",
                 yesText: "OK");

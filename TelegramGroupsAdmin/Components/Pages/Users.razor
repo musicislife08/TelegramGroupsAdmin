@@ -50,7 +50,7 @@
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
     }
 
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6">
         <MudTabPanel Text="Active" Icon="@Icons.Material.Filled.People" BadgeData="@FilteredActiveUsers.Count">
             <MudTable Items="@FilteredActiveUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
@@ -607,7 +607,7 @@
         try
         {
             // Show confirmation dialog
-            var confirmed = await DialogService.ShowMessageBox(
+            var confirmed = await DialogService.ShowMessageBoxAsync(
                 "Confirm Unban",
                 $"Are you sure you want to unban {user.DisplayName}?",
                 yesText: "Unban",

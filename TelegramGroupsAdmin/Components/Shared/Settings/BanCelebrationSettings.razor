@@ -363,7 +363,7 @@
 
     private async Task DeleteGif(BanCelebrationGif gif)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete GIF",
             $"Are you sure you want to delete '{gif.Name ?? gif.FilePath}'? This will also remove the file from disk.",
             yesText: "Delete",
@@ -445,7 +445,7 @@
 
     private async Task DeleteCaption(BanCelebrationCaption caption)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete Caption",
             $"Are you sure you want to delete '{caption.Name ?? "this caption"}'?",
             yesText: "Delete",

@@ -14,49 +14,45 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AngleSharp" Version="1.4.0" />
-        <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
-        <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
-        <PackageReference Include="ByteSize" Version="2.1.2" />
-        <PackageReference Include="CsvHelper" Version="33.1.0" />
-        <PackageReference Include="Dapper" Version="2.1.66" />
-        <PackageReference Include="DiffPlex" Version="1.9.0" />
-        <PackageReference Include="HumanCron" Version="0.5.0" />
-        <PackageReference Include="HumanCron.Quartz" Version="0.5.0" />
-        <PackageReference Include="Lib.Net.Http.WebPush" Version="3.3.1" />
-        <PackageReference Include="Markdig" Version="0.44.0" />
-        <PackageReference Include="Markdown.ColorCode" Version="3.0.1" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Build.Tasks.Core" Version="18.0.2" />
-        <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
-        <!-- WORKAROUND: Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in Microsoft.EntityFrameworkCore.Design transitive deps
-             Remove when Microsoft.EntityFrameworkCore.Design updates to 17.14.28+ (Oct 2025) -->
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+        <PackageReference Include="AngleSharp" />
+        <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
+        <PackageReference Include="Blazor-ApexCharts" />
+        <PackageReference Include="ByteSize" />
+        <PackageReference Include="CsvHelper" />
+        <PackageReference Include="Dapper" />
+        <PackageReference Include="DiffPlex" />
+        <PackageReference Include="HumanCron" />
+        <PackageReference Include="HumanCron.Quartz" />
+        <PackageReference Include="Lib.Net.Http.WebPush" />
+        <PackageReference Include="Markdig" />
+        <PackageReference Include="Markdown.ColorCode" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
           <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.2.0" />
-        <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
-        <PackageReference Include="MudBlazor" Version="8.15.0" />
-        <PackageReference Include="Npgsql" Version="10.0.1" />
-        <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.1" />
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
-        <PackageReference Include="Npgsql.OpenTelemetry" Version="10.0.1" />
-        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
-        <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.11.0-beta.1" />
-        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
-        <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.0" />
-        <PackageReference Include="Otp.NET" Version="1.4.1" />
-        <PackageReference Include="QRCoder" Version="1.7.0" />
-        <PackageReference Include="SendGrid" Version="9.29.3" />
-        <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
-        <PackageReference Include="Serilog.Sinks.OpenTelemetry" Version="4.2.0" />
-        <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
-        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
-        <PackageReference Include="Telegram.Bot" Version="22.8.1" />
-        <PackageReference Include="TimeZoneConverter" Version="7.2.0" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
+        <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+        <PackageReference Include="MudBlazor" />
+        <PackageReference Include="Npgsql" />
+        <PackageReference Include="Npgsql.DependencyInjection" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+        <PackageReference Include="Npgsql.OpenTelemetry" />
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+        <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+        <PackageReference Include="Otp.NET" />
+        <PackageReference Include="QRCoder" />
+        <PackageReference Include="SendGrid" />
+        <PackageReference Include="Serilog.AspNetCore" />
+        <PackageReference Include="Serilog.Sinks.OpenTelemetry" />
+        <PackageReference Include="Serilog.Sinks.Seq" />
+        <PackageReference Include="SixLabors.ImageSharp" />
+        <PackageReference Include="Telegram.Bot" />
+        <PackageReference Include="TimeZoneConverter" />
     </ItemGroup>
 
     <ItemGroup>

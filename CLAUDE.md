@@ -2,7 +2,7 @@
 
 ## Stack
 
-.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.15.0, PostgreSQL 18, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
+.NET 10.0 (10.0.100), Blazor Server, MudBlazor 9.0.0, PostgreSQL 18, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 ## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
 
@@ -377,7 +377,15 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 ### UI Frameworks
 
-- MudBlazor v8+: Use `IMudDialogInstance` (interface), not `MudDialogInstance` (concrete class)
+- MudBlazor v9+: Use `IMudDialogInstance` (interface), not `MudDialogInstance` (concrete class)
+- MudBlazor v9+: `ShowMessageBox()` → `ShowMessageBoxAsync()` on `IDialogService`
+- MudBlazor v9+: `MudFileUpload.ActivatorContent` → `CustomContent` with context (call `context.OpenFilePickerAsync` on button click)
+- MudBlazor v9+: `MudTabs.PanelClass` → `TabPanelsClass`
+- MudBlazor v9+: `MudTextField.AutoGrow` → `Sizing="InputSizing.Auto"`
+- MudBlazor v9+: `MudSelect.SelectedValues` uses `IReadOnlyCollection<T>` (not `IEnumerable<T>`)
+- MudBlazor v9+: `MudMenu.ActivatorContent` requires explicit `@context.ToggleAsync` on buttons (no implicit activation)
+- MudBlazor v9+: Buttons inside `MudMenu.ChildContent` no longer auto-close the menu
+- Central Package Management: All NuGet versions managed in `Directory.Packages.props` at repo root
 
 ### Documentation
 

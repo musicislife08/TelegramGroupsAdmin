@@ -155,10 +155,8 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         await MarkAllReadButton.ClickAsync();
 
         // Assert - badge disappears, "Mark all read" button hidden
+        // MudBlazor v9: menu stays open after clicking buttons inside ChildContent
         await Expect(NotificationBadge).Not.ToBeVisibleAsync();
-
-        // Re-open dropdown to verify button is hidden
-        await NotificationBellButton.ClickAsync();
         await Expect(MarkAllReadButton).Not.ToBeVisibleAsync();
         // But "Clear all" should still be visible (notifications exist, just read)
         await Expect(ClearAllButton).ToBeVisibleAsync();
