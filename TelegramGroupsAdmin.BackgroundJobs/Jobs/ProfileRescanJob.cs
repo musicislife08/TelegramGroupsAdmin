@@ -25,12 +25,6 @@ public class ProfileRescanJob(
     ITelegramUserRepository userRepository,
     IProfileScanService profileScanService) : IJob
 {
-    private readonly ILogger<ProfileRescanJob> _logger = logger;
-    private readonly IBackgroundJobConfigService _jobConfigService = jobConfigService;
-    private readonly ITelegramSessionManager _sessionManager = sessionManager;
-    private readonly ITelegramUserRepository _userRepository = userRepository;
-    private readonly IProfileScanService _profileScanService = profileScanService;
-
     public async Task Execute(IJobExecutionContext context)
     {
         await ExecuteAsync(context.CancellationToken);
@@ -45,36 +39,36 @@ public class ProfileRescanJob(
         try
         {
             // Check User API availability first
-            if (!await _sessionManager.HasAnyActiveSessionAsync(cancellationToken))
+            if (!await sessionManager.HasAnyActiveSessionAsync(cancellationToken))
             {
-                _logger.LogInformation("Profile rescan: no User API session available, skipping batch");
+                logger.LogInformation("Profile rescan: no User API session available, skipping batch");
                 success = true;
                 return;
             }
 
             // Load job-specific settings
-            var jobConfig = await _jobConfigService.GetJobConfigAsync(
+            var jobConfig = await jobConfigService.GetJobConfigAsync(
                 BackgroundJobNames.ProfileRescan, cancellationToken);
             var settings = jobConfig?.ProfileRescan ?? new();
             var batchSize = settings.BatchSize;
             var rescanAfter = TimeSpanUtilities.ParseDurationOrDefault(settings.RescanAfter, TimeSpan.FromDays(7));
             var cutoff = DateTimeOffset.UtcNow - rescanAfter;
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Profile rescan: starting batch (size={BatchSize}, rescanAfter={RescanAfter}, cutoff={Cutoff})",
                 batchSize, settings.RescanAfter, cutoff);
 
             // Query eligible users via repository
-            var userIds = await _userRepository.GetEligibleUsersForRescanAsync(batchSize, cutoff, cancellationToken);
+            var userIds = await userRepository.GetEligibleUsersForRescanAsync(batchSize, cutoff, cancellationToken);
 
             if (userIds.Count == 0)
             {
-                _logger.LogInformation("Profile rescan: no eligible users found");
+                logger.LogInformation("Profile rescan: no eligible users found");
                 success = true;
                 return;
             }
 
-            _logger.LogInformation("Profile rescan: found {Count} users to scan", userIds.Count);
+            logger.LogInformation("Profile rescan: found {Count} users to scan", userIds.Count);
 
             var scanned = 0;
             var skipped = 0;
@@ -84,9 +78,9 @@ public class ProfileRescanJob(
                 try
                 {
                     // Look up the user's most recently active chat for alert/notification targeting
-                    var chat = await _userRepository.GetFirstChatForUserAsync(userId, cancellationToken);
+                    var chat = await userRepository.GetFirstChatForUserAsync(userId, cancellationToken);
 
-                    var result = await _profileScanService.ScanUserProfileAsync(
+                    var result = await profileScanService.ScanUserProfileAsync(
                         UserIdentity.FromId(userId),
                         triggeringChat: chat,
                         cancellationToken);
@@ -104,25 +98,25 @@ public class ProfileRescanJob(
                         skipped++;
 
                     // Throttle to avoid Telegram FLOOD_WAIT rate limits
-                    await Task.Delay(500, cancellationToken);
+                    await Task.Delay(1000, cancellationToken);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", userId);
+                    logger.LogWarning(ex, "Profile rescan: failed to scan user {UserId}, continuing batch", userId);
                 }
             }
 
             if (aborted)
-                _logger.LogWarning("Profile rescan: aborted — User API session unavailable ({Scanned} scanned, {Remaining} remaining)",
+                logger.LogWarning("Profile rescan: aborted — User API session unavailable ({Scanned} scanned, {Remaining} remaining)",
                     scanned, userIds.Count - scanned - skipped);
             else
-                _logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users ({Skipped} skipped)",
+                logger.LogInformation("Profile rescan: completed {Scanned}/{Total} users ({Skipped} skipped)",
                     scanned, userIds.Count, skipped);
             success = true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Profile rescan batch failed");
+            logger.LogError(ex, "Profile rescan batch failed");
             throw; // Re-throw for Quartz retry
         }
         finally

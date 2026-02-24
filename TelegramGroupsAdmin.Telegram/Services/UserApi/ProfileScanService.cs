@@ -75,6 +75,30 @@ public sealed class ProfileScanService(
             return EmptyResult(user.Id, "No User API session available. Connect a session in Settings.");
         }
 
+        // Top-level guard: if any API call in Steps 1-8 triggers the flood gate,
+        // bail out immediately without permanently excluding the user.
+        try
+        {
+            return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat,
+                userRepo, scope.ServiceProvider, ct);
+        }
+        catch (TelegramFloodWaitException ex)
+        {
+            logger.LogWarning("Rate limited during scan of {User} — {Message}, skipping (not excluding)",
+                user.ToLogDebug(), ex.Message);
+            return EmptyResult(user.Id, ex.Message);
+        }
+    }
+
+    private async Task<ProfileScanResult> ScanUserProfileCoreAsync(
+        IWTelegramApiClient client,
+        UserIdentity user,
+        Models.TelegramUser? existingUser,
+        ChatIdentity? triggeringChat,
+        ITelegramUserRepository userRepo,
+        IServiceProvider sp,
+        CancellationToken ct)
+    {
         // ── Step 1: Resolve user (Telegram requires access_hash, not bare IDs) ──
         var resolvedUser = await ResolveUserAsync(client, user.Id, existingUser, ct);
         if (resolvedUser == null)
@@ -90,6 +114,7 @@ public sealed class ProfileScanService(
         {
             fullUser = await client.Users_GetFullUser(resolvedUser);
         }
+        catch (TelegramFloodWaitException) { throw; }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to get full user info for {User}", user.ToLogDebug());
@@ -130,6 +155,7 @@ public sealed class ProfileScanService(
                     if (channelFull.full_chat is ChannelFull cf)
                         channelAbout = cf.about;
                 }
+                catch (TelegramFloodWaitException) { throw; }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "Failed to fetch full channel info for {ChannelId} for {User}",
@@ -168,6 +194,7 @@ public sealed class ProfileScanService(
                         allStoryItems.TryAdd(s.id, s);
                 }
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to fetch pinned stories for {User}", user.ToLogDebug());
@@ -191,6 +218,7 @@ public sealed class ProfileScanService(
                         allStoryItems[s.id] = s; // Replace min version with full version
                 }
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to resolve min stories for {User}", user.ToLogDebug());
@@ -226,7 +254,7 @@ public sealed class ProfileScanService(
 
             await userRepo.UpdateProfileScannedAtAsync(user.Id, ct);
 
-            var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
+            var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, sp, ct);
             return new ProfileScanResult(
                 user.Id, bio, personalChannelId, channelTitle, channelAbout,
                 hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
@@ -245,13 +273,13 @@ public sealed class ProfileScanService(
             hasPinnedStories, pinnedStoryCaptions, storyCount, storyCaptions,
             isScam, isFake, isVerified);
 
-        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var configService = sp.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chat.Id);
         var profileScanConfig = welcomeConfig?.JoinSecurity?.ProfileScan;
         var banThreshold = profileScanConfig?.BanThreshold ?? ProfileScanConfig.DefaultBanThreshold;
         var notifyThreshold = profileScanConfig?.NotifyThreshold ?? ProfileScanConfig.DefaultNotifyThreshold;
 
-        var scoringEngine = scope.ServiceProvider.GetRequiredService<IProfileScoringEngine>();
+        var scoringEngine = sp.GetRequiredService<IProfileScoringEngine>();
 
         var scoreResult = await scoringEngine.ScoreAsync(
             profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, ct);
@@ -267,7 +295,7 @@ public sealed class ProfileScanService(
             await userRepo.SetProfileScanExcludedAsync(user.Id, false, ct);
 
         // Persist scan result history
-        var scanResultsRepo = scope.ServiceProvider.GetRequiredService<IProfileScanResultsRepository>();
+        var scanResultsRepo = sp.GetRequiredService<IProfileScanResultsRepository>();
         await scanResultsRepo.InsertAsync(new ProfileScanResultRecord(
             Id: 0,
             UserId: user.Id,
@@ -289,9 +317,9 @@ public sealed class ProfileScanService(
 
         // ── Step 8: Take moderation action ──
         if (scoreResult.Outcome == ProfileScanOutcome.Banned)
-            await HandleBanAsync(user, triggeringChat, result, scope.ServiceProvider, ct);
+            await HandleBanAsync(user, triggeringChat, result, sp, ct);
         else if (scoreResult.Outcome == ProfileScanOutcome.HeldForReview)
-            await CreateProfileScanAlertAsync(user, triggeringChat, result, scope.ServiceProvider, ct);
+            await CreateProfileScanAlertAsync(user, triggeringChat, result, sp, ct);
 
         return result;
     }
@@ -325,6 +353,7 @@ public sealed class ProfileScanService(
             {
                 logger.LogDebug("Username @{Username} no longer valid for {UserId}", username, userId);
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to resolve username @{Username} for {UserId}", username, userId);
@@ -347,6 +376,7 @@ public sealed class ProfileScanService(
                 logger.LogDebug("Name search for \"{Query}\" returned {Count} users but none matched {UserId}",
                     searchQuery, found.users.Count, userId);
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to search for \"{Query}\" to resolve {UserId}", searchQuery, userId);
@@ -517,6 +547,7 @@ public sealed class ProfileScanService(
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("profile photo");
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to download profile photo for vision");
@@ -534,6 +565,7 @@ public sealed class ProfileScanService(
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("personal channel photo");
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to download channel photo for vision");
@@ -579,6 +611,7 @@ public sealed class ProfileScanService(
                         }
                     }
                 }
+                catch (TelegramFloodWaitException) { throw; }
                 catch (Exception ex)
                 {
                     logger.LogDebug(ex, "Failed to download story media for vision");
