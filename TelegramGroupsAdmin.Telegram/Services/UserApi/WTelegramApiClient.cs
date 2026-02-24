@@ -74,7 +74,19 @@ public sealed class WTelegramApiClient(Client client, ILogger<WTelegramApiClient
             logger.LogWarning("FLOOD_WAIT_{Seconds} — waiting before retry", ex.X);
             await Task.Delay(TimeSpan.FromSeconds(ex.X));
             _floodWaitUntil = null;
-            return await apiCall();
+
+            try
+            {
+                return await apiCall();
+            }
+            catch (RpcException retryEx) when (retryEx.Code == 420)
+            {
+                // Retry also rate-limited — set gate and surface as our exception type
+                _floodWaitUntil = DateTimeOffset.UtcNow.AddSeconds(retryEx.X);
+                logger.LogWarning("FLOOD_WAIT_{Seconds} on retry — gate reset until {Until:u}",
+                    retryEx.X, _floodWaitUntil);
+                throw new TelegramFloodWaitException(retryEx.X, _floodWaitUntil.Value);
+            }
         }
     }
 

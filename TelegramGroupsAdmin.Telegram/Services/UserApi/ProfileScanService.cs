@@ -114,6 +114,7 @@ public sealed class ProfileScanService(
         {
             fullUser = await client.Users_GetFullUser(resolvedUser);
         }
+        catch (TelegramFloodWaitException) { throw; }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to get full user info for {User}", user.ToLogDebug());
@@ -154,6 +155,7 @@ public sealed class ProfileScanService(
                     if (channelFull.full_chat is ChannelFull cf)
                         channelAbout = cf.about;
                 }
+                catch (TelegramFloodWaitException) { throw; }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "Failed to fetch full channel info for {ChannelId} for {User}",
@@ -192,6 +194,7 @@ public sealed class ProfileScanService(
                         allStoryItems.TryAdd(s.id, s);
                 }
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to fetch pinned stories for {User}", user.ToLogDebug());
@@ -215,6 +218,7 @@ public sealed class ProfileScanService(
                         allStoryItems[s.id] = s; // Replace min version with full version
                 }
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to resolve min stories for {User}", user.ToLogDebug());
@@ -543,6 +547,7 @@ public sealed class ProfileScanService(
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("profile photo");
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to download profile photo for vision");
@@ -560,6 +565,7 @@ public sealed class ProfileScanService(
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("personal channel photo");
             }
+            catch (TelegramFloodWaitException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to download channel photo for vision");
@@ -605,6 +611,7 @@ public sealed class ProfileScanService(
                         }
                     }
                 }
+                catch (TelegramFloodWaitException) { throw; }
                 catch (Exception ex)
                 {
                     logger.LogDebug(ex, "Failed to download story media for vision");
