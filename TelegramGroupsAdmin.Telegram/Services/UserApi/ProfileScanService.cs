@@ -242,7 +242,8 @@ public sealed class ProfileScanService(
         var result = new ProfileScanResult(
             user.Id, bio, personalChannelId, channelTitle, channelAbout,
             hasPinnedStories, pinnedStoryCaptions, isScam, isFake, isVerified,
-            scoreResult.Score, scoreResult.Outcome, scoreResult.AiReason, scoreResult.AiSignals);
+            scoreResult.Score, scoreResult.Outcome, scoreResult.AiReason, scoreResult.AiSignals,
+            scoreResult.ContainsNudity);
 
         // ── Step 8: Take moderation action ──
         if (scoreResult.Outcome == ProfileScanOutcome.Banned)
@@ -352,8 +353,9 @@ public sealed class ProfileScanService(
 
         await moderationService.BanUserAsync(intent, ct);
 
-        // Censor explicit profile photo if banned for adult content
-        await CensorProfilePhotoAsync(user, ct);
+        // Censor explicit profile photo only when nudity was detected in images
+        if (result.ContainsNudity)
+            await CensorProfilePhotoAsync(user, ct);
 
         logger.LogInformation("Profile scan: banned {User} (score {Score})", user.ToLogInfo(), result.Score);
     }
@@ -407,8 +409,8 @@ public sealed class ProfileScanService(
             var payload = new SendChatNotificationPayload(
                 Chat: chat,
                 EventType: NotificationEventType.ProfileScanAlert,
-                Subject: $"Profile Scan Alert — Score {result.Score:F1}/5.0",
-                Message: $"User profile flagged for review.\nReason: {result.AiReason ?? signals}",
+                Subject: $"Profile Scan Alert — {user.DisplayName} — Score {result.Score:F1}/5.0",
+                Message: $"User: {user.DisplayName} (ID: {user.Id})\nSignals: {signals}\nReason: {result.AiReason ?? "rule-based detection"}",
                 ReportId: reportId,
                 ReportedUserId: user.Id,
                 ReportType: ReportType.ProfileScanAlert);
@@ -434,7 +436,10 @@ public sealed class ProfileScanService(
         try
         {
             using var image = await Image.LoadAsync(photoPath, ct);
-            image.Mutate(x => x.GaussianBlur(40));
+            // ImageSharp GaussianBlur kernel is ~6*sigma+1 pixels; clamp so it fits the image
+            var maxSigma = Math.Min(image.Width, image.Height) / 6f;
+            var sigma = Math.Min(40f, maxSigma);
+            image.Mutate(x => x.GaussianBlur(sigma));
             await image.SaveAsJpegAsync(photoPath, ct);
             logger.LogInformation("Profile scan: censored profile photo for banned {User}", user.ToLogInfo());
         }
@@ -620,5 +625,5 @@ public sealed class ProfileScanService(
 
     private static ProfileScanResult EmptyResult(long userId, string? skipReason = null) =>
         new(userId, null, null, null, null, false, null, false, false, false,
-            0.0m, ProfileScanOutcome.Clean, null, null, skipReason);
+            0.0m, ProfileScanOutcome.Clean, null, null, ContainsNudity: false, skipReason);
 }

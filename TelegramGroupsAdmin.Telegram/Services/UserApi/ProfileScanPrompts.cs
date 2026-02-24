@@ -23,7 +23,7 @@ internal static class ProfileScanPrompts
         Analyze ALL provided evidence to assess the risk level of this account.
 
         You must respond with valid JSON in this exact format:
-        {"spam": true/false, "confidence": 0-100, "reason": "clear explanation", "signals_detected": ["signal1", "signal2"]}
+        {"spam": true/false, "confidence": 0-100, "reason": "clear explanation", "signals_detected": ["signal1", "signal2"], "contains_nudity": true/false}
 
         IMPORTANT: Set "spam" to true for ANY level of concern — not just definitive spam.
         Use the "confidence" field to indicate severity:
@@ -58,6 +58,10 @@ internal static class ProfileScanPrompts
         A suggestive photo alone might be 40-50, but suggestive photo + suggestive name = 55-70.
         A personal channel with explicit adult branding (18+, NSFW, etc.) is a strong signal on its own (80+),
         regardless of whether the profile photo is explicitly pornographic.
+
+        Set "contains_nudity" to true ONLY if any provided image contains nudity, pornography, or
+        explicit sexual imagery. This is specifically about visual content in images — suggestive text,
+        adult channel branding, or non-visual signals should NOT set this flag.
         """;
 
     internal static string BuildUserPrompt(
@@ -107,7 +111,7 @@ internal static class ProfileScanPrompts
               <image_labels>{{imageLabels ?? "none"}}</image_labels>
             </images>
 
-            Respond with JSON: {"spam": true/false, "confidence": 0-100, "reason": "...", "signals_detected": [...]}
+            Respond with JSON: {"spam": true/false, "confidence": 0-100, "reason": "...", "signals_detected": [...], "contains_nudity": true/false}
             """;
     }
 }
@@ -119,4 +123,5 @@ internal record ProfileScanAIResponse(
     [property: JsonPropertyName("spam")] bool Spam,
     [property: JsonPropertyName("confidence")] int Confidence,
     [property: JsonPropertyName("reason")] string? Reason,
-    [property: JsonPropertyName("signals_detected")] string[]? SignalsDetected);
+    [property: JsonPropertyName("signals_detected")] string[]? SignalsDetected,
+    [property: JsonPropertyName("contains_nudity")] bool ContainsNudity);

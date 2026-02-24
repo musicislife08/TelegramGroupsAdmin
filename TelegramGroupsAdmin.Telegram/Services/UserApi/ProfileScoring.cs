@@ -28,6 +28,7 @@ public record ProfileScanResult(
     ProfileScanOutcome Outcome,
     string? AiReason,
     string[]? AiSignalsDetected,
+    bool ContainsNudity = false,
     string? SkipReason = null);
 
 /// <summary>Result from the full two-layer scoring pipeline.</summary>
@@ -38,7 +39,8 @@ public record ScoringResult(
     decimal AiScore,
     int? AiConfidence,
     string? AiReason,
-    string[]? AiSignals);
+    string[]? AiSignals,
+    bool ContainsNudity = false);
 
 /// <summary>
 /// Two-layer scoring engine for profile risk assessment.
@@ -56,9 +58,10 @@ public sealed class ProfileScoringEngine(
         decimal Score,
         int? Confidence,
         string? Reason,
-        string[]? Signals)
+        string[]? Signals,
+        bool ContainsNudity = false)
     {
-        public static readonly AiScoringResult Empty = new(0.0m, null, null, null);
+        public static readonly AiScoringResult Empty = new(0.0m, null, null, null, false);
     }
 
     private const decimal MaxScore = 5.0m;
@@ -99,7 +102,8 @@ public sealed class ProfileScoringEngine(
                 AiScore: 0.0m,
                 AiConfidence: null,
                 AiReason: "Rule-based detection triggered ban threshold",
-                AiSignals: null);
+                AiSignals: null,
+                ContainsNudity: false);
         }
 
         // ── Layer 2: AI vision analysis ──
@@ -123,7 +127,8 @@ public sealed class ProfileScoringEngine(
             AiScore: aiResult.Score,
             AiConfidence: aiResult.Confidence,
             AiReason: aiResult.Reason,
-            AiSignals: aiResult.Signals);
+            AiSignals: aiResult.Signals,
+            ContainsNudity: aiResult.ContainsNudity);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -248,7 +253,7 @@ public sealed class ProfileScoringEngine(
             }
 
             if (!response.Spam)
-                return new AiScoringResult(0.0m, response.Confidence, response.Reason, response.SignalsDetected);
+                return new AiScoringResult(0.0m, response.Confidence, response.Reason, response.SignalsDetected, response.ContainsNudity);
 
             // Map confidence to points (aligned with prompt tiers)
             var score = response.Confidence switch
@@ -258,7 +263,7 @@ public sealed class ProfileScoringEngine(
                 _ => 0.0m       // Minor signals — treat as clean
             };
 
-            return new AiScoringResult(score, response.Confidence, response.Reason, response.SignalsDetected);
+            return new AiScoringResult(score, response.Confidence, response.Reason, response.SignalsDetected, response.ContainsNudity);
         }
         catch (JsonException ex)
         {

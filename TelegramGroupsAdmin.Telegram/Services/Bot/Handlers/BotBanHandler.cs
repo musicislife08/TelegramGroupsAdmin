@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
@@ -63,6 +64,12 @@ public class BotBanHandler : IBotBanHandler
                 {
                     await apiClient.BanChatMemberAsync(chat.Id, user.Id, ct: ct);
                     Interlocked.Increment(ref successCount);
+                }
+                catch (ApiRequestException ex) when (ex.Message.Contains("PARTICIPANT_ID_INVALID"))
+                {
+                    _logger.LogDebug("Cannot ban {User} in {Chat}: user ID no longer valid (deleted account?)",
+                        user.ToLogDebug(), chat.ToLogDebug());
+                    Interlocked.Increment(ref failCount);
                 }
                 catch (Exception ex)
                 {
@@ -153,6 +160,12 @@ public class BotBanHandler : IBotBanHandler
                     await apiClient.BanChatMemberAsync(chat.Id, user.Id, ct: ct);
                     Interlocked.Increment(ref successCount);
                 }
+                catch (ApiRequestException ex) when (ex.Message.Contains("PARTICIPANT_ID_INVALID"))
+                {
+                    _logger.LogDebug("Cannot temp ban {User} in {Chat}: user ID no longer valid (deleted account?)",
+                        user.ToLogDebug(), chat.ToLogDebug());
+                    Interlocked.Increment(ref failCount);
+                }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to temp ban {User} in {Chat}", user.ToLogDebug(), chat.ToLogDebug());
@@ -217,6 +230,12 @@ public class BotBanHandler : IBotBanHandler
                 {
                     await apiClient.UnbanChatMemberAsync(chat.Id, user.Id, onlyIfBanned: true, ct: ct);
                     Interlocked.Increment(ref successCount);
+                }
+                catch (ApiRequestException ex) when (ex.Message.Contains("PARTICIPANT_ID_INVALID"))
+                {
+                    _logger.LogDebug("Cannot unban {User} in {Chat}: user ID no longer valid (deleted account?)",
+                        user.ToLogDebug(), chat.ToLogDebug());
+                    Interlocked.Increment(ref failCount);
                 }
                 catch (Exception ex)
                 {
