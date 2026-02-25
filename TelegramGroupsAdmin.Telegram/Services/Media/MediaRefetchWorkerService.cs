@@ -35,7 +35,7 @@ public class MediaRefetchWorkerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("MediaRefetchWorkerService started with 4 workers");
+        _logger.LogDebug("MediaRefetchWorkerService started with 4 workers");
 
         // Start 4 fixed workers
         var workers = Enumerable.Range(0, 4)
@@ -44,12 +44,12 @@ public class MediaRefetchWorkerService : BackgroundService
 
         await Task.WhenAll(workers);
 
-        _logger.LogInformation("MediaRefetchWorkerService stopped");
+        _logger.LogDebug("MediaRefetchWorkerService stopped");
     }
 
     private async Task ProcessQueueAsync(int workerId, CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Worker {WorkerId} started", workerId);
+        _logger.LogDebug("Worker {WorkerId} started", workerId);
 
         try
         {
@@ -79,7 +79,7 @@ public class MediaRefetchWorkerService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Worker {WorkerId} cancelled", workerId);
+            _logger.LogDebug("Worker {WorkerId} cancelled", workerId);
         }
         catch (Exception ex)
         {
@@ -106,7 +106,7 @@ public class MediaRefetchWorkerService : BackgroundService
         var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
         var mediaService = scope.ServiceProvider.GetRequiredService<TelegramMediaService>();
 
-        _logger.LogInformation("Worker {WorkerId} refetching media: message {MessageId} type {MediaType}",
+        _logger.LogDebug("Worker {WorkerId} refetching media: message {MessageId} type {MediaType}",
             workerId, request.MessageId, request.MediaType);
 
         // Get message data from database
@@ -136,7 +136,7 @@ public class MediaRefetchWorkerService : BackgroundService
             // Update message with local path
             await messageRepo.UpdateMediaLocalPathAsync(request.MessageId, localPath);
 
-            _logger.LogInformation("Worker {WorkerId} completed media refetch: {LocalPath}", workerId, localPath);
+            _logger.LogDebug("Worker {WorkerId} completed media refetch: {LocalPath}", workerId, localPath);
 
             // Notify UI components via SignalR event (triggers Blazor re-render)
             _messageProcessingService.RaiseMediaUpdated(request.MessageId, request.MediaType!.Value);
@@ -173,8 +173,8 @@ public class MediaRefetchWorkerService : BackgroundService
 
         var knownPhotoId = user?.PhotoFileUniqueId;
 
-        _logger.LogInformation("Worker {WorkerId} refetching user photo: {User}",
-            workerId, user.ToLogInfo(request.UserId!.Value));
+        _logger.LogDebug("Worker {WorkerId} refetching user photo: {User}",
+            workerId, user.ToLogDebug(request.UserId!.Value));
 
         // Download photo (will check if changed)
         var result = await photoService.GetUserPhotoWithMetadataAsync(
@@ -190,8 +190,8 @@ public class MediaRefetchWorkerService : BackgroundService
                 result.FileUniqueId,
                 result.RelativePath);
 
-            _logger.LogInformation("Worker {WorkerId} completed user photo refetch: {User}",
-                workerId, user.ToLogInfo(request.UserId!.Value));
+            _logger.LogDebug("Worker {WorkerId} completed user photo refetch: {User}",
+                workerId, user.ToLogDebug(request.UserId!.Value));
 
             // User photo updates don't have a UI event yet (would need OnUserPhotoUpdated event)
             // For now, users refresh page to see updated photos

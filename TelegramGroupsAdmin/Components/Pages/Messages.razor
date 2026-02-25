@@ -486,7 +486,7 @@
         {
             try
             {
-                Logger.LogInformation("🔔 SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
+                Logger.LogDebug("SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
 
                 // Reload the message from database to get updated media_local_path
                 var updatedMessage = await MessageRepository.GetMessageAsync(messageId);
@@ -519,7 +519,7 @@
                     ApplyFilters();
                     StateHasChanged();
 
-                    Logger.LogInformation("✅ UI refreshed for message {MessageId} after media download via SignalR", messageId);
+                    Logger.LogDebug("UI refreshed for message {MessageId} after media download via SignalR", messageId);
                 }
                 else
                 {
@@ -1455,7 +1455,7 @@
 
             if (queuedCount > 0)
             {
-                Logger.LogInformation("Queued {Count} missing media files for automatic re-download (excluding Documents)", queuedCount);
+                Logger.LogDebug("Queued {Count} missing media files for automatic re-download (excluding Documents)", queuedCount);
             }
         }
         catch (Exception ex)
