@@ -132,7 +132,7 @@ builder.Services.AddBackgroundJobs(builder.Configuration);
 // Readiness: Checks database connectivity (if DB is down, stop receiving traffic but don't restart)
 builder.Services.AddHealthChecks()
     .AddNpgSql(
-        connectionString,
+        dbDataSourceFactory: sp => sp.GetRequiredService<Npgsql.NpgsqlDataSource>(),
         name: "postgresql",
         tags: ["ready", "db"]);
 

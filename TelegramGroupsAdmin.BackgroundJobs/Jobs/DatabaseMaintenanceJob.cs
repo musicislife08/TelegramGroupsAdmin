@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Diagnostics;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Quartz;
@@ -19,12 +18,12 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class DatabaseMaintenanceJob : IJob
 {
     private readonly ILogger<DatabaseMaintenanceJob> _logger;
-    private readonly IConfiguration _configuration;
+    private readonly NpgsqlDataSource _dataSource;
 
-    public DatabaseMaintenanceJob(ILogger<DatabaseMaintenanceJob> logger, IConfiguration configuration)
+    public DatabaseMaintenanceJob(ILogger<DatabaseMaintenanceJob> logger, NpgsqlDataSource dataSource)
     {
         _logger = logger;
-        _configuration = configuration;
+        _dataSource = dataSource;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -64,19 +63,12 @@ public class DatabaseMaintenanceJob : IJob
         {
             try
             {
-                var connectionString = _configuration.GetConnectionString("PostgreSQL");
-                if (string.IsNullOrEmpty(connectionString))
-                {
-                    _logger.LogError("PostgreSQL connection string not found in configuration");
-                    return;
-                }
-
                 _logger.LogInformation("Database maintenance job started");
 
-                // VACUUM and ANALYZE must run outside of transactions
-                // NpgsqlConnection with Enlist=false ensures no automatic transaction enrollment
-                await using var connection = new NpgsqlConnection(connectionString);
-                await connection.OpenAsync(cancellationToken);
+                // VACUUM and ANALYZE must run outside of transactions.
+                // NpgsqlDataSource.OpenConnectionAsync() returns a pooled connection
+                // that is NOT auto-enrolled in ambient transactions.
+                await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
                 // Execute maintenance operations based on payload
                 if (payload.RunVacuumFull)

@@ -99,6 +99,14 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
             .UsingJobData(retryJobData)
             .Build();
 
+        // Remove stale retry trigger if it exists from a previous failure cycle
+        // (e.g., job failed yesterday, retry trigger was created but never cleaned up)
+        var triggerKey = retryTrigger.Key;
+        if (await scheduler.GetTrigger(triggerKey, cancellationToken) != null)
+        {
+            await scheduler.UnscheduleJob(triggerKey, cancellationToken);
+        }
+
         await scheduler.ScheduleJob(retryTrigger, cancellationToken);
 
         _logger.LogInformation(
