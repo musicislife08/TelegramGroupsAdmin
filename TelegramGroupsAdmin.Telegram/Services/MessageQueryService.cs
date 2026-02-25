@@ -271,7 +271,7 @@ public class MessageQueryService : IMessageQueryService
         return results.Select(m => m.ToModel()).ToList();
     }
 
-    public async Task<Dictionary<long, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
@@ -403,7 +403,7 @@ public class MessageQueryService : IMessageQueryService
 
     /// <inheritdoc />
     public async Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

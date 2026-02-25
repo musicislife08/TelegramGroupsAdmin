@@ -21,7 +21,7 @@ public class VideoTrainingSampleDto
     /// Reference to the message containing this video
     /// </summary>
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     /// <summary>
     /// Path to the video file on disk (/data/media/...)

@@ -89,7 +89,7 @@ public class WarnHandlerTests
         // Arrange
         const long userId = 12345L;
         const long chatId = -100123456789L;
-        const long messageId = 42L;
+        const int messageId = 42;
         var executor = Actor.FromSystem("test");
 
         _mockUserRepository.AddWarningAsync(userId, Arg.Any<WarningEntry>(), Arg.Any<CancellationToken>())

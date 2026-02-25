@@ -15,7 +15,7 @@ public class TrainingLabelDto
     /// </summary>
     [Key]
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     /// <summary>
     /// Label: 0=Spam, 1=Ham (stored as smallint, enforced by check constraint).

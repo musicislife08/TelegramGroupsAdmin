@@ -104,7 +104,7 @@ public class BotModerationServiceTests
             Arg.Any<UserIdentity>(),
             Arg.Any<Actor>(),
             Arg.Any<string>(),
-            Arg.Any<long?>(),
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -175,7 +175,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
 
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -221,7 +221,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Failed("API error"));
 
         // Act
@@ -255,7 +255,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 2)); // Below threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
@@ -285,7 +285,7 @@ public class BotModerationServiceTests
             Arg.Any<UserIdentity>(),
             Arg.Any<Actor>(),
             Arg.Any<string>(),
-            Arg.Any<long?>(),
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -296,14 +296,14 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
                 ConfigType.Moderation, Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
 
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -333,7 +333,7 @@ public class BotModerationServiceTests
             Arg.Is<UserIdentity>(u => u.Id == userId),
             Actor.AutoBan,
             Arg.Is<string>(s => s!.Contains("threshold")),
-            Arg.Any<long?>(),
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -344,7 +344,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 5)); // Well above threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
@@ -369,7 +369,7 @@ public class BotModerationServiceTests
             Arg.Any<UserIdentity>(),
             Arg.Any<Actor>(),
             Arg.Any<string>(),
-            Arg.Any<long?>(),
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -380,7 +380,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
@@ -416,7 +416,7 @@ public class BotModerationServiceTests
     public async Task MarkAsSpamAndBanAsync_CompletesAllSteps_InCorrectOrder()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long userId = 12345L;
         const long chatId = -100123456789L;
         var executor = Actor.FromSystem("SpamDetection");
@@ -427,7 +427,7 @@ public class BotModerationServiceTests
         _mockMessageHandler.DeleteAsync(Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>())
             .Returns(DeleteResult.Succeeded(messageDeleted: true));
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
 
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -461,7 +461,7 @@ public class BotModerationServiceTests
             Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>());
 
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
 
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
             messageId, executor, Arg.Any<CancellationToken>());
@@ -471,7 +471,7 @@ public class BotModerationServiceTests
     public async Task MarkAsSpamAndBanAsync_DeleteFails_StillBansUser()
     {
         // Arrange - Message deletion is best-effort (may already be deleted)
-        const long messageId = 42L;
+        const int messageId = 42;
         const long userId = 12345L;
         const long chatId = -100123456789L;
         var executor = Actor.FromSystem("SpamDetection");
@@ -482,7 +482,7 @@ public class BotModerationServiceTests
         _mockMessageHandler.DeleteAsync(Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>())
             .Returns(DeleteResult.Succeeded(messageDeleted: false)); // Deletion failed (soft failure)
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
 
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -512,7 +512,7 @@ public class BotModerationServiceTests
     public async Task MarkAsSpamAndBanAsync_BanFails_ReturnsFailure()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long userId = 12345L;
         const long chatId = -100123456789L;
         var executor = Actor.FromSystem("SpamDetection");
@@ -523,7 +523,7 @@ public class BotModerationServiceTests
         _mockMessageHandler.DeleteAsync(Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>())
             .Returns(DeleteResult.Succeeded(messageDeleted: true));
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Failed("API error"));
 
         // Act
@@ -546,7 +546,7 @@ public class BotModerationServiceTests
 
         // Training data should NOT be created on failure
         await _mockTrainingHandler.DidNotReceive().CreateSpamSampleAsync(
-            Arg.Any<long>(),
+            Arg.Any<int>(),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
     }
@@ -666,7 +666,7 @@ public class BotModerationServiceTests
         var duration = TimeSpan.FromHours(24);
         var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
-        _mockBanHandler.TempBanAsync(Arg.Any<UserIdentity>(), executor, duration, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.TempBanAsync(Arg.Any<UserIdentity>(), executor, duration, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(TempBanResult.Succeeded(chatsAffected: 5, expiresAt, chatsFailed: 0));
 
         // Act
@@ -703,7 +703,7 @@ public class BotModerationServiceTests
         var executor = Actor.FromSystem("test");
         var duration = TimeSpan.FromHours(1);
 
-        _mockBanHandler.TempBanAsync(Arg.Any<UserIdentity>(), executor, duration, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.TempBanAsync(Arg.Any<UserIdentity>(), executor, duration, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(TempBanResult.Failed("API error"));
 
         // Act
@@ -741,7 +741,7 @@ public class BotModerationServiceTests
         var duration = TimeSpan.FromHours(2);
         var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
-        _mockBanHandler.TempBanAsync(Arg.Any<UserIdentity>(), executor, duration, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.TempBanAsync(Arg.Any<UserIdentity>(), executor, duration, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(TempBanResult.Succeeded(chatsAffected: 3, expiresAt, chatsFailed: 2));
 
         // Act
@@ -929,7 +929,7 @@ public class BotModerationServiceTests
     public async Task DeleteMessageAsync_SuccessfulDelete_AuditsAction()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
         const long userId = 12345L;
         var executor = Actor.FromTelegramUser(999, "Admin");
@@ -964,7 +964,7 @@ public class BotModerationServiceTests
     public async Task DeleteMessageAsync_MessageAlreadyDeleted_StillAudits()
     {
         // Arrange - Message was already deleted (returns success but messageDeleted=false)
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
         const long userId = 12345L;
         var executor = Actor.FromTelegramUser(999, "Admin");
@@ -1006,7 +1006,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
 
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1047,7 +1047,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
@@ -1086,14 +1086,14 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 3)); // Reaches threshold
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
                 ConfigType.Moderation, Arg.Any<long>())
             .Returns(new WarningSystemConfig { AutoBanEnabled = true, AutoBanThreshold = 3 });
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Failed("API rate limited"));
 
         // Act
@@ -1116,7 +1116,7 @@ public class BotModerationServiceTests
 
         // Verify: Ban was attempted
         await _mockBanHandler.Received(1).BanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), Actor.AutoBan, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u.Id == userId), Actor.AutoBan, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1155,7 +1155,7 @@ public class BotModerationServiceTests
     public async Task MarkAsSpamAndBanAsync_TrainingDataFails_StillReturnsSuccess()
     {
         // Arrange - All actions succeed except training data creation
-        const long messageId = 42L;
+        const int messageId = 42;
         const long userId = 12345L;
         const long chatId = -100123456789L;
         var executor = Actor.FromSystem("SpamDetection");
@@ -1166,7 +1166,7 @@ public class BotModerationServiceTests
         _mockMessageHandler.DeleteAsync(Arg.Any<ChatIdentity>(), messageId, executor, Arg.Any<CancellationToken>())
             .Returns(DeleteResult.Succeeded(messageDeleted: true));
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
 
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1207,7 +1207,7 @@ public class BotModerationServiceTests
     public async Task SyncBanToChatAsync_SuccessfulSync_ReturnsSingleChatAffected()
     {
         // Arrange
-        _mockBanHandler.BanInChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Actor.AutoDetection, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanInChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Actor.AutoDetection, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 1));
 
         // Act
@@ -1218,7 +1218,7 @@ public class BotModerationServiceTests
                 Chat = ChatIdentity.FromId(-100123456789),
                 Executor = Actor.AutoDetection,
                 Reason = "Lazy ban sync",
-                TriggeredByMessageId = 42L
+                TriggeredByMessageId = 42
             });
 
         // Assert
@@ -1258,14 +1258,14 @@ public class BotModerationServiceTests
         // Verify handler was NOT called
         await _mockBanHandler.DidNotReceive().BanInChatAsync(
             Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
-            Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task SyncBanToChatAsync_BanFails_ReturnsFailure()
     {
         // Arrange
-        _mockBanHandler.BanInChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Actor.AutoDetection, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanInChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Actor.AutoDetection, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Failed("User is chat admin"));
 
         // Act
@@ -1294,7 +1294,7 @@ public class BotModerationServiceTests
     public async Task SyncBanToChatAsync_UsesAutoDetectionActor()
     {
         // Arrange - Verify the intent's executor flows through to the handler
-        _mockBanHandler.BanInChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanInChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 1));
 
         // Act
@@ -1305,12 +1305,12 @@ public class BotModerationServiceTests
                 Chat = ChatIdentity.FromId(-100123456789),
                 Executor = Actor.AutoDetection,
                 Reason = "Lazy sync",
-                TriggeredByMessageId = 42L
+                TriggeredByMessageId = 42
             });
 
         // Assert - Verify Actor.AutoDetection was forwarded to handler
         await _mockBanHandler.Received(1).BanInChatAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Actor.AutoDetection, "Lazy sync", 42L, Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Actor.AutoDetection, "Lazy sync", 42, Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -1321,7 +1321,7 @@ public class BotModerationServiceTests
     public async Task DeleteMessageAsync_AuditFails_StillReturnsSuccess()
     {
         // Arrange - Message deletion succeeds but audit logging throws
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
         const long userId = 12345L;
         var executor = Actor.FromTelegramUser(999, "Admin");
@@ -1362,7 +1362,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.BanAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
 
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -1399,7 +1399,7 @@ public class BotModerationServiceTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("SpamDetection");
 
-        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+        _mockWarnHandler.WarnAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<long>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(WarnResult.Succeeded(warningCount: 1));
 
         _mockConfigService.GetEffectiveAsync<WarningSystemConfig>(
@@ -1507,7 +1507,7 @@ public class BotModerationServiceTests
     public async Task HandleMalwareViolationAsync_DeletesMessage()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         const string malwareDetails = "Trojan.GenericKD detected";
@@ -1548,7 +1548,7 @@ public class BotModerationServiceTests
     public async Task HandleMalwareViolationAsync_EnsuresMessageExists()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         const string malwareDetails = "Trojan detected";
@@ -1582,7 +1582,7 @@ public class BotModerationServiceTests
     public async Task HandleMalwareViolationAsync_CreatesReport()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         const string malwareDetails = "Ransomware detected";
@@ -1606,7 +1606,7 @@ public class BotModerationServiceTests
 
         // Assert - Report was created with isAutomated=true
         await _mockReportService.Received(1).CreateReportAsync(
-            Arg.Is<Report>(r => r.MessageId == (int)messageId && r.Chat.Id == chatId),
+            Arg.Is<Report>(r => r.MessageId == messageId && r.Chat.Id == chatId),
             null,
             true,
             Arg.Any<CancellationToken>());
@@ -1616,7 +1616,7 @@ public class BotModerationServiceTests
     public async Task HandleMalwareViolationAsync_NotifiesAdmins()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         const string malwareDetails = "Virus.Win32.Agent detected";
@@ -1650,7 +1650,7 @@ public class BotModerationServiceTests
     public async Task HandleMalwareViolationAsync_DoesNotBan()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         const string malwareDetails = "Trojan detected";
@@ -1677,7 +1677,7 @@ public class BotModerationServiceTests
             Arg.Any<UserIdentity>(),
             Arg.Any<Actor>(),
             Arg.Any<string>(),
-            Arg.Any<long?>(),
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -1685,7 +1685,7 @@ public class BotModerationServiceTests
     public async Task HandleMalwareViolationAsync_AuditsDelete()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         const string malwareDetails = "Malware detected";
@@ -1724,7 +1724,7 @@ public class BotModerationServiceTests
     public async Task HandleCriticalViolationAsync_DeletesMessage()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         var violations = new List<string> { "Blocked URL: malware.com" };
@@ -1765,7 +1765,7 @@ public class BotModerationServiceTests
     public async Task HandleCriticalViolationAsync_NotifiesUser()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         var violations = new List<string> { "Blocked URL", "Suspicious file" };
@@ -1798,7 +1798,7 @@ public class BotModerationServiceTests
     public async Task HandleCriticalViolationAsync_DoesNotBan()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         var violations = new List<string> { "Blocked URL" };
@@ -1825,7 +1825,7 @@ public class BotModerationServiceTests
             Arg.Any<UserIdentity>(),
             Arg.Any<Actor>(),
             Arg.Any<string>(),
-            Arg.Any<long?>(),
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -1833,7 +1833,7 @@ public class BotModerationServiceTests
     public async Task HandleCriticalViolationAsync_DoesNotWarn()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         var violations = new List<string> { "Blocked URL" };
@@ -1861,7 +1861,7 @@ public class BotModerationServiceTests
             Arg.Any<Actor>(),
             Arg.Any<string?>(),
             Arg.Any<long>(),
-            Arg.Any<long?>(),
+            Arg.Any<int?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -1869,7 +1869,7 @@ public class BotModerationServiceTests
     public async Task HandleCriticalViolationAsync_AuditsDelete()
     {
         // Arrange
-        const long messageId = 1001L;
+        const int messageId = 1001;
         const long chatId = 2002L;
         const long userId = 3003L;
         var violations = new List<string> { "Blocked URL" };

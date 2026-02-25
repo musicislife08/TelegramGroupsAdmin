@@ -10,12 +10,12 @@ public interface IMessageHistoryRepository
 {
     // Core CRUD
     Task InsertMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default);
-    Task<UiModels.MessageRecord?> GetMessageAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<UiModels.MessageRecord?> GetMessageAsync(int messageId, CancellationToken cancellationToken = default);
     Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default);
-    Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default);
-    Task UpdateMessageTextAsync(long messageId, string enrichedText, CancellationToken cancellationToken = default);
-    Task UpdateMessageEditDateAsync(long messageId, DateTimeOffset editDate, CancellationToken cancellationToken = default);
-    Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default);
+    Task UpdateMediaLocalPathAsync(int messageId, string localPath, CancellationToken cancellationToken = default);
+    Task UpdateMessageTextAsync(int messageId, string enrichedText, CancellationToken cancellationToken = default);
+    Task UpdateMessageEditDateAsync(int messageId, DateTimeOffset editDate, CancellationToken cancellationToken = default);
+    Task MarkMessageAsDeletedAsync(int messageId, string deletionSource, CancellationToken cancellationToken = default);
 
     // Message counts (used by impersonation detection and chat-specific queries)
     Task<int> GetMessageCountAsync(long userId, long chatId, CancellationToken cancellationToken = default);

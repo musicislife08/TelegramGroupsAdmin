@@ -373,7 +373,7 @@ public class ReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         await new TestReportBuilder(SharedFactory.Services)
-            .ForMessageId((int)message2.MessageId)
+            .ForMessageId(message2.MessageId)
             .InChat(chat)
             .ReportedBy(100004, "reporter2")
             .AsReviewed("admin", "Dismissed")

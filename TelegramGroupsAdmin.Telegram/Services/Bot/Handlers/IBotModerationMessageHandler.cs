@@ -23,7 +23,7 @@ public interface IBotModerationMessageHandler
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result indicating whether message exists (either already or after backfill).</returns>
     Task<BackfillResult> EnsureExistsAsync(
-        long messageId,
+        int messageId,
         ChatIdentity chat,
         Message? telegramMessage = null,
         CancellationToken cancellationToken = default);
@@ -33,7 +33,7 @@ public interface IBotModerationMessageHandler
     /// </summary>
     Task<DeleteResult> DeleteAsync(
         ChatIdentity chat,
-        long messageId,
+        int messageId,
         Actor executor,
         CancellationToken cancellationToken = default);
 
@@ -55,6 +55,6 @@ public interface IBotModerationMessageHandler
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Enriched message with detection history, or null if not found.</returns>
     Task<MessageWithDetectionHistory?> GetEnrichedAsync(
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default);
 }

@@ -54,7 +54,7 @@ public class BackgroundJobScheduler
     /// Deduplicated by userId - multiple messages from same user won't trigger multiple photo fetches.
     /// </summary>
     public async Task ScheduleUserPhotoFetchAsync(
-        long messageId,
+        int messageId,
         long userId,
         CancellationToken cancellationToken = default)
     {

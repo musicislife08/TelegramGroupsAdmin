@@ -14,7 +14,7 @@ public interface IMLTrainingDataRepository
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>HashSet of all labeled message IDs</returns>
-    Task<HashSet<long>> GetLabeledMessageIdsAsync(CancellationToken cancellationToken = default);
+    Task<HashSet<int>> GetLabeledMessageIdsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets all spam training samples (explicit labels + high-confidence auto-detected).
@@ -23,7 +23,7 @@ public interface IMLTrainingDataRepository
     /// <param name="labeledMessageIds">Already-labeled message IDs to exclude from implicit spam (avoids duplicate query)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of spam samples with metadata</returns>
-    Task<List<TrainingSample>> GetSpamSamplesAsync(HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default);
+    Task<List<TrainingSample>> GetSpamSamplesAsync(HashSet<int> labeledMessageIds, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets ham training samples (explicit labels + quality-filtered never-flagged messages).
@@ -33,7 +33,7 @@ public interface IMLTrainingDataRepository
     /// <param name="labeledMessageIds">Already-labeled message IDs to exclude from implicit ham (avoids duplicate query)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of ham samples with metadata</returns>
-    Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default);
+    Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, HashSet<int> labeledMessageIds, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets training data balance statistics for UI display.

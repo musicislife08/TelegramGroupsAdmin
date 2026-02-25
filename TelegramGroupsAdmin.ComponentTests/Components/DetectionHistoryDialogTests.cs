@@ -20,7 +20,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
     /// Creates a test MessageRecord with default values.
     /// </summary>
     private static MessageRecord CreateTestMessage(
-        long messageId = 12345,
+        int messageId = 12345,
         long userId = 67890,
         string messageText = "Test message")
     {

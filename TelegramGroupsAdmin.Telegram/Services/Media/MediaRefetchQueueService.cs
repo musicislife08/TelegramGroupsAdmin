@@ -35,7 +35,7 @@ public class MediaRefetchQueueService : IMediaRefetchQueueService
     /// </summary>
     internal ChannelReader<RefetchRequest> Reader => _channel.Reader;
 
-    public async ValueTask<bool> EnqueueMediaAsync(long messageId, MediaType mediaType)
+    public async ValueTask<bool> EnqueueMediaAsync(int messageId, MediaType mediaType)
     {
         var request = new RefetchRequest
         {

@@ -122,7 +122,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return result;
     }
 
-    public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(int messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await WithActorJoins(
@@ -134,7 +134,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results;
     }
 
-    public async Task<Dictionary<long, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<int, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -433,7 +433,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     /// Invalidate all training data for a specific message (set used_for_training = false).
     /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
     /// </summary>
-    public async Task InvalidateTrainingDataForMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task InvalidateTrainingDataForMessageAsync(int messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 

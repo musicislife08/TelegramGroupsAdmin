@@ -44,7 +44,7 @@ public interface IMessageQueryService
     /// Used by orchestrator to build rich notifications after spam ban.
     /// </summary>
     Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -59,8 +59,8 @@ public interface IMessageQueryService
     /// <summary>
     /// Get content checks for multiple messages (latest detection per message)
     /// </summary>
-    Task<Dictionary<long, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(
-        IEnumerable<long> messageIds,
+    Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(
+        IEnumerable<int> messageIds,
         CancellationToken cancellationToken = default);
 
     /// <summary>

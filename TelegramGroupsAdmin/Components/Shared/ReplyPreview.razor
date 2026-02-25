@@ -13,7 +13,7 @@
 
 @code {
     [Parameter, EditorRequired]
-    public long? ReplyToMessageId { get; set; }
+    public int? ReplyToMessageId { get; set; }
 
     [Parameter]
     public string? ReplyToUser { get; set; }
@@ -22,7 +22,7 @@
     public string? ReplyToText { get; set; }
 
     [Parameter]
-    public EventCallback<long> OnReplyClick { get; set; }
+    public EventCallback<int> OnReplyClick { get; set; }
 
     private string GetReplyUserDisplay()
     {

@@ -53,7 +53,7 @@ public class TestReportBuilder
     /// </summary>
     public TestReportBuilder ForMessage(TestMessage message)
     {
-        _messageId = (int)message.MessageId;
+        _messageId = message.MessageId;
         _chatId = message.ChatId;
         return this;
     }

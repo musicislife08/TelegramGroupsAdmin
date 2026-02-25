@@ -16,10 +16,10 @@ public interface IMessageEditService
     /// <summary>
     /// Get all edits for a specific message
     /// </summary>
-    Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(int messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get edit counts for multiple messages (used for batch display)
     /// </summary>
-    Task<Dictionary<long, int>> GetEditCountsForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default);
+    Task<Dictionary<int, int>> GetEditCountsForMessagesAsync(IEnumerable<int> messageIds, CancellationToken cancellationToken = default);
 }

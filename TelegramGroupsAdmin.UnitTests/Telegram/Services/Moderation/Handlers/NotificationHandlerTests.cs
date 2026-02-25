@@ -368,7 +368,7 @@ public class NotificationHandlerTests
     /// </summary>
     private static MessageWithDetectionHistory CreateTestEnrichedMessage(
         long chatId,
-        long messageId,
+        int messageId,
         long userId,
         string? messageText = "Test spam message",
         string? photoLocalPath = null,

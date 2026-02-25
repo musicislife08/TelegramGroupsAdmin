@@ -39,7 +39,7 @@ public class TrainingHandler : ITrainingHandler
 
     /// <inheritdoc />
     public async Task CreateSpamSampleAsync(
-        long messageId,
+        int messageId,
         Actor executor,
         CancellationToken cancellationToken = default)
     {

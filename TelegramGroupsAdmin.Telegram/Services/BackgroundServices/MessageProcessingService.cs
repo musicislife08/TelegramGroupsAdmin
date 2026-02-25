@@ -44,12 +44,12 @@ public partial class MessageProcessingService(
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
     public event Action<MessageEditRecord>? OnMessageEdited;
-    public event Action<long, MediaType>? OnMediaUpdated;
+    public event Action<int, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Raises the OnMediaUpdated event (called by MediaRefetchWorkerService)
     /// </summary>
-    public void RaiseMediaUpdated(long messageId, MediaType mediaType)
+    public void RaiseMediaUpdated(int messageId, MediaType mediaType)
     {
         OnMediaUpdated?.Invoke(messageId, mediaType);
     }

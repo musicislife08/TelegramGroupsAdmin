@@ -248,7 +248,7 @@ public class FileScanJob(
         try
         {
             // Delete the message containing infected file
-            await _messageService.DeleteAndMarkMessageAsync(payload.Chat.Id, (int)payload.MessageId, "file_scan_infected", cancellationToken);
+            await _messageService.DeleteAndMarkMessageAsync(payload.Chat.Id, payload.MessageId, "file_scan_infected", cancellationToken);
 
             _logger.LogWarning(
                 "Deleted infected file message {MessageId} from {Chat}",

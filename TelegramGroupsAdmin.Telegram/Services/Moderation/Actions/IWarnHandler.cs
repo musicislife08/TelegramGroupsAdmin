@@ -18,6 +18,6 @@ public interface IWarnHandler
         Actor executor,
         string? reason,
         long chatId,
-        long? messageId = null,
+        int? messageId = null,
         CancellationToken cancellationToken = default);
 }

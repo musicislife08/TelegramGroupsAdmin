@@ -184,8 +184,8 @@
 
     // Message state (per-chat) - PERF-APP-1: Use composite model with detection history included
     private List<MessageWithDetectionHistory> _allMessages = [];
-    private Dictionary<long, ContentCheckRecord> _contentChecks = new();
-    private Dictionary<long, int> _editCounts = new();
+    private Dictionary<int, ContentCheckRecord> _contentChecks = new();
+    private Dictionary<int, int> _editCounts = new();
     private bool _loading;
     private bool _loadingMore;
     private bool _hasMore = true;
@@ -205,11 +205,11 @@
     private long? _botUserId; // Bot's Telegram user ID (for identifying bot messages)
     private string? _linkedUsername; // User's linked Telegram username (for calculating signature length)
     private string? _featureUnavailableReason; // Reason why feature is unavailable (for placeholder text)
-    private long? _isEditingMessageId; // Message currently being edited
+    private int? _isEditingMessageId; // Message currently being edited
     private int? _replyToMessageId; // Message being replied to (Telegram message IDs are always int)
     private string? _editingOriginalText; // Original text of message being edited
 
-    private long? _highlightMessageId; // Message to scroll to and highlight
+    private int? _highlightMessageId; // Message to scroll to and highlight
     private const int PageSize = 50;
 
     // Infinite scroll state
@@ -354,7 +354,7 @@
     /// Ensures the highlighted message is loaded in the current view (loads from DB if needed)
     /// Does NOT perform scrolling - that happens in OnAfterRenderAsync where JS interop is allowed
     /// </summary>
-    private async Task EnsureHighlightedMessageLoadedAsync(long targetMessageId)
+    private async Task EnsureHighlightedMessageLoadedAsync(int targetMessageId)
     {
         // Prevent duplicate calls (e.g., from Blazor prerendering)
         if (_highlightMessageEnsured)
@@ -394,7 +394,7 @@
                     }
 
                     // Load metadata for this message
-                    long[] messageIds = [targetMessageId];
+                    int[] messageIds = [targetMessageId];
                     var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
                     var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
 
@@ -457,7 +457,7 @@
                 _allMessages.Insert(0, new MessageWithDetectionHistory { Message = enrichedMessage ?? message });
 
                 // Load spam check for this new message if it exists
-                long[] messageIds = [message.MessageId];
+                int[] messageIds = [message.MessageId];
                 var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
                 foreach (var kvp in newContentChecks)
                 {
@@ -488,7 +488,7 @@
     }
 
     // ReSharper disable once AsyncVoidMethod
-    private async void HandleMediaUpdated(long messageId, MediaType mediaType)
+    private async void HandleMediaUpdated(int messageId, MediaType mediaType)
     {
         // CRITICAL: Must use InvokeAsync because worker runs on background thread
         await InvokeAsync(async () =>
@@ -829,7 +829,7 @@
         }
     }
 
-    private ContentCheckRecord? GetContentCheck(long messageId)
+    private ContentCheckRecord? GetContentCheck(int messageId)
     {
         // PERF-APP-1: Use detection results already loaded via Include() instead of separate dictionary
         var wrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == messageId);
@@ -855,7 +855,7 @@
         );
     }
 
-    private int GetEditCount(long messageId)
+    private int GetEditCount(int messageId)
     {
         _editCounts.TryGetValue(messageId, out var count);
         return count;
@@ -1030,7 +1030,7 @@
     /// Refreshes detection history display for a message after spam/ham labeling.
     /// Updates both the message wrapper's cached history and the content checks dictionary.
     /// </summary>
-    private async Task RefreshDetectionHistoryDisplayAsync(long messageId, long userId)
+    private async Task RefreshDetectionHistoryDisplayAsync(int messageId, long userId)
     {
         // Refresh detection history for this message in the wrapper
         var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
@@ -1362,12 +1362,12 @@
             }
 
             // Store highlight target (from ModerationReportCard or Users: highlight=456 or messageId=456)
-            if (query.TryGetValue("highlight", out var highlightStr) && long.TryParse(highlightStr, out var highlightId))
+            if (query.TryGetValue("highlight", out var highlightStr) && int.TryParse(highlightStr, out var highlightId))
             {
                 _highlightMessageId = highlightId;
                 Logger.LogDebug("Will highlight message: {MessageId}", highlightId);
             }
-            else if (query.TryGetValue("messageId", out var messageIdStr) && long.TryParse(messageIdStr, out var messageId))
+            else if (query.TryGetValue("messageId", out var messageIdStr) && int.TryParse(messageIdStr, out var messageId))
             {
                 _highlightMessageId = messageId;
                 Logger.LogDebug("Will highlight message: {MessageId}", messageId);
@@ -1379,7 +1379,7 @@
         }
     }
 
-    private async Task HandleReplyClick(long targetMessageId)
+    private async Task HandleReplyClick(int targetMessageId)
     {
         try
         {
@@ -1651,7 +1651,7 @@
         if (_sendAsUser)
         {
             var result = await WebUserMessagingService.EditMessageAsync(
-                WebUser, _selectedChatId.Value, (int)_isEditingMessageId.Value, text);
+                WebUser, _selectedChatId.Value, _isEditingMessageId.Value, text);
 
             if (result.Success)
             {
@@ -1667,7 +1667,7 @@
         else
         {
             var result = await WebBotMessagingService.EditMessageAsync(
-                WebUser, _selectedChatId.Value, (int)_isEditingMessageId.Value, text);
+                WebUser, _selectedChatId.Value, _isEditingMessageId.Value, text);
 
             if (result.Success)
             {
@@ -1693,7 +1693,7 @@
     /// <summary>
     /// Handle edit button click from MessageBubbleTelegram
     /// </summary>
-    private void HandleEditClick(long messageId, string messageText)
+    private void HandleEditClick(int messageId, string messageText)
     {
         _isEditingMessageId = messageId;
         _editingOriginalText = messageText;
@@ -1705,9 +1705,9 @@
     /// <summary>
     /// Handle reply button click from MessageBubbleTelegram
     /// </summary>
-    private void HandleReplyToClick(long messageId)
+    private void HandleReplyToClick(int messageId)
     {
-        _replyToMessageId = (int)messageId; // Safe: Telegram message IDs are always int-range (#214)
+        _replyToMessageId = messageId;
         StateHasChanged();
 
         Logger.LogDebug("Started reply to message {MessageId}", messageId);

@@ -19,7 +19,7 @@ public class ImageViewerDialogTests : DialogTestContext
     /// Creates a test MessageRecord with the specified properties.
     /// </summary>
     private static MessageRecord CreateTestMessage(
-        long messageId = 12345,
+        int messageId = 12345,
         long userId = 1001,
         string? userName = "testuser",
         string? firstName = "Test",

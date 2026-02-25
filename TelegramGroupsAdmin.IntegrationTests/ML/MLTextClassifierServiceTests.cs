@@ -593,7 +593,7 @@ public class MLTextClassifierServiceTests
         // Create 10 test messages (5 spam + 5 ham)
         for (int i = 1; i <= 10; i++)
         {
-            long messageId = 110000 + i;
+            int messageId = 110000 + i;
             await context.Database.ExecuteSqlRawAsync(
                 $$"""
                 INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, content_check_skip_reason)
@@ -606,7 +606,7 @@ public class MLTextClassifierServiceTests
         // Add 5 spam labels
         for (int i = 1; i <= 5; i++)
         {
-            long messageId = 110000 + i;
+            int messageId = 110000 + i;
             await context.Database.ExecuteSqlRawAsync(
                 $"INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, 0, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
             );
@@ -615,7 +615,7 @@ public class MLTextClassifierServiceTests
         // Add 5 ham labels
         for (int i = 6; i <= 10; i++)
         {
-            long messageId = 110000 + i;
+            int messageId = 110000 + i;
             await context.Database.ExecuteSqlRawAsync(
                 $"INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, 1, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
             );
@@ -641,7 +641,7 @@ public class MLTextClassifierServiceTests
         // Create 22 ham messages
         for (int i = 1; i <= 22; i++)
         {
-            long messageId = 120000 + i;
+            int messageId = 120000 + i;
             await context.Database.ExecuteSqlRawAsync(
                 $$"""
                 INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, content_check_skip_reason)
@@ -676,7 +676,7 @@ public class MLTextClassifierServiceTests
         // Create 23 spam messages
         for (int i = 1; i <= 23; i++)
         {
-            long messageId = 130000 + i;
+            int messageId = 130000 + i;
             await context.Database.ExecuteSqlRawAsync(
                 $$"""
                 INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, content_check_skip_reason)

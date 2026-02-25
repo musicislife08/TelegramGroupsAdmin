@@ -30,7 +30,7 @@ public class AuditHandlerTests
     private const long ValidUserId = 123456789L;
     private const long NonExistentUserId = 999999999L;
     private const long ChatId = -1001234567890L;
-    private const long TestMessageId = 99999L;  // Used in tests expecting FK failures
+    private const int TestMessageId = 99999;  // Used in tests expecting FK failures
 
     [SetUp]
     public async Task SetUp()
@@ -103,7 +103,7 @@ public class AuditHandlerTests
     /// <summary>
     /// Helper method to create a test message directly in the database (satisfies FK constraint for user_actions.message_id).
     /// </summary>
-    private async Task<long> CreateTestMessageAsync(long chatId, long userId)
+    private async Task<int> CreateTestMessageAsync(long chatId, long userId)
     {
         var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using var context = await contextFactory.CreateDbContextAsync();

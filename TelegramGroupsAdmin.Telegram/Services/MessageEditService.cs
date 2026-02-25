@@ -36,7 +36,7 @@ public class MessageEditService : IMessageEditService
             edit.EditDate);
     }
 
-    public async Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(int messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.MessageEdits
@@ -48,7 +48,7 @@ public class MessageEditService : IMessageEditService
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<Dictionary<long, int>> GetEditCountsForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<int, int>> GetEditCountsForMessagesAsync(IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();

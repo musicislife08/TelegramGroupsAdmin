@@ -29,7 +29,7 @@ public class EditHistoryDialogTestContext : BunitContext
         var logger = Substitute.For<ILogger<EditHistoryDialog>>();
 
         // Default: return empty edit list
-        MessageEditService.GetEditsForMessageAsync(Arg.Any<long>()).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>()).Returns([]);
         MessageTranslationService.GetTranslationForEditAsync(Arg.Any<long>()).Returns((MessageTranslation?)null);
 
         // Register mocks
@@ -72,13 +72,13 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
     {
         MessageEditService.ClearReceivedCalls();
         MessageTranslationService.ClearReceivedCalls();
-        MessageEditService.GetEditsForMessageAsync(Arg.Any<long>()).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>()).Returns([]);
     }
 
     #region Helper Methods
 
     private static MessageRecord CreateTestMessage(
-        long messageId = 83973,
+        int messageId = 83973,
         long userId = 1234567890,
         string userName = "johndoe42",
         string messageText = "This is a test message for the edit history dialog.")
@@ -117,7 +117,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
 
     private static MessageEditRecord CreateTestEdit(
         long id = 355,
-        long messageId = 83973,
+        int messageId = 83973,
         string oldText = "Aww,,, my starlink speeds are back to normal today",
         string newText = "Aww... my starlink speeds are back to normal today")
     {

@@ -32,10 +32,10 @@ public interface IMessageProcessingService
     /// <summary>
     /// Event fired when media is updated for a message.
     /// </summary>
-    event Action<long, MediaType>? OnMediaUpdated;
+    event Action<int, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Raises the OnMediaUpdated event (called by MediaRefetchWorkerService).
     /// </summary>
-    void RaiseMediaUpdated(long messageId, MediaType mediaType);
+    void RaiseMediaUpdated(int messageId, MediaType mediaType);
 }

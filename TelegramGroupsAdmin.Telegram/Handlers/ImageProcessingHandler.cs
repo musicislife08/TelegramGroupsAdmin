@@ -77,7 +77,7 @@ public class ImageProcessingHandler
     private async Task<(string? fullPath, string? thumbPath)> DownloadAndProcessImageAsync(
         string photoFileId,
         long chatId,
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default)
     {
         try

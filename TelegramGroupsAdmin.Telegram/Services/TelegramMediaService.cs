@@ -34,7 +34,7 @@ public class TelegramMediaService(
         MediaType mediaType,
         string? fileName,
         long chatId,
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default)
     {
         try

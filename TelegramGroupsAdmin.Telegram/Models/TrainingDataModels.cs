@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 public class TrainingSampleDto
 {
     public long Id { get; set; }
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
     public string MessageText { get; set; } = string.Empty;
     public string? ContentHash { get; set; }
     public bool IsSpam { get; set; }

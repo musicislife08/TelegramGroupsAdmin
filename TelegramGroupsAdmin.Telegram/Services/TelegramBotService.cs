@@ -32,7 +32,7 @@ public class TelegramBotService(
         remove => messageProcessingService.OnMessageEdited -= value;
     }
 
-    public event Action<long, MediaType>? OnMediaUpdated
+    public event Action<int, MediaType>? OnMediaUpdated
     {
         add => messageProcessingService.OnMediaUpdated += value;
         remove => messageProcessingService.OnMediaUpdated -= value;

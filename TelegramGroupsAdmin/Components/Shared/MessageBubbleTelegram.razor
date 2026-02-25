@@ -438,19 +438,19 @@
     public bool IsCurrentUser { get; set; }
 
     [Parameter]
-    public EventCallback<long> OnReplyClick { get; set; }
+    public EventCallback<int> OnReplyClick { get; set; }
 
     /// <summary>
     /// Phase 1: Send & Edit Messages as Bot - Reply button callback
     /// </summary>
     [Parameter]
-    public EventCallback<long> OnReplyToClick { get; set; }
+    public EventCallback<int> OnReplyToClick { get; set; }
 
     /// <summary>
     /// Phase 1: Send & Edit Messages as Bot - Edit button callback (messageId, messageText)
     /// </summary>
     [Parameter]
-    public EventCallback<(long MessageId, string MessageText)> OnEditClick { get; set; }
+    public EventCallback<(int MessageId, string MessageText)> OnEditClick { get; set; }
 
     /// <summary>
     /// Phase 1: Send & Edit Messages as Bot - Is this message from the bot?

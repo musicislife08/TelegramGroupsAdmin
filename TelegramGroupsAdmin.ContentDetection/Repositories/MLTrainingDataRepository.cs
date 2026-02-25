@@ -20,7 +20,7 @@ public class MLTrainingDataRepository(
     ILogger<MLTrainingDataRepository> logger) : IMLTrainingDataRepository
 {
 
-    public async Task<HashSet<long>> GetLabeledMessageIdsAsync(CancellationToken cancellationToken = default)
+    public async Task<HashSet<int>> GetLabeledMessageIdsAsync(CancellationToken cancellationToken = default)
     {
         var ids = await context.TrainingLabels
             .AsNoTracking()
@@ -29,7 +29,7 @@ public class MLTrainingDataRepository(
         return ids.ToHashSet();
     }
 
-    public async Task<List<TrainingSample>> GetSpamSamplesAsync(HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default)
+    public async Task<List<TrainingSample>> GetSpamSamplesAsync(HashSet<int> labeledMessageIds, CancellationToken cancellationToken = default)
     {
         // Explicit spam labels (admin decisions override auto-detection)
         // Note: OrderByDescending ensures deterministic results when multiple translations exist
@@ -96,7 +96,7 @@ public class MLTrainingDataRepository(
         return DeduplicateSamples(samples, "spam");
     }
 
-    public async Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default)
+    public async Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, HashSet<int> labeledMessageIds, CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(spamCount);
 

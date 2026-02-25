@@ -68,7 +68,7 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
     /// Extracts keyframes, computes perceptual hashes, and stores with spam/ham label
     /// </summary>
     public async Task<bool> SaveTrainingSampleAsync(
-        long messageId,
+        int messageId,
         bool isSpam,
         Actor markedBy,
         CancellationToken cancellationToken = default)

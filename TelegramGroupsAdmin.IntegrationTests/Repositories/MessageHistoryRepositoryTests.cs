@@ -144,7 +144,7 @@ public class MessageHistoryRepositoryTests
 
     // Helper to create test message
     private UiModels.MessageRecord CreateTestMessage(
-        long messageId,
+        int messageId,
         long userId,
         long chatId,
         string? text = null,
@@ -512,7 +512,7 @@ public class MessageHistoryRepositoryTests
     {
         // Arrange - Use a message ID that definitely doesn't exist (very high ID)
         // This ensures deterministic behavior regardless of golden dataset contents
-        const long nonExistentMessageId = 999999;
+        const int nonExistentMessageId = 999999;
 
         // Act
         var translation = await _translationService!.GetTranslationForMessageAsync(nonExistentMessageId);
@@ -754,7 +754,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetMessageAsync_NotExists_ShouldReturnNull()
     {
         // Arrange
-        long nonExistentId = 999999999;
+        int nonExistentId = 999999999;
 
         // Act
         var message = await _repository!.GetMessageAsync(nonExistentId);

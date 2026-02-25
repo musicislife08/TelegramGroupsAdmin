@@ -12,7 +12,7 @@ public interface ITrainingHandler
     /// Mark a message as spam training sample.
     /// </summary>
     Task CreateSpamSampleAsync(
-        long messageId,
+        int messageId,
         Actor executor,
         CancellationToken cancellationToken = default);
 }

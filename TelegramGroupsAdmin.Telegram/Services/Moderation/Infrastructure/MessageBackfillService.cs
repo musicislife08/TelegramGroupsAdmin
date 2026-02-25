@@ -27,7 +27,7 @@ public class MessageBackfillService : IMessageBackfillService
 
     /// <inheritdoc />
     public async Task<bool> BackfillIfMissingAsync(
-        long messageId,
+        int messageId,
         long chatId,
         Message telegramMessage,
         CancellationToken cancellationToken = default)

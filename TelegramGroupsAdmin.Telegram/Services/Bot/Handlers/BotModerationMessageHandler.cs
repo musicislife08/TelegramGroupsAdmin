@@ -45,7 +45,7 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
 
     /// <inheritdoc />
     public async Task<BackfillResult> EnsureExistsAsync(
-        long messageId,
+        int messageId,
         ChatIdentity chat,
         Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
@@ -89,7 +89,7 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
     /// <inheritdoc />
     public async Task<DeleteResult> DeleteAsync(
         ChatIdentity chat,
-        long messageId,
+        int messageId,
         Actor executor,
         CancellationToken cancellationToken = default)
     {
@@ -101,7 +101,7 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
         {
             await _botMessageService.DeleteAndMarkMessageAsync(
                 chat.Id,
-                (int)messageId,
+                messageId,
                 deletionSource: "moderation_action",
                 cancellationToken);
 
@@ -140,7 +140,7 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
 
     /// <inheritdoc />
     public async Task<MessageWithDetectionHistory?> GetEnrichedAsync(
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default)
     {
         return await _messageQueryService.GetMessageWithDetectionHistoryAsync(messageId, cancellationToken);

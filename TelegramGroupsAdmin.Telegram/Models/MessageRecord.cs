@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// Phase 4.X: Added media attachment support (GIF, Video, Audio, Voice, Sticker, VideoNote, Document)
 /// </summary>
 public record MessageRecord(
-    long MessageId,
+    int MessageId,
     UserIdentity User,
     ChatIdentity Chat,
     DateTimeOffset Timestamp,
@@ -23,7 +23,7 @@ public record MessageRecord(
     string? UserPhotoPath,
     DateTimeOffset? DeletedAt,
     string? DeletionSource,
-    long? ReplyToMessageId,
+    int? ReplyToMessageId,
     string? ReplyToUser,
     string? ReplyToText,
     // Media attachment fields (Phase 4.X)

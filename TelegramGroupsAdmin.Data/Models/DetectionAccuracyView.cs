@@ -67,7 +67,7 @@ public class DetectionAccuracyView
     /// Message ID this detection relates to
     /// </summary>
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     /// <summary>
     /// Full timestamp of the detection (for timezone-aware grouping)

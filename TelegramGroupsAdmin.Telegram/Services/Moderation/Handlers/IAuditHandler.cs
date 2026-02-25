@@ -27,7 +27,7 @@ public interface IAuditHandler
     /// <summary>
     /// Log message deletion to audit trail.
     /// </summary>
-    Task LogDeleteAsync(long messageId, ChatIdentity chat, UserIdentity user, Actor executor, CancellationToken cancellationToken = default);
+    Task LogDeleteAsync(int messageId, ChatIdentity chat, UserIdentity user, Actor executor, CancellationToken cancellationToken = default);
 
     Task LogRestrictAsync(UserIdentity user, ChatIdentity? chat, Actor executor, string? reason, CancellationToken cancellationToken = default);
 
