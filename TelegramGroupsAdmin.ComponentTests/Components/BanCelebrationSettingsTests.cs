@@ -298,15 +298,14 @@ public class BanCelebrationSettingsTests : BanCelebrationSettingsTestContext
     }
 
     [Test]
-    public async Task GifLibrarySection_DisplaysGifs_WhenAvailable()
+    public void GifLibrarySection_DisplaysGifs_WhenAvailable()
     {
         // Arrange
         GifRepository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(CreateTestGifs());
 
         // Act
         var cut = RenderComponent();
-        await Task.Delay(50);
-        cut.Render();
+        cut.WaitForState(() => cut.Markup.Contains("Celebration 1"));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Celebration 1"));

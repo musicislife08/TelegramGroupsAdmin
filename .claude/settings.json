@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dotnet slopwatch analyze -d . --hook",
+            "timeout": 60000
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -242,7 +242,6 @@ public static class ServiceCollectionExtensions
                 })
                 .AddHttpMessageHandler(sp => new ApiKeyDelegatingHandler(
                     sp,
-                    configuration,
                     serviceName: "VirusTotal",
                     headerName: "x-apikey"))
                 .AddResilienceHandler("virustotal", resiliencePipelineBuilder =>

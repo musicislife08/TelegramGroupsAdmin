@@ -65,12 +65,8 @@ public class BanCelebrationSettingsTests : SharedAuthenticatedTestBase
         // Act - click backdrop (should NOT close with BackdropClick = false)
         await _page.ClickBackdropAsync();
 
-        // Small delay to ensure any close animation would have started
-        await Task.Delay(500);
-
         // Assert - dialog is STILL visible (backdrop click disabled for safety)
-        Assert.That(await _page.IsDialogVisibleAsync(), Is.True,
-            "Dialog should NOT close on backdrop click (safety feature)");
+        await _page.ExpectDialogVisibleAsync();
 
         // Cleanup - close dialog properly
         await _page.CloseDialogByEscapeAsync();

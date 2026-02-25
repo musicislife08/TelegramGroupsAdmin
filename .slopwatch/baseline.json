@@ -1,0 +1,305 @@
+{
+  "version": 1,
+  "createdAt": "2026-02-24T17:57:01.604946+00:00",
+  "updatedAt": "2026-02-25T00:00:13.384718+00:00",
+  "description": "Initial baseline created by 'slopwatch init' on 2026-02-24 17:57:01 UTC",
+  "entries": [
+    {
+      "hash": "f4045d91dcf732f3",
+      "ruleId": "SW005",
+      "filePath": "Directory.Build.props",
+      "lineNumber": 3,
+      "codeSnippet": "<NoWarn>$(NoWarn);CA1873</NoWarn>",
+      "message": "Adding warnings to NoWarn: CA1873",
+      "baselinedAt": "2026-02-24T17:57:01.605648+00:00"
+    },
+    {
+      "hash": "e0e5ed9b5fc98530",
+      "ruleId": "SW005",
+      "filePath": "TelegramGroupsAdmin.Core/TelegramGroupsAdmin.Core.csproj",
+      "lineNumber": 9,
+      "codeSnippet": "<NoWarn>SKEXP0010</NoWarn>",
+      "message": "Setting NoWarn to suppress warnings: SKEXP0010",
+      "baselinedAt": "2026-02-24T17:57:01.605679+00:00"
+    },
+    {
+      "hash": "349a2ed0389d185f",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.ComponentTests/Components/BanCelebrationSettingsTests.cs",
+      "lineNumber": 308,
+      "codeSnippet": "Task.Delay(50)",
+      "message": "Test uses Task.Delay(50) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.605682+00:00"
+    },
+    {
+      "hash": "f8f858e7b644afbc",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.ComponentTests/Components/BanCelebrationChatSettingsTests.cs",
+      "lineNumber": 137,
+      "codeSnippet": "Task.Delay(50)",
+      "message": "Test uses Task.Delay(50) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.605704+00:00"
+    },
+    {
+      "hash": "3c3b78a7f5109473",
+      "ruleId": "SW005",
+      "filePath": "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj",
+      "lineNumber": 13,
+      "codeSnippet": "<NoWarn>$(NoWarn);CS8669</NoWarn>",
+      "message": "Adding warnings to NoWarn: CS8669",
+      "baselinedAt": "2026-02-24T17:57:01.605728+00:00"
+    },
+    {
+      "hash": "2e5ab9901e5bb2d1",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin/Components/Shared/Settings/BanCelebrationSettings.razor",
+      "lineNumber": 315,
+      "codeSnippet": "catch\n            {\n                // Silently continue - thumbnail generation is non-critical\n            }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.605733+00:00"
+    },
+    {
+      "hash": "bb2011d50b43633d",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin/Components/Shared/ContentDetection/ContentTester.razor",
+      "lineNumber": 853,
+      "codeSnippet": "catch\n            {\n                // ignored\n            }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.605736+00:00"
+    },
+    {
+      "hash": "1499da6dfb3b369d",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin/Components/Shared/ContentDetection/UrlFiltersConfig.razor",
+      "lineNumber": 420,
+      "codeSnippet": "catch (OperationCanceledException)\n        {\n            // Debounce was canceled by a newer change, this is expected\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.605739+00:00"
+    },
+    {
+      "hash": "6de4f0992e11aeda",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin/Components/Pages/DocsPage.razor",
+      "lineNumber": 230,
+      "codeSnippet": "catch (Exception)\n        {\n            // Ignore errors if mermaid fails to render\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.605742+00:00"
+    },
+    {
+      "hash": "faebc866f72be2f4",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin/Services/ApiKeyDelegatingHandler.cs",
+      "lineNumber": 54,
+      "codeSnippet": "catch\n        {\n            // Database might not be available during startup - fall through to env var\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.605745+00:00"
+    },
+    {
+      "hash": "e2a9955ae4b75623",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.Telegram/Repositories/BanCelebrationGifRepository.cs",
+      "lineNumber": 150,
+      "codeSnippet": "catch { /* ignore cleanup errors */ }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.605747+00:00"
+    },
+    {
+      "hash": "a03afb63890bc91a",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.Telegram/Services/UserApi/TelegramAuthService.cs",
+      "lineNumber": 57,
+      "codeSnippet": "catch { /* best-effort */ }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.60575+00:00"
+    },
+    {
+      "hash": "9daf20b6cebe3017",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.Telegram/Services/UserApi/TelegramSessionManager.cs",
+      "lineNumber": 259,
+      "codeSnippet": "catch\n        {\n            // Best-effort disposal\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608555+00:00"
+    },
+    {
+      "hash": "c18c684272d9d8a7",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.Telegram/Services/Media/MediaNotificationService.cs",
+      "lineNumber": 98,
+      "codeSnippet": "catch (Exception)\n            {\n                // Ignore callback errors to prevent one component from breaking others\n            }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608563+00:00"
+    },
+    {
+      "hash": "02b195af0929a2d3",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.Telegram/Services/Media/MediaNotificationService.cs",
+      "lineNumber": 127,
+      "codeSnippet": "catch (Exception)\n            {\n                // Ignore callback errors\n            }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608566+00:00"
+    },
+    {
+      "hash": "54ac8d8229f063d2",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.UnitTests/Telegram/Services/ThumbnailServiceTests.cs",
+      "lineNumber": 58,
+      "codeSnippet": "catch\n            {\n                // Ignore cleanup errors\n            }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.60857+00:00"
+    },
+    {
+      "hash": "522b0ed5cc739680",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/TelegramAuthServiceTests.cs",
+      "lineNumber": 168,
+      "codeSnippet": "catch { /* expected: task cancelled or delay interrupted */ }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608573+00:00"
+    },
+    {
+      "hash": "baf0000fd606d22c",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/TelegramAuthServiceTests.cs",
+      "lineNumber": 208,
+      "codeSnippet": "catch { /* ignore */ }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608577+00:00"
+    },
+    {
+      "hash": "abdf9677b69fabe1",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/TelegramAuthServiceTests.cs",
+      "lineNumber": 162,
+      "codeSnippet": "Task.Delay(50)",
+      "message": "Test uses Task.Delay(50) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.608581+00:00"
+    },
+    {
+      "hash": "0f237fdbc108213d",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.UnitTests/Telegram/Services/UserApi/TelegramAuthServiceTests.cs",
+      "lineNumber": 203,
+      "codeSnippet": "Task.Delay(20)",
+      "message": "Test uses Task.Delay(20) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.608583+00:00"
+    },
+    {
+      "hash": "c90377cbaef1f76e",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.E2ETests/PageObjects/TotpSetupPage.cs",
+      "lineNumber": 59,
+      "codeSnippet": "catch (PlaywrightException)\n        {\n            // May timeout if redirect happens\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608586+00:00"
+    },
+    {
+      "hash": "ec95448869cd7d16",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.E2ETests/PageObjects/Settings/SettingsPage.cs",
+      "lineNumber": 64,
+      "codeSnippet": "catch (TimeoutException)\n        {\n            // Loading indicator may have already disappeared\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608589+00:00"
+    },
+    {
+      "hash": "0be3edb9c0cd6a80",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.E2ETests/PageObjects/Settings/BanCelebrationSettingsPage.cs",
+      "lineNumber": 95,
+      "codeSnippet": "catch (TimeoutException)\n        {\n            // Loading indicator may have already disappeared\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608592+00:00"
+    },
+    {
+      "hash": "3183fd4c38247b06",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.E2ETests/PageObjects/Settings/WebAdminAccountsPage.cs",
+      "lineNumber": 94,
+      "codeSnippet": "catch (TimeoutException)\n        {\n            // Loading indicator may have already disappeared\n        }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608595+00:00"
+    },
+    {
+      "hash": "3e9bc80af45db8e2",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.E2ETests/Tests/Settings/BanCelebrationSettingsTests.cs",
+      "lineNumber": 69,
+      "codeSnippet": "Task.Delay(500)",
+      "message": "Test uses Task.Delay(500) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.608597+00:00"
+    },
+    {
+      "hash": "5cdae99e922bd555",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.E2ETests/Infrastructure/TestWebApplicationFactory.cs",
+      "lineNumber": 394,
+      "codeSnippet": "Thread.Sleep(TimeSpan.FromSeconds(Math.Pow(2, attempt)))",
+      "message": "Test uses Thread.Sleep(TimeSpan.FromSeconds(Math.Pow(2, attempt))) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.6086+00:00"
+    },
+    {
+      "hash": "be3cc956d6e34208",
+      "ruleId": "SW005",
+      "filePath": "TelegramGroupsAdmin.IntegrationTests/TelegramGroupsAdmin.IntegrationTests.csproj",
+      "lineNumber": 10,
+      "codeSnippet": "<NoWarn>$(NoWarn);EF1002</NoWarn>",
+      "message": "Adding warnings to NoWarn: EF1002",
+      "baselinedAt": "2026-02-24T17:57:01.608602+00:00"
+    },
+    {
+      "hash": "8017bd5414252bf4",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.IntegrationTests/Repositories/BanCelebrationCaptionRepositoryTests.cs",
+      "lineNumber": 78,
+      "codeSnippet": "Task.Delay(10)",
+      "message": "Test uses Task.Delay(10) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.608605+00:00"
+    },
+    {
+      "hash": "9edde95bef578e81",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.IntegrationTests/Repositories/BanCelebrationGifRepositoryTests.cs",
+      "lineNumber": 100,
+      "codeSnippet": "catch\n            {\n                // Ignore cleanup errors\n            }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.60861+00:00"
+    },
+    {
+      "hash": "8ac308f680ebe22e",
+      "ruleId": "SW004",
+      "filePath": "TelegramGroupsAdmin.IntegrationTests/Repositories/BanCelebrationGifRepositoryTests.cs",
+      "lineNumber": 128,
+      "codeSnippet": "Task.Delay(10)",
+      "message": "Test uses Task.Delay(10) which may indicate a timing-dependent test",
+      "baselinedAt": "2026-02-24T17:57:01.608613+00:00"
+    },
+    {
+      "hash": "8d98c075081a0bfa",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.IntegrationTests/Telegram/Services/BanCelebrationServiceTests.cs",
+      "lineNumber": 157,
+      "codeSnippet": "catch\n            {\n                // Ignore cleanup errors\n            }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.608618+00:00"
+    },
+    {
+      "hash": "4c351a80212d4739",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.IntegrationTests/Telegram/Services/Bot/BotMessageServiceTests.cs",
+      "lineNumber": 131,
+      "codeSnippet": "catch { /* Ignore cleanup errors */ }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-24T17:57:01.60862+00:00"
+    },
+    {
+      "hash": "f7ed8431c368a962",
+      "ruleId": "SW003",
+      "filePath": "TelegramGroupsAdmin.Telegram/Services/UserApi/AuthFlowContext.cs",
+      "lineNumber": 35,
+      "codeSnippet": "catch { /* best-effort */ }",
+      "message": "Empty catch block swallows exceptions without handling",
+      "baselinedAt": "2026-02-25T00:00:13.384496+00:00"
+    }
+  ]
+}

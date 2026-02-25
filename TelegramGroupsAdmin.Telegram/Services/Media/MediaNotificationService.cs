@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Media;
@@ -8,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Media;
 /// Thread-safe subscription management with broadcast notifications
 /// Multiple components can subscribe to the same media
 /// </summary>
-public class MediaNotificationService : IMediaNotificationService
+public class MediaNotificationService(ILogger<MediaNotificationService> logger) : IMediaNotificationService
 {
     private readonly ConcurrentDictionary<string, List<Action>> _subscriptions = new();
     private readonly Lock _lock = new();
@@ -95,9 +96,9 @@ public class MediaNotificationService : IMediaNotificationService
             {
                 callback();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore callback errors to prevent one component from breaking others
+                logger.LogWarning(ex, "Media notification callback failed for key {Key}", key);
             }
         }
     }
@@ -124,9 +125,9 @@ public class MediaNotificationService : IMediaNotificationService
             {
                 callback();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore callback errors
+                logger.LogWarning(ex, "Media notification callback failed for key {Key}", key);
             }
         }
     }
