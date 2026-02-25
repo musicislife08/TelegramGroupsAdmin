@@ -145,6 +145,7 @@ public class TelegramSessionManagerTests
 
         // Verify the client was connected and session was updated
         await mockApiClient.Received(1).LoginUserIfNeeded(Arg.Any<TL.CodeSettings?>(), Arg.Any<bool>());
+        await mockApiClient.Received(1).WarmPeerCacheAsync();
         await _mockSessionRepo.Received(1).UpdateLastUsedAsync(TestSessionId, Arg.Any<CancellationToken>());
     }
 

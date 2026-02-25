@@ -87,12 +87,12 @@ public class ChatListTests : MudBlazorTestContext
     public void DisplaysAllChats()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111, chatName: "Group One"),
             CreateChat(chatId: -100222, chatName: "Group Two"),
             CreateChat(chatId: -100333, chatName: "Group Three")
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -108,10 +108,10 @@ public class ChatListTests : MudBlazorTestContext
     public void DisplaysChatTitles()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatName: "My Awesome Chat")
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -126,11 +126,11 @@ public class ChatListTests : MudBlazorTestContext
     public void DisplaysChatListItems()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111),
             CreateChat(chatId: -100222)
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -142,27 +142,27 @@ public class ChatListTests : MudBlazorTestContext
     }
 
     [Test]
-    public void SortsChatsById()
+    public void SortsChatsByName()
     {
         // Arrange - provide chats in non-sorted order
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100333, chatName: "Third"),
             CreateChat(chatId: -100111, chatName: "First"),
             CreateChat(chatId: -100222, chatName: "Second")
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
             .Add(x => x.Chats, chats));
 
-        // Assert - should be sorted by ChatId (ascending)
+        // Assert - should be sorted alphabetically by chat name
         var items = cut.FindAll(".chat-list-item");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(items[0].TextContent, Does.Contain("Third")); // -100333 comes first (more negative)
+            Assert.That(items[0].TextContent, Does.Contain("First"));
             Assert.That(items[1].TextContent, Does.Contain("Second"));
-            Assert.That(items[2].TextContent, Does.Contain("First")); // -100111 comes last
+            Assert.That(items[2].TextContent, Does.Contain("Third"));
         }
     }
 
@@ -174,10 +174,10 @@ public class ChatListTests : MudBlazorTestContext
     public void DisplaysChatAvatar_WhenIconPathProvided()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatIconPath: "/data/icons/chat.jpg", chatName: "Test Chat")
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -196,10 +196,10 @@ public class ChatListTests : MudBlazorTestContext
     public void DisplaysFallbackAvatar_WhenNoIconPath()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatIconPath: null)
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -214,10 +214,10 @@ public class ChatListTests : MudBlazorTestContext
     public void SetsLazyLoadingOnAvatars()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatIconPath: "/data/icons/chat.jpg")
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -236,11 +236,11 @@ public class ChatListTests : MudBlazorTestContext
     public void HighlightsSelectedChat()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111, chatName: "Chat One"),
             CreateChat(chatId: -100222, chatName: "Chat Two")
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -257,11 +257,11 @@ public class ChatListTests : MudBlazorTestContext
     public void DoesNotHighlightUnselectedChats()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111, chatName: "Chat One"),
             CreateChat(chatId: -100222, chatName: "Chat Two")
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -278,10 +278,10 @@ public class ChatListTests : MudBlazorTestContext
     public void NoSelectionHighlight_WhenSelectedChatIdIsNull()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p
@@ -298,11 +298,11 @@ public class ChatListTests : MudBlazorTestContext
     {
         // Arrange
         long? selectedChatId = null;
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111, chatName: "Chat One"),
             CreateChat(chatId: -100222, chatName: "Chat Two")
-        };
+        ];
 
         var cut = Render<ChatList>(p => p
             .Add(x => x.Chats, chats)
@@ -326,10 +326,10 @@ public class ChatListTests : MudBlazorTestContext
     public void DisplaysMessageCount_WhenProvided()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
         var messageCounts = new Dictionary<long, int> { { -100111, 42 } };
 
         // Act
@@ -346,10 +346,10 @@ public class ChatListTests : MudBlazorTestContext
     public void HidesMessageCount_WhenZero()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
         var messageCounts = new Dictionary<long, int> { { -100111, 0 } };
 
         // Act
@@ -366,10 +366,10 @@ public class ChatListTests : MudBlazorTestContext
     public void HidesMessageCount_WhenNotInDictionary()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
         var messageCounts = new Dictionary<long, int>(); // Empty
 
         // Act
@@ -384,60 +384,16 @@ public class ChatListTests : MudBlazorTestContext
 
     #endregion
 
-    #region Unread Count Tests
-
-    [Test]
-    public void DisplaysUnreadBadge_WhenUnreadCountProvided()
-    {
-        // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
-            CreateChat(chatId: -100111)
-        };
-        var unreadCounts = new Dictionary<long, int> { { -100111, 5 } };
-
-        // Act
-        var cut = Render<ChatList>(p => p
-            .Add(x => x.Chats, chats)
-            .Add(x => x.UnreadCounts, unreadCounts));
-
-        // Assert
-        var badge = cut.Find(".chat-unread-badge");
-        Assert.That(badge.TextContent, Is.EqualTo("5"));
-    }
-
-    [Test]
-    public void HidesUnreadBadge_WhenZero()
-    {
-        // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
-            CreateChat(chatId: -100111)
-        };
-        var unreadCounts = new Dictionary<long, int> { { -100111, 0 } };
-
-        // Act
-        var cut = Render<ChatList>(p => p
-            .Add(x => x.Chats, chats)
-            .Add(x => x.UnreadCounts, unreadCounts));
-
-        // Assert
-        var badges = cut.FindAll(".chat-unread-badge");
-        Assert.That(badges.Count, Is.EqualTo(0));
-    }
-
-    #endregion
-
     #region Last Message Preview Tests
 
     [Test]
     public void DisplaysLastMessagePreview_WhenProvided()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
         var previews = new Dictionary<long, string> { { -100111, "Hello everyone!" } };
 
         // Act
@@ -454,10 +410,10 @@ public class ChatListTests : MudBlazorTestContext
     public void DisplaysNoMessagesYet_WhenNoPreview()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
         var previews = new Dictionary<long, string>(); // Empty
 
         // Act
@@ -474,10 +430,10 @@ public class ChatListTests : MudBlazorTestContext
     public void TruncatesLongPreview()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
         var longMessage = "This is a very long message that should definitely be truncated because it exceeds the maximum length allowed for message previews";
         var previews = new Dictionary<long, string> { { -100111, longMessage } };
 
@@ -496,10 +452,10 @@ public class ChatListTests : MudBlazorTestContext
     public void DoesNotTruncateShortPreview()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat(chatId: -100111)
-        };
+        ];
         var shortMessage = "Short message";
         var previews = new Dictionary<long, string> { { -100111, shortMessage } };
 
@@ -522,10 +478,10 @@ public class ChatListTests : MudBlazorTestContext
     public void HasCorrectStructure()
     {
         // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
+        List<ManagedChatRecord> chats =
+        [
             CreateChat()
-        };
+        ];
 
         // Act
         var cut = Render<ChatList>(p => p

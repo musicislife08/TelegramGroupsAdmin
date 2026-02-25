@@ -25,7 +25,7 @@ public interface IWebBotMessagingService
         WebUserIdentity webUser,
         long chatId,
         string text,
-        long? replyToMessageId = null,
+        int? replyToMessageId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

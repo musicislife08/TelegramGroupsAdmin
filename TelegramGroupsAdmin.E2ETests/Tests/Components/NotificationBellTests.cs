@@ -189,6 +189,7 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Assert - dropdown now shows empty state
         // Need to re-open the dropdown as it may close after action
         await NotificationBellButton.ClickAsync();
+        await Expect(DropdownMenu).ToBeVisibleAsync();
         await Expect(EmptyStateMessage).ToBeVisibleAsync();
         await Expect(NotificationBadge).Not.ToBeVisibleAsync();
     }

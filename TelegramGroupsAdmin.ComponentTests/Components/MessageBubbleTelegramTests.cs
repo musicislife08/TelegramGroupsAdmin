@@ -454,4 +454,178 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     }
 
     #endregion
+
+    #region Timestamp Tests
+
+    [Test]
+    public void DisplaysTimestamp()
+    {
+        // Arrange
+        var timestamp = new DateTimeOffset(2025, 6, 15, 14, 30, 0, TimeSpan.Zero);
+        var message = new MessageRecord(
+            MessageId: 123,
+            User: new UserIdentity(456, "John", null, null),
+            Chat: new ChatIdentity(789, "Test Chat"),
+            Timestamp: timestamp,
+            MessageText: "Hello",
+            PhotoFileId: null,
+            PhotoFileSize: null,
+            Urls: null,
+            EditDate: null,
+            ContentHash: null,
+            PhotoLocalPath: null,
+            PhotoThumbnailPath: null,
+            ChatIconPath: null,
+            UserPhotoPath: null,
+            DeletedAt: null,
+            DeletionSource: null,
+            ReplyToMessageId: null,
+            ReplyToUser: null,
+            ReplyToText: null,
+            MediaType: null,
+            MediaFileId: null,
+            MediaFileSize: null,
+            MediaFileName: null,
+            MediaMimeType: null,
+            MediaLocalPath: null,
+            MediaDuration: null,
+            Translation: null,
+            ContentCheckSkipReason: ContentCheckSkipReason.NotSkipped);
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message));
+
+        // Assert — the timestamp element is rendered with the UTC value in data-utc attribute
+        var timestampEl = cut.Find(".tg-timestamp");
+        Assert.That(timestampEl.GetAttribute("data-utc"), Is.EqualTo(timestamp.ToString("o")));
+    }
+
+    [Test]
+    public void TimestampElement_HasLocalTimestampClass()
+    {
+        // Arrange
+        var message = CreateMessage();
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message));
+
+        // Assert — client-side JS will localise times; verify the CSS hook class is present
+        var timestampEl = cut.Find(".tg-timestamp.local-timestamp");
+        Assert.That(timestampEl, Is.Not.Null);
+    }
+
+    #endregion
+
+    #region ShowSpamActions Tests
+
+    [Test]
+    public void ShowsActionsMenu_WhenShowSpamActionsIsTrue()
+    {
+        // Arrange
+        var message = CreateMessage();
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.ShowSpamActions, true));
+
+        // Assert — the actions menu container is present
+        var actionsMenu = cut.FindAll(".tg-actions-menu");
+        Assert.That(actionsMenu.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void HidesActionsMenu_WhenShowSpamActionsIsFalse()
+    {
+        // Arrange
+        var message = CreateMessage();
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.ShowSpamActions, false));
+
+        // Assert — the actions menu container must not exist
+        var actionsMenu = cut.FindAll(".tg-actions-menu");
+        Assert.That(actionsMenu.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void MarkAsSpamMenuItem_MenuContainerPresent_WhenShowSpamActionsTrue_AndNotCurrentUser_AndNotSpam()
+    {
+        // Arrange — ContentCheck is null (no spam verdict yet) and IsCurrentUser=false
+        var message = CreateMessage();
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.ShowSpamActions, true)
+            .Add(x => x.IsCurrentUser, false));
+
+        // Assert — MudMenu renders items in a popover portal outside inline DOM,
+        // so verify the menu activator container is present (menu items exist but are in the portal)
+        var menuContainer = cut.FindAll(".tg-actions-menu");
+        Assert.That(menuContainer.Count, Is.GreaterThan(0),
+            "Actions menu container should be present for non-current user with spam actions enabled");
+    }
+
+    [Test]
+    public void MarkAsSpamMenuItem_NotRendered_WhenShowSpamActionsIsFalse()
+    {
+        // Arrange
+        var message = CreateMessage();
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.ShowSpamActions, false));
+
+        // Assert
+        Assert.That(cut.Markup, Does.Not.Contain("Mark as Spam"));
+    }
+
+    #endregion
+
+    #region ActionInProgress Structural Tests
+
+    [Test]
+    public void MenuItemsInitiallyNotDisabled_WhenRendered()
+    {
+        // Arrange
+        var message = CreateMessage();
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.ShowSpamActions, true)
+            .Add(x => x.IsCurrentUser, false));
+
+        // Assert — MudMenuItem renders a <li> element; none should carry the mud-disabled class
+        // _actionInProgress starts as false so no menu item should be visually disabled
+        var disabledItems = cut.FindAll("li.mud-list-item-disabled");
+        Assert.That(disabledItems.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void ActionsMenu_RendersMenuContainer_WhenShowSpamActionsTrue()
+    {
+        // Arrange
+        var message = CreateMessage();
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.ShowSpamActions, true)
+            .Add(x => x.IsCurrentUser, false));
+
+        // Assert — MudMenu renders the activator inline; menu items are in a popover portal
+        // so we verify the menu container exists rather than checking for individual item text
+        var menuContainer = cut.FindAll(".tg-actions-menu");
+        Assert.That(menuContainer.Count, Is.GreaterThan(0),
+            "Actions menu container should be present when ShowSpamActions is true");
+    }
+
+    #endregion
 }

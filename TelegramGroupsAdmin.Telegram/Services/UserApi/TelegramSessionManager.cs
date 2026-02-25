@@ -197,6 +197,7 @@ public sealed class TelegramSessionManager(
         {
             apiClient = clientFactory.Create(ConfigCallback, sessionStream);
             await apiClient.LoginUserIfNeeded();
+            await apiClient.WarmPeerCacheAsync();
 
             var cached = new CachedClient(apiClient, sessionId, sessionStream);
             _clients[webUserId] = cached;

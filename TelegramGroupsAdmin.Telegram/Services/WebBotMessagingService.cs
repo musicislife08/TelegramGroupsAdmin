@@ -113,7 +113,7 @@ public class WebBotMessagingService : IWebBotMessagingService
         WebUserIdentity webUser,
         long chatId,
         string text,
-        long? replyToMessageId = null,
+        int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -147,7 +147,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             ReplyParameters? replyParameters = null;
             if (replyToMessageId.HasValue)
             {
-                replyParameters = new ReplyParameters { MessageId = (int)replyToMessageId.Value };
+                replyParameters = new ReplyParameters { MessageId = replyToMessageId.Value };
             }
 
             // Send message via BotMessageService

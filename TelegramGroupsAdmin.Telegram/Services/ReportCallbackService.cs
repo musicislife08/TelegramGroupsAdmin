@@ -22,18 +22,10 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// <remarks>
 /// Registered as Singleton - creates scopes internally for scoped services.
 /// </remarks>
-public class ReportCallbackService : IReportCallbackService
+public class ReportCallbackService(
+    ILogger<ReportCallbackService> logger,
+    IServiceScopeFactory scopeFactory) : IReportCallbackService
 {
-    private readonly ILogger<ReportCallbackService> _logger;
-    private readonly IServiceScopeFactory _scopeFactory;
-
-    public ReportCallbackService(
-        ILogger<ReportCallbackService> logger,
-        IServiceScopeFactory scopeFactory)
-    {
-        _logger = logger;
-        _scopeFactory = scopeFactory;
-    }
 
     public bool CanHandle(string callbackData)
     {
@@ -45,7 +37,7 @@ public class ReportCallbackService : IReportCallbackService
         var data = callbackQuery.Data;
         if (string.IsNullOrEmpty(data))
         {
-            _logger.LogWarning("Review callback received with null/empty data");
+            logger.LogWarning("Review callback received with null/empty data");
             return;
         }
 
@@ -56,11 +48,11 @@ public class ReportCallbackService : IReportCallbackService
             !long.TryParse(parts[0], out var contextId) ||
             !int.TryParse(parts[1], out var actionInt))
         {
-            _logger.LogWarning("Invalid review callback format: {Data}", data);
+            logger.LogWarning("Invalid review callback format: {Data}", data);
             return;
         }
 
-        using var scope = _scopeFactory.CreateScope();
+        using var scope = scopeFactory.CreateScope();
         var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
         var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -71,7 +63,7 @@ public class ReportCallbackService : IReportCallbackService
         var context = await callbackContextRepo.GetByIdAsync(contextId, cancellationToken);
         if (context == null)
         {
-            _logger.LogWarning("Review callback context {ContextId} not found (button expired)", contextId);
+            logger.LogWarning("Review callback context {ContextId} not found (button expired)", contextId);
             await UpdateMessageWithResultAsync(callbackQuery, "Button expired - please use web UI", cancellationToken);
             return;
         }
@@ -82,7 +74,7 @@ public class ReportCallbackService : IReportCallbackService
         var userId = context.UserId;
         var executorUser = callbackQuery.From;
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Review callback: Type={ReportType}, Action={ActionInt}, ReviewId={ReviewId}, ChatId={ChatId}, UserId={UserId}, Executor={Executor}",
             reportType, actionInt, reviewId, chatId, userId, executorUser.ToLogInfo());
 
@@ -90,7 +82,7 @@ public class ReportCallbackService : IReportCallbackService
         var report = await reportsRepo.GetByIdAsync(reviewId, cancellationToken);
         if (report == null)
         {
-            _logger.LogWarning("Review {ReviewId} not found", reviewId);
+            logger.LogWarning("Review {ReviewId} not found", reviewId);
             await UpdateMessageWithResultAsync(callbackQuery, "Review not found", cancellationToken);
             await callbackContextRepo.DeleteAsync(contextId, cancellationToken);
             return;
@@ -98,7 +90,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (report.Status != ReportStatus.Pending)
         {
-            _logger.LogInformation("Review {ReviewId} already handled (status: {Status})", reviewId, report.Status);
+            logger.LogInformation("Review {ReviewId} already handled (status: {Status})", reviewId, report.Status);
             await UpdateMessageWithResultAsync(callbackQuery,
                 FormatAlreadyHandledMessage(report.ReviewedBy, report.ActionTaken, report.ReviewedAt), cancellationToken);
             await callbackContextRepo.DeleteAsync(contextId, cancellationToken);
@@ -141,9 +133,9 @@ public class ReportCallbackService : IReportCallbackService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to execute review action {Action} for review {ReviewId} (type: {ReportType})",
+            logger.LogError(ex, "Failed to execute review action {Action} for review {ReviewId} (type: {ReportType})",
                 actionInt, reviewId, reportType);
-            result = new ReviewActionResult(Success: false, Message: $"Action failed: {ex.Message}");
+            result = new ReviewActionResult(Success: false, Message: "Action failed unexpectedly. Check logs for details.");
         }
 
         // Atomically update review status (race condition protection)
@@ -197,7 +189,7 @@ public class ReportCallbackService : IReportCallbackService
         // Validate action enum
         if (actionInt < 0 || actionInt > (int)ReportAction.Dismiss)
         {
-            _logger.LogWarning("Invalid report action value: {ActionInt}", actionInt);
+            logger.LogWarning("Invalid report action value: {ActionInt}", actionInt);
             return new ReviewActionResult(Success: false, Message: "Invalid action");
         }
 
@@ -240,7 +232,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Review {ReviewId}: User {User} marked as spam by {Executor}",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
@@ -288,7 +280,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Review {ReviewId}: User {User} banned by {Executor}",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
@@ -321,7 +313,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Review {ReviewId}: User {User} warned by {Executor} (count: {Count})",
                 report.Id, user.ToLogInfo(), executor.DisplayName, result.WarningCount);
             return new ReviewActionResult(
@@ -335,7 +327,7 @@ public class ReportCallbackService : IReportCallbackService
 
     private ReviewActionResult HandleDismissAction(long reviewId, Core.Models.Actor executor)
     {
-        _logger.LogInformation("Review {ReviewId} dismissed by {Executor}", reviewId, executor.DisplayName);
+        logger.LogInformation("Review {ReviewId} dismissed by {Executor}", reviewId, executor.DisplayName);
         return new ReviewActionResult(Success: true, Message: "Report dismissed", ActionName: "Dismiss");
     }
 
@@ -354,7 +346,7 @@ public class ReportCallbackService : IReportCallbackService
         // Validate action enum
         if (actionInt < 0 || actionInt > (int)ImpersonationAction.Trust)
         {
-            _logger.LogWarning("Invalid impersonation action value: {ActionInt}", actionInt);
+            logger.LogWarning("Invalid impersonation action value: {ActionInt}", actionInt);
             return new ReviewActionResult(Success: false, Message: "Invalid action");
         }
 
@@ -390,7 +382,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Impersonation review {ReviewId}: User {User} banned as scammer by {Executor}",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
@@ -404,7 +396,7 @@ public class ReportCallbackService : IReportCallbackService
 
     private ReviewActionResult HandleImpersonationDismissAction(long reviewId, Core.Models.Actor executor)
     {
-        _logger.LogInformation(
+        logger.LogInformation(
             "Impersonation review {ReviewId} dismissed by {Executor}",
             reviewId, executor.DisplayName);
         return new ReviewActionResult(
@@ -431,7 +423,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Impersonation review {ReviewId}: User {User} trusted by {Executor}",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
@@ -459,7 +451,7 @@ public class ReportCallbackService : IReportCallbackService
         // Validate action enum
         if (actionInt < 0 || actionInt > (int)ExamAction.DenyAndBan)
         {
-            _logger.LogWarning("Invalid exam action value: {ActionInt}", actionInt);
+            logger.LogWarning("Invalid exam action value: {ActionInt}", actionInt);
             return new ReviewActionResult(Success: false, Message: "Invalid action");
         }
 
@@ -494,7 +486,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Exam review {ReviewId}: User {User} approved by {Executor}, permissions restored",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
 
@@ -523,7 +515,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Exam review {ReviewId}: User {User} denied (kicked) by {Executor}",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
 
@@ -552,7 +544,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Exam review {ReviewId}: User {User} denied and banned by {Executor}",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
 
@@ -580,7 +572,7 @@ public class ReportCallbackService : IReportCallbackService
     {
         if (actionInt < 0 || actionInt > (int)ProfileScanAction.Kick)
         {
-            _logger.LogWarning("Invalid profile scan action value: {ActionInt}", actionInt);
+            logger.LogWarning("Invalid profile scan action value: {ActionInt}", actionInt);
             return new ReviewActionResult(Success: false, Message: "Invalid action");
         }
 
@@ -605,8 +597,21 @@ public class ReportCallbackService : IReportCallbackService
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
+        await using var scope = scopeFactory.CreateAsyncScope();
+
+        // If user was kicked by welcome timeout, just close the report — nothing to restore
+        var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+        var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
+
+        if (welcomeResponse is { Response: Models.WelcomeResponseType.Timeout })
+        {
+            logger.LogDebug(
+                "Profile scan Allow for timed-out user {User} — closing report without admission",
+                user.ToLogDebug());
+            return new ReviewActionResult(Success: true, Message: "User already left — alert dismissed", ActionName: "Allow");
+        }
+
         // Clear the profile gate and attempt admission
-        await using var scope = _scopeFactory.CreateAsyncScope();
         var admissionHandler = scope.ServiceProvider.GetRequiredService<IWelcomeAdmissionHandler>();
 
         var admissionResult = await admissionHandler.TryAdmitUserAsync(
@@ -614,7 +619,7 @@ public class ReportCallbackService : IReportCallbackService
             $"Profile scan alert #{report.Id} allowed by admin",
             cancellationToken);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Profile scan review {ReviewId}: User {User} allowed by {Executor} (admission: {Result})",
             report.Id, user.ToLogInfo(), executor.DisplayName, admissionResult);
 
@@ -643,7 +648,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Profile scan review {ReviewId}: User {User} banned by {Executor}",
                 report.Id, user.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
@@ -675,7 +680,7 @@ public class ReportCallbackService : IReportCallbackService
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Profile scan review {ReviewId}: User {User} kicked from {Chat} by {Executor}",
                 report.Id, user.ToLogInfo(), chat.ToLogInfo(), executor.DisplayName);
             return new ReviewActionResult(
@@ -714,7 +719,7 @@ public class ReportCallbackService : IReportCallbackService
         string? actionName,
         CancellationToken cancellationToken)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var messageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
 
         // 1. Delete the /report command message (for all actions)
@@ -728,13 +733,13 @@ public class ReportCallbackService : IReportCallbackService
                     "report_cleanup",
                     cancellationToken);
 
-                _logger.LogDebug(
+                logger.LogDebug(
                     "Deleted /report command message {MessageId} in chat {ChatId}",
                     report.ReportCommandMessageId.Value, report.Chat.Id);
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex,
+                logger.LogDebug(ex,
                     "Could not delete /report command message {MessageId} (may already be deleted)",
                     report.ReportCommandMessageId);
             }
@@ -751,13 +756,13 @@ public class ReportCallbackService : IReportCallbackService
                     replyParameters: new ReplyParameters { MessageId = report.MessageId.Value },
                     cancellationToken: cancellationToken);
 
-                _logger.LogDebug(
+                logger.LogDebug(
                     "Sent dismiss notification as reply to message {MessageId} in chat {ChatId}",
                     report.MessageId, report.Chat.Id);
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex,
+                logger.LogDebug(ex,
                     "Could not reply to reported message {MessageId} (may be deleted)",
                     report.MessageId);
             }
@@ -775,7 +780,7 @@ public class ReportCallbackService : IReportCallbackService
         string? actionName,
         CancellationToken cancellationToken)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
 
         var siblingAlerts = await reportsRepo.GetPendingProfileScanAlertsForUserAsync(
@@ -796,11 +801,11 @@ public class ReportCallbackService : IReportCallbackService
                 note,
                 cancellationToken);
 
-            _logger.LogDebug("Auto-closed sibling profile scan alert #{SiblingId} for {User}",
+            logger.LogDebug("Auto-closed sibling profile scan alert #{SiblingId} for {User}",
                 sibling.Id, user.ToLogDebug());
         }
 
-        _logger.LogInformation("Profile scan cleanup: auto-closed {Count} sibling alert(s) for {User}",
+        logger.LogInformation("Profile scan cleanup: auto-closed {Count} sibling alert(s) for {User}",
             siblingAlerts.Count, user.ToLogInfo());
     }
 
@@ -822,7 +827,7 @@ public class ReportCallbackService : IReportCallbackService
         if (callbackQuery.Message == null)
             return;
 
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var dmService = scope.ServiceProvider.GetRequiredService<IBotDmService>();
 
         try
@@ -855,7 +860,7 @@ public class ReportCallbackService : IReportCallbackService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to update DM message after review action");
+            logger.LogWarning(ex, "Failed to update DM message after review action");
         }
     }
 
