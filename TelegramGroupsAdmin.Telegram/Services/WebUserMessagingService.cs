@@ -28,6 +28,11 @@ public class WebUserMessagingService(
             logger.LogDebug("User API messaging available for {User}", webUser.ToLogDebug());
             return new WebUserFeatureAvailability(true, null);
         }
+        catch (TelegramFloodWaitException ex)
+        {
+            logger.LogWarning("Flood wait checking user API availability for {User}: {Seconds}s", webUser.ToLogDebug(), ex.WaitSeconds);
+            return new WebUserFeatureAvailability(false, $"Rate limited — try again in {ex.WaitSeconds}s");
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to check user API availability for {User}", webUser.ToLogDebug());
