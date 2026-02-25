@@ -142,7 +142,7 @@ public class ChatListTests : MudBlazorTestContext
     }
 
     [Test]
-    public void SortsChatsById()
+    public void SortsChatsByName()
     {
         // Arrange - provide chats in non-sorted order
         var chats = new List<ManagedChatRecord>
@@ -156,13 +156,13 @@ public class ChatListTests : MudBlazorTestContext
         var cut = Render<ChatList>(p => p
             .Add(x => x.Chats, chats));
 
-        // Assert - should be sorted by ChatId (ascending)
+        // Assert - should be sorted alphabetically by chat name
         var items = cut.FindAll(".chat-list-item");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(items[0].TextContent, Does.Contain("Third")); // -100333 comes first (more negative)
+            Assert.That(items[0].TextContent, Does.Contain("First"));
             Assert.That(items[1].TextContent, Does.Contain("Second"));
-            Assert.That(items[2].TextContent, Does.Contain("First")); // -100111 comes last
+            Assert.That(items[2].TextContent, Does.Contain("Third"));
         }
     }
 
@@ -380,50 +380,6 @@ public class ChatListTests : MudBlazorTestContext
         // Assert
         var countSpans = cut.FindAll(".chat-count");
         Assert.That(countSpans.Count, Is.EqualTo(0));
-    }
-
-    #endregion
-
-    #region Unread Count Tests
-
-    [Test]
-    public void DisplaysUnreadBadge_WhenUnreadCountProvided()
-    {
-        // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
-            CreateChat(chatId: -100111)
-        };
-        var unreadCounts = new Dictionary<long, int> { { -100111, 5 } };
-
-        // Act
-        var cut = Render<ChatList>(p => p
-            .Add(x => x.Chats, chats)
-            .Add(x => x.UnreadCounts, unreadCounts));
-
-        // Assert
-        var badge = cut.Find(".chat-unread-badge");
-        Assert.That(badge.TextContent, Is.EqualTo("5"));
-    }
-
-    [Test]
-    public void HidesUnreadBadge_WhenZero()
-    {
-        // Arrange
-        var chats = new List<ManagedChatRecord>
-        {
-            CreateChat(chatId: -100111)
-        };
-        var unreadCounts = new Dictionary<long, int> { { -100111, 0 } };
-
-        // Act
-        var cut = Render<ChatList>(p => p
-            .Add(x => x.Chats, chats)
-            .Add(x => x.UnreadCounts, unreadCounts));
-
-        // Assert
-        var badges = cut.FindAll(".chat-unread-badge");
-        Assert.That(badges.Count, Is.EqualTo(0));
     }
 
     #endregion

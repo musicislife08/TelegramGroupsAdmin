@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Constants
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Extensions
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
@@ -200,7 +201,7 @@
                                 }
                             </div>
                             <div class="tg-media-placeholder-text">
-                                @GetMediaTypeName(Message.MediaType.Value) downloading...
+                                @Message.MediaType.Value.ToDisplayName() downloading...
                             </div>
                         </div>
                     }
@@ -597,25 +598,6 @@
         }
 
         return $"{len:0.##} {sizes[order]}";
-    }
-
-    /// <summary>
-    /// Get friendly name for media type
-    /// Phase 4.X: Used for media placeholder display
-    /// </summary>
-    private string GetMediaTypeName(MediaType mediaType)
-    {
-        return mediaType switch
-        {
-            MediaType.Animation => "GIF",
-            MediaType.Video => "Video",
-            MediaType.Audio => "Audio",
-            MediaType.Voice => "Voice message",
-            MediaType.Sticker => "Sticker",
-            MediaType.VideoNote => "Video message",
-            MediaType.Document => "Document",
-            _ => "Media"
-        };
     }
 
     /// <summary>

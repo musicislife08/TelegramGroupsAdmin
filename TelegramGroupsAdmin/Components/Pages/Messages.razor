@@ -11,6 +11,7 @@
 @using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Extensions
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
 @inject IMessageEditService MessageEditService
@@ -31,6 +32,7 @@
 @inject IMediaRefetchQueueService MediaRefetchQueue
 @inject TelegramGroupsAdmin.Core.Services.AI.IAITranslationService TranslationService
 @inject IWebBotMessagingService WebBotMessagingService
+@inject IWebUserMessagingService WebUserMessagingService
 @attribute [Authorize]
 @implements IDisposable
 
@@ -52,7 +54,6 @@
         <ChatList Chats="_filteredChats"
                   SelectedChatId="_selectedChatId"
                   MessageCounts="_chatMessageCounts"
-                  UnreadCounts="_chatUnreadCounts"
                   LastMessagePreviews="_lastMessagePreviews"
                   OnChatSelected="HandleChatSelected" />
     </div>
@@ -136,8 +137,7 @@
                     }
                 </div>
 
-                @* Message Input (Phase 1: Bot messages) *@
-                <ChatInput IsEnabled="@_isFeatureAvailable"
+                <ChatInput IsEnabled="@(_isBotAvailable || _userApiAvailableForChat)"
                            PlaceholderText="@GetChatInputPlaceholder()"
                            MaxMessageLength="@GetMaxMessageLength()"
                            CurrentText="@_editingOriginalText"
@@ -145,6 +145,10 @@
                            ReplyToMessageId="@_replyToMessageId"
                            ReplyToUser="@GetReplyToUser()"
                            ReplyToText="@GetReplyToText()"
+                           SendAsUser="@_sendAsUser"
+                           UserApiAvailableForChat="@_userApiAvailableForChat"
+                           ToggleDisabledReason="@_toggleDisabledReason"
+                           OnSendAsUserChanged="@HandleSendAsUserChanged"
                            OnSendMessage="@SendMessageAsync"
                            OnEditMessage="@EditMessageAsync"
                            OnCancelEdit="@CancelEdit"
@@ -177,7 +181,6 @@
     private string _chatSearchText = "";
     private long? _selectedChatId;
     private readonly Dictionary<long, int> _chatMessageCounts = new();
-    private readonly Dictionary<long, int> _chatUnreadCounts = new();
     private readonly Dictionary<long, string> _lastMessagePreviews = new();
 
     // Message state (per-chat) - PERF-APP-1: Use composite model with detection history included
@@ -194,8 +197,12 @@
     // User state
     private HashSet<long> _userTelegramIds = []; // Current user's linked Telegram IDs
 
-    // Phase 1: Send & Edit Messages as Bot state
-    private bool _isFeatureAvailable; // Feature enabled (bot enabled + user has linked account)
+    // Send & Edit Messages state
+    private bool _isBotAvailable; // Bot messaging available (bot enabled + user has linked account)
+    private bool _isUserApiAvailable; // User API available (WTelegram session connected)
+    private bool _userApiAvailableForChat; // User API can send to the currently selected chat
+    private bool _sendAsUser; // Current toggle state: true = personal account, false = bot
+    private string? _toggleDisabledReason; // Tooltip text when toggle is disabled
     private long? _botUserId; // Bot's Telegram user ID (for identifying bot messages)
     private string? _linkedUsername; // User's linked Telegram username (for calculating signature length)
     private string? _featureUnavailableReason; // Reason why feature is unavailable (for placeholder text)
@@ -246,14 +253,15 @@
         // Parse query string parameters to select chat if specified
         await ApplyQueryStringFiltersAsync();
 
+        // Check feature availability (bot + user API)
+        await CheckFeatureAvailabilityAsync();
+
         // If a chat was auto-selected from query string, load its messages
         if (_selectedChatId.HasValue)
         {
             await LoadChatMessagesAsync(_selectedChatId.Value);
+            await CheckUserApiForChatAsync(_selectedChatId.Value);
         }
-
-        // Phase 1: Check feature availability (bot enabled + linked Telegram account)
-        await CheckFeatureAvailabilityAsync();
     }
 
     public void Dispose()
@@ -428,11 +436,17 @@
         {
             try
             {
-                // Only add message if it belongs to the currently selected chat
+                // Update sidebar preview and message count for this chat
+                var preview = message.MediaType?.ToDisplayName()
+                              ?? message.MessageText
+                              ?? (!string.IsNullOrEmpty(message.PhotoFileId) ? "Photo" : "Message");
+                _lastMessagePreviews[message.Chat.Id] = preview;
+                _chatMessageCounts[message.Chat.Id] = _chatMessageCounts.GetValueOrDefault(message.Chat.Id) + 1;
+
+                // Only add to message list if it belongs to the currently selected chat
                 if (!_selectedChatId.HasValue || message.Chat.Id != _selectedChatId.Value)
                 {
-                    Logger.LogTrace("Ignoring new message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
-                        message.MessageId, message.Chat.Id, _selectedChatId);
+                    StateHasChanged(); // Still re-render for sidebar update
                     return;
                 }
 
@@ -591,13 +605,12 @@
                     {
                         var lastMessage = lastMessages.First();
                         var hasPhoto = !string.IsNullOrEmpty(lastMessage.PhotoFileId);
-                        var preview = lastMessage.MessageText ?? (hasPhoto ? "📷 Photo" : "Message");
+                        var preview = lastMessage.MediaType?.ToDisplayName()
+                                      ?? lastMessage.MessageText
+                                      ?? (hasPhoto ? "Photo" : "Message");
                         _lastMessagePreviews[chat.Identity.Id] = preview;
                     }
                 }
-
-                // TODO: Implement read tracking for unread counts
-                _chatUnreadCounts[chat.Identity.Id] = 0; // Placeholder
             }
         }
         catch (Exception ex)
@@ -610,6 +623,38 @@
     {
         _selectedChatId = chatId;
         await LoadChatMessagesAsync(chatId);
+        await CheckUserApiForChatAsync(chatId);
+    }
+
+    /// <summary>
+    /// Check if the admin's personal Telegram account can send to this specific chat.
+    /// Updates toggle state accordingly — defaults to user mode when available, falls back to bot.
+    /// </summary>
+    private async Task CheckUserApiForChatAsync(long chatId)
+    {
+        if (!_isUserApiAvailable || WebUser == null)
+        {
+            _userApiAvailableForChat = false;
+            _sendAsUser = false;
+            _toggleDisabledReason = !_isUserApiAvailable
+                ? "Connect your Telegram account in Settings"
+                : null;
+            return;
+        }
+
+        var chatResult = await WebUserMessagingService.CanSendToChatAsync(WebUser, chatId);
+        _userApiAvailableForChat = chatResult.CanSend;
+
+        if (!chatResult.CanSend)
+        {
+            _sendAsUser = false;
+            _toggleDisabledReason = chatResult.UnavailableReason ?? "Not available for this chat";
+        }
+        else
+        {
+            _sendAsUser = true; // Default to user mode when available
+            _toggleDisabledReason = null;
+        }
     }
 
     private void HandleBackToChats()
@@ -1545,111 +1590,153 @@
     // ========================================================================
 
     /// <summary>
-    /// Check if feature is available (bot enabled + user has linked Telegram account)
+    /// Check if bot and user API messaging features are available.
     /// </summary>
     private async Task CheckFeatureAvailabilityAsync()
     {
         if (WebUser == null)
         {
-            _isFeatureAvailable = false;
             _featureUnavailableReason = "Not authenticated";
             return;
         }
 
-        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(WebUser!);
-        _isFeatureAvailable = result.IsAvailable;
-        _botUserId = result.BotUserId;
-        _linkedUsername = result.LinkedUsername;
-        _featureUnavailableReason = result.UnavailableReason;
+        // Check bot availability
+        var botResult = await WebBotMessagingService.CheckFeatureAvailabilityAsync(WebUser);
+        _isBotAvailable = botResult.IsAvailable;
+        _botUserId = botResult.BotUserId;
+        _linkedUsername = botResult.LinkedUsername;
+        _featureUnavailableReason = botResult.UnavailableReason;
+
+        // Check user API availability (WTelegram session connected)
+        var userResult = await WebUserMessagingService.CheckFeatureAvailabilityAsync(WebUser);
+        _isUserApiAvailable = userResult.IsAvailable;
+
+        if (!_isUserApiAvailable)
+        {
+            _toggleDisabledReason = userResult.UnavailableReason ?? "User API not available";
+        }
     }
 
     /// <summary>
-    /// Calculate maximum message length accounting for signature
-    /// Telegram limit: 4096 characters
-    /// Signature format: \n\n—{username} (3 fixed chars + username length)
+    /// Calculate maximum message length accounting for signature in bot mode.
+    /// User mode: full 4096 limit (no signature). Bot mode: reduced by signature length.
     /// </summary>
     private int GetMaxMessageLength()
     {
         const int telegramLimit = 4096;
 
-        if (!_isFeatureAvailable || string.IsNullOrEmpty(_linkedUsername))
+        // User mode — no signature, full limit
+        if (_sendAsUser)
+            return telegramLimit;
+
+        // Bot mode — reduce by signature length
+        if (!string.IsNullOrEmpty(_linkedUsername))
         {
-            return telegramLimit; // No signature, full limit
+            var signatureLength = 3 + _linkedUsername.Length; // "\n\n—" + username
+            return telegramLimit - signatureLength;
         }
 
-        var signatureLength = 3 + _linkedUsername.Length; // "\n\n—" + username
-        return telegramLimit - signatureLength;
+        return telegramLimit;
     }
 
     /// <summary>
-    /// Send new message as bot with signature
+    /// Send message — routes through user API or bot based on toggle state.
     /// </summary>
     private async Task SendMessageAsync(string text)
     {
-        if (!_selectedChatId.HasValue)
-            return;
-
-        if (WebUser == null)
+        if (!_selectedChatId.HasValue || WebUser == null)
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
-        var result = await WebBotMessagingService.SendMessageAsync(
-            WebUser!,
-            _selectedChatId.Value,
-            text,
-            _replyToMessageId);
-
-        if (result.Success)
+        if (_sendAsUser)
         {
-            _replyToMessageId = null; // Clear reply state
-            Snackbar.Add("Message sent", Severity.Success);
+            var result = await WebUserMessagingService.SendMessageAsync(
+                WebUser, _selectedChatId.Value, text, _replyToMessageId);
 
-            // Refresh messages to show the bot-sent message
-            // (Bot doesn't receive updates for its own messages, so manual refresh required)
-            await LoadChatMessagesAsync(_selectedChatId.Value);
+            if (result.Success)
+            {
+                _replyToMessageId = null;
+                // Bot sees this as a normal incoming message — UI updates via HandleNewMessage event
+            }
+            else
+            {
+                Snackbar.Add($"Failed to send: {result.ErrorMessage}", Severity.Error);
+            }
         }
         else
         {
-            Snackbar.Add($"Failed to send message: {result.ErrorMessage}", Severity.Error);
+            var result = await WebBotMessagingService.SendMessageAsync(
+                WebUser, _selectedChatId.Value, text, _replyToMessageId);
+
+            if (result.Success)
+            {
+                _replyToMessageId = null;
+                Snackbar.Add("Message sent", Severity.Success);
+
+                // Bot doesn't receive updates for its own messages — manual refresh required
+                await LoadChatMessagesAsync(_selectedChatId.Value);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to send: {result.ErrorMessage}", Severity.Error);
+            }
         }
     }
 
     /// <summary>
-    /// Edit existing bot message (no signature)
+    /// Edit message — routes through user API or bot based on toggle state.
     /// </summary>
     private async Task EditMessageAsync(string text)
     {
-        if (!_isEditingMessageId.HasValue || !_selectedChatId.HasValue)
-            return;
-
-        if (WebUser == null)
+        if (!_isEditingMessageId.HasValue || !_selectedChatId.HasValue || WebUser == null)
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
-        var result = await WebBotMessagingService.EditMessageAsync(
-            WebUser!,
-            _selectedChatId.Value,
-            (int)_isEditingMessageId.Value,
-            text);
-
-        if (result.Success)
+        if (_sendAsUser)
         {
-            _isEditingMessageId = null;
-            _editingOriginalText = null;
-            Snackbar.Add("Message edited", Severity.Success);
+            var result = await WebUserMessagingService.EditMessageAsync(
+                WebUser, _selectedChatId.Value, (int)_isEditingMessageId.Value, text);
 
-            // Refresh messages to show the bot-edited message
-            // (Bot doesn't receive updates for its own edits, so manual refresh required)
-            await LoadChatMessagesAsync(_selectedChatId.Value);
+            if (result.Success)
+            {
+                _isEditingMessageId = null;
+                _editingOriginalText = null;
+                // Bot sees this edit — UI updates via event
+            }
+            else
+            {
+                Snackbar.Add($"Failed to edit: {result.ErrorMessage}", Severity.Error);
+            }
         }
         else
         {
-            Snackbar.Add($"Failed to edit message: {result.ErrorMessage}", Severity.Error);
+            var result = await WebBotMessagingService.EditMessageAsync(
+                WebUser, _selectedChatId.Value, (int)_isEditingMessageId.Value, text);
+
+            if (result.Success)
+            {
+                _isEditingMessageId = null;
+                _editingOriginalText = null;
+                Snackbar.Add("Message edited", Severity.Success);
+
+                // Bot doesn't receive updates for its own edits — manual refresh
+                await LoadChatMessagesAsync(_selectedChatId.Value);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to edit: {result.ErrorMessage}", Severity.Error);
+            }
         }
+    }
+
+    private void HandleSendAsUserChanged(bool sendAsUser)
+    {
+        _sendAsUser = sendAsUser;
+        StateHasChanged();
     }
 
     /// <summary>
@@ -1699,13 +1786,13 @@
     /// </summary>
     private string GetChatInputPlaceholder()
     {
-        if (!_isFeatureAvailable)
-            return _featureUnavailableReason ?? "Feature unavailable";
+        if (!_isBotAvailable && !_userApiAvailableForChat)
+            return _featureUnavailableReason ?? "Messaging unavailable";
 
         if (_isEditingMessageId.HasValue)
             return "Edit message...";
 
-        return "Type a message...";
+        return _sendAsUser ? "Message as you..." : "Message as bot...";
     }
 
     /// <summary>

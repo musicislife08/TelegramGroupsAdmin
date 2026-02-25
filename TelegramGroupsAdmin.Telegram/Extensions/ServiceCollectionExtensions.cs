@@ -139,6 +139,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
+            services.AddScoped<IWebUserMessagingService, WebUserMessagingService>(); // Send/edit as admin's personal Telegram account
             services.AddSingleton<IBanCelebrationCache, BanCelebrationCache>(); // Singleton: shuffle-bag state for ban celebrations
             services.AddScoped<IBanCelebrationService, BanCelebrationService>(); // Scoped: uses IBanCelebrationCache for state
             services.AddScoped<IThumbnailService, ThumbnailService>(); // Thumbnail generation for images/GIFs

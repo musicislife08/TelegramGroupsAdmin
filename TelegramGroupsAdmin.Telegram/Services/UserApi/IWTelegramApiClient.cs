@@ -77,6 +77,39 @@ public interface IWTelegramApiClient : IAsyncDisposable
     /// <summary>Get all dialogs (chats/groups/channels the account is in).</summary>
     Task<Messages_Dialogs> Messages_GetAllDialogs();
 
+    /// <summary>Get all chats, channels and supergroups the account is in.
+    /// Returns a dictionary of ChatBase keyed by channel/chat ID.</summary>
+    Task<Messages_Chats> Messages_GetAllChats();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MESSAGING (Part 4: send as admin)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Send a text message as the logged-in user.
+    /// The bot will see this as a normal incoming message and populate the UI automatically.</summary>
+    /// <param name="peer">Destination chat (use <see cref="GetInputPeerForChat"/> to resolve)</param>
+    /// <param name="text">Message text (max 4096 characters)</param>
+    /// <param name="replyToMsgId">Optional message ID to reply to</param>
+    Task<Message> SendMessageAsync(InputPeer peer, string text, int replyToMsgId = 0);
+
+    /// <summary>Edit a message previously sent by the logged-in user.</summary>
+    /// <param name="peer">Chat where the message was sent</param>
+    /// <param name="messageId">ID of the message to edit</param>
+    /// <param name="text">New message text</param>
+    Task<UpdatesBase> Messages_EditMessage(InputPeer peer, int messageId, string text);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PEER CACHE (resolves bot API chat IDs to InputPeer with access hash)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Warm the peer cache by fetching all chats/channels the user is in.
+    /// Must be called after login before sending messages.</summary>
+    Task WarmPeerCacheAsync();
+
+    /// <summary>Resolve a bot API chat ID (e.g. -1001322973935) to an InputPeer.
+    /// Returns null if the user is not a member of that chat.</summary>
+    InputPeer? GetInputPeerForChat(long botApiChatId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // GENERIC INVOKE (escape hatch for one-off calls not yet in the interface)
     // ═══════════════════════════════════════════════════════════════════════════

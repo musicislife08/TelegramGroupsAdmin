@@ -145,6 +145,49 @@ public sealed class WTelegramApiClient(Client client, ILogger<WTelegramApiClient
     public Task<Messages_Dialogs> Messages_GetAllDialogs()
         => CallAsync(() => client.Messages_GetAllDialogs());
 
+    public Task<Messages_Chats> Messages_GetAllChats()
+        => CallAsync(() => client.Messages_GetAllChats());
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MESSAGING (Part 4: send as admin)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public Task<Message> SendMessageAsync(InputPeer peer, string text, int replyToMsgId = 0)
+        => CallAsync(() => client.SendMessageAsync(peer, text, reply_to_msg_id: replyToMsgId));
+
+    public Task<UpdatesBase> Messages_EditMessage(InputPeer peer, int messageId, string text)
+        => CallAsync(() => client.Messages_EditMessage(peer, messageId, text));
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PEER CACHE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private Dictionary<long, ChatBase> _chats = new();
+
+    public async Task WarmPeerCacheAsync()
+    {
+        var result = await Messages_GetAllChats();
+        _chats = result.chats;
+        logger.LogInformation("Warmed peer cache with {Count} chats", _chats.Count);
+    }
+
+    public InputPeer? GetInputPeerForChat(long botApiChatId)
+    {
+        // Bot API supergroup/channel IDs use -100{channelId} format
+        // e.g. -1001322973935 → channel ID 1322973935
+        var channelId = botApiChatId;
+        if (botApiChatId < -1000000000000)
+            channelId = -(botApiChatId + 1000000000000);
+        else if (botApiChatId < 0)
+            channelId = -botApiChatId; // Regular group chats use -{chatId}
+
+        return _chats.TryGetValue(channelId, out var chat) ? chat.ToInputPeer() : null;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // GENERIC INVOKE
+    // ═══════════════════════════════════════════════════════════════════════════
+
     public Task<T> Invoke<T>(IMethod<T> query)
         => CallAsync(() => client.Invoke(query));
 
