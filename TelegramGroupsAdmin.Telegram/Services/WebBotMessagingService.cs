@@ -93,9 +93,9 @@ public class WebBotMessagingService : IWebBotMessagingService
                 _logger.LogDebug("Bot user ID: {BotUserId}", botUserId);
             }
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "WebBotMessaging available for {User} (Telegram: @{Username})",
-                webUser.ToLogInfo(),
+                webUser.ToLogDebug(),
                 linkedUser.Username);
 
             return new WebBotFeatureAvailability(true, botUserId, linkedUser.Username, null);

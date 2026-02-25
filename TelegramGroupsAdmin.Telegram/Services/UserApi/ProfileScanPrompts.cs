@@ -54,6 +54,16 @@ internal static class ProfileScanPrompts
         - Personal channel about legitimate topics
         - Stories showing normal life content
 
+        URL METADATA ANALYSIS:
+        When a <url_metadata> section is provided, it contains scraped page titles and descriptions
+        from URLs found in the user's bio, channel description, or story captions. Use this to identify:
+        - Adult/pornographic site titles or descriptions (HIGH RISK, confidence 80+)
+        - Cryptocurrency/investment scam landing pages
+        - Phishing or impersonation pages
+        - Gambling or casino promotion pages
+        - URL shortener landing pages that redirect to suspicious content
+        URL metadata revealing legitimate sites (social media, GitHub, personal blogs) is neutral.
+
         When multiple suggestive signals combine, increase confidence accordingly.
         A suggestive photo alone might be 40-50, but suggestive photo + suggestive name = 55-70.
         A personal channel with explicit adult branding (18+, NSFW, etc.) is a strong signal on its own (80+),
@@ -74,7 +84,8 @@ internal static class ProfileScanPrompts
         int storyCount,
         IReadOnlyList<string>? storyCaptions,
         int imageCount,
-        string? imageLabels = null)
+        string? imageLabels = null,
+        string? urlMetadata = null)
     {
         var captionsBlock = "";
         if (storyCaptions is { Count: > 0 })
@@ -85,6 +96,17 @@ internal static class ProfileScanPrompts
                 <captions>
             {{string.Join("\n", sanitizedCaptions)}}
                 </captions>
+            """;
+        }
+
+        var urlMetadataBlock = "";
+        if (!string.IsNullOrWhiteSpace(urlMetadata))
+        {
+            urlMetadataBlock = $$"""
+
+                <url_metadata>
+                {{SanitizeForPrompt(urlMetadata)}}
+                </url_metadata>
             """;
         }
 
@@ -110,7 +132,7 @@ internal static class ProfileScanPrompts
               <image_count>{{imageCount}}</image_count>
               <image_labels>{{imageLabels ?? "none"}}</image_labels>
             </images>
-
+            {{urlMetadataBlock}}
             Respond with JSON: {"spam": true/false, "confidence": 0-100, "reason": "...", "signals_detected": [...], "contains_nudity": true/false}
             """;
     }

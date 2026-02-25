@@ -69,7 +69,7 @@ public class TelegramMediaService(
                 await _mediaService.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
             }
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Downloaded {MediaType} file for message {MessageId}: {FileName} ({FileSize} bytes)",
                 mediaType,
                 messageId,

@@ -33,6 +33,7 @@ public class ProfileScoringEngineTests
     private static readonly ChatIdentity TestChat = new(67890L, "Test Chat");
 
     private IUrlPreFilterService _urlPreFilter = null!;
+    private IUrlContentScrapingService _urlContentScraping = null!;
     private IStopWordsRepository _stopWordsRepository = null!;
     private IChatService _chatService = null!;
     private ILogger<ProfileScoringEngine> _logger = null!;
@@ -42,13 +43,18 @@ public class ProfileScoringEngineTests
     public void SetUp()
     {
         _urlPreFilter = Substitute.For<IUrlPreFilterService>();
+        _urlContentScraping = Substitute.For<IUrlContentScrapingService>();
         _stopWordsRepository = Substitute.For<IStopWordsRepository>();
         _chatService = Substitute.For<IChatService>();
         _logger = Substitute.For<ILogger<ProfileScoringEngine>>();
 
-        _sut = new ProfileScoringEngine(_urlPreFilter, _stopWordsRepository, _chatService, _logger);
+        _sut = new ProfileScoringEngine(_urlPreFilter, _urlContentScraping, _stopWordsRepository, _chatService, _logger);
 
-        // Safe defaults — no block, no stop words, AI disabled
+        // Safe defaults — no block, no stop words, AI disabled, no URL metadata
+        _urlContentScraping
+            .ScrapeUrlMetadataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
         _urlPreFilter
             .CheckHardBlockAsync(Arg.Any<string>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
             .Returns(new HardBlockResult(false, null, null));
@@ -990,5 +996,119 @@ public class ProfileScoringEngineTests
             Assert.That(result.AiSignals, Has.Length.EqualTo(2));
             Assert.That(result.AiSignals, Is.EquivalentTo(new[] { "promo_link", "explicit_content" }));
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Layer 2: URL metadata scraping for AI context
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task ScoreAsync_UrlMetadataPassedToAiPrompt_WhenScrapingReturnsData()
+    {
+        // Arrange — bio has a URL, scraping returns metadata
+        var profile = BuildProfile(bio: "Check out https://example.com");
+        _urlContentScraping
+            .ScrapeUrlMetadataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("https://example.com\nFree Adult Videos - Watch Now");
+
+        _chatService
+            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _chatService
+            .GetCompletionAsync(
+                Arg.Any<AIFeatureType>(), Arg.Any<string>(),
+                Arg.Is<string>(prompt => prompt.Contains("url_metadata")),
+                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(AiResponse("""{"spam": true, "confidence": 90, "reason": "adult site URL", "signals_detected": ["adult_url_metadata"]}"""));
+
+        // Act
+        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        // Assert — AI was called with a prompt containing URL metadata
+        await _chatService.Received(1).GetCompletionAsync(
+            AIFeatureType.ProfileScan, Arg.Any<string>(),
+            Arg.Is<string>(prompt => prompt.Contains("url_metadata")),
+            Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
+        Assert.That(result.AiScore, Is.EqualTo(4.5m));
+    }
+
+    [Test]
+    public async Task ScoreAsync_UrlScrapingFailure_ContinuesWithoutMetadata()
+    {
+        // Arrange — scraping throws, scoring should still complete
+        var profile = BuildProfile(bio: "Visit https://example.com");
+        _urlContentScraping
+            .ScrapeUrlMetadataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<string?>(_ => throw new HttpRequestException("Connection refused"));
+
+        _chatService
+            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _chatService
+            .GetCompletionAsync(
+                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(AiResponse("""{"spam": false, "confidence": 10, "reason": "clean"}"""));
+
+        // Act — must not throw
+        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        // Assert — scoring completed gracefully
+        Assert.That(result.AiScore, Is.EqualTo(0.0m));
+        Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Clean));
+    }
+
+    [Test]
+    public async Task ScoreAsync_UrlScrapingSkipped_WhenAiFeatureUnavailable()
+    {
+        // Arrange — AI disabled (default), URL scraping should not be called
+        var profile = BuildProfile(bio: "Visit https://example.com");
+
+        // Act
+        await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        // Assert — URL scraping must not be called when AI is unavailable
+        await _urlContentScraping.DidNotReceive()
+            .ScrapeUrlMetadataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ScoreAsync_UrlScrapingSkipped_WhenRuleScoreExceedsBanThreshold()
+    {
+        // Arrange — Telegram-flagged account hits max score, AI layer skipped entirely
+        var profile = BuildProfile(bio: "Check https://example.com", isScam: true);
+
+        // Act
+        await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        // Assert — URL scraping must not be called when rule score already bans
+        await _urlContentScraping.DidNotReceive()
+            .ScrapeUrlMetadataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ScoreAsync_NoUrlMetadata_PromptDoesNotContainUrlMetadataSection()
+    {
+        // Arrange — bio without URLs, scraping returns null
+        var profile = BuildProfile(bio: "Just a normal bio without URLs");
+
+        _chatService
+            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _chatService
+            .GetCompletionAsync(
+                Arg.Any<AIFeatureType>(), Arg.Any<string>(),
+                Arg.Is<string>(prompt => !prompt.Contains("url_metadata")),
+                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(AiResponse("""{"spam": false, "confidence": 5, "reason": "clean"}"""));
+
+        // Act
+        await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        // Assert — prompt without url_metadata section was used
+        await _chatService.Received(1).GetCompletionAsync(
+            AIFeatureType.ProfileScan, Arg.Any<string>(),
+            Arg.Is<string>(prompt => !prompt.Contains("url_metadata")),
+            Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>());
     }
 }

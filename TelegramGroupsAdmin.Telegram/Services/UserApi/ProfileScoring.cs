@@ -49,6 +49,7 @@ public record ScoringResult(
 /// </summary>
 public sealed class ProfileScoringEngine(
     IUrlPreFilterService urlPreFilter,
+    IUrlContentScrapingService urlContentScraping,
     IStopWordsRepository stopWordsRepository,
     IChatService chatService,
     ILogger<ProfileScoringEngine> logger) : IProfileScoringEngine
@@ -204,13 +205,34 @@ public sealed class ProfileScoringEngine(
             return AiScoringResult.Empty;
         }
 
+        // Scrape URL metadata for AI context (bio, channel description, story captions may contain URLs)
+        string? urlMetadata = null;
+        var allText = AggregateText(profile);
+        if (!string.IsNullOrWhiteSpace(allText))
+        {
+            try
+            {
+                urlMetadata = await urlContentScraping.ScrapeUrlMetadataAsync(allText, ct);
+                if (urlMetadata != null)
+                {
+                    logger.LogDebug("Profile scan for {User}: scraped URL metadata for AI context",
+                        profile.User.ToLogDebug());
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Profile scan for {User}: URL scraping failed, continuing without metadata",
+                    profile.User.ToLogDebug());
+            }
+        }
+
         var systemPrompt = ProfileScanPrompts.BuildSystemPrompt();
         var userPrompt = ProfileScanPrompts.BuildUserPrompt(
             profile.FirstName, profile.LastName, profile.Username,
             profile.Bio,
             profile.PersonalChannelTitle, profile.PersonalChannelAbout,
             profile.StoryCount, profile.StoryCaptions,
-            images.Count, imageLabels);
+            images.Count, imageLabels, urlMetadata);
 
         ChatCompletionResult? result;
         var options = new ChatCompletionOptions { JsonMode = true };

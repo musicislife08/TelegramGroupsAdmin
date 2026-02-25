@@ -17,4 +17,13 @@ public interface IUrlContentScrapingService
     /// or original text if no URLs found or all scrapes failed
     /// </returns>
     Task<string> EnrichMessageWithUrlPreviewsAsync(string messageText, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Scrapes URLs found in the given text and returns formatted metadata previews.
+    /// Unlike EnrichMessageWithUrlPreviewsAsync, returns only the metadata (no original text or delimiter).
+    /// </summary>
+    /// <param name="text">Text that may contain URLs to scrape (bio, channel description, story captions, etc.)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Formatted URL preview metadata, or null if no URLs found or all scrapes failed</returns>
+    Task<string?> ScrapeUrlMetadataAsync(string text, CancellationToken cancellationToken = default);
 }

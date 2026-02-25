@@ -132,15 +132,26 @@ public partial class UrlContentScrapingService(
     public async Task<string> EnrichMessageWithUrlPreviewsAsync(string messageText, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(messageText))
-        {
             return messageText;
-        }
 
-        var urls = UrlUtilities.ExtractUrls(messageText);
+        var metadata = await ScrapeUrlMetadataAsync(messageText, cancellationToken);
+        return metadata != null
+            ? messageText + Delimiter + metadata
+            : messageText;
+    }
+
+    /// <summary>
+    /// Scrapes URLs found in the given text and returns formatted metadata previews.
+    /// Returns null if no URLs found or all scrapes failed.
+    /// </summary>
+    public async Task<string?> ScrapeUrlMetadataAsync(string text, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var urls = UrlUtilities.ExtractUrls(text);
         if (urls == null || urls.Count == 0)
-        {
-            return messageText;
-        }
+            return null;
 
         // Configure HTTP client
         _httpClient.Timeout = TimeSpan.FromSeconds(10);
@@ -158,13 +169,9 @@ public partial class UrlContentScrapingService(
         foreach (var (url, preview) in results)
         {
             if (preview == null)
-            {
-                continue; // Skip failed scrapes
-            }
+                continue;
 
             successfulScrapes++;
-
-            // Format preview for this URL - single line with URL
             previewBuilder.AppendLine(url);
 
             // Deduplicate content - collect unique non-empty values
@@ -182,9 +189,6 @@ public partial class UrlContentScrapingService(
             {
                 if (!string.IsNullOrWhiteSpace(content) && seenContent.Add(content))
                 {
-                    // Normalize newlines: collapse multiple consecutive newlines into single newlines
-                    // This preserves line breaks (readability) while preventing blank lines that
-                    // would cause the UI to render separate blocks
                     var normalizedContent = MultipleNewlinesRegex().Replace(content, "\n");
                     previewBuilder.AppendLine(normalizedContent);
                 }
@@ -193,16 +197,14 @@ public partial class UrlContentScrapingService(
             previewBuilder.AppendLine(); // Blank line between URLs
         }
 
-        // Only enrich if we successfully scraped at least one URL
         if (successfulScrapes == 0)
         {
-            logger.LogDebug("No URLs successfully scraped for message with {UrlCount} URLs", urls.Count);
-            return messageText;
+            logger.LogDebug("No URLs successfully scraped from text with {UrlCount} URLs", urls.Count);
+            return null;
         }
 
-        logger.LogDebug("Enriched message with {SuccessCount}/{TotalCount} URL previews", successfulScrapes, urls.Count);
-
-        return messageText + Delimiter + previewBuilder.ToString().TrimEnd();
+        logger.LogDebug("Scraped {SuccessCount}/{TotalCount} URL previews", successfulScrapes, urls.Count);
+        return previewBuilder.ToString().TrimEnd();
     }
 
     /// <summary>
