@@ -605,8 +605,21 @@ public class ReportCallbackService : IReportCallbackService
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
-        // Clear the profile gate and attempt admission
         await using var scope = _scopeFactory.CreateAsyncScope();
+
+        // If user was kicked by welcome timeout, just close the report — nothing to restore
+        var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+        var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
+
+        if (welcomeResponse is { Response: Models.WelcomeResponseType.Timeout })
+        {
+            _logger.LogDebug(
+                "Profile scan Allow for timed-out user {User} — closing report without admission",
+                user.ToLogDebug());
+            return new ReviewActionResult(Success: true, Message: "User already left — alert dismissed", ActionName: "Allow");
+        }
+
+        // Clear the profile gate and attempt admission
         var admissionHandler = scope.ServiceProvider.GetRequiredService<IWelcomeAdmissionHandler>();
 
         var admissionResult = await admissionHandler.TryAdmitUserAsync(
