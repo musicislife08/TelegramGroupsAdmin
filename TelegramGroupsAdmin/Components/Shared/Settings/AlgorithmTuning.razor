@@ -214,14 +214,6 @@
                                     </MudButton>
                                 }
 
-                                <MudButton Variant="Variant.Text"
-                                           Color="Color.Info"
-                                           Size="Size.Small"
-                                           OnClick="@(() => ViewSampleMessages(recommendation))"
-                                           StartIcon="@Icons.Material.Filled.Visibility"
-                                           FullWidth="true">
-                                    View Sample Messages
-                                </MudButton>
                             </MudStack>
                         </MudItem>
                     </MudGrid>
@@ -436,20 +428,6 @@
         finally
         {
             _isRejecting = false;
-        }
-    }
-
-    private void ViewSampleMessages(ThresholdRecommendation recommendation)
-    {
-        if (recommendation.SampleVetoedMessageIds.Count > 0)
-        {
-            // Navigate to messages page with filter for these message IDs
-            var messageId = recommendation.SampleVetoedMessageIds.First();
-            Navigation.NavigateTo($"/messages?detectionId={messageId}");
-        }
-        else
-        {
-            Snackbar.Add("No sample messages available", Severity.Warning);
         }
     }
 

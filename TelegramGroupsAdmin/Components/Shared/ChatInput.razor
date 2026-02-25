@@ -39,26 +39,28 @@
     <div class="chat-input-wrapper">
         @* User/Bot Toggle *@
         <div class="mode-toggle" title="@GetToggleTooltip()">
-            <button class="mode-button @(SendAsUser ? "user-mode" : "bot-mode")"
-                    @onclick="HandleModeToggle"
-                    disabled="@(!CanToggleMode)">
-                @if (SendAsUser)
-                {
-                    @* Person icon — sending as personal account *@
-                    <svg viewBox="0 0 24 24" class="mode-icon">
-                        <path fill="currentColor" d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z" />
-                    </svg>
-                    <span class="mode-label">Me</span>
-                }
-                else
-                {
-                    @* Bot icon — sending as bot with signature *@
-                    <svg viewBox="0 0 24 24" class="mode-icon">
-                        <path fill="currentColor" d="M12 2A10 10 0 0 0 2 12A10 10 0 0 0 12 22A10 10 0 0 0 22 12A10 10 0 0 0 12 2M12 4A8 8 0 0 1 20 12A8 8 0 0 1 12 20A8 8 0 0 1 4 12A8 8 0 0 1 12 4M7.5 14.5L9 16L11 14L13 16L14.5 14.5L12.5 12.5L14.5 10.5L13 9L11 11L9 9L7.5 10.5L9.5 12.5L7.5 14.5Z" />
-                    </svg>
-                    <span class="mode-label">Bot</span>
-                }
-            </button>
+            @if (CheckingUserApi)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="56px" Height="28px"
+                             Class="mode-skeleton" />
+            }
+            else
+            {
+                <button class="mode-button @(SendAsUser ? "user-mode" : "bot-mode")"
+                        @onclick="HandleModeToggle"
+                        disabled="@(!CanToggleMode)">
+                    @if (SendAsUser)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Class="mode-icon" />
+                        <span class="mode-label">Me</span>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Class="mode-icon" />
+                        <span class="mode-label">Bot</span>
+                    }
+                </button>
+            }
         </div>
 
         @* Attach Button (disabled — not yet implemented) *@
@@ -159,6 +161,10 @@
     /// <summary>True when the admin's personal account has access to the selected chat.</summary>
     [Parameter]
     public bool UserApiAvailableForChat { get; set; }
+
+    /// <summary>True while the parent is checking user API availability for the selected chat.</summary>
+    [Parameter]
+    public bool CheckingUserApi { get; set; }
 
     /// <summary>Tooltip explaining why the toggle is disabled (null when available).</summary>
     [Parameter]

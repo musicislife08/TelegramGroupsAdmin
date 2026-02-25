@@ -301,10 +301,11 @@
                             </MudButton>
                         }
 
+                        @* TODO: #358 — Wire up mini messages dialog (per-user message history) *@
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Message"
-                                   OnClick="@ViewMessages"
+                                   Disabled="true"
                                    Size="Size.Small">
                             View Messages
                         </MudButton>
@@ -854,13 +855,6 @@
             return $"{days} day{(days == 1 ? "" : "s")}";
 
         return $"{days} day{(days == 1 ? "" : "s")} {hours} hour{(hours == 1 ? "" : "s")}";
-    }
-
-    private void ViewMessages()
-    {
-        if (_userDetail == null) return;
-        Navigation.NavigateTo($"/messages?userId={_userDetail.User.Id}");
-        MudDialog.Close();
     }
 
     private void Close() => MudDialog.Close();

@@ -326,7 +326,7 @@
 
                             @if (ContentCheck?.IsSpam != true && !IsCurrentUser)
                             {
-                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsSpam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; try { await OnMarkAsSpam.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-danger">
                                         <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
                                         <span>Mark as Spam</span>
@@ -336,7 +336,7 @@
 
                             @if (!IsManuallyMarkedAsHam())
                             {
-                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsHam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; try { await OnMarkAsHam.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-success">
                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
                                         <span>Mark as Ham</span>
@@ -344,21 +344,21 @@
                                 </MudMenuItem>
                             }
 
-                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnDeleteMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; try { await OnDeleteMessage.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-danger">
                                     <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" />
                                     <span>Delete Message</span>
                                 </div>
                             </MudMenuItem>
 
-                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTempBan.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; try { await OnTempBan.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-warning">
                                     <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" />
                                     <span>Temp Ban User</span>
                                 </div>
                             </MudMenuItem>
 
-                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnWarn.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; try { await OnWarn.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-warning">
                                     <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
                                     <span>Warn User</span>
@@ -368,7 +368,7 @@
                             @* Phase 4.20: Manual translation button (for messages that didn't auto-translate) *@
                             @if (Message.Translation == null && !string.IsNullOrWhiteSpace(Message.MessageText))
                             {
-                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTranslateMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; try { await OnTranslateMessage.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item">
                                         <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" />
                                         <span>Translate Message</span>
@@ -426,9 +426,6 @@
     public EventCallback<long> OnViewUserDetail { get; set; }
 
     [Parameter]
-    public EventCallback<long> OnFilterByChat { get; set; }
-
-    [Parameter]
     public EventCallback<MessageRecord> OnDeleteMessage { get; set; }
 
     [Parameter]
@@ -482,7 +479,7 @@
     [Inject]
     private IDialogService DialogService { get; set; } = null!;
 
-    private readonly bool _actionInProgress = false;
+    private bool _actionInProgress;
     private bool _popoverOpen;
     private bool _showTranslation = true; // Phase 4.20: Show translation by default when available
 
@@ -622,7 +619,7 @@
             return (messageText, null);
         }
 
-        var parts = messageText.Split(new[] { delimiter }, 2, StringSplitOptions.None);
+        var parts = messageText.Split([delimiter], 2, StringSplitOptions.None);
         var content = parts[0];
         var previewSection = parts.Length > 1 ? parts[1] : null;
 
@@ -632,7 +629,7 @@
         }
 
         // Parse each URL preview block (separated by double newline)
-        var previewBlocks = previewSection.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var previewBlocks = previewSection.Split(["\n\n"], StringSplitOptions.RemoveEmptyEntries);
         var previews = new List<UrlPreview>();
 
         foreach (var block in previewBlocks)

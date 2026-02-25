@@ -9,9 +9,12 @@ using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
+using WelcomeResponseType = TelegramGroupsAdmin.Telegram.Models.WelcomeResponseType;
 using ReportBase = TelegramGroupsAdmin.Core.Models.ReportBase;
 using ReportStatus = TelegramGroupsAdmin.Core.Models.ReportStatus;
 using ReportType = TelegramGroupsAdmin.Core.Models.ReportType;
@@ -50,6 +53,8 @@ public class ReportCallbackServiceTests
     private IBotDmService _mockDmService = null!;
     private IBotMessageService _mockMessageService = null!;
     private IManagedChatsRepository _mockManagedChatsRepo = null!;
+    private IWelcomeResponsesRepository _mockWelcomeResponsesRepo = null!;
+    private IWelcomeAdmissionHandler _mockWelcomeAdmissionHandler = null!;
 
     private ReportCallbackService _service = null!;
 
@@ -70,6 +75,8 @@ public class ReportCallbackServiceTests
         _mockDmService = Substitute.For<IBotDmService>();
         _mockMessageService = Substitute.For<IBotMessageService>();
         _mockManagedChatsRepo = Substitute.For<IManagedChatsRepository>();
+        _mockWelcomeResponsesRepo = Substitute.For<IWelcomeResponsesRepository>();
+        _mockWelcomeAdmissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
 
         // Wire up scope factory → scope → service provider
         _mockScopeFactory.CreateScope().Returns(_mockScope);
@@ -93,6 +100,15 @@ public class ReportCallbackServiceTests
             .Returns(_mockMessageService);
         _mockServiceProvider.GetService(typeof(IManagedChatsRepository))
             .Returns(_mockManagedChatsRepo);
+        _mockServiceProvider.GetService(typeof(IWelcomeResponsesRepository))
+            .Returns(_mockWelcomeResponsesRepo);
+        _mockServiceProvider.GetService(typeof(IWelcomeAdmissionHandler))
+            .Returns(_mockWelcomeAdmissionHandler);
+
+        // Default: no sibling profile scan alerts (cleanup runs after all report actions)
+        _mockReportsRepo.GetPendingProfileScanAlertsForUserAsync(
+            Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns([]);
 
         _service = new ReportCallbackService(
             _mockLogger,
@@ -1080,6 +1096,177 @@ public class ReportCallbackServiceTests
         await _mockReportsRepo.DidNotReceive().TryUpdateStatusAsync(
             Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
             Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Profile Scan Actions
+
+    [Test]
+    public async Task HandleProfileAllowAsync_UserTimedOut_ClosesReportSilently()
+    {
+        // Arrange
+        var callbackQuery = CreateCallbackQuery(data: "rev:12345:0"); // Action 0 = Allow
+        var profileContext = new ReportCallbackContext(
+            Id: TestContextId,
+            ReportId: TestReportId,
+            ReportType: ReportType.ProfileScanAlert,
+            ChatId: TestChatId,
+            UserId: TestUserId,
+            CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var report = new ReportBase
+        {
+            Id = TestReportId,
+            Type = ReportType.ProfileScanAlert,
+            Chat = new ChatIdentity(TestChatId, "Test Chat"),
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status = ReportStatus.Pending,
+            ReviewedBy = null,
+            ReviewedAt = null,
+            ActionTaken = null,
+            AdminNotes = null,
+            SubjectUserId = TestUserId,
+            MessageId = null
+        };
+
+        var timedOutResponse = new TelegramGroupsAdmin.Telegram.Models.WelcomeResponse(
+            Id: 1L,
+            ChatId: TestChatId,
+            UserId: TestUserId,
+            Username: "testuser",
+            WelcomeMessageId: 42,
+            Response: WelcomeResponseType.Timeout,
+            RespondedAt: DateTimeOffset.UtcNow.AddMinutes(-15),
+            DmSent: false,
+            DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-15),
+            TimeoutJobId: "job123");
+
+        var managedChat = new ManagedChatRecord(
+            Identity: new ChatIdentity(TestChatId, "Test Chat"),
+            ChatType: ManagedChatType.Group,
+            BotStatus: BotChatStatus.Administrator,
+            IsAdmin: true,
+            AddedAt: DateTimeOffset.UtcNow.AddDays(-30),
+            IsActive: true,
+            IsDeleted: false,
+            LastSeenAt: DateTimeOffset.UtcNow,
+            SettingsJson: null,
+            ChatIconPath: null);
+
+        _mockCallbackContextRepo.GetByIdAsync(TestContextId, Arg.Any<CancellationToken>())
+            .Returns(profileContext);
+        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
+        _mockUserRepo.GetByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(CreateTestUser());
+        _mockManagedChatsRepo.GetByChatIdAsync(TestChatId, Arg.Any<CancellationToken>())
+            .Returns(managedChat);
+        _mockWelcomeResponsesRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(timedOutResponse);
+        _mockReportsRepo.TryUpdateStatusAsync(TestReportId, ReportStatus.Reviewed, Arg.Any<string>(),
+            "Allow", "User already left — alert dismissed", Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        await _service.HandleCallbackAsync(callbackQuery);
+
+        // Assert - User timed out, so TryAdmitUserAsync should NOT be called
+        await _mockWelcomeAdmissionHandler.DidNotReceive().TryAdmitUserAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        // Verify the report was marked as reviewed with appropriate message
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(TestReportId, ReportStatus.Reviewed,
+            Arg.Any<string>(), "Allow", "User already left — alert dismissed", Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleProfileAllowAsync_UserNotTimedOut_ProceedsWithAdmission()
+    {
+        // Arrange
+        var callbackQuery = CreateCallbackQuery(data: "rev:12345:0"); // Action 0 = Allow
+        var profileContext = new ReportCallbackContext(
+            Id: TestContextId,
+            ReportId: TestReportId,
+            ReportType: ReportType.ProfileScanAlert,
+            ChatId: TestChatId,
+            UserId: TestUserId,
+            CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var report = new ReportBase
+        {
+            Id = TestReportId,
+            Type = ReportType.ProfileScanAlert,
+            Chat = new ChatIdentity(TestChatId, "Test Chat"),
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status = ReportStatus.Pending,
+            ReviewedBy = null,
+            ReviewedAt = null,
+            ActionTaken = null,
+            AdminNotes = null,
+            SubjectUserId = TestUserId,
+            MessageId = null
+        };
+
+        var pendingResponse = new TelegramGroupsAdmin.Telegram.Models.WelcomeResponse(
+            Id: 1L,
+            ChatId: TestChatId,
+            UserId: TestUserId,
+            Username: "testuser",
+            WelcomeMessageId: 42,
+            Response: WelcomeResponseType.Pending,
+            RespondedAt: DateTimeOffset.UtcNow.AddMinutes(-15),
+            DmSent: false,
+            DmFallback: false,
+            CreatedAt: DateTimeOffset.UtcNow.AddMinutes(-15),
+            TimeoutJobId: null);
+
+        var managedChat2 = new ManagedChatRecord(
+            Identity: new ChatIdentity(TestChatId, "Test Chat"),
+            ChatType: ManagedChatType.Group,
+            BotStatus: BotChatStatus.Administrator,
+            IsAdmin: true,
+            AddedAt: DateTimeOffset.UtcNow.AddDays(-30),
+            IsActive: true,
+            IsDeleted: false,
+            LastSeenAt: DateTimeOffset.UtcNow,
+            SettingsJson: null,
+            ChatIconPath: null);
+
+        _mockCallbackContextRepo.GetByIdAsync(TestContextId, Arg.Any<CancellationToken>())
+            .Returns(profileContext);
+        _mockReportsRepo.GetByIdAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
+        _mockUserRepo.GetByTelegramIdAsync(TestUserId, Arg.Any<CancellationToken>())
+            .Returns(CreateTestUser());
+        _mockManagedChatsRepo.GetByChatIdAsync(TestChatId, Arg.Any<CancellationToken>())
+            .Returns(managedChat2);
+        _mockWelcomeResponsesRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns(pendingResponse);
+        _mockWelcomeAdmissionHandler.TryAdmitUserAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.Admitted);
+        _mockReportsRepo.TryUpdateStatusAsync(TestReportId, ReportStatus.Reviewed, Arg.Any<string>(),
+            "Allow", "User allowed — permissions restored", Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        await _service.HandleCallbackAsync(callbackQuery);
+
+        // Assert - User not timed out, so TryAdmitUserAsync SHOULD be called
+        await _mockWelcomeAdmissionHandler.Received(1).TryAdmitUserAsync(
+            Arg.Is<UserIdentity>(u => u.Id == TestUserId),
+            Arg.Is<ChatIdentity>(c => c.Id == TestChatId),
+            Arg.Any<Actor>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+
+        // Verify the report was marked as reviewed with appropriate message
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(TestReportId, ReportStatus.Reviewed,
+            Arg.Any<string>(), "Allow", "User allowed — permissions restored", Arg.Any<CancellationToken>());
     }
 
     #endregion

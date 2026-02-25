@@ -1,7 +1,7 @@
 @* Chat list sidebar - Telegram Desktop style *@
 
 <div class="chat-list">
-    @if (Chats == null || !Chats.Any())
+    @if (Chats is not { Count: > 0 })
     {
         <div class="chat-list-empty">
             <div class="empty-icon">

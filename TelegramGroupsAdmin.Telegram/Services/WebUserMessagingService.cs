@@ -36,7 +36,7 @@ public class WebUserMessagingService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to check user API availability for {User}", webUser.ToLogDebug());
-            return new WebUserFeatureAvailability(false, $"Error: {ex.Message}");
+            return new WebUserFeatureAvailability(false, "An unexpected error occurred. Please try again.");
         }
     }
 
@@ -75,7 +75,7 @@ public class WebUserMessagingService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to check chat availability for {User} in chat {ChatId}", webUser.ToLogDebug(), chatId);
-            return new WebUserChatAvailability(false, $"Error: {ex.Message}");
+            return new WebUserChatAvailability(false, "An unexpected error occurred. Please try again.");
         }
     }
 
@@ -131,7 +131,7 @@ public class WebUserMessagingService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to send user message for {User} in chat {ChatId}", webUser.ToLogDebug(), chatId);
-            return new WebUserMessageResult(false, ex.Message);
+            return new WebUserMessageResult(false, "An unexpected error occurred. Please try again.");
         }
     }
 
@@ -156,7 +156,13 @@ public class WebUserMessagingService(
 
             var peer = client.GetInputPeerForChat(chatId);
             if (peer is null)
-                return new WebUserMessageResult(false, "You're not a member of this group");
+            {
+                // Try refreshing cache once (matching SendMessageAsync pattern)
+                await client.WarmPeerCacheAsync();
+                peer = client.GetInputPeerForChat(chatId);
+                if (peer is null)
+                    return new WebUserMessageResult(false, "You're not a member of this group");
+            }
 
             await client.Messages_EditMessage(peer, messageId, text);
 
@@ -180,7 +186,7 @@ public class WebUserMessagingService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to edit user message {MessageId} for {User}", messageId, webUser.ToLogDebug());
-            return new WebUserMessageResult(false, ex.Message);
+            return new WebUserMessageResult(false, "An unexpected error occurred. Please try again.");
         }
     }
 }

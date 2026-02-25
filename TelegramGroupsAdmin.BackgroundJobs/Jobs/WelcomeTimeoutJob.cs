@@ -23,17 +23,13 @@ public class WelcomeTimeoutJob(
     IBotModerationService moderationService,
     IBotMessageService messageService) : IJob
 {
-    private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly IBotModerationService _moderationService = moderationService;
-    private readonly IBotMessageService _messageService = messageService;
 
     /// <summary>
     /// Quartz.NET entry point - extracts payload and delegates to ExecuteAsync
     /// </summary>
     public async Task Execute(IJobExecutionContext context)
     {
-        var payload = await JobPayloadHelper.TryGetPayloadAsync<WelcomeTimeoutPayload>(context, _logger);
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<WelcomeTimeoutPayload>(context, logger);
         if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
@@ -51,13 +47,13 @@ public class WelcomeTimeoutJob(
 
         try
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Processing welcome timeout for {User} in {Chat}",
                 payload.User.DisplayName,
                 payload.Chat.DisplayName);
 
             // Check if user has responded
-            await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
+            await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
             var response = await dbContext.WelcomeResponses
                 .Where(r => r.ChatId == payload.Chat.Id
                     && r.UserId == payload.User.Id
@@ -66,14 +62,14 @@ public class WelcomeTimeoutJob(
 
             if (response == null || (int)response.Response != (int)Data.Models.WelcomeResponseType.Pending)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "User {User} already responded to welcome in {Chat}, skipping timeout",
                     payload.User.DisplayName,
                     payload.Chat.DisplayName);
                 return;
             }
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Welcome timeout: {User} did not respond in {Chat}",
                 payload.User.DisplayName,
                 payload.Chat.DisplayName);
@@ -81,7 +77,7 @@ public class WelcomeTimeoutJob(
             // Kick user for timeout
             try
             {
-                await _moderationService.KickUserFromChatAsync(
+                await moderationService.KickUserFromChatAsync(
                     new KickIntent
                     {
                         User = payload.User,
@@ -91,14 +87,14 @@ public class WelcomeTimeoutJob(
                     },
                     cancellationToken);
 
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Kicked {User} from {Chat} due to welcome timeout",
                     payload.User.DisplayName,
                     payload.Chat.DisplayName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(
+                logger.LogError(
                     ex,
                     "Failed to kick {User} from {Chat}",
                     payload.User.DisplayName,
@@ -109,7 +105,7 @@ public class WelcomeTimeoutJob(
             // Delete welcome message
             try
             {
-                await _messageService.DeleteAndMarkMessageAsync(
+                await messageService.DeleteAndMarkMessageAsync(
                     chatId: payload.Chat.Id,
                     messageId: payload.WelcomeMessageId,
                     deletionSource: "welcome_timeout",
@@ -117,7 +113,7 @@ public class WelcomeTimeoutJob(
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     ex,
                     "Failed to delete welcome message {MessageId} in chat {ChatId}",
                     payload.WelcomeMessageId,
@@ -129,7 +125,7 @@ public class WelcomeTimeoutJob(
             response.RespondedAt = DateTimeOffset.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Recorded welcome timeout for {User} in {Chat}",
                 payload.User.DisplayName,
                 payload.Chat.DisplayName);
@@ -138,7 +134,7 @@ public class WelcomeTimeoutJob(
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            logger.LogError(
                 ex,
                 "Failed to process welcome timeout for {User} in chat {ChatId}",
                 payload?.User.DisplayName,
