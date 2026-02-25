@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Repositories;
@@ -17,47 +16,16 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 /// We bridge this to the web UI using TaskCompletionSource — the callback awaits
 /// a TCS that gets resolved when the user submits code/password via the UI.
 ///
-/// Auth contexts are stored in a static ConcurrentDictionary because the flow spans
+/// Auth contexts are stored in an IAuthFlowStore singleton because the flow spans
 /// multiple HTTP requests (phone submit → code submit → optional 2FA submit) and
 /// the service is scoped per request.
 /// </summary>
 public sealed class TelegramAuthService(
     IServiceScopeFactory scopeFactory,
     IWTelegramClientFactory clientFactory,
+    IAuthFlowStore flowStore,
     ILogger<TelegramAuthService> logger) : ITelegramAuthService
 {
-    // Static: auth flows span multiple scoped service lifetimes
-    private static readonly ConcurrentDictionary<string, AuthFlowContext> ActiveFlows = new();
-
-    private sealed class AuthFlowContext : IAsyncDisposable
-    {
-        public required IWTelegramApiClient Client { get; init; }
-        public required string PhoneNumber { get; init; }
-        public required Actor Executor { get; init; }
-
-        // Cross-thread synchronization (ARM64 memory visibility)
-        public readonly Lock Lock = new();
-        public TaskCompletionSource<string>? PendingInput { get; set; }
-        public AuthStep CurrentStep { get; set; } = AuthStep.CodeSent;
-        public Task? LoginTask { get; set; }
-        public string? ErrorMessage { get; set; }
-        public byte[] SessionData { get; set; } = [];
-
-        /// <summary>Signal fired when the background login flow changes state (needs input, completes, fails).</summary>
-        public TaskCompletionSource StepSignal { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        /// <summary>Auto-cancel after 5 minutes to prevent abandoned flows from leaking resources.</summary>
-        public CancellationTokenSource FlowTimeout { get; } = new(TimeSpan.FromMinutes(5));
-
-        public async ValueTask DisposeAsync()
-        {
-            PendingInput?.TrySetCanceled();
-            FlowTimeout.Dispose();
-            try { await Client.DisposeAsync(); }
-            catch { /* best-effort */ }
-        }
-    }
-
     public async Task<AuthFlowState> StartAuthAsync(string webUserId, string phoneNumber, Actor executor, CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -78,7 +46,7 @@ public sealed class TelegramAuthService(
             Executor = executor
         };
 
-        if (!ActiveFlows.TryAdd(webUserId, context))
+        if (!flowStore.TryAdd(webUserId, context))
         {
             await context.DisposeAsync();
             return new AuthFlowState(AuthStep.Failed, "An authentication flow is already in progress.");
@@ -163,7 +131,7 @@ public sealed class TelegramAuthService(
 
         if (step == AuthStep.Failed)
         {
-            ActiveFlows.TryRemove(webUserId, out _);
+            flowStore.TryRemove(webUserId, out _);
             await context.DisposeAsync();
             return new AuthFlowState(AuthStep.Failed, error);
         }
@@ -173,7 +141,7 @@ public sealed class TelegramAuthService(
 
     public async Task<AuthFlowState> SubmitCodeAsync(string webUserId, string code, CancellationToken ct)
     {
-        if (!ActiveFlows.TryGetValue(webUserId, out var context))
+        if (!flowStore.TryGetValue(webUserId, out var context))
             return new AuthFlowState(AuthStep.Failed, "No authentication flow in progress.");
 
         TaskCompletionSource<string>? tcs;
@@ -196,7 +164,7 @@ public sealed class TelegramAuthService(
 
     public async Task<AuthFlowState> Submit2FAAsync(string webUserId, string password, CancellationToken ct)
     {
-        if (!ActiveFlows.TryGetValue(webUserId, out var context))
+        if (!flowStore.TryGetValue(webUserId, out var context))
             return new AuthFlowState(AuthStep.Failed, "No authentication flow in progress.");
 
         TaskCompletionSource<string>? tcs;
@@ -217,7 +185,7 @@ public sealed class TelegramAuthService(
 
     public async Task CancelAuthAsync(string webUserId)
     {
-        if (ActiveFlows.TryRemove(webUserId, out var context))
+        if (flowStore.TryRemove(webUserId, out var context))
         {
             await context.DisposeAsync();
             logger.LogInformation("Cancelled WTelegram auth flow for web user {WebUserId}", webUserId);
@@ -260,7 +228,7 @@ public sealed class TelegramAuthService(
                 return new AuthFlowState(AuthStep.Requires2FA);
 
             case AuthStep.Failed:
-                ActiveFlows.TryRemove(webUserId, out _);
+                flowStore.TryRemove(webUserId, out _);
                 await context.DisposeAsync();
                 return new AuthFlowState(AuthStep.Failed, error);
 
@@ -271,7 +239,7 @@ public sealed class TelegramAuthService(
 
     private async Task FinalizeConnectionAsync(string webUserId, AuthFlowContext context, CancellationToken ct)
     {
-        ActiveFlows.TryRemove(webUserId, out _);
+        flowStore.TryRemove(webUserId, out _);
 
         var telegramUser = context.Client.User;
         var telegramUserId = context.Client.UserId;
@@ -376,7 +344,7 @@ public sealed class TelegramAuthService(
 
     private string WaitForUserInput(string webUserId, AuthStep step)
     {
-        if (!ActiveFlows.TryGetValue(webUserId, out var context))
+        if (!flowStore.TryGetValue(webUserId, out var context))
             throw new OperationCanceledException("Auth flow was cancelled.");
 
         TaskCompletionSource<string> tcs;
@@ -406,7 +374,7 @@ public sealed class TelegramAuthService(
 
     private void CaptureSessionData(string webUserId, byte[] data)
     {
-        if (ActiveFlows.TryGetValue(webUserId, out var context))
+        if (flowStore.TryGetValue(webUserId, out var context))
         {
             using (context.Lock.EnterScope())
                 context.SessionData = data;

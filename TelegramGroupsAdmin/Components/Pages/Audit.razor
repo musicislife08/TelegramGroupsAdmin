@@ -49,31 +49,31 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudSelect T="string?"
+                <MudSelect T="string"
                           Label="Actor (Who)"
                           Value="_filterActorUserId"
                           ValueChanged="OnActorFilterChanged"
                           Clearable="true"
                           AnchorOrigin="Origin.BottomCenter">
-                    <MudSelectItem T="string?" Value="null">All Actors</MudSelectItem>
+                    <MudSelectItem T="string" Value="null">All Actors</MudSelectItem>
                     @foreach (var user in _users)
                     {
-                        <MudSelectItem T="string?" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
+                        <MudSelectItem T="string" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
                     }
-                    <MudSelectItem T="string?" Value="@("SYSTEM")">SYSTEM</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("SYSTEM")">SYSTEM</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudSelect T="string?"
+                <MudSelect T="string"
                           Label="Target User"
                           Value="_filterTargetUserId"
                           ValueChanged="OnTargetFilterChanged"
                           Clearable="true"
                           AnchorOrigin="Origin.BottomCenter">
-                    <MudSelectItem T="string?" Value="null">All Targets</MudSelectItem>
+                    <MudSelectItem T="string" Value="null">All Targets</MudSelectItem>
                     @foreach (var user in _users)
                     {
-                        <MudSelectItem T="string?" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
+                        <MudSelectItem T="string" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>

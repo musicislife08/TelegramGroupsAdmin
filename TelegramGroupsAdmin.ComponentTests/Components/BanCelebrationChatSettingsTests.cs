@@ -123,7 +123,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     }
 
     [Test]
-    public async Task EnableToggle_DefaultsToDisabled()
+    public void EnableToggle_DefaultsToDisabled()
     {
         // Arrange
         ConfigService.GetAsync<BanCelebrationConfig>(
@@ -132,10 +132,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
 
         // Act
         var cut = RenderComponent();
-
-        // Wait for async load
-        await Task.Delay(50);
-        cut.Render();
+        cut.WaitForState(() => cut.Markup.Length > 0);
 
         // Assert - Trigger options should not be visible when disabled
         Assert.That(cut.Markup, Does.Not.Contain("Trigger on auto-ban"));

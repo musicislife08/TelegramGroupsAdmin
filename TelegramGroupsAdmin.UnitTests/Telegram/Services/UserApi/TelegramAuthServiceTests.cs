@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using TL;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
@@ -16,9 +15,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.UserApi;
 /// Unit tests for TelegramAuthService.
 ///
 /// Testing strategy:
-/// - TelegramAuthService.ActiveFlows is a static ConcurrentDictionary that persists across
-///   scoped service instances. Tests use unique per-test user IDs and call CancelAuthAsync
-///   in TearDown to prevent cross-test contamination.
+/// - IAuthFlowStore is mocked to control flow existence without timing hacks.
 /// - All external dependencies mocked with NSubstitute.
 /// - IServiceScopeFactory chain configured via SetupScope() helper.
 /// - Auth flow background tasks (LoginUserIfNeeded) are not exercised in unit tests because
@@ -28,12 +25,11 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.UserApi;
 [TestFixture]
 public class TelegramAuthServiceTests
 {
-    // Use a per-test unique user ID to prevent static ActiveFlows contamination.
-    // Each test gets its own ID derived from a Guid so parallel test runs don't collide.
     private string _testWebUserId = null!;
 
     private IServiceScopeFactory _mockScopeFactory = null!;
     private IWTelegramClientFactory _mockClientFactory = null!;
+    private IAuthFlowStore _mockFlowStore = null!;
     private ILogger<TelegramAuthService> _mockLogger = null!;
     private ITelegramSessionRepository _mockSessionRepo = null!;
     private ISystemConfigRepository _mockConfigRepo = null!;
@@ -49,19 +45,18 @@ public class TelegramAuthServiceTests
 
         _mockScopeFactory = Substitute.For<IServiceScopeFactory>();
         _mockClientFactory = Substitute.For<IWTelegramClientFactory>();
+        _mockFlowStore = Substitute.For<IAuthFlowStore>();
         _mockLogger = Substitute.For<ILogger<TelegramAuthService>>();
         _mockSessionRepo = Substitute.For<ITelegramSessionRepository>();
         _mockConfigRepo = Substitute.For<ISystemConfigRepository>();
         _mockAuditService = Substitute.For<IAuditService>();
 
-        _sut = new TelegramAuthService(_mockScopeFactory, _mockClientFactory, _mockLogger);
-    }
+        // Default: TryAdd succeeds, TryGetValue returns false (no existing flow)
+        _mockFlowStore.TryAdd(Arg.Any<string>(), Arg.Any<AuthFlowContext>()).Returns(true);
+        _mockFlowStore.TryGetValue(Arg.Any<string>(), out Arg.Any<AuthFlowContext?>()).Returns(false);
+        _mockFlowStore.TryRemove(Arg.Any<string>(), out Arg.Any<AuthFlowContext?>()).Returns(false);
 
-    [TearDown]
-    public async Task TearDown()
-    {
-        // Clean up any auth flow left in the static dictionary to prevent test contamination.
-        await _sut.CancelAuthAsync(_testWebUserId);
+        _sut = new TelegramAuthService(_mockScopeFactory, _mockClientFactory, _mockFlowStore, _mockLogger);
     }
 
     /// <summary>
@@ -106,66 +101,17 @@ public class TelegramAuthServiceTests
     [Test]
     public async Task StartAuthAsync_AlreadyInProgress_ReturnsFailed()
     {
-        // Arrange — prime the static dictionary with a fake flow context by calling StartAuthAsync
-        // with credentials that pass the gate but whose client blocks indefinitely on login.
+        // Arrange — flow store rejects TryAdd (flow already exists for this user)
         SetupScope();
         _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
             .Returns(new UserApiConfig { ApiId = 12345 });
         _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
             .Returns("test-api-hash");
 
-        // Client whose LoginUserIfNeeded never completes — keeps the flow alive
-        var blockingClient = Substitute.For<IWTelegramApiClient>();
-        var neverComplete = new TaskCompletionSource<TL.User>();
-        blockingClient.LoginUserIfNeeded(Arg.Any<TL.CodeSettings?>(), Arg.Any<bool>())
-            .Returns(neverComplete.Task);
+        _mockFlowStore.TryAdd(Arg.Any<string>(), Arg.Any<AuthFlowContext>()).Returns(false);
 
-        _mockClientFactory.Create(
-                Arg.Any<Func<string, string?>>(),
-                Arg.Any<byte[]>(),
-                Arg.Any<Action<byte[]>>())
-            .Returns(blockingClient);
-
-        // First call starts the flow (will be in CodeSent step after the delay).
-        // We use a short-circuit: StartAuthAsync takes real 2s delay internally.
-        // To avoid slow tests, we instead directly verify the second call is rejected
-        // by injecting a pre-existing flow via CancelAuthAsync NOT being called first.
-        //
-        // We simulate the second call to an already-in-progress flow by calling StartAuthAsync
-        // a second time (the first call will linger due to the blocking client).
-        // However, StartAuthAsync itself delays 2 seconds — so we test only the error path
-        // by calling StartAuthAsync twice with credentials that fail the gate the second time.
-        //
-        // Alternative: set up two separate service instances sharing the same static dictionary.
-        // Because ActiveFlows is static, a second TelegramAuthService instance shares the same dict.
-        var secondSut = new TelegramAuthService(_mockScopeFactory, _mockClientFactory, _mockLogger);
-
-        // Start first flow — credentials pass, client blocks; flow enters CodeSent
-        // (we can't easily wait for CodeSent without the real 2s delay, so instead
-        //  we inject into the dict directly through the second call path).
-        //
-        // The simplest approach: call StartAuthAsync once with no-credentials on secondSut
-        // to confirm it returns Failed("already in progress") AFTER we manually add a flow.
-        //
-        // Because we can't directly insert into the private static dict, we rely on the fact that
-        // two TelegramAuthService instances share the same static ConcurrentDictionary.
-        // We configure sut1 to reach the TryAdd step and start background work, then immediately
-        // call secondSut.StartAuthAsync to hit the ContainsKey guard.
-        //
-        // To avoid the 2s Task.Delay in the first call, wrap the first call without awaiting it
-        // and cancel it quickly.
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-        // We don't await — let it run in background to insert into ActiveFlows
-        var firstCall = _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, cts.Token);
-
-        // Give just enough time for the ContainsKey/TryAdd path to execute
-        await Task.Delay(50);
-
-        // Now call with the second service instance sharing the same static dict
-        var result = await secondSut.StartAuthAsync(_testWebUserId, "+9999999999", _testExecutor, CancellationToken.None);
-
-        // Await the first call to avoid unobserved task exceptions
-        try { await firstCall; } catch { /* expected: task cancelled or delay interrupted */ }
+        // Act — single synchronous call, no timing needed
+        var result = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, CancellationToken.None);
 
         // Assert
         Assert.That(result.Step, Is.EqualTo(AuthStep.Failed));
@@ -179,46 +125,41 @@ public class TelegramAuthServiceTests
     [Test]
     public async Task CancelAuthAsync_RemovesActiveFlow()
     {
-        // Arrange — simulate an in-progress flow by starting one with blocking client
-        SetupScope();
-        _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(new UserApiConfig { ApiId = 12345 });
-        _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
-            .Returns("test-api-hash");
+        // Arrange — flow store has an active flow that will be removed
+        var mockClient = Substitute.For<IWTelegramApiClient>();
+        AuthFlowContext? removedContext = null;
+        _mockFlowStore.TryRemove(_testWebUserId, out Arg.Any<AuthFlowContext?>())
+            .Returns(x =>
+            {
+                // Simulate having a context to dispose
+                x[1] = new AuthFlowContext
+                {
+                    Client = mockClient,
+                    PhoneNumber = "+1234567890",
+                    Executor = _testExecutor
+                };
+                return true;
+            });
 
-        var blockingClient = Substitute.For<IWTelegramApiClient>();
-        var neverComplete = new TaskCompletionSource<TL.User>();
-        blockingClient.LoginUserIfNeeded(Arg.Any<TL.CodeSettings?>(), Arg.Any<bool>())
-            .Returns(neverComplete.Task);
-        _mockClientFactory.Create(
-                Arg.Any<Func<string, string?>>(),
-                Arg.Any<byte[]>(),
-                Arg.Any<Action<byte[]>>())
-            .Returns(blockingClient);
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-        var startTask = _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, cts.Token);
-
-        // Brief pause to let TryAdd execute
-        await Task.Delay(20);
-
-        // Act — cancel before TearDown to verify the explicit cancel path
+        // Act
         await _sut.CancelAuthAsync(_testWebUserId);
 
-        try { await startTask; } catch { /* ignore */ }
+        // Assert — TryRemove was called and client was disposed
+        _mockFlowStore.Received(1).TryRemove(_testWebUserId, out Arg.Any<AuthFlowContext?>());
+        await mockClient.Received(1).DisposeAsync();
+    }
 
-        // Assert — a subsequent StartAuthAsync for the same user should not hit the "already in progress" guard.
-        // We verify by checking that the dictionary no longer blocks a new flow.
-        // Configure a second flow that will immediately fail on credentials.
-        _mockConfigRepo.GetUserApiConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(new UserApiConfig { ApiId = 0 });
-        _mockConfigRepo.GetUserApiHashAsync(Arg.Any<CancellationToken>())
-            .Returns((string?)null);
-        var secondStart = await _sut.StartAuthAsync(_testWebUserId, "+1234567890", _testExecutor, CancellationToken.None);
+    [Test]
+    public async Task CancelAuthAsync_NoFlow_DoesNothing()
+    {
+        // Arrange — no flow exists
+        _mockFlowStore.TryRemove(_testWebUserId, out Arg.Any<AuthFlowContext?>()).Returns(false);
 
-        // If CancelAuthAsync worked, the second call should return "No credentials" failure,
-        // NOT "already in progress" failure.
-        Assert.That(secondStart.ErrorMessage, Does.Not.Contain("already in progress"));
+        // Act
+        await _sut.CancelAuthAsync(_testWebUserId);
+
+        // Assert — TryRemove was called but nothing else happened
+        _mockFlowStore.Received(1).TryRemove(_testWebUserId, out Arg.Any<AuthFlowContext?>());
     }
 
     #endregion

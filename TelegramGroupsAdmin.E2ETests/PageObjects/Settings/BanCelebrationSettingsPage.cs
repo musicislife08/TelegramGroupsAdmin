@@ -126,6 +126,14 @@ public class BanCelebrationSettingsPage
     }
 
     /// <summary>
+    /// Asserts that the dialog is visible using Playwright's auto-retrying Expect API.
+    /// </summary>
+    public async Task ExpectDialogVisibleAsync()
+    {
+        await Expect(_page.Locator(Dialog)).ToBeVisibleAsync();
+    }
+
+    /// <summary>
     /// Gets the dialog title text.
     /// </summary>
     public async Task<string?> GetDialogTitleAsync()
