@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using TelegramGroupsAdmin.Data.Services;
 
 namespace TelegramGroupsAdmin.Data.Extensions;
@@ -8,39 +9,21 @@ namespace TelegramGroupsAdmin.Data.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds all data layer services: Dapper (BackupService only), EF Core
+    /// Adds all data layer services: single NpgsqlDataSource pool shared by EF Core and raw ADO.NET
     /// </summary>
     public static IServiceCollection AddDataServices(this IServiceCollection services, string connectionString)
     {
-        // Npgsql data source for backup service (raw ADO.NET - Dapper can't handle complex JSONB types)
+        // Single NpgsqlDataSource — the ONE connection pool for all app database access.
+        // EF Core (via pooled factory) and raw ADO.NET services (BackupService, etc.) share this pool.
+        // Quartz.NET is the only consumer with its own separate pool (API limitation).
         services.AddNpgsqlDataSource(connectionString);
 
-        // EF Core DbContext with pooling (scoped lifetime, automatically disposed)
-        // Using AddDbContext instead of manual factory ensures proper disposal
-        // Default tracking behavior - use .AsNoTracking() explicitly for read-only queries
-        services.AddDbContext<AppDbContext>(
-            options => options
-                .UseNpgsql(connectionString, npgsqlOptions =>
-                {
-                    // Enable connection resiliency (automatic retry on transient failures)
-                    // Max 6 retries with up to 30 seconds delay between attempts
-                    npgsqlOptions.EnableRetryOnFailure(
-                        maxRetryCount: 6,
-                        maxRetryDelay: TimeSpan.FromSeconds(30),
-                        errorCodesToAdd: null);
-                })
-                .ConfigureWarnings(w => w
-                    .Ignore(RelationalEventId.PendingModelChangesWarning)
-                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning)), // Quartz.NET internal queries
-            contextLifetime: ServiceLifetime.Scoped,
-            optionsLifetime: ServiceLifetime.Singleton);
-
-        // Also register factory for scenarios that need explicit context creation (background services)
-        services.AddPooledDbContextFactory<AppDbContext>(options =>
+        // Pooled DbContext factory — background services and scoped contexts share this.
+        // Uses the registered NpgsqlDataSource (resolved from DI) so all connections come from one pool.
+        services.AddPooledDbContextFactory<AppDbContext>((sp, options) =>
             options
-                .UseNpgsql(connectionString, npgsqlOptions =>
+                .UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>(), npgsqlOptions =>
                 {
-                    // Enable connection resiliency (automatic retry on transient failures)
                     npgsqlOptions.EnableRetryOnFailure(
                         maxRetryCount: 6,
                         maxRetryDelay: TimeSpan.FromSeconds(30),
@@ -48,7 +31,12 @@ public static class ServiceCollectionExtensions
                 })
                 .ConfigureWarnings(w => w
                     .Ignore(RelationalEventId.PendingModelChangesWarning)
-                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning))); // Quartz.NET internal queries
+                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning)));
+
+        // Scoped DbContext derived from the pooled factory — for repositories, Blazor components, etc.
+        // DI container calls Dispose() at end of scope, which returns context to the pool.
+        services.AddScoped(sp =>
+            sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
         // Migration history compaction service (runs before EF Core migrations)
         services.AddScoped<IMigrationHistoryCompactionService, MigrationHistoryCompactionService>();
