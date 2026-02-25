@@ -206,7 +206,7 @@
     private string? _linkedUsername; // User's linked Telegram username (for calculating signature length)
     private string? _featureUnavailableReason; // Reason why feature is unavailable (for placeholder text)
     private long? _isEditingMessageId; // Message currently being edited
-    private long? _replyToMessageId; // Message being replied to
+    private int? _replyToMessageId; // Message being replied to (Telegram message IDs are always int)
     private string? _editingOriginalText; // Original text of message being edited
 
     private long? _highlightMessageId; // Message to scroll to and highlight
@@ -1707,7 +1707,7 @@
     /// </summary>
     private void HandleReplyToClick(long messageId)
     {
-        _replyToMessageId = messageId;
+        _replyToMessageId = (int)messageId; // Safe: Telegram message IDs are always int-range (#214)
         StateHasChanged();
 
         Logger.LogDebug("Started reply to message {MessageId}", messageId);

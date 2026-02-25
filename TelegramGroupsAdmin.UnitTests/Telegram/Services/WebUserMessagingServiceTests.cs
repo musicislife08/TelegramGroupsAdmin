@@ -413,14 +413,14 @@ public class WebUserMessagingServiceTests
     public async Task SendMessageAsync_WithReplyToMessageId_PassesReplyToIdToClient()
     {
         // Arrange
-        const long replyToId = 555L;
+        const int replyToId = 555;
         var peer = MakePeer();
         _mockSessionManager
             .GetClientAsync(TestWebUserId, Arg.Any<CancellationToken>())
             .Returns(_mockClient);
         _mockClient.GetInputPeerForChat(TestChatId).Returns(peer);
         _mockClient
-            .SendMessageAsync(peer, "Reply text", (int)replyToId)
+            .SendMessageAsync(peer, "Reply text", replyToId)
             .Returns(new TL.Message { id = 303 });
 
         // Act
@@ -429,7 +429,7 @@ public class WebUserMessagingServiceTests
         // Assert
         using var _ = Assert.EnterMultipleScope();
         Assert.That(result.Success, Is.True);
-        await _mockClient.Received(1).SendMessageAsync(peer, "Reply text", (int)replyToId);
+        await _mockClient.Received(1).SendMessageAsync(peer, "Reply text", replyToId);
     }
 
     [Test]

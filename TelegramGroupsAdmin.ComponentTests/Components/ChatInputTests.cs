@@ -258,7 +258,7 @@ public class ChatInputTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ChatInput>(p => p
-            .Add(x => x.ReplyToMessageId, 12345L)
+            .Add(x => x.ReplyToMessageId, 12345)
             .Add(x => x.ReplyToUser, "TestUser")
             .Add(x => x.ReplyToText, "Original message"));
 
@@ -272,7 +272,7 @@ public class ChatInputTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ChatInput>(p => p
-            .Add(x => x.ReplyToMessageId, 12345L)
+            .Add(x => x.ReplyToMessageId, 12345)
             .Add(x => x.ReplyToUser, "TestUser")
             .Add(x => x.ReplyToText, "Original message"));
 

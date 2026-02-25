@@ -163,14 +163,12 @@ public sealed class WTelegramApiClient(Client client, ILogger<WTelegramApiClient
     // PEER CACHE
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private readonly ConcurrentDictionary<long, ChatBase> _chats = new();
+    private volatile Dictionary<long, ChatBase> _chats = new();
 
     public async Task WarmPeerCacheAsync()
     {
         var result = await Messages_GetAllChats();
-        _chats.Clear();
-        foreach (var kvp in result.chats)
-            _chats.TryAdd(kvp.Key, kvp.Value);
+        _chats = new Dictionary<long, ChatBase>(result.chats);
         logger.LogInformation("Warmed peer cache with {Count} chats", _chats.Count);
     }
 

@@ -83,7 +83,7 @@ public class WebUserMessagingService(
         WebUserIdentity webUser,
         long chatId,
         string text,
-        long? replyToMessageId = null,
+        int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -108,7 +108,7 @@ public class WebUserMessagingService(
                     return new WebUserMessageResult(false, "You're not a member of this group");
             }
 
-            var replyTo = replyToMessageId.HasValue ? (int)replyToMessageId.Value : 0;
+            var replyTo = replyToMessageId ?? 0;
             var sentMessage = await client.SendMessageAsync(peer, text, replyTo);
 
             logger.LogDebug(
