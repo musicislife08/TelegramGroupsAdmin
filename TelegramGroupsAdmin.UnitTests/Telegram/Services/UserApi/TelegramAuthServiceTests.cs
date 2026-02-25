@@ -127,7 +127,6 @@ public class TelegramAuthServiceTests
     {
         // Arrange — flow store has an active flow that will be removed
         var mockClient = Substitute.For<IWTelegramApiClient>();
-        AuthFlowContext? removedContext = null;
         _mockFlowStore.TryRemove(_testWebUserId, out Arg.Any<AuthFlowContext?>())
             .Returns(x =>
             {

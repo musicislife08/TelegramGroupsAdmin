@@ -132,7 +132,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
 
         // Act
         var cut = RenderComponent();
-        cut.WaitForState(() => cut.Markup.Length > 0);
+        cut.WaitForState(() => cut.Markup.Contains("mud-switch"));
 
         // Assert - Trigger options should not be visible when disabled
         Assert.That(cut.Markup, Does.Not.Contain("Trigger on auto-ban"));
