@@ -169,9 +169,8 @@ public class BayesContentCheckV2(
         try
         {
             // Load training data using IMLTrainingDataRepository (shares logic with ML.NET classifier)
-            var labeledMessageIds = await trainingDataRepository.GetLabeledMessageIdsAsync(cancellationToken);
-            var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
-            var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
+            var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(cancellationToken);
+            var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, cancellationToken);
 
             if (spamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass || hamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass)
             {

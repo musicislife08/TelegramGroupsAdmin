@@ -395,7 +395,7 @@
 
                     // Load metadata for this message
                     int[] messageIds = [targetMessageId];
-                    var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+                    var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
                     var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
 
                     foreach (var kvp in contentChecks)
@@ -458,7 +458,7 @@
 
                 // Load spam check for this new message if it exists
                 int[] messageIds = [message.MessageId];
-                var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+                var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
                 foreach (var kvp in newContentChecks)
                 {
                     _contentChecks[kvp.Key] = kvp.Value;
@@ -808,7 +808,7 @@
         else
         {
             var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
-            var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+            var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
             await Task.WhenAll(editCountsTask, contentChecksTask);
 
             var editCounts = await editCountsTask;

@@ -1380,7 +1380,8 @@ public class MessageHistoryRepositoryTests
         var messageIds = messages.Select(m => m.MessageId).ToList();
 
         // Act
-        var contentChecks = await _queryService.GetContentChecksForMessagesAsync(messageIds);
+        var chatId = messages.First().Chat.Id;
+        var contentChecks = await _queryService.GetContentChecksForMessagesAsync(chatId, messageIds);
 
         // Assert
         Assert.That(contentChecks, Is.Not.Null);
