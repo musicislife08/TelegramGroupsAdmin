@@ -32,8 +32,8 @@ public class MLTrainingDataRepository(
                   m => new { m.MessageId, m.ChatId },
                   (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => new { x.m.MessageId, x.m.ChatId },
-                       mt => new { MessageId = mt.MessageId!.Value, ChatId = mt.ChatId!.Value },
+                       x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
+                       mt => new { mt.MessageId, mt.ChatId },
                        (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
@@ -55,8 +55,8 @@ public class MLTrainingDataRepository(
                   m => new { m.MessageId, m.ChatId },
                   (dr, m) => m)
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       m => new { m.MessageId, m.ChatId },
-                       mt => new { MessageId = mt.MessageId!.Value, ChatId = mt.ChatId!.Value },
+                       m => new { MessageId = (int?)m.MessageId, ChatId = (long?)m.ChatId },
+                       mt => new { mt.MessageId, mt.ChatId },
                        (m, mts) => new { m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
@@ -118,8 +118,8 @@ public class MLTrainingDataRepository(
                   m => new { m.MessageId, m.ChatId },
                   (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => new { x.m.MessageId, x.m.ChatId },
-                       mt => new { MessageId = mt.MessageId!.Value, ChatId = mt.ChatId!.Value },
+                       x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
+                       mt => new { mt.MessageId, mt.ChatId },
                        (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {

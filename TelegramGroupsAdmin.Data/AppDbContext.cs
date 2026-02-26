@@ -542,8 +542,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // DetectionResults indexes
         modelBuilder.Entity<DetectionResultRecordDto>()
-            .HasIndex(dr => dr.MessageId);
-        modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.DetectedAt);
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.UsedForTraining);
