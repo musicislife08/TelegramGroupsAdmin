@@ -188,7 +188,7 @@ public class CascadeBehaviorTests
         // Act - Delete the message
         await using (var context = helper.GetDbContext())
         {
-            var message = await context.Messages.FindAsync(5000L);
+            var message = await context.Messages.FindAsync(5000);
             Assert.That(message, Is.Not.Null, "Message should be found before deletion");
 
             context.Messages.Remove(message!);

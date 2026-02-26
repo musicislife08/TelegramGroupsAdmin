@@ -554,7 +554,7 @@ public class BotModerationService : IBotModerationService
         {
             var report = new Report(
                 Id: 0, // Assigned by database
-                MessageId: (int)intent.MessageId,
+                MessageId: intent.MessageId,
                 Chat: intent.Chat,
                 ReportCommandMessageId: null,
                 ReportedByUserId: null,

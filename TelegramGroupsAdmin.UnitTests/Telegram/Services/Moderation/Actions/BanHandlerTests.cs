@@ -106,7 +106,7 @@ public class BanHandlerTests
             .ThrowsAsync(new Exception("Chat error 2"));
 
         // Act
-        var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Repeated violations", 100L);
+        var result = await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Repeated violations", 100);
 
         // Assert
         using (Assert.EnterMultipleScope())
@@ -166,7 +166,7 @@ public class BanHandlerTests
         _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity> { new(-100001, "Chat 1"), new(-100002, "Chat 2"), new(-100003, "Chat 3") }.AsReadOnly());
 
         // Act
-        await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Spam violation", 42L);
+        await _handler.BanAsync(UserIdentity.FromId(userId), executor, "Spam violation", 42);
 
         // Assert - Verify ban status was set on user (source of truth)
         await _mockUserRepository.Received(1).SetBanStatusAsync(
@@ -238,7 +238,7 @@ public class BanHandlerTests
             .Returns("job-123");
 
         // Act
-        await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, duration, "Timeout", 42L);
+        await _handler.TempBanAsync(UserIdentity.FromId(userId), executor, duration, "Timeout", 42);
 
         // Assert - Verify ban status was set WITH expiry
         await _mockUserRepository.Received(1).SetBanStatusAsync(

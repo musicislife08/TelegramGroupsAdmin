@@ -44,7 +44,7 @@ public class TrustCommand : IBotCommand
         CancellationToken cancellationToken = default)
     {
         User? targetUser = null;
-        long? messageId = null;
+        int? messageId = null;
 
         // Option 1: Reply to message
         if (message.ReplyToMessage != null)

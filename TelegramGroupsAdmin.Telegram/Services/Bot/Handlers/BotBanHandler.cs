@@ -43,7 +43,7 @@ public class BotBanHandler : IBotBanHandler
         UserIdentity user,
         Actor executor,
         string? reason,
-        long? triggeredByMessageId = null,
+        int? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -100,7 +100,7 @@ public class BotBanHandler : IBotBanHandler
         ChatIdentity chat,
         Actor executor,
         string? reason,
-        long? triggeredByMessageId = null,
+        int? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -135,7 +135,7 @@ public class BotBanHandler : IBotBanHandler
         Actor executor,
         TimeSpan duration,
         string? reason,
-        long? triggeredByMessageId = null,
+        int? triggeredByMessageId = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
