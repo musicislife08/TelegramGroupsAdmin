@@ -509,6 +509,7 @@ public partial class MessageProcessingService(
             var translationForDetection = await translationHandler.GetTextForDetectionAsync(
                 text,
                 message.MessageId,
+                message.Chat.Id,
                 cancellationToken);
             var translation = translationForDetection.Translation;
 
@@ -658,7 +659,7 @@ public partial class MessageProcessingService(
 
                 if (enrichedText != text) // Content was enriched
                 {
-                    await repository.UpdateMessageTextAsync(message.MessageId, enrichedText, cancellationToken);
+                    await repository.UpdateMessageTextAsync(message.MessageId, message.Chat.Id, enrichedText, cancellationToken);
                     text = enrichedText; // Use enriched text for content detection later
 
                     logger.LogDebug(

@@ -127,7 +127,7 @@
     {
         try
         {
-            _edits = await MessageEditService.GetEditsForMessageAsync(Message.MessageId);
+            _edits = await MessageEditService.GetEditsForMessageAsync(Message.MessageId, Message.Chat.Id);
 
             // Phase 4.20: Load translations for each edit
             foreach (var edit in _edits)

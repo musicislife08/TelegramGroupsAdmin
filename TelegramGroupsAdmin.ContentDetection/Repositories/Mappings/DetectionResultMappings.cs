@@ -21,6 +21,7 @@ public static class DetectionResultMappings
             {
                 Id = data.Id,
                 MessageId = data.MessageId,
+                ChatId = data.ChatId,
                 DetectedAt = data.DetectedAt,
                 DetectionSource = data.DetectionSource,
                 DetectionMethod = data.DetectionMethod,
@@ -48,6 +49,7 @@ public static class DetectionResultMappings
             {
                 Id = ui.Id,
                 MessageId = ui.MessageId,
+                ChatId = ui.ChatId,
                 DetectedAt = ui.DetectedAt,
                 DetectionSource = ui.DetectionSource,
                 DetectionMethod = ui.DetectionMethod,

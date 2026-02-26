@@ -75,7 +75,7 @@ public class ReportService(
 
         // Get photo path from stored message for DM with image
         string? photoPath = null;
-        var storedMessage = await messageHistoryRepository.GetMessageAsync(report.MessageId, cancellationToken);
+        var storedMessage = await messageHistoryRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (storedMessage?.PhotoLocalPath != null)
         {
             // PhotoLocalPath is stored as relative (e.g., "full/{chatId}/{messageId}.jpg")

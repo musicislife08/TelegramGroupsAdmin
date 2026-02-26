@@ -16,6 +16,9 @@ public class MessageEditRecordDto
     [Column("message_id")]
     public int MessageId { get; set; }
 
+    [Column("chat_id")]
+    public long ChatId { get; set; }
+
     [Column("edit_date")]
     public DateTimeOffset EditDate { get; set; }
 
@@ -34,6 +37,5 @@ public class MessageEditRecordDto
     public string? NewContentHash { get; set; }
 
     // Navigation property
-    [ForeignKey(nameof(MessageId))]
     public virtual MessageRecordDto? Message { get; set; }
 }

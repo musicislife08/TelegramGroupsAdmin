@@ -271,7 +271,7 @@ public class MessageQueryService : IMessageQueryService
         return results.Select(m => m.ToModel()).ToList();
     }
 
-    public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
@@ -282,10 +282,10 @@ public class MessageQueryService : IMessageQueryService
         // Full detection history is available via GetByMessageIdAsync in DetectionResultsRepository
         var results = await context.DetectionResults
             .AsNoTracking()
-            .Where(dr => messageIdArray.Contains(dr.MessageId))
+            .Where(dr => dr.ChatId == chatId && messageIdArray.Contains(dr.MessageId))
             .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
+                dr => new { dr.MessageId, dr.ChatId },
+                m => new { m.MessageId, m.ChatId },
                 (dr, m) => new
                 {
                     dr.Id,
@@ -404,6 +404,7 @@ public class MessageQueryService : IMessageQueryService
     /// <inheritdoc />
     public async Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
         int messageId,
+        long chatId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -412,7 +413,7 @@ public class MessageQueryService : IMessageQueryService
         var messageWithDetections = await context.Messages
             .AsNoTracking()
             .Include(m => m.DetectionResults)
-            .Where(m => m.MessageId == messageId)
+            .Where(m => m.MessageId == messageId && m.ChatId == chatId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (messageWithDetections == null)
@@ -421,7 +422,7 @@ public class MessageQueryService : IMessageQueryService
         // Step 2: Load enriched message data from view
         var enrichedMessage = await context.EnrichedMessages
             .AsNoTracking()
-            .Where(m => m.MessageId == messageId)
+            .Where(m => m.MessageId == messageId && m.ChatId == chatId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (enrichedMessage == null)

@@ -63,7 +63,9 @@ public class DetectionResultRecordDto
     [Column("edit_version")]
     public int EditVersion { get; set; }
 
+    [Column("chat_id")]
+    public long ChatId { get; set; }
+
     // Navigation property
-    [ForeignKey(nameof(MessageId))]
     public virtual MessageRecordDto? Message { get; set; }
 }

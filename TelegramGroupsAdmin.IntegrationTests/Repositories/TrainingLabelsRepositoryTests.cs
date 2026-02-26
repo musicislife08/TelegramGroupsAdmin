@@ -92,13 +92,14 @@ public class TrainingLabelsRepositoryTests
         // Act
         await _repository!.UpsertLabelAsync(
             messageId,
+            GoldenDataset.Messages.Msg6_ChatId,
             TrainingLabel.Spam,
             userId,
             "Manual spam marking by admin",
             auditLogId: 123);
 
         // Assert - Verify inserted
-        var label = await _repository.GetByMessageIdAsync(messageId);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg6_ChatId);
         Assert.That(label, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -120,12 +121,13 @@ public class TrainingLabelsRepositoryTests
         // Act
         await _repository!.UpsertLabelAsync(
             messageId,
+            GoldenDataset.Messages.Msg7_ChatId,
             TrainingLabel.Ham,
             labeledByUserId: null, // System-generated
             "False positive correction");
 
         // Assert
-        var label = await _repository.GetByMessageIdAsync(messageId);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg7_ChatId);
         Assert.That(label, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -143,12 +145,13 @@ public class TrainingLabelsRepositoryTests
         // Act - Update to ham (false positive correction)
         await _repository!.UpsertLabelAsync(
             messageId,
+            GoldenDataset.ManagedChats.MainChat_Id,
             TrainingLabel.Ham,
             GoldenDataset.TelegramUsers.User4_TelegramUserId,
             "Corrected to ham");
 
         // Assert - Should update, not duplicate
-        var label = await _repository.GetByMessageIdAsync(messageId);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(label!.Label, Is.EqualTo(TrainingLabel.Ham));
@@ -174,8 +177,8 @@ public class TrainingLabelsRepositoryTests
         var tasks = new List<Task>();
         for (int i = 0; i < 5; i++)
         {
-            tasks.Add(_repository!.UpsertLabelAsync(messageId, TrainingLabel.Spam, userId1, "Concurrent spam"));
-            tasks.Add(_repository!.UpsertLabelAsync(messageId, TrainingLabel.Ham, userId2, "Concurrent ham"));
+            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Spam, userId1, "Concurrent spam"));
+            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Ham, userId2, "Concurrent ham"));
         }
         await Task.WhenAll(tasks);
 
@@ -185,7 +188,7 @@ public class TrainingLabelsRepositoryTests
         Assert.That(count, Is.EqualTo(1), "Concurrent upserts should result in exactly one row (last writer wins)");
 
         // Verify the final label is valid (either spam or ham, depending on last writer)
-        var label = await _repository!.GetByMessageIdAsync(messageId);
+        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg11_ChatId);
         Assert.That(label, Is.Not.Null);
         Assert.That(label!.Label, Is.AnyOf(TrainingLabel.Spam, TrainingLabel.Ham), "Final label should be valid");
     }
@@ -201,7 +204,7 @@ public class TrainingLabelsRepositoryTests
         int messageId = GoldenDataset.TrainingLabels.Label2_MessageId;
 
         // Act
-        var label = await _repository!.GetByMessageIdAsync(messageId);
+        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
 
         // Assert
         Assert.That(label, Is.Not.Null);
@@ -219,7 +222,7 @@ public class TrainingLabelsRepositoryTests
         int messageId = GoldenDataset.Messages.Msg8_Id;
 
         // Act
-        var label = await _repository!.GetByMessageIdAsync(messageId);
+        var label = await _repository!.GetByMessageIdAsync(messageId, GoldenDataset.Messages.Msg8_ChatId);
 
         // Assert
         Assert.That(label, Is.Null);
@@ -236,10 +239,10 @@ public class TrainingLabelsRepositoryTests
         int messageId = GoldenDataset.TrainingLabels.Label3_MessageId;
 
         // Act
-        await _repository!.DeleteLabelAsync(messageId);
+        await _repository!.DeleteLabelAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
 
         // Assert
-        var label = await _repository.GetByMessageIdAsync(messageId);
+        var label = await _repository.GetByMessageIdAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(label, Is.Null);
     }
 
@@ -252,7 +255,7 @@ public class TrainingLabelsRepositoryTests
         // Act & Assert - Should not throw
         Assert.DoesNotThrowAsync(async () =>
         {
-            await _repository!.DeleteLabelAsync(messageId);
+            await _repository!.DeleteLabelAsync(messageId, GoldenDataset.Messages.Msg9_ChatId);
         });
     }
 
@@ -270,8 +273,8 @@ public class TrainingLabelsRepositoryTests
         Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
         {
             await _testHelper!.ExecuteSqlAsync($@"
-                INSERT INTO training_labels (message_id, label, labeled_at)
-                VALUES ({messageId}, 0, NOW())
+                INSERT INTO training_labels (message_id, chat_id, label, labeled_at)
+                VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 0, NOW())
             ");
         });
     }
@@ -286,8 +289,8 @@ public class TrainingLabelsRepositoryTests
         Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
         {
             await _testHelper!.ExecuteSqlAsync($@"
-                INSERT INTO training_labels (message_id, label, labeled_at)
-                VALUES ({messageId}, 99, NOW())
+                INSERT INTO training_labels (message_id, chat_id, label, labeled_at)
+                VALUES ({messageId}, {GoldenDataset.Messages.Msg10_ChatId}, 99, NOW())
             ");
         });
     }

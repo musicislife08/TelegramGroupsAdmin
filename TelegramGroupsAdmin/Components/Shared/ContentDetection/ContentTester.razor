@@ -552,6 +552,7 @@
             var translationResult = await TranslationHandler.GetTextForDetectionAsync(
                 _messageText,
                 messageId: 0, // Test message, no real ID
+                chatId: 0, // Test content, no real chat
                 CancellationToken.None);
 
             if (translationResult.DetectedLanguage != null)

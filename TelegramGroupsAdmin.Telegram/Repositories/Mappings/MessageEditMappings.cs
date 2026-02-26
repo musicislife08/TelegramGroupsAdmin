@@ -13,6 +13,7 @@ public static class MessageEditMappings
         public UiModels.MessageEditRecord ToModel() => new(
             Id: data.Id,
             MessageId: data.MessageId,
+            ChatId: data.ChatId,
             OldText: data.OldText,
             NewText: data.NewText,
             EditDate: data.EditDate,
@@ -27,6 +28,7 @@ public static class MessageEditMappings
         {
             Id = ui.Id,
             MessageId = ui.MessageId,
+            ChatId = ui.ChatId,
             EditDate = ui.EditDate,
             OldText = ui.OldText,
             NewText = ui.NewText,

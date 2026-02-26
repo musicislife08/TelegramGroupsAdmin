@@ -206,7 +206,7 @@
     private string? _linkedUsername; // User's linked Telegram username (for calculating signature length)
     private string? _featureUnavailableReason; // Reason why feature is unavailable (for placeholder text)
     private int? _isEditingMessageId; // Message currently being edited
-    private int? _replyToMessageId; // Message being replied to (Telegram message IDs are always int)
+    private int? _replyToMessageId; // Message being replied to
     private string? _editingOriginalText; // Original text of message being edited
 
     private int? _highlightMessageId; // Message to scroll to and highlight
@@ -368,7 +368,7 @@
             if (targetMessage == null)
             {
                 // Message not loaded yet, try to load it
-                var message = await MessageRepository.GetMessageAsync(targetMessageId);
+                var message = await MessageRepository.GetMessageAsync(targetMessageId, _selectedChatId!.Value);
                 if (message == null)
                 {
                     Logger.LogWarning("Highlighted message {MessageId} not found in database", targetMessageId);
@@ -395,8 +395,8 @@
 
                     // Load metadata for this message
                     int[] messageIds = [targetMessageId];
-                    var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
-                    var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+                    var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
+                    var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
 
                     foreach (var kvp in contentChecks)
                         _contentChecks[kvp.Key] = kvp.Value;
@@ -406,7 +406,7 @@
                     // Load detection history for Admin+ users (now included in wrapper)
                     if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
                     {
-                        var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId);
+                        var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId, _selectedChatId!.Value);
                         messageWrapper.DetectionResults.AddRange(history);
                     }
                 }
@@ -458,14 +458,14 @@
 
                 // Load spam check for this new message if it exists
                 int[] messageIds = [message.MessageId];
-                var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+                var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
                 foreach (var kvp in newContentChecks)
                 {
                     _contentChecks[kvp.Key] = kvp.Value;
                 }
 
                 // Load edit count for this message
-                var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+                var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
                 foreach (var kvp in newEditCounts)
                 {
                     _editCounts[kvp.Key] = kvp.Value;
@@ -498,7 +498,7 @@
                 Logger.LogDebug("SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
 
                 // Reload the message from database to get updated media_local_path
-                var updatedMessage = await MessageRepository.GetMessageAsync(messageId);
+                var updatedMessage = await MessageRepository.GetMessageAsync(messageId, _selectedChatId!.Value);
                 if (updatedMessage == null)
                 {
                     Logger.LogWarning("Updated message {MessageId} not found in database", messageId);
@@ -794,7 +794,7 @@
 
         if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
         {
-            var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+            var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
             if (replace)
             {
                 _editCounts = editCounts;
@@ -807,8 +807,8 @@
         }
         else
         {
-            var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-            var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+            var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
+            var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
             await Task.WhenAll(editCountsTask, contentChecksTask);
 
             var editCounts = await editCountsTask;
@@ -959,6 +959,7 @@
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = message.MessageId,
+                ChatId = message.Chat.Id,
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
@@ -978,6 +979,7 @@
             // 2. Create explicit training label for ML
             await TrainingLabelsRepository.UpsertLabelAsync(
                 message.MessageId,
+                message.Chat.Id,
                 label: TrainingLabel.Ham,
                 labeledByUserId: executor.GetTelegramUserId(),
                 reason: reason,
@@ -1033,7 +1035,7 @@
     private async Task RefreshDetectionHistoryDisplayAsync(int messageId, long userId)
     {
         // Refresh detection history for this message in the wrapper
-        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
+        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId, _selectedChatId!.Value);
         var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == messageId);
         if (messageWrapper != null)
         {
@@ -1065,9 +1067,9 @@
     {
         // Use detection history from wrapper if available (avoids duplicate database query)
         var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
-        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
 
-        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId);
+        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
 
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {
@@ -1139,7 +1141,7 @@
             if (result.Success)
             {
                 // Update the message in place to show it's deleted (don't remove from UI)
-                var updatedMessage = await MessageRepository.GetMessageAsync(message.MessageId);
+                var updatedMessage = await MessageRepository.GetMessageAsync(message.MessageId, message.Chat.Id);
                 if (updatedMessage != null)
                 {
                     var index = _allMessages.FindIndex(mw => mw.Message.MessageId == message.MessageId);
@@ -1392,7 +1394,7 @@
                 Logger.LogInformation("Target message {MessageId} not in view, loading...", targetMessageId);
 
                 // Load the message from repository
-                var message = await MessageRepository.GetMessageAsync(targetMessageId);
+                var message = await MessageRepository.GetMessageAsync(targetMessageId, _selectedChatId!.Value);
                 if (message == null)
                 {
                     Logger.LogWarning("Target message {MessageId} not found in database", targetMessageId);
@@ -1441,7 +1443,7 @@
                 {
                     // Queue for re-download (deduplication handled by queue service)
                     // Real-time UI updates handled by BotService.OnMediaUpdated event
-                    var wasQueued = await MediaRefetchQueue.EnqueueMediaAsync(msg.MessageId, msg.MediaType.Value);
+                    var wasQueued = await MediaRefetchQueue.EnqueueMediaAsync(msg.MessageId, msg.Chat.Id, msg.MediaType.Value);
                     if (wasQueued)
                     {
                         queuedCount++;
@@ -1489,6 +1491,7 @@
             var translation = new MessageTranslation(
                 Id: 0, // Will be set by INSERT
                 MessageId: message.MessageId,
+                ChatId: message.Chat.Id,
                 EditId: null,
                 TranslatedText: translationResult.TranslatedText,
                 DetectedLanguage: translationResult.DetectedLanguage,

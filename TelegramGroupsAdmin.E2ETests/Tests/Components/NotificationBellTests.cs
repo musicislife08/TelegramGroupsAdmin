@@ -186,10 +186,11 @@ public class NotificationBellTests : SharedAuthenticatedTestBase
         // Act - click "Clear all"
         await ClearAllButton.ClickAsync();
 
-        // Assert - dropdown now shows empty state
-        // Need to re-open the dropdown as it may close after action
-        await NotificationBellButton.ClickAsync();
-        await Expect(DropdownMenu).ToBeVisibleAsync();
+        // Assert - MudBlazor v9: menu stays open after button click in ChildContent
+        // Wait for the notification content to be removed (server round-trip + re-render)
+        await Expect(DropdownMenu.GetByText("Spam Detected")).Not.ToBeVisibleAsync();
+
+        // Dropdown should now show empty state in-place
         await Expect(EmptyStateMessage).ToBeVisibleAsync();
         await Expect(NotificationBadge).Not.ToBeVisibleAsync();
     }

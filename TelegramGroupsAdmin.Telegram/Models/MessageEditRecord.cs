@@ -6,6 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 public record MessageEditRecord(
     long Id,
     int MessageId,
+    long ChatId,
     string? OldText,
     string? NewText,
     DateTimeOffset EditDate,

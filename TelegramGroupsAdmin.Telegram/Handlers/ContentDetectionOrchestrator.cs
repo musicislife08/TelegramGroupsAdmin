@@ -202,6 +202,7 @@ public class ContentDetectionOrchestrator
         var detectionResult = new DetectionResultRecord
         {
             MessageId = message.MessageId,
+            ChatId = message.Chat.Id,
             DetectedAt = DateTimeOffset.UtcNow,
             DetectionSource = "auto",
             DetectionMethod = spamResult.CheckResults.Count > 0

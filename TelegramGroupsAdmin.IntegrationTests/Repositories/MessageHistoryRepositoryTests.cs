@@ -380,7 +380,7 @@ public class MessageHistoryRepositoryTests
 
         // Update media path to point to a file that does NOT exist
         const string nonExistentFileName = "animation_does_not_exist_999060.gif";
-        await _repository.UpdateMediaLocalPathAsync(999060, nonExistentFileName);
+        await _repository.UpdateMediaLocalPathAsync(999060, GoldenDataset.ManagedChats.MainChat_Id, nonExistentFileName);
 
         // Act - Retrieve via MessageQueryService (this also calls ValidateMediaPath internally)
         var messagesWithHistory = await _queryService!.GetMessagesWithDetectionHistoryAsync(
@@ -417,6 +417,7 @@ public class MessageHistoryRepositoryTests
         var messageTranslation = new MessageTranslation(
             Id: 0,
             MessageId: 999010,
+            ChatId: GoldenDataset.ManagedChats.MainChat_Id,
             EditId: null,
             TranslatedText: "Message translation - should be included",
             DetectedLanguage: "en",
@@ -429,6 +430,7 @@ public class MessageHistoryRepositoryTests
         var edit = new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: 999010,
+            ChatId: GoldenDataset.ManagedChats.MainChat_Id,
             OldText: "Original text to be edited and translated",
             NewText: "Edited text",
             EditDate: DateTimeOffset.UtcNow,
@@ -438,13 +440,14 @@ public class MessageHistoryRepositoryTests
         await _editService!.InsertMessageEditAsync(edit);
 
         // Get the edit ID we just created
-        var edits = await _editService.GetEditsForMessageAsync(999010);
+        var edits = await _editService.GetEditsForMessageAsync(999010, GoldenDataset.ManagedChats.MainChat_Id);
         var createdEdit = edits.First(e => e.NewText == "Edited text");
 
         // Insert a translation for the edit (message_id NULL, edit_id NOT NULL)
         var editTranslation = new MessageTranslation(
             Id: 0,
             MessageId: null,
+            ChatId: null,
             EditId: createdEdit.Id,
             TranslatedText: "Edit translation - should be excluded",
             DetectedLanguage: "en",
@@ -480,11 +483,14 @@ public class MessageHistoryRepositoryTests
     {
         // Arrange - Get a message without translation
         var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
-        var messageId = messages.First().MessageId;
+        var firstMsg = messages.First();
+        var messageId = firstMsg.MessageId;
+        var chatId = firstMsg.Chat.Id;
 
         var translation = new MessageTranslation(
             Id: 0, // Will be set by INSERT
             MessageId: messageId,
+            ChatId: chatId,
             EditId: null, // Message translation (exclusive arc)
             TranslatedText: "Hello world",
             DetectedLanguage: "fr",
@@ -496,7 +502,7 @@ public class MessageHistoryRepositoryTests
         await _translationService!.InsertTranslationAsync(translation, CancellationToken.None);
 
         // Assert - Verify translation inserted
-        var retrieved = await _translationService!.GetTranslationForMessageAsync(messageId);
+        var retrieved = await _translationService!.GetTranslationForMessageAsync(messageId, chatId);
         Assert.That(retrieved, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -515,7 +521,7 @@ public class MessageHistoryRepositoryTests
         const int nonExistentMessageId = 999999;
 
         // Act
-        var translation = await _translationService!.GetTranslationForMessageAsync(nonExistentMessageId);
+        var translation = await _translationService!.GetTranslationForMessageAsync(nonExistentMessageId, GoldenDataset.ManagedChats.MainChat_Id);
 
         // Assert - Should return null for non-existent message
         Assert.That(translation, Is.Null);
@@ -541,6 +547,7 @@ public class MessageHistoryRepositoryTests
         var firstTranslation = new MessageTranslation(
             Id: 0,
             MessageId: 999030,
+            ChatId: GoldenDataset.ManagedChats.MainChat_Id,
             EditId: null,
             TranslatedText: "First translation text",
             DetectedLanguage: "en",
@@ -550,7 +557,7 @@ public class MessageHistoryRepositoryTests
         await _translationService!.InsertTranslationAsync(firstTranslation);
 
         // Verify first translation was inserted
-        var retrievedFirst = await _translationService.GetTranslationForMessageAsync(999030);
+        var retrievedFirst = await _translationService.GetTranslationForMessageAsync(999030, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(retrievedFirst, Is.Not.Null);
         Assert.That(retrievedFirst!.TranslatedText, Is.EqualTo("First translation text"));
 
@@ -558,6 +565,7 @@ public class MessageHistoryRepositoryTests
         var secondTranslation = new MessageTranslation(
             Id: 0,
             MessageId: 999030,
+            ChatId: GoldenDataset.ManagedChats.MainChat_Id,
             EditId: null,
             TranslatedText: "Updated translation text",
             DetectedLanguage: "en",
@@ -567,7 +575,7 @@ public class MessageHistoryRepositoryTests
         await _translationService.InsertTranslationAsync(secondTranslation);
 
         // Assert - Should have exactly ONE translation for this message (upsert behavior)
-        var retrievedSecond = await _translationService.GetTranslationForMessageAsync(999030);
+        var retrievedSecond = await _translationService.GetTranslationForMessageAsync(999030, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(retrievedSecond, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -591,11 +599,14 @@ public class MessageHistoryRepositoryTests
     {
         // Arrange
         var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
-        var messageId = messages.First().MessageId;
+        var firstMsg = messages.First();
+        var messageId = firstMsg.MessageId;
+        var chatId = firstMsg.Chat.Id;
 
         var edit = new UiModels.MessageEditRecord(
             Id: 0, // Will be set by INSERT
             MessageId: messageId,
+            ChatId: chatId,
             OldText: "Original",
             NewText: "Edited",
             EditDate: DateTimeOffset.UtcNow,
@@ -607,7 +618,7 @@ public class MessageHistoryRepositoryTests
         await _editService!.InsertMessageEditAsync(edit);
 
         // Assert
-        var edits = await _editService!.GetEditsForMessageAsync(messageId);
+        var edits = await _editService!.GetEditsForMessageAsync(messageId, chatId);
         Assert.That(edits, Is.Not.Null);
         Assert.That(edits.Count, Is.GreaterThan(0));
 
@@ -621,11 +632,14 @@ public class MessageHistoryRepositoryTests
     {
         // Arrange - Insert multiple edits
         var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
-        var messageId = messages.First().MessageId;
+        var firstMsg = messages.First();
+        var messageId = firstMsg.MessageId;
+        var chatId = firstMsg.Chat.Id;
 
         var edit1 = new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: messageId,
+            ChatId: chatId,
             OldText: "Original",
             NewText: "Edit 1",
             EditDate: DateTimeOffset.UtcNow.AddSeconds(-10),
@@ -635,6 +649,7 @@ public class MessageHistoryRepositoryTests
         var edit2 = new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: messageId,
+            ChatId: chatId,
             OldText: "Edit 1",
             NewText: "Edit 2",
             EditDate: DateTimeOffset.UtcNow.AddSeconds(-5),
@@ -646,7 +661,7 @@ public class MessageHistoryRepositoryTests
         await _editService!.InsertMessageEditAsync(edit2);
 
         // Act
-        var edits = await _editService!.GetEditsForMessageAsync(messageId);
+        var edits = await _editService!.GetEditsForMessageAsync(messageId, chatId);
 
         // Assert
         Assert.That(edits.Count, Is.GreaterThanOrEqualTo(2));
@@ -659,15 +674,19 @@ public class MessageHistoryRepositoryTests
     [Test]
     public async Task GetEditCountsForMessagesAsync_ShouldReturnCounts()
     {
-        // Arrange - Insert edits for multiple messages
-        var messages = await _queryService!.GetRecentMessagesAsync(limit: 3);
-        var msg1Id = messages[0].MessageId;
-        var msg2Id = messages[1].MessageId;
+        // Arrange - Insert edits for multiple messages from the same chat
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 20);
+        var firstChatId = messages[0].Chat.Id;
+        var sameChatMessages = messages.Where(m => m.Chat.Id == firstChatId).Take(2).ToList();
+        Assert.That(sameChatMessages.Count, Is.GreaterThanOrEqualTo(2), "Need at least 2 messages in same chat");
+        var msg1Id = sameChatMessages[0].MessageId;
+        var msg2Id = sameChatMessages[1].MessageId;
 
         // Add 2 edits to msg1
         await _editService!.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg1Id,
+            ChatId: firstChatId,
             OldText: "Original",
             NewText: "Edit 1",
             EditDate: DateTimeOffset.UtcNow,
@@ -677,6 +696,7 @@ public class MessageHistoryRepositoryTests
         await _editService!.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg1Id,
+            ChatId: firstChatId,
             OldText: "Edit 1",
             NewText: "Edit 2",
             EditDate: DateTimeOffset.UtcNow,
@@ -688,6 +708,7 @@ public class MessageHistoryRepositoryTests
         await _editService!.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg2Id,
+            ChatId: firstChatId,
             OldText: "Original",
             NewText: "Edit 1",
             EditDate: DateTimeOffset.UtcNow,
@@ -696,7 +717,7 @@ public class MessageHistoryRepositoryTests
         ));
 
         // Act
-        var counts = await _editService!.GetEditCountsForMessagesAsync(new[] { msg1Id, msg2Id });
+        var counts = await _editService!.GetEditCountsForMessagesAsync(firstChatId, new[] { msg1Id, msg2Id });
 
         // Assert
         Assert.That(counts, Is.Not.Null);
@@ -726,7 +747,7 @@ public class MessageHistoryRepositoryTests
         await _repository!.InsertMessageAsync(message);
 
         // Assert - Retrieve and verify
-        var retrieved = await _repository.GetMessageAsync(999001);
+        var retrieved = await _repository.GetMessageAsync(999001, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(retrieved, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -743,7 +764,7 @@ public class MessageHistoryRepositoryTests
         var messageId = GoldenDataset.Messages.Msg1_Id;
 
         // Act
-        var message = await _repository!.GetMessageAsync(messageId);
+        var message = await _repository!.GetMessageAsync(messageId, GoldenDataset.ManagedChats.MainChat_Id);
 
         // Assert
         Assert.That(message, Is.Not.Null);
@@ -757,7 +778,7 @@ public class MessageHistoryRepositoryTests
         int nonExistentId = 999999999;
 
         // Act
-        var message = await _repository!.GetMessageAsync(nonExistentId);
+        var message = await _repository!.GetMessageAsync(nonExistentId, GoldenDataset.ManagedChats.MainChat_Id);
 
         // Assert
         Assert.That(message, Is.Null);
@@ -785,7 +806,7 @@ public class MessageHistoryRepositoryTests
         await _repository.UpdateMessageAsync(updatedMessage);
 
         // Assert
-        var retrieved = await _repository.GetMessageAsync(999002);
+        var retrieved = await _repository.GetMessageAsync(999002, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.MessageText, Is.EqualTo("Updated text"));
     }
@@ -808,7 +829,7 @@ public class MessageHistoryRepositoryTests
         await _repository!.InsertMessageAsync(message);
 
         // Verify no media path initially
-        var retrievedBefore = await _repository.GetMessageAsync(999003);
+        var retrievedBefore = await _repository.GetMessageAsync(999003, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(retrievedBefore, Is.Not.Null);
         Assert.That(retrievedBefore!.MediaLocalPath, Is.Null);
 
@@ -824,10 +845,10 @@ public class MessageHistoryRepositoryTests
         try
         {
             // Act - Update media local path (stores just the filename)
-            await _repository.UpdateMediaLocalPathAsync(999003, testMediaFileName);
+            await _repository.UpdateMediaLocalPathAsync(999003, GoldenDataset.ManagedChats.MainChat_Id, testMediaFileName);
 
             // Assert - Verify media path was updated
-            var retrievedAfter = await _repository.GetMessageAsync(999003);
+            var retrievedAfter = await _repository.GetMessageAsync(999003, GoldenDataset.ManagedChats.MainChat_Id);
             Assert.That(retrievedAfter, Is.Not.Null);
             using (Assert.EnterMultipleScope())
             {
@@ -865,10 +886,10 @@ public class MessageHistoryRepositoryTests
 
         // Update media path to point to a file that does NOT exist
         const string nonExistentFileName = "this_file_does_not_exist_999050.mp4";
-        await _repository.UpdateMediaLocalPathAsync(999050, nonExistentFileName);
+        await _repository.UpdateMediaLocalPathAsync(999050, GoldenDataset.ManagedChats.MainChat_Id, nonExistentFileName);
 
         // Act - Retrieve the message (this calls ValidateMediaPath internally)
-        var retrieved = await _repository.GetMessageAsync(999050);
+        var retrieved = await _repository.GetMessageAsync(999050, GoldenDataset.ManagedChats.MainChat_Id);
 
         // Assert - MediaLocalPath should be null because file doesn't exist
         Assert.That(retrieved, Is.Not.Null);
@@ -894,10 +915,10 @@ public class MessageHistoryRepositoryTests
         await _repository!.InsertMessageAsync(message);
 
         // Act
-        await _repository.MarkMessageAsDeletedAsync(999004, "test_deletion");
+        await _repository.MarkMessageAsDeletedAsync(999004, GoldenDataset.ManagedChats.MainChat_Id, "test_deletion");
 
         // Assert
-        var retrieved = await _repository.GetMessageAsync(999004);
+        var retrieved = await _repository.GetMessageAsync(999004, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(retrieved, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -953,7 +974,7 @@ public class MessageHistoryRepositoryTests
             "Message should appear in user's messages before soft delete");
 
         // Act - Soft delete the message
-        await _repository.MarkMessageAsDeletedAsync(999040, "test_soft_delete");
+        await _repository.MarkMessageAsDeletedAsync(999040, GoldenDataset.ManagedChats.MainChat_Id, "test_soft_delete");
 
         // Assert - Message should no longer appear in GetUserMessagesAsync
         var messagesAfter = await _repository.GetUserMessagesAsync(GoldenDataset.TelegramUsers.User1_TelegramUserId);
@@ -961,9 +982,85 @@ public class MessageHistoryRepositoryTests
             "Soft-deleted message should be excluded from GetUserMessagesAsync results");
 
         // Verify the message still exists (soft delete, not hard delete)
-        var deletedMessage = await _repository.GetMessageAsync(999040);
+        var deletedMessage = await _repository.GetMessageAsync(999040, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(deletedMessage, Is.Not.Null, "Message should still exist in database");
         Assert.That(deletedMessage!.DeletedAt, Is.Not.Null, "Message should have DeletedAt set");
+    }
+
+    [Test]
+    public async Task CompositeKey_SameMessageIdDifferentChats_ShouldBeDistinctRows()
+    {
+        // This is the core invariant of the composite PK migration:
+        // (messageId, chatA) and (messageId, chatB) must be separate rows.
+        const int sharedMessageId = 999090;
+        var chatA = GoldenDataset.ManagedChats.MainChat_Id;
+        var chatB = GoldenDataset.ManagedChats.Chat1_Id;
+
+        // Arrange - Insert the same messageId into two different chats
+        var messageInChatA = CreateTestMessage(
+            messageId: sharedMessageId,
+            userId: GoldenDataset.TelegramUsers.User1_TelegramUserId,
+            chatId: chatA,
+            text: "Message in Chat A"
+        );
+        var messageInChatB = CreateTestMessage(
+            messageId: sharedMessageId,
+            userId: GoldenDataset.TelegramUsers.User2_TelegramUserId,
+            chatId: chatB,
+            text: "Message in Chat B"
+        );
+
+        await _repository!.InsertMessageAsync(messageInChatA);
+        await _repository.InsertMessageAsync(messageInChatB);
+
+        // Act - Retrieve each independently
+        var retrievedA = await _repository.GetMessageAsync(sharedMessageId, chatA);
+        var retrievedB = await _repository.GetMessageAsync(sharedMessageId, chatB);
+
+        // Assert - Both exist and have correct chat-specific data
+        Assert.That(retrievedA, Is.Not.Null, "Message in Chat A should exist");
+        Assert.That(retrievedB, Is.Not.Null, "Message in Chat B should exist");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrievedA!.MessageText, Is.EqualTo("Message in Chat A"));
+            Assert.That(retrievedA.Chat.Id, Is.EqualTo(chatA));
+            Assert.That(retrievedB!.MessageText, Is.EqualTo("Message in Chat B"));
+            Assert.That(retrievedB.Chat.Id, Is.EqualTo(chatB));
+        }
+    }
+
+    [Test]
+    public async Task CompositeKey_MarkDeletedInOneChat_ShouldNotAffectOtherChat()
+    {
+        // Verify that MarkMessageAsDeletedAsync with composite key
+        // only affects the targeted chat, not a same-messageId row in another chat.
+        const int sharedMessageId = 999091;
+        var chatA = GoldenDataset.ManagedChats.MainChat_Id;
+        var chatB = GoldenDataset.ManagedChats.Chat1_Id;
+
+        // Arrange
+        await _repository!.InsertMessageAsync(CreateTestMessage(
+            messageId: sharedMessageId, userId: GoldenDataset.TelegramUsers.User1_TelegramUserId,
+            chatId: chatA, text: "Chat A message"));
+        await _repository.InsertMessageAsync(CreateTestMessage(
+            messageId: sharedMessageId, userId: GoldenDataset.TelegramUsers.User2_TelegramUserId,
+            chatId: chatB, text: "Chat B message"));
+
+        // Act - Delete only in Chat A
+        await _repository.MarkMessageAsDeletedAsync(sharedMessageId, chatA, "test_isolation");
+
+        // Assert - Chat A deleted, Chat B untouched
+        var deletedMsg = await _repository.GetMessageAsync(sharedMessageId, chatA);
+        var untouchedMsg = await _repository.GetMessageAsync(sharedMessageId, chatB);
+
+        Assert.That(deletedMsg, Is.Not.Null);
+        Assert.That(untouchedMsg, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletedMsg!.DeletedAt, Is.Not.Null, "Chat A message should be soft-deleted");
+            Assert.That(deletedMsg.DeletionSource, Is.EqualTo("test_isolation"));
+            Assert.That(untouchedMsg!.DeletedAt, Is.Null, "Chat B message should NOT be affected");
+        }
     }
 
     #endregion
@@ -1011,7 +1108,7 @@ public class MessageHistoryRepositoryTests
         // that have detection results, regardless of their age.
 
         // Get messages with detection results from golden dataset
-        var messageWithDetection = await _repository!.GetMessageAsync(GoldenDataset.Messages.Msg1_Id);
+        var messageWithDetection = await _repository!.GetMessageAsync(GoldenDataset.Messages.Msg1_Id, GoldenDataset.Messages.Msg1_ChatId);
         Assert.That(messageWithDetection, Is.Not.Null, "Golden dataset should have message with detection result");
 
         // Verify it has detection result (via the query service)
@@ -1026,12 +1123,12 @@ public class MessageHistoryRepositoryTests
         var result = await _repository.CleanupExpiredAsync(TimeSpan.FromDays(30));
 
         // Assert - Message with detection result should NOT be deleted
-        var messageAfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg1_Id);
+        var messageAfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg1_Id, GoldenDataset.Messages.Msg1_ChatId);
         Assert.That(messageAfterCleanup, Is.Not.Null,
             "Message with detection result should be preserved by cleanup (training data retention)");
 
         // Also verify Msg11 (82581) is preserved
-        var msg11AfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg11_Id);
+        var msg11AfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg11_Id, GoldenDataset.Messages.Msg11_ChatId);
         Assert.That(msg11AfterCleanup, Is.Not.Null,
             "Another message with detection result should also be preserved");
     }
@@ -1047,11 +1144,11 @@ public class MessageHistoryRepositoryTests
         }
 
         // Verify old messages exist before cleanup
-        var msg45DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id);
-        var msg60DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id);
-        var msgWithTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id);
-        var msg29DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id);
-        var msgNonTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id);
+        var msg45DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id, GoldenDataset.ManagedChats.MainChat_Id);
+        var msg60DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id, GoldenDataset.ManagedChats.MainChat_Id);
+        var msgWithTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id, GoldenDataset.ManagedChats.MainChat_Id);
+        var msg29DaysBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id, GoldenDataset.ManagedChats.MainChat_Id);
+        var msgNonTrainingBefore = await _repository!.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id, GoldenDataset.ManagedChats.MainChat_Id);
 
         using (Assert.EnterMultipleScope())
         {
@@ -1082,10 +1179,10 @@ public class MessageHistoryRepositoryTests
             "Should delete exactly 4 old messages without training data");
 
         // Assert - Old messages WITHOUT training data are DELETED
-        var msg45DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id);
-        var msg60DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id);
-        var msg35DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg35DaysOld_Id);
-        var msgNonTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id);
+        var msg45DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg45DaysOld_Id, GoldenDataset.ManagedChats.MainChat_Id);
+        var msg60DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg60DaysOld_Id, GoldenDataset.ManagedChats.MainChat_Id);
+        var msg35DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg35DaysOld_Id, GoldenDataset.ManagedChats.MainChat_Id);
+        var msgNonTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgNonTraining_Id, GoldenDataset.ManagedChats.MainChat_Id);
 
         using (Assert.EnterMultipleScope())
         {
@@ -1097,12 +1194,12 @@ public class MessageHistoryRepositoryTests
         }
 
         // Assert - Old message WITH training data is PRESERVED
-        var msgWithTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id);
+        var msgWithTrainingAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.MsgWithTraining_Id, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(msgWithTrainingAfter, Is.Not.Null,
             "90-day old message WITH training data (used_for_training=true) should be preserved");
 
         // Assert - Boundary message (29 days) is PRESERVED
-        var msg29DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id);
+        var msg29DaysAfter = await _repository.GetMessageAsync(GoldenDataset.OldMessages.Msg29DaysOld_Id, GoldenDataset.ManagedChats.MainChat_Id);
         Assert.That(msg29DaysAfter, Is.Not.Null,
             "Message 29 days old should NOT be deleted (just inside retention window)");
 
@@ -1162,7 +1259,7 @@ public class MessageHistoryRepositoryTests
             text: "Test message to be deleted"
         );
         await _repository!.InsertMessageAsync(message);
-        await _repository.MarkMessageAsDeletedAsync(999020, "test_cleanup");
+        await _repository.MarkMessageAsDeletedAsync(999020, 999999, "test_cleanup");
 
         // Act - Get stats (should handle empty/deleted data gracefully)
         var stats = await _statsService!.GetStatsAsync();
@@ -1283,7 +1380,8 @@ public class MessageHistoryRepositoryTests
         var messageIds = messages.Select(m => m.MessageId).ToList();
 
         // Act
-        var contentChecks = await _queryService.GetContentChecksForMessagesAsync(messageIds);
+        var chatId = messages.First().Chat.Id;
+        var contentChecks = await _queryService.GetContentChecksForMessagesAsync(chatId, messageIds);
 
         // Assert
         Assert.That(contentChecks, Is.Not.Null);

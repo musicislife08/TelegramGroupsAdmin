@@ -155,7 +155,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        _message = await MessageRepository.GetMessageAsync(Report.MessageId);
+        _message = await MessageRepository.GetMessageAsync(Report.MessageId, Report.Chat.Id);
 
         // Fetch user details if message exists
         if (_message != null)

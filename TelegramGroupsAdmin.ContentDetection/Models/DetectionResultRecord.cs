@@ -9,6 +9,7 @@ public class DetectionResultRecord
 {
     public long Id { get; set; }
     public int MessageId { get; set; }
+    public long ChatId { get; set; }
     public DateTimeOffset DetectedAt { get; set; }
     public string DetectionSource { get; set; } = string.Empty;
     public string DetectionMethod { get; set; } = string.Empty;

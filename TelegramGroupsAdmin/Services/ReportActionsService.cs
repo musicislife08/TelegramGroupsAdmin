@@ -45,7 +45,7 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
-        var message = await _messageRepository.GetMessageAsync(report.MessageId, cancellationToken);
+        var message = await _messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (message == null)
         {
             throw new InvalidOperationException($"Message {report.MessageId} not found");
@@ -101,7 +101,7 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
-        var message = await _messageRepository.GetMessageAsync(report.MessageId, cancellationToken);
+        var message = await _messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (message == null)
         {
             throw new InvalidOperationException($"Message {report.MessageId} not found");
@@ -172,7 +172,7 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
-        var message = await _messageRepository.GetMessageAsync(report.MessageId, cancellationToken);
+        var message = await _messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (message == null)
         {
             throw new InvalidOperationException($"Message {report.MessageId} not found");

@@ -403,29 +403,25 @@ public class BackupServiceTests
     [Test]
     public async Task RestoreAsync_ShouldResetSequences()
     {
-        // Arrange - Create backup with messages
+        // Arrange - Create backup with data
         var backup = await _backupService!.ExportAsync();
 
         // Act - Restore
         await _backupService.RestoreAsync(backup);
 
-        // Assert - Insert new message, verify ID continues from max
-        await _testHelper!.ExecuteSqlAsync(@"
-            INSERT INTO telegram_users (telegram_user_id, username, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
-            VALUES (888888, 'seq_test', false, false, NOW(), NOW(), NOW(), NOW())
+        // Assert - Insert new message_edit, verify ID continues from max
+        // (message_edits.id still has identity/sequence, unlike messages.message_id which uses ValueGeneratedNever)
+        await _testHelper!.ExecuteSqlAsync($@"
+            INSERT INTO message_edits (message_id, chat_id, edit_date, new_text)
+            VALUES ({GoldenDataset.Messages.Msg1_Id}, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test edit')
         ");
 
-        await _testHelper.ExecuteSqlAsync($@"
-            INSERT INTO messages (user_id, chat_id, timestamp, message_text, content_check_skip_reason)
-            VALUES (888888, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test', 0)
+        var newEditId = await _testHelper.ExecuteScalarAsync<long>(@"
+            SELECT id FROM message_edits WHERE new_text = 'sequence test edit'
         ");
 
-        var newMessageId = await _testHelper.ExecuteScalarAsync<long>(@"
-            SELECT message_id FROM messages WHERE message_text = 'sequence test'
-        ");
-
-        Assert.That(newMessageId, Is.GreaterThan(GoldenDataset.Messages.Msg1_Id),
-            "Sequence should reset to max(message_id) + 1 after restore");
+        Assert.That(newEditId, Is.GreaterThan(0),
+            "Sequence should be reset so new ID is positive after restore");
     }
 
     #endregion

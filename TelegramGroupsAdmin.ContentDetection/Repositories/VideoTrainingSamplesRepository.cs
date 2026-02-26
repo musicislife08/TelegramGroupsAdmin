@@ -69,6 +69,7 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
     /// </summary>
     public async Task<bool> SaveTrainingSampleAsync(
         int messageId,
+        long chatId,
         bool isSpam,
         Actor markedBy,
         CancellationToken cancellationToken = default)
@@ -80,7 +81,7 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
             // Get message to check for video
             var message = await context.Messages
                 .AsNoTracking()
-                .Where(m => m.MessageId == messageId)
+                .Where(m => m.MessageId == messageId && m.ChatId == chatId)
                 .Select(m => new
                 {
                     m.MessageId,
@@ -173,7 +174,7 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
 
             // Check if training sample already exists for this message
             var existingSample = await context.VideoTrainingSamples
-                .Where(vts => vts.MessageId == messageId)
+                .Where(vts => vts.MessageId == messageId && vts.ChatId == chatId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (existingSample != null)
@@ -189,6 +190,7 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
             var trainingSample = new VideoTrainingSampleDto
             {
                 MessageId = messageId,
+                ChatId = chatId,
                 VideoPath = videoPath,
                 DurationSeconds = message.MediaDuration ?? 0,
                 FileSizeBytes = (int)(message.MediaFileSize ?? 0),

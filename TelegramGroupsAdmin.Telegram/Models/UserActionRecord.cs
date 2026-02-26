@@ -14,6 +14,7 @@ public record UserActionRecord(
     long UserId,
     UserActionType ActionType,
     int? MessageId,
+    long? ChatId,
     Actor IssuedBy,
     DateTimeOffset IssuedAt,
     DateTimeOffset? ExpiresAt,

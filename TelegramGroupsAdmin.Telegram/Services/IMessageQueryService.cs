@@ -45,6 +45,7 @@ public interface IMessageQueryService
     /// </summary>
     Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
         int messageId,
+        long chatId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -60,6 +61,7 @@ public interface IMessageQueryService
     /// Get content checks for multiple messages (latest detection per message)
     /// </summary>
     Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(
+        long chatId,
         IEnumerable<int> messageIds,
         CancellationToken cancellationToken = default);
 

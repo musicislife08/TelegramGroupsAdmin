@@ -84,6 +84,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         return new MessageTranslation(
             Id: 1,
             MessageId: 123,
+            ChatId: 456,
             EditId: null,
             TranslatedText: translatedText,
             DetectedLanguage: language,

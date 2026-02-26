@@ -219,6 +219,7 @@ public class TestMessageBuilder
         _translation = new MessageTranslation(
             Id: 0, // Will be assigned by database
             MessageId: _messageId,
+            ChatId: _chatId,
             EditId: null,
             TranslatedText: translatedText,
             DetectedLanguage: detectedLanguage,

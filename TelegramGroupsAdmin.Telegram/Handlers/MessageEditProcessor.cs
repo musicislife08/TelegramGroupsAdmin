@@ -47,7 +47,7 @@ public class MessageEditProcessor
         var translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
 
         // Get the old message from the database
-        var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId, cancellationToken);
+        var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId, editedMessage.Chat.Id, cancellationToken);
         if (oldMessage == null)
         {
             _logger.LogWarning(
@@ -83,9 +83,10 @@ public class MessageEditProcessor
         var editRecord = new MessageEditRecord(
             Id: 0, // Will be set by INSERT
             MessageId: editedMessage.MessageId,
-            EditDate: editDate,
+            ChatId: editedMessage.Chat.Id,
             OldText: oldText,
             NewText: newText,
+            EditDate: editDate,
             OldContentHash: oldContentHash,
             NewContentHash: newContentHash
         );
@@ -132,7 +133,7 @@ public class MessageEditProcessor
             return;
 
         // Re-fetch edit to get generated ID
-        var editsForMessage = await editService.GetEditsForMessageAsync(editedMessage.MessageId, cancellationToken);
+        var editsForMessage = await editService.GetEditsForMessageAsync(editedMessage.MessageId, editedMessage.Chat.Id, cancellationToken);
         var savedEdit = editsForMessage.OrderByDescending(e => e.EditDate).FirstOrDefault();
 
         if (savedEdit == null)
@@ -159,6 +160,7 @@ public class MessageEditProcessor
             var translation = new MessageTranslation(
                 Id: 0, // Will be set by INSERT
                 MessageId: null, // Exclusive arc: translation belongs to EDIT, not message
+                ChatId: null, // Exclusive arc: translation belongs to EDIT, not message
                 EditId: savedEdit.Id,
                 TranslatedText: translationResult.TranslatedText,
                 DetectedLanguage: translationResult.DetectedLanguage,
@@ -195,7 +197,7 @@ public class MessageEditProcessor
                 var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
 
                 // Get the latest edit_version for this message
-                var existingResults = await detectionResultsRepo.GetByMessageIdAsync(editedMessage.MessageId, CancellationToken.None);
+                var existingResults = await detectionResultsRepo.GetByMessageIdAsync(editedMessage.MessageId, editedMessage.Chat.Id, CancellationToken.None);
                 var maxEditVersion = existingResults.Any()
                     ? existingResults.Max(r => r.EditVersion)
                     : 0;

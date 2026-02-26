@@ -9,7 +9,6 @@ namespace TelegramGroupsAdmin.Data.Models;
 [Table("messages")]
 public class MessageRecordDto
 {
-    [Key]
     [Column("message_id")]
     public int MessageId { get; set; }
 

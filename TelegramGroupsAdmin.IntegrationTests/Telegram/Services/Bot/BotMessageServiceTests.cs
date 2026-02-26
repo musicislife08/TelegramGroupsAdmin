@@ -163,7 +163,7 @@ public class BotMessageServiceTests
         Assert.That(result.Id, Is.EqualTo(messageId));
 
         // Assert - Message saved to database
-        var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
+        var savedMessage = await _messageRepo!.GetMessageAsync(messageId, TestChatId);
         Assert.That(savedMessage, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {
@@ -207,7 +207,7 @@ public class BotMessageServiceTests
             replyParameters: replyParameters);
 
         // Assert - Reply info saved
-        var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
+        var savedMessage = await _messageRepo!.GetMessageAsync(messageId, TestChatId);
         Assert.That(savedMessage!.ReplyToMessageId, Is.EqualTo(replyToMessageId));
     }
 
@@ -282,7 +282,7 @@ public class BotMessageServiceTests
         await _service!.EditAndUpdateMessageAsync(TestChatId, messageId, editedText);
 
         // Assert - Edit history created
-        var edits = await _editService!.GetEditsForMessageAsync(messageId);
+        var edits = await _editService!.GetEditsForMessageAsync(messageId, TestChatId);
         Assert.That(edits, Has.Count.EqualTo(1));
         using (Assert.EnterMultipleScope())
         {
@@ -321,7 +321,7 @@ public class BotMessageServiceTests
         await _service!.EditAndUpdateMessageAsync(TestChatId, messageId, editedText);
 
         // Assert - Message text updated in database
-        var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
+        var savedMessage = await _messageRepo!.GetMessageAsync(messageId, TestChatId);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.MessageText, Is.EqualTo(editedText));
@@ -364,7 +364,7 @@ public class BotMessageServiceTests
         await _service!.DeleteAndMarkMessageAsync(TestChatId, messageId, "test_deletion");
 
         // Assert - Message marked as deleted in database
-        var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
+        var savedMessage = await _messageRepo!.GetMessageAsync(messageId, TestChatId);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.DeletedAt, Is.Not.Null);
@@ -390,7 +390,7 @@ public class BotMessageServiceTests
             await _service!.DeleteAndMarkMessageAsync(TestChatId, messageId, "test_deletion"));
 
         // Assert - Message still marked as deleted (with "_failed" suffix)
-        var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
+        var savedMessage = await _messageRepo!.GetMessageAsync(messageId, TestChatId);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(savedMessage!.DeletedAt, Is.Not.Null);
@@ -441,7 +441,7 @@ public class BotMessageServiceTests
         Assert.That(result.Animation, Is.Not.Null);
 
         // Assert - Message saved with media metadata
-        var savedMessage = await _messageRepo!.GetMessageAsync(messageId);
+        var savedMessage = await _messageRepo!.GetMessageAsync(messageId, TestChatId);
         Assert.That(savedMessage, Is.Not.Null);
         using (Assert.EnterMultipleScope())
         {

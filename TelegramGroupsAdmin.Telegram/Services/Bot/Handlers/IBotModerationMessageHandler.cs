@@ -52,9 +52,11 @@ public interface IBotModerationMessageHandler
     /// Used by orchestrator to build rich notifications after spam ban.
     /// </summary>
     /// <param name="messageId">The message ID to fetch.</param>
+    /// <param name="chatId">The chat ID the message belongs to.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Enriched message with detection history, or null if not found.</returns>
     Task<MessageWithDetectionHistory?> GetEnrichedAsync(
         int messageId,
+        long chatId,
         CancellationToken cancellationToken = default);
 }

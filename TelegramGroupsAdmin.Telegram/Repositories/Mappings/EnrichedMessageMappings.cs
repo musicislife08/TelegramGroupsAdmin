@@ -23,6 +23,7 @@ public static class EnrichedMessageMappings
                 ? new MessageTranslation(
                     Id: view.TranslationId.Value,
                     MessageId: view.MessageId,
+                    ChatId: view.ChatId,
                     EditId: null, // View only includes message translations, not edit translations
                     TranslatedText: view.TranslatedText!,
                     DetectedLanguage: view.DetectedLanguage!,

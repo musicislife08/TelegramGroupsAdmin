@@ -165,6 +165,7 @@ public class CascadeBehaviorTests
             context.MessageTranslations.Add(new MessageTranslationDto
             {
                 MessageId = 5000,
+                ChatId = 789,
                 TranslatedText = "Hello world",
                 DetectedLanguage = "es",
                 Confidence = 0.95m,
@@ -188,7 +189,7 @@ public class CascadeBehaviorTests
         // Act - Delete the message
         await using (var context = helper.GetDbContext())
         {
-            var message = await context.Messages.FindAsync(5000);
+            var message = await context.Messages.FindAsync(5000, 789L);
             Assert.That(message, Is.Not.Null, "Message should be found before deletion");
 
             context.Messages.Remove(message!);
@@ -213,7 +214,7 @@ public class CascadeBehaviorTests
             SELECT COUNT(*)
             FROM message_translations mt
             WHERE NOT EXISTS (
-                SELECT 1 FROM messages m WHERE m.message_id = mt.message_id
+                SELECT 1 FROM messages m WHERE m.message_id = mt.message_id AND m.chat_id = mt.chat_id
             )
             AND mt.message_id IS NOT NULL
         ");

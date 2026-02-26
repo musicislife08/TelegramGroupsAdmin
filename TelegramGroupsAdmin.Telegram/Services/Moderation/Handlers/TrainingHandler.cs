@@ -40,11 +40,12 @@ public class TrainingHandler : ITrainingHandler
     /// <inheritdoc />
     public async Task CreateSpamSampleAsync(
         int messageId,
+        ChatIdentity chat,
         Actor executor,
         CancellationToken cancellationToken = default)
     {
         // Try to get message from database
-        var message = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
+        var message = await _messageHistoryRepository.GetMessageAsync(messageId, chat.Id, cancellationToken);
 
         if (message == null)
         {
@@ -57,12 +58,13 @@ public class TrainingHandler : ITrainingHandler
         // Create detection result for history (NOT for training - use training_labels instead)
         // Guard: skip insert if a detection record already exists (e.g., from the automated pipeline)
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
-        var existingDetections = await _detectionResultsRepository.GetByMessageIdAsync(messageId, cancellationToken);
+        var existingDetections = await _detectionResultsRepository.GetByMessageIdAsync(messageId, chat.Id, cancellationToken);
         if (existingDetections.Count == 0)
         {
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = messageId,
+                ChatId = chat.Id,
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
@@ -90,6 +92,7 @@ public class TrainingHandler : ITrainingHandler
         {
             await _trainingLabelsRepository.UpsertLabelAsync(
                 messageId,
+                chat.Id,
                 label: TrainingLabel.Spam,
                 labeledByUserId: executor.GetTelegramUserId(), // Null if executor is web user or system
                 reason: "Marked as spam by moderator",
@@ -116,6 +119,7 @@ public class TrainingHandler : ITrainingHandler
         // Save image training sample if message has a photo
         var imageSaved = await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
             messageId,
+            chat.Id,
             isSpam: true,
             executor,
             cancellationToken);

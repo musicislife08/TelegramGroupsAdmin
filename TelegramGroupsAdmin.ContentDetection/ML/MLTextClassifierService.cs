@@ -81,12 +81,9 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             using var scope = _serviceProvider.CreateScope();
             var trainingDataRepository = scope.ServiceProvider.GetRequiredService<IMLTrainingDataRepository>();
 
-            // Load labeled message IDs once (reused by both spam and ham queries to avoid duplication)
-            var labeledMessageIds = await trainingDataRepository.GetLabeledMessageIdsAsync(cancellationToken);
-
             // Load training samples from repository (encapsulates multi-table queries)
-            var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
-            var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
+            var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(cancellationToken);
+            var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, cancellationToken);
 
             if (spamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass || hamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass)
             {

@@ -57,7 +57,7 @@ public class MessageHandlerTests
         const int messageId = 42;
         const long chatId = -100123456789L;
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(CreateTestMessageRecord(messageId, chatId));
 
         // Act
@@ -86,7 +86,7 @@ public class MessageHandlerTests
         const long chatId = -100123456789L;
         var telegramMessage = CreateTestMessage(messageId, chatId);
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         _mockMessageBackfillService.BackfillIfMissingAsync(
@@ -115,7 +115,7 @@ public class MessageHandlerTests
         const int messageId = 42;
         const long chatId = -100123456789L;
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         // Act - No telegramMessage provided
@@ -138,7 +138,7 @@ public class MessageHandlerTests
         const long chatId = -100123456789L;
         var telegramMessage = CreateTestMessage(messageId, chatId);
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         _mockMessageBackfillService.BackfillIfMissingAsync(

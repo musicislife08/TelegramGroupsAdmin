@@ -17,40 +17,40 @@
 -- We need spam (net_confidence > 0) for trend testing
 -- ============================================================
 
-INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, check_results_json, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, check_results_json, edit_version)
 VALUES
 -- Today's spam (3 records) - use messages 82617, 82618, 82616
 -- Anchored to today's midnight + small offsets (safe even at 00:00:01 UTC)
-(82617, date_trunc('day', NOW()) + INTERVAL '3 seconds', 'System', 'StopWords, Bayes', 85, 'Spam detected: multiple triggers',
+(82617, -1001322973935, date_trunc('day', NOW()) + INTERVAL '3 seconds', 'System', 'StopWords, Bayes', 85, 'Spam detected: multiple triggers',
  'spam-detection-v1', FALSE, 85,
  '{{"Checks":[{{"CheckName":0,"Result":1,"Confidence":85,"ProcessingTimeMs":5.2}},{{"CheckName":3,"Result":1,"Confidence":78,"ProcessingTimeMs":12.1}}]}}',
  0),
-(82618, date_trunc('day', NOW()) + INTERVAL '2 seconds', 'System', 'StopWords', 72, 'Stop word match detected',
+(82618, -1001322973935, date_trunc('day', NOW()) + INTERVAL '2 seconds', 'System', 'StopWords', 72, 'Stop word match detected',
  'spam-detection-v1', FALSE, 72,
  '{{"Checks":[{{"CheckName":0,"Result":1,"Confidence":72,"ProcessingTimeMs":3.8}}]}}',
  0),
-(82616, date_trunc('day', NOW()) + INTERVAL '1 second', 'System', 'OpenAI', 90, 'LLM flagged as spam content',
+(82616, -1001322973935, date_trunc('day', NOW()) + INTERVAL '1 second', 'System', 'OpenAI', 90, 'LLM flagged as spam content',
  'spam-detection-v1', FALSE, 90,
  '{{"Checks":[{{"CheckName":6,"Result":1,"Confidence":90,"ProcessingTimeMs":1250}}]}}',
  0),
 
 -- Yesterday's spam (2 records) - use messages 82615, 82612
 -- Anchored to yesterday's midnight + offset (always within yesterday)
-(82615, date_trunc('day', NOW()) - INTERVAL '1 day' + INTERVAL '12 hours', 'System', 'Bayes', 68, 'Bayes classifier flagged',
+(82615, -1001322973935, date_trunc('day', NOW()) - INTERVAL '1 day' + INTERVAL '12 hours', 'System', 'Bayes', 68, 'Bayes classifier flagged',
  'spam-detection-v1', FALSE, 68,
  '{{"Checks":[{{"CheckName":3,"Result":1,"Confidence":68,"ProcessingTimeMs":8.5}}]}}',
  0),
-(82612, date_trunc('day', NOW()) - INTERVAL '1 day' + INTERVAL '10 hours', 'System', 'StopWords', 75, 'Keyword pattern match',
+(82612, -1001322973935, date_trunc('day', NOW()) - INTERVAL '1 day' + INTERVAL '10 hours', 'System', 'StopWords', 75, 'Keyword pattern match',
  'spam-detection-v1', FALSE, 75,
  NULL,
  0),
 
 -- Last week's spam (2 records) - use messages 82606, 82603
-(82606, date_trunc('day', NOW()) - INTERVAL '8 days' + INTERVAL '12 hours', 'System', 'StopWords', 80, 'Spam pattern detected',
+(82606, -1001322973935, date_trunc('day', NOW()) - INTERVAL '8 days' + INTERVAL '12 hours', 'System', 'StopWords', 80, 'Spam pattern detected',
  'spam-detection-v1', FALSE, 80,
  NULL,
  0),
-(82603, date_trunc('day', NOW()) - INTERVAL '9 days' + INTERVAL '12 hours', 'System', 'Bayes', 65, 'Spam probability exceeded threshold',
+(82603, -1001322973935, date_trunc('day', NOW()) - INTERVAL '9 days' + INTERVAL '12 hours', 'System', 'Bayes', 65, 'Spam probability exceeded threshold',
  'spam-detection-v1', FALSE, 65,
  NULL,
  0);
@@ -63,20 +63,20 @@ VALUES
 
 -- False Positive correction: Message 82617 was flagged spam above, now corrected to ham
 -- (detection_source='manual', net_confidence negative = ham)
-INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
 VALUES
-(82617, date_trunc('day', NOW()) + INTERVAL '4 seconds', 'manual', 'Manual Review', 100, 'Admin correction: not spam (false positive)', 'manual-review', FALSE, -100, 0);
+(82617, -1001322973935, date_trunc('day', NOW()) + INTERVAL '4 seconds', 'manual', 'Manual Review', 100, 'Admin correction: not spam (false positive)', 'manual-review', FALSE, -100, 0);
 
 -- First add a ham detection for message 82594 (required for FN test - needs original automated detection)
-INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
 VALUES
-(82594, date_trunc('day', NOW()) + INTERVAL '5 seconds', 'System', 'StopWords, Bayes', 0, 'No spam detected', 'spam-detection-v1', FALSE, 0, 0);
+(82594, -1001322973935, date_trunc('day', NOW()) + INTERVAL '5 seconds', 'System', 'StopWords, Bayes', 0, 'No spam detected', 'spam-detection-v1', FALSE, 0, 0);
 
 -- False Negative correction: Message 82594 was detected as ham above, now corrected to spam
 -- (detection_source='manual', net_confidence positive = spam)
-INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
 VALUES
-(82594, date_trunc('day', NOW()) + INTERVAL '6 seconds', 'manual', 'Manual Review', 100, 'Admin correction: is spam (false negative)', 'manual-review', FALSE, 100, 0);
+(82594, -1001322973935, date_trunc('day', NOW()) + INTERVAL '6 seconds', 'manual', 'Manual Review', 100, 'Admin correction: is spam (false negative)', 'manual-review', FALSE, 100, 0);
 
 
 -- ============================================================
