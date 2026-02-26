@@ -41,8 +41,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         return detectionResults
             .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
+                dr => new { dr.MessageId, dr.ChatId },
+                m => new { m.MessageId, m.ChatId },
                 (dr, m) => new DetectionResultWithMessage(dr, m));
     }
 
@@ -56,12 +56,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         AppDbContext context)
     {
         return detectionResults
-            .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => new { dr, m })
+            .Join(context.Messages, dr => new { dr.MessageId, dr.ChatId }, m => new { m.MessageId, m.ChatId }, (dr, m) => new { dr, m })
             .GroupJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, users) => new { x.dr, x.m, users })
             .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.dr, x.m, user })
             .GroupJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.dr, x.m, x.user, tgUsers })
             .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new { x.dr, x.m, x.user, tgUser })
-            .GroupJoin(context.MessageTranslations, x => x.m.MessageId, mt => mt.MessageId, (x, translations) => new { x.dr, x.m, x.user, x.tgUser, translations })
+            .GroupJoin(context.MessageTranslations, x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId }, mt => new { mt.MessageId, mt.ChatId }, (x, translations) => new { x.dr, x.m, x.user, x.tgUser, translations })
             .SelectMany(x => x.translations.DefaultIfEmpty(), (x, translation) => new
             {
                 x.dr,
@@ -76,6 +76,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             {
                 Id = x.dr.Id,
                 MessageId = x.dr.MessageId,
+                ChatId = x.dr.ChatId,
                 DetectedAt = x.dr.DetectedAt,
                 DetectionSource = x.dr.DetectionSource,
                 DetectionMethod = x.dr.DetectionMethod,
@@ -122,11 +123,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return result;
     }
 
-    public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(int messageId, CancellationToken cancellationToken = default)
+    public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking().Where(dr => dr.MessageId == messageId),
+                context.DetectionResults.AsNoTracking().Where(dr => dr.MessageId == messageId && dr.ChatId == chatId),
                 context)
             .OrderByDescending(x => x.DetectedAt)
             .ToListAsync(cancellationToken);
@@ -134,16 +135,16 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results;
     }
 
-    public async Task<Dictionary<int, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<int, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Convert to list to avoid multiple enumeration
         var messageIdList = messageIds.ToList();
 
-        // Single query with WHERE message_id IN (...)
+        // Single query with WHERE message_id IN (...) AND chat_id = ...
         var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking().Where(dr => messageIdList.Contains(dr.MessageId)),
+                context.DetectionResults.AsNoTracking().Where(dr => dr.ChatId == chatId && messageIdList.Contains(dr.MessageId)),
                 context)
             .OrderByDescending(x => x.DetectedAt)
             .ToListAsync(cancellationToken);
@@ -180,8 +181,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // - Training samples should match what was analyzed (COALESCE: translated > original)
         var results = await (
             from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on dr.MessageId equals m.MessageId
-            join mt in context.MessageTranslations on m.MessageId equals mt.MessageId into translations
+            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
+            join mt in context.MessageTranslations on new { MessageId = (int?)m.MessageId, ChatId = (long?)m.ChatId } equals new { mt.MessageId, mt.ChatId } into translations
             from mt in translations.DefaultIfEmpty()
             where dr.UsedForTraining == true
                 && m.MessageText != null
@@ -204,7 +205,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Use query syntax for EF Core translation compatibility (H10 pattern from GetTrainingSamplesAsync)
         var results = await (
             from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on dr.MessageId equals m.MessageId
+            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
             where dr.IsSpam == true
                 && dr.UsedForTraining == true
                 && m.MessageText != null
@@ -227,7 +228,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Use query syntax for EF Core translation compatibility
         var results = await (
             from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on dr.MessageId equals m.MessageId
+            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
             where dr.IsSpam == false
                 && dr.UsedForTraining == true
                 && m.MessageText != null
@@ -433,12 +434,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     /// Invalidate all training data for a specific message (set used_for_training = false).
     /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
     /// </summary>
-    public async Task InvalidateTrainingDataForMessageAsync(int messageId, CancellationToken cancellationToken = default)
+    public async Task InvalidateTrainingDataForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var affectedRecords = await context.DetectionResults
-            .Where(dr => dr.MessageId == messageId && dr.UsedForTraining)
+            .Where(dr => dr.MessageId == messageId && dr.ChatId == chatId && dr.UsedForTraining)
             .ExecuteUpdateAsync(
                 setters => setters.SetProperty(dr => dr.UsedForTraining, false),
                 cancellationToken);
@@ -494,6 +495,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             var translation = new DataModels.MessageTranslationDto
             {
                 MessageId = message.MessageId,
+                ChatId = 0, // Manual sample: matches parent message ChatId = 0
                 EditId = null, // Exclusive arc: message translation (not edit translation)
                 TranslatedText = translatedText,
                 DetectedLanguage = detectedLanguage,
@@ -515,6 +517,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         var detectionResult = new DataModels.DetectionResultRecordDto
         {
             MessageId = message.MessageId,
+            ChatId = 0, // Manual sample: matches parent message ChatId = 0
             DetectedAt = DateTimeOffset.UtcNow,
             DetectionSource = source,
             DetectionMethod = "Manual",
@@ -700,8 +703,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             .OrderByDescending(dr => dr.DetectedAt)
             .Take(limit * 2) // Get extra to filter after JSON parsing
             .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
+                dr => new { dr.MessageId, dr.ChatId },
+                m => new { m.MessageId, m.ChatId },
                 (dr, m) => new { dr.Id, dr.MessageId, dr.DetectedAt, dr.CheckResultsJson, m.MessageText })
             .ToListAsync(cancellationToken);
 

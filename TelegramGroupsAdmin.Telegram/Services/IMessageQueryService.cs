@@ -45,6 +45,7 @@ public interface IMessageQueryService
     /// </summary>
     Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
         int messageId,
+        long chatId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

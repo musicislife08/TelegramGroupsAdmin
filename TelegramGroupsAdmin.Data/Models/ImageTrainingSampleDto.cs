@@ -23,6 +23,9 @@ public class ImageTrainingSampleDto
     [Column("message_id")]
     public int MessageId { get; set; }
 
+    [Column("chat_id")]
+    public long ChatId { get; set; }
+
     /// <summary>
     /// Path to the image file on disk (/data/media/...)
     /// </summary>

@@ -18,6 +18,9 @@ public class MessageTranslationDto
     [Column("message_id")]
     public int? MessageId { get; set; }
 
+    [Column("chat_id")]
+    public long? ChatId { get; set; }
+
     [Column("edit_id")]
     public long? EditId { get; set; }
 
@@ -43,7 +46,6 @@ public class MessageTranslationDto
     public long? SimilarityHash { get; set; }
 
     // Navigation properties
-    [ForeignKey(nameof(MessageId))]
     public virtual MessageRecordDto? Message { get; set; }
 
     [ForeignKey(nameof(EditId))]

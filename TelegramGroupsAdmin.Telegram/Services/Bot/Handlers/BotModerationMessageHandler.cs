@@ -55,7 +55,7 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
             messageId, chat.ToLogDebug());
 
         // Check if message already exists
-        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
+        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, chat.Id, cancellationToken);
         if (existingMessage != null)
         {
             _logger.LogDebug("Message {MessageId} already exists in database", messageId);
@@ -141,8 +141,9 @@ public class BotModerationMessageHandler : IBotModerationMessageHandler
     /// <inheritdoc />
     public async Task<MessageWithDetectionHistory?> GetEnrichedAsync(
         int messageId,
+        long chatId,
         CancellationToken cancellationToken = default)
     {
-        return await _messageQueryService.GetMessageWithDetectionHistoryAsync(messageId, cancellationToken);
+        return await _messageQueryService.GetMessageWithDetectionHistoryAsync(messageId, chatId, cancellationToken);
     }
 }

@@ -128,7 +128,7 @@ public class BotMessageService(
         CancellationToken cancellationToken = default)
     {
         // Get old message from database for edit history
-        var oldMessage = await messageRepo.GetMessageAsync(messageId, cancellationToken);
+        var oldMessage = await messageRepo.GetMessageAsync(messageId, chatId, cancellationToken);
         if (oldMessage == null)
         {
             throw new InvalidOperationException($"Message {messageId} not found in database");
@@ -160,9 +160,10 @@ public class BotMessageService(
         var editRecord = new MessageEditRecord(
             Id: 0, // Will be set by INSERT
             MessageId: messageId,
-            EditDate: editDate,
+            ChatId: chatId,
             OldText: oldText,
             NewText: text,
+            EditDate: editDate,
             OldContentHash: oldContentHash,
             NewContentHash: newContentHash
         );
@@ -204,7 +205,7 @@ public class BotMessageService(
             await messageHandler.DeleteAsync(chatId, messageId, cancellationToken);
 
             // Mark as deleted in database
-            await messageRepo.MarkMessageAsDeletedAsync(messageId, deletionSource, cancellationToken);
+            await messageRepo.MarkMessageAsDeletedAsync(messageId, chatId, deletionSource, cancellationToken);
 
             logger.LogDebug(
                 "Deleted and marked message {MessageId} (chat: {ChatId}, source: {Source})",
@@ -223,7 +224,7 @@ public class BotMessageService(
             // (message might already be deleted, or we lost permissions)
             try
             {
-                await messageRepo.MarkMessageAsDeletedAsync(messageId, $"{deletionSource}_failed", cancellationToken);
+                await messageRepo.MarkMessageAsDeletedAsync(messageId, chatId, $"{deletionSource}_failed", cancellationToken);
             }
             catch (Exception dbEx)
             {

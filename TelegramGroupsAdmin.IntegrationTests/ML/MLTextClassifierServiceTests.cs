@@ -608,7 +608,7 @@ public class MLTextClassifierServiceTests
         {
             int messageId = 110000 + i;
             await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, 0, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
+                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 0, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
             );
         }
 
@@ -617,7 +617,7 @@ public class MLTextClassifierServiceTests
         {
             int messageId = 110000 + i;
             await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, 1, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
+                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 1, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
             );
         }
 
@@ -652,7 +652,7 @@ public class MLTextClassifierServiceTests
 
             // Add ham label
             await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, 1, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
+                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 1, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
             );
         }
 
@@ -687,7 +687,7 @@ public class MLTextClassifierServiceTests
 
             // Add spam label
             await context.Database.ExecuteSqlRawAsync(
-                $"INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, 0, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
+                $"INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at) VALUES ({messageId}, {GoldenDataset.ManagedChats.MainChat_Id}, 0, {GoldenDataset.TelegramUsers.User1_TelegramUserId}, NOW())"
             );
         }
 

@@ -121,7 +121,7 @@ public class ReportActionsServiceTests
         var report = CreateTestReport();
         _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
-        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         // Act & Assert
@@ -536,7 +536,7 @@ public class ReportActionsServiceTests
     {
         _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
-        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
     }
 

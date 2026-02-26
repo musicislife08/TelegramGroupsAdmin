@@ -40,6 +40,7 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
     /// </remarks>
     public async Task UpsertLabelAsync(
         int messageId,
+        long chatId,
         TrainingLabel label,
         long? labeledByUserId = null,
         string? reason = null,
@@ -50,9 +51,9 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
 
         // Use PostgreSQL's ON CONFLICT DO UPDATE for atomic upsert (no race condition)
         await context.Database.ExecuteSqlAsync($@"
-            INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at, reason, audit_log_id)
-            VALUES ({messageId}, {(short)label}, {labeledByUserId}, {DateTimeOffset.UtcNow}, {reason}, {auditLogId})
-            ON CONFLICT (message_id) DO UPDATE SET
+            INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at, reason, audit_log_id)
+            VALUES ({messageId}, {chatId}, {(short)label}, {labeledByUserId}, {DateTimeOffset.UtcNow}, {reason}, {auditLogId})
+            ON CONFLICT (message_id, chat_id) DO UPDATE SET
                 label = EXCLUDED.label,
                 labeled_by_user_id = EXCLUDED.labeled_by_user_id,
                 labeled_at = EXCLUDED.labeled_at,
@@ -68,13 +69,13 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
     /// <summary>
     /// Gets the training label for a message (if exists).
     /// </summary>
-    public async Task<TrainingLabelRecord?> GetByMessageIdAsync(int messageId, CancellationToken cancellationToken = default)
+    public async Task<TrainingLabelRecord?> GetByMessageIdAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var dto = await context.TrainingLabels
             .AsNoTracking()
-            .FirstOrDefaultAsync(tl => tl.MessageId == messageId, cancellationToken);
+            .FirstOrDefaultAsync(tl => tl.MessageId == messageId && tl.ChatId == chatId, cancellationToken);
 
         return dto?.ToModel();
     }
@@ -83,13 +84,13 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
     /// Deletes a training label for a message using atomic ExecuteDeleteAsync.
     /// This is thread-safe and ~42% faster than load-then-delete pattern.
     /// </summary>
-    public async Task DeleteLabelAsync(int messageId, CancellationToken cancellationToken = default)
+    public async Task DeleteLabelAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Use ExecuteDeleteAsync for atomic delete (no race condition, no memory load)
         var rowsDeleted = await context.TrainingLabels
-            .Where(tl => tl.MessageId == messageId)
+            .Where(tl => tl.MessageId == messageId && tl.ChatId == chatId)
             .ExecuteDeleteAsync(cancellationToken);
 
         if (rowsDeleted > 0)

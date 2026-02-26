@@ -36,14 +36,19 @@ public class MLTrainingDataRepository(
         var explicitSpam = await context.TrainingLabels
             .AsNoTracking()
             .Where(tl => tl.Label == (short)TrainingLabel.Spam)
-            .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => new { tl, m })
+            .Join(context.Messages,
+                  tl => new { tl.MessageId, tl.ChatId },
+                  m => new { m.MessageId, m.ChatId },
+                  (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => x.m.MessageId, mt => mt.MessageId,
+                       x => new { x.m.MessageId, x.m.ChatId },
+                       mt => new { MessageId = mt.MessageId!.Value, ChatId = mt.ChatId!.Value },
                        (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
                 x.tl.MessageId,
+                x.tl.ChatId,
                 x.tl.LabeledByUserId,
                 x.tl.LabeledAt
             })
@@ -54,14 +59,19 @@ public class MLTrainingDataRepository(
         var implicitSpam = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.IsSpam && dr.UsedForTraining && !labeledMessageIds.Contains(dr.MessageId))
-            .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => m)
+            .Join(context.Messages,
+                  dr => new { dr.MessageId, dr.ChatId },
+                  m => new { m.MessageId, m.ChatId },
+                  (dr, m) => m)
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       m => m.MessageId, mt => mt.MessageId,
+                       m => new { m.MessageId, m.ChatId },
+                       mt => new { MessageId = mt.MessageId!.Value, ChatId = mt.ChatId!.Value },
                        (m, mts) => new { m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
-                x.m.MessageId
+                x.m.MessageId,
+                x.m.ChatId
             })
             .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
             .ToListAsync(cancellationToken);
@@ -74,6 +84,7 @@ public class MLTrainingDataRepository(
                 Label = TrainingLabel.Spam,
                 Source = TrainingSampleSource.Explicit,
                 MessageId = x.MessageId,
+                ChatId = x.ChatId,
                 LabeledByUserId = x.LabeledByUserId,
                 LabeledAt = x.LabeledAt
             }),
@@ -83,6 +94,7 @@ public class MLTrainingDataRepository(
                 Label = TrainingLabel.Spam,
                 Source = TrainingSampleSource.Implicit,
                 MessageId = x.MessageId,
+                ChatId = x.ChatId,
                 LabeledByUserId = null,
                 LabeledAt = null
             })
@@ -110,14 +122,19 @@ public class MLTrainingDataRepository(
         var explicitHamRaw = await context.TrainingLabels
             .AsNoTracking()
             .Where(tl => tl.Label == (short)TrainingLabel.Ham)
-            .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => new { tl, m })
+            .Join(context.Messages,
+                  tl => new { tl.MessageId, tl.ChatId },
+                  m => new { m.MessageId, m.ChatId },
+                  (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => x.m.MessageId, mt => mt.MessageId,
+                       x => new { x.m.MessageId, x.m.ChatId },
+                       mt => new { MessageId = mt.MessageId!.Value, ChatId = mt.ChatId!.Value },
                        (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
                 x.tl.MessageId,
+                x.tl.ChatId,
                 x.tl.LabeledByUserId,
                 x.tl.LabeledAt
             })
@@ -131,6 +148,7 @@ public class MLTrainingDataRepository(
             Label = TrainingLabel.Ham,
             Source = TrainingSampleSource.Explicit,
             MessageId = x.MessageId,
+            ChatId = x.ChatId,
             LabeledByUserId = x.LabeledByUserId,
             LabeledAt = x.LabeledAt
         }).ToList();
@@ -176,12 +194,12 @@ public class MLTrainingDataRepository(
                && !spamDetectedMessageIds.Contains(m.MessageId)
                && m.DeletedAt == null  // Message-level filter (better signal than user-level ban)
             from mt in context.MessageTranslations
-                .Where(mt => mt.MessageId == m.MessageId && mt.EditId == null)
+                .Where(mt => mt.MessageId == m.MessageId && mt.ChatId == m.ChatId && mt.EditId == null)
                 .DefaultIfEmpty()
             let text = mt != null ? mt.TranslatedText : m.MessageText
             where text != null && text.Length > MLConstants.MinTextLength
             orderby text.Length descending  // Sort by LENGTH (uses expression index)
-            select new { Text = text, m.MessageId }
+            select new { Text = text, m.MessageId, m.ChatId }
         ).ToListAsync(cancellationToken);
 
         // Convert to samples for deduplication
@@ -191,6 +209,7 @@ public class MLTrainingDataRepository(
             Label = TrainingLabel.Ham,
             Source = TrainingSampleSource.Implicit,
             MessageId = x.MessageId,
+            ChatId = x.ChatId,
             LabeledByUserId = null,
             LabeledAt = null
         }).ToList();

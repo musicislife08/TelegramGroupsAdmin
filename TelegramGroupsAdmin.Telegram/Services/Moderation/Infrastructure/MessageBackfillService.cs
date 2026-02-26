@@ -33,7 +33,7 @@ public class MessageBackfillService : IMessageBackfillService
         CancellationToken cancellationToken = default)
     {
         // Check if message already exists in database
-        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
+        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, chatId, cancellationToken);
         if (existingMessage != null)
         {
             _logger.LogDebug(

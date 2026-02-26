@@ -140,6 +140,7 @@ public class FileScanJob(
                 var detectionRecord = new DetectionResultRecord
                 {
                     MessageId = payload.MessageId,
+                    ChatId = payload.Chat.Id,
                     UserId = payload.User.Id,
                     DetectedAt = DateTimeOffset.UtcNow,
                     DetectionSource = "file_scan", // Phase 4.14
@@ -258,6 +259,7 @@ public class FileScanJob(
             // Mark message as deleted in database for audit trail
             await _messageHistoryRepository.MarkMessageAsDeletedAsync(
                 payload.MessageId,
+                payload.Chat.Id,
                 "file_scan_infected",
                 cancellationToken);
         }
@@ -277,6 +279,7 @@ public class FileScanJob(
             // Still mark as deleted in DB for audit trail
             await _messageHistoryRepository.MarkMessageAsDeletedAsync(
                 payload.MessageId,
+                payload.Chat.Id,
                 "file_scan_infected_already_deleted",
                 cancellationToken);
         }

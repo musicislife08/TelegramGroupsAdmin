@@ -14,9 +14,9 @@ public class MediaNotificationService(ILogger<MediaNotificationService> logger) 
     private readonly ConcurrentDictionary<string, List<Action>> _subscriptions = new();
     private readonly Lock _lock = new();
 
-    public void Subscribe(int messageId, MediaType mediaType, Action callback)
+    public void Subscribe(int messageId, long chatId, MediaType mediaType, Action callback)
     {
-        var key = $"{messageId}:{mediaType}";
+        var key = $"{messageId}:{chatId}:{mediaType}";
         using (_lock.EnterScope())
         {
             if (!_subscriptions.TryGetValue(key, out var callbacks))
@@ -42,9 +42,9 @@ public class MediaNotificationService(ILogger<MediaNotificationService> logger) 
         }
     }
 
-    public void Unsubscribe(int messageId, MediaType mediaType, Action callback)
+    public void Unsubscribe(int messageId, long chatId, MediaType mediaType, Action callback)
     {
-        var key = $"{messageId}:{mediaType}";
+        var key = $"{messageId}:{chatId}:{mediaType}";
         using (_lock.EnterScope())
         {
             if (_subscriptions.TryGetValue(key, out var callbacks))
@@ -74,9 +74,9 @@ public class MediaNotificationService(ILogger<MediaNotificationService> logger) 
         }
     }
 
-    public void NotifyMediaReady(int messageId, MediaType mediaType)
+    public void NotifyMediaReady(int messageId, long chatId, MediaType mediaType)
     {
-        var key = $"{messageId}:{mediaType}";
+        var key = $"{messageId}:{chatId}:{mediaType}";
         List<Action>? callbacks;
 
         using (_lock.EnterScope())

@@ -70,9 +70,9 @@ public class EnrichedMessageView
         FROM messages m
         LEFT JOIN managed_chats c ON m.chat_id = c.chat_id
         LEFT JOIN telegram_users u ON m.user_id = u.telegram_user_id
-        LEFT JOIN messages parent ON m.reply_to_message_id = parent.message_id
+        LEFT JOIN messages parent ON m.reply_to_message_id = parent.message_id AND m.chat_id = parent.chat_id
         LEFT JOIN telegram_users parent_user ON parent.user_id = parent_user.telegram_user_id
-        LEFT JOIN message_translations t ON m.message_id = t.message_id AND t.edit_id IS NULL;
+        LEFT JOIN message_translations t ON m.message_id = t.message_id AND m.chat_id = t.chat_id AND t.edit_id IS NULL;
         """;
 
     /// <summary>

@@ -158,6 +158,7 @@ public class TestUserActionBuilder
             UserId: _userId,
             ActionType: _actionType,
             MessageId: _messageId,
+            ChatId: null,
             IssuedBy: _issuedBy,
             IssuedAt: _issuedAt,
             ExpiresAt: _expiresAt,

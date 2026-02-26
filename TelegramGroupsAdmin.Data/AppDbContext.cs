@@ -98,6 +98,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Add Quartz.NET schema (11 tables: qrtz_job_details, qrtz_triggers, etc.)
         modelBuilder.AddQuartz(builder => builder.UsePostgreSql());
 
+        // Configure composite primary keys
+        modelBuilder.Entity<MessageRecordDto>().HasKey(m => new { m.MessageId, m.ChatId });
+        modelBuilder.Entity<MessageRecordDto>().Property(m => m.MessageId).ValueGeneratedNever();
+        modelBuilder.Entity<TrainingLabelDto>().HasKey(tl => new { tl.MessageId, tl.ChatId });
+
         // Configure relationships
         ConfigureRelationships(modelBuilder);
 
@@ -125,7 +130,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasOne(d => d.Message)
             .WithMany(m => m.DetectionResults)
-            .HasForeignKey(d => d.MessageId)
+            .HasForeignKey(d => new { d.MessageId, d.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // Configure is_spam as computed column (PostgreSQL: net_confidence > 0)
@@ -137,14 +142,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<MessageEditRecordDto>()
             .HasOne(e => e.Message)
             .WithMany(m => m.MessageEdits)
-            .HasForeignKey(e => e.MessageId)
+            .HasForeignKey(e => new { e.MessageId, e.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // Messages → UserActions (one-to-many, nullable)
         modelBuilder.Entity<UserActionRecordDto>()
             .HasOne(ua => ua.Message)
             .WithMany(m => m.UserActions)
-            .HasForeignKey(ua => ua.MessageId)
+            .HasForeignKey(ua => new { ua.MessageId, ua.ChatId })
             .OnDelete(DeleteBehavior.SetNull);
 
         // Users → Invites created (one-to-many) - Creator navigation property
@@ -358,6 +363,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_user_actions_exclusive_actor",
                 "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
 
+        // UserActions: message_id and chat_id must be both null or both non-null
+        modelBuilder.Entity<UserActionRecordDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_user_actions_message_chat_null_consistency",
+                "(message_id IS NULL) = (chat_id IS NULL)"));
+
         // DetectionResults: Exactly one actor must be non-null
         modelBuilder.Entity<DetectionResultRecordDto>()
             .ToTable(t => t.HasCheckConstraint(
@@ -402,17 +413,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_image_training_exclusive_actor",
                 "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1"));
 
-        // MessageTranslations: Exactly one of (message_id, edit_id) must be non-null
+        // MessageTranslations: Exactly one of (message_id+chat_id, edit_id) must be non-null
         modelBuilder.Entity<MessageTranslationDto>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_message_translations_exclusive_source",
-                "(message_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1"));
+                "(message_id IS NOT NULL AND chat_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1"));
 
         // MessageTranslations: CASCADE delete when message or edit is deleted
         modelBuilder.Entity<MessageTranslationDto>()
             .HasOne(mt => mt.Message)
             .WithMany()
-            .HasForeignKey(mt => mt.MessageId)
+            .HasForeignKey(mt => new { mt.MessageId, mt.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<MessageTranslationDto>()
@@ -425,7 +436,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ImageTrainingSampleDto>()
             .HasOne(its => its.Message)
             .WithMany()
-            .HasForeignKey(its => its.MessageId)
+            .HasForeignKey(its => new { its.MessageId, its.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // VideoTrainingSamples: Exactly one actor must be non-null
@@ -438,7 +449,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<VideoTrainingSampleDto>()
             .HasOne(vts => vts.Message)
             .WithMany()
-            .HasForeignKey(vts => vts.MessageId)
+            .HasForeignKey(vts => new { vts.MessageId, vts.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // Actor System Foreign Keys (web user, telegram user, system identifier)
@@ -490,7 +501,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TrainingLabelDto>()
             .HasOne(tl => tl.Message)
             .WithMany()
-            .HasForeignKey(tl => tl.MessageId)
+            .HasForeignKey(tl => new { tl.MessageId, tl.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // TrainingLabels → TelegramUsers (SET NULL when user is deleted)
@@ -504,9 +515,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
     {
-        // Messages table indexes
-        modelBuilder.Entity<MessageRecordDto>()
-            .HasIndex(m => m.ChatId);
+        // Messages table indexes (ChatId index removed - now part of composite PK)
         modelBuilder.Entity<MessageRecordDto>()
             .HasIndex(m => m.UserId);
         modelBuilder.Entity<MessageRecordDto>()
@@ -521,9 +530,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // MessageTranslations indexes (partial UNIQUE indexes for exclusive arc pattern)
         modelBuilder.Entity<MessageTranslationDto>()
-            .HasIndex(mt => mt.MessageId)
+            .HasIndex(mt => new { mt.MessageId, mt.ChatId })
             .IsUnique()
-            .HasFilter("message_id IS NOT NULL");
+            .HasFilter("message_id IS NOT NULL AND chat_id IS NOT NULL");
         modelBuilder.Entity<MessageTranslationDto>()
             .HasIndex(mt => mt.EditId)
             .IsUnique()
@@ -694,14 +703,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // ImageTrainingSamples indexes
         modelBuilder.Entity<ImageTrainingSampleDto>()
-            .HasIndex(its => its.MessageId)
+            .HasIndex(its => new { its.MessageId, its.ChatId })
             .IsUnique();  // One training sample per message
         modelBuilder.Entity<ImageTrainingSampleDto>()
             .HasIndex(its => new { its.IsSpam, its.MarkedAt });  // Filter spam/ham + sort by date
 
         // VideoTrainingSamples indexes
         modelBuilder.Entity<VideoTrainingSampleDto>()
-            .HasIndex(vts => vts.MessageId)
+            .HasIndex(vts => new { vts.MessageId, vts.ChatId })
             .IsUnique();  // One training sample per message
         modelBuilder.Entity<VideoTrainingSampleDto>()
             .HasIndex(vts => new { vts.IsSpam, vts.MarkedAt });  // Filter spam/ham + sort by date

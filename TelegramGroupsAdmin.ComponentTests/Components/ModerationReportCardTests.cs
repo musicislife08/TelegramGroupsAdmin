@@ -176,7 +176,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(status: ReportStatus.Pending);
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -196,7 +196,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(status: ReportStatus.Reviewed, actionTaken: "spam");
         var message = CreateSpamMessage(deletedAt: DateTimeOffset.UtcNow, deletionSource: "spam_action");
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -220,7 +220,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport();
         var message = CreateSpamMessage(messageText: "Buy crypto now! Great rates!");
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -240,7 +240,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport();
         var message = CreateSpamMessage(messageText: null);
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -263,7 +263,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         // Arrange
         var report = CreateReport();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         // Act
@@ -285,7 +285,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport();
         var message = CreateSpamMessage(photoFileId: "AgACAgIAAxkBAAI...");
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -307,7 +307,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             deletedAt: DateTimeOffset.UtcNow.AddMinutes(-30),
             deletionSource: "spam_action");
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -331,7 +331,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(status: ReportStatus.Pending);
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -357,7 +357,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(status: ReportStatus.Reviewed, actionTaken: "spam");
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -388,7 +388,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             reportedByUserName: "ReporterUser");
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -415,7 +415,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             reportedByUserName: "Auto-Detection");
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -443,7 +443,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             webUserId: "user-guid-123");
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -471,7 +471,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(chatId: -1001329174109, messageId: 212408);
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -495,7 +495,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(chatId: -123456789);
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -524,7 +524,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var message = CreateSpamMessage();
         var user = CreateTelegramUser(firstName: "John", lastName: "Spammer");
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(user);
@@ -544,7 +544,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport();
         var message = CreateSpamMessage(); // Has FirstName="Crypto", LastName="Spammer"
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns((TelegramUser?)null);
@@ -569,7 +569,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(status: ReportStatus.Pending);
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -603,7 +603,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport(status: ReportStatus.Pending);
         var message = CreateSpamMessage();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
         UserRepository.GetByTelegramIdAsync(message.User.Id, Arg.Any<CancellationToken>())
             .Returns(CreateTelegramUser());
@@ -635,7 +635,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         // Arrange
         var report = CreateReport(messageId: 12345);
 
-        MessageRepository.GetMessageAsync(12345, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(12345, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(CreateSpamMessage(messageId: 12345));
 
         // Act
@@ -644,7 +644,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
 
         // Assert - wait for repository to be called
         cut.WaitForAssertion(() =>
-            MessageRepository.Received(1).GetMessageAsync(12345, Arg.Any<CancellationToken>()));
+            MessageRepository.Received(1).GetMessageAsync(12345, Arg.Any<long>(), Arg.Any<CancellationToken>()));
     }
 
     [Test]
@@ -654,7 +654,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         var report = CreateReport();
         var message = CreateSpamMessage(userId: 999888777);
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
         // Act
@@ -672,7 +672,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
         // Arrange
         var report = CreateReport();
 
-        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<CancellationToken>())
+        MessageRepository.GetMessageAsync(report.MessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         // Act

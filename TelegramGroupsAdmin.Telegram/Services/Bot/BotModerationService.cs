@@ -125,7 +125,7 @@ public class BotModerationService : IBotModerationService
 
         // Step 4: Create training data (non-critical - failure doesn't affect ban success)
         await SafeExecuteAsync(
-            () => _trainingHandler.CreateSpamSampleAsync(intent.MessageId, intent.Executor, cancellationToken),
+            () => _trainingHandler.CreateSpamSampleAsync(intent.MessageId, intent.Chat, intent.Executor, cancellationToken),
             $"Create training data for message {intent.MessageId}");
 
         // Step 5: Send ban celebration (non-critical - failure doesn't affect ban success)
@@ -139,7 +139,7 @@ public class BotModerationService : IBotModerationService
         await SafeExecuteAsync(
             async () =>
             {
-                var enrichedMessage = await _messageHandler.GetEnrichedAsync(intent.MessageId, cancellationToken);
+                var enrichedMessage = await _messageHandler.GetEnrichedAsync(intent.MessageId, intent.Chat.Id, cancellationToken);
                 if (enrichedMessage != null)
                 {
                     await _notificationHandler.NotifyAdminsSpamBanAsync(

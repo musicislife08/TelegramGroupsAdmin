@@ -30,6 +30,11 @@ public record TrainingSample
     public required int MessageId { get; init; }
 
     /// <summary>
+    /// Chat ID where the message originated (part of composite key with MessageId).
+    /// </summary>
+    public required long ChatId { get; init; }
+
+    /// <summary>
     /// User ID who labeled this sample (null for implicit/auto-detected samples).
     /// </summary>
     public long? LabeledByUserId { get; init; }

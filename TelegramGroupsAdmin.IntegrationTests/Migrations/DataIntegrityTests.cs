@@ -52,6 +52,7 @@ public class DataIntegrityTests
             context.MessageTranslations.Add(new MessageTranslationDto
             {
                 MessageId = 7000,
+                ChatId = 222,
                 TranslatedText = "First translation",
                 DetectedLanguage = "en",
                 TranslatedAt = DateTimeOffset.UtcNow
@@ -66,6 +67,7 @@ public class DataIntegrityTests
             context.MessageTranslations.Add(new MessageTranslationDto
             {
                 MessageId = 7000,  // Duplicate!
+                ChatId = 222,
                 TranslatedText = "Second translation",
                 DetectedLanguage = "es",
                 TranslatedAt = DateTimeOffset.UtcNow
@@ -173,8 +175,8 @@ public class DataIntegrityTests
         var bothNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
         {
             await helper.ExecuteSqlAsync(@"
-                INSERT INTO message_translations (message_id, edit_id, translated_text, detected_language, translated_at)
-                VALUES (NULL, NULL, 'Invalid translation', 'en', NOW());
+                INSERT INTO message_translations (message_id, chat_id, edit_id, translated_text, detected_language, translated_at)
+                VALUES (NULL, NULL, NULL, 'Invalid translation', 'en', NOW());
             ");
         });
 
@@ -204,6 +206,7 @@ public class DataIntegrityTests
             var edit = new MessageEditRecordDto
             {
                 MessageId = 8000,
+                ChatId = 555,
                 EditDate = DateTimeOffset.UtcNow,
                 NewText = "Edited"
             };
@@ -215,8 +218,8 @@ public class DataIntegrityTests
         var bothNonNullException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
         {
             await helper.ExecuteSqlAsync($@"
-                INSERT INTO message_translations (message_id, edit_id, translated_text, detected_language, translated_at)
-                VALUES (8000, {editId}, 'Invalid translation', 'en', NOW());
+                INSERT INTO message_translations (message_id, chat_id, edit_id, translated_text, detected_language, translated_at)
+                VALUES (8000, 555, {editId}, 'Invalid translation', 'en', NOW());
             ");
         });
 
@@ -365,8 +368,8 @@ public class DataIntegrityTests
         var orphanedMessageException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
         {
             await helper.ExecuteSqlAsync(@"
-                INSERT INTO message_translations (message_id, translated_text, detected_language, translated_at)
-                VALUES (99999, 'Orphaned translation', 'en', NOW());
+                INSERT INTO message_translations (message_id, chat_id, translated_text, detected_language, translated_at)
+                VALUES (99999, 99999, 'Orphaned translation', 'en', NOW());
             ");
         });
 
@@ -375,7 +378,7 @@ public class DataIntegrityTests
             Assert.That(orphanedMessageException!.SqlState, Is.EqualTo("23503"), // FK violation
                       "Orphaned message_id should violate FK constraint");
             Assert.That(orphanedMessageException.ConstraintName,
-                Is.EqualTo("FK_message_translations_messages_message_id"),
+                Is.EqualTo("FK_message_translations_messages_message_id_chat_id"),
                 "Should mention FK to messages table");
         }
 

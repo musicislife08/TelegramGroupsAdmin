@@ -24,12 +24,14 @@ public interface IImageTrainingSamplesRepository
     /// Computes photo hash and stores with spam/ham label
     /// </summary>
     /// <param name="messageId">Message ID</param>
+    /// <param name="chatId">Chat ID the message belongs to</param>
     /// <param name="isSpam">True = spam sample, False = ham (legitimate) sample</param>
     /// <param name="markedBy">Actor who labeled the message</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if sample was saved, False if message has no photo or hash computation failed</returns>
     Task<bool> SaveTrainingSampleAsync(
         int messageId,
+        long chatId,
         bool isSpam,
         Actor markedBy,
         CancellationToken cancellationToken = default);

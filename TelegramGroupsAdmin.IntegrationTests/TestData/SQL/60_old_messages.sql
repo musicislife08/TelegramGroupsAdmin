@@ -37,9 +37,10 @@ VALUES (
 );
 
 -- Detection result for message 96003 (training data - preserved)
-INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, net_confidence, used_for_training, system_identifier, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, net_confidence, used_for_training, system_identifier, edit_version)
 VALUES (
     96003,
+    -1001322973935,
     NOW() - INTERVAL '90 days',
     'TextClassifier',
     'Bayes',
@@ -82,9 +83,10 @@ VALUES (
 );
 
 -- Detection result for message 96006 (NOT training data - will cascade delete with message)
-INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, net_confidence, used_for_training, system_identifier, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, net_confidence, used_for_training, system_identifier, edit_version)
 VALUES (
     96006,
+    -1001322973935,
     NOW() - INTERVAL '50 days',
     'TextClassifier',
     'Bayes',
@@ -101,19 +103,21 @@ VALUES (
 
 -- Edit for message 96001 (cascade deletes when message is deleted)
 -- Edit IDs: 960001+ to avoid conflicts
-INSERT INTO message_edits (id, message_id, edit_date, old_text, new_text)
+INSERT INTO message_edits (id, message_id, chat_id, edit_date, old_text, new_text)
 VALUES (
     960001,
     96001,
+    -1001322973935,
     NOW() - INTERVAL '44 days',
     'Original text before edit',
     'Old message that should be cleaned up'
 );
 
 -- Translation for message 96002 (cascade deletes when message is deleted)
-INSERT INTO message_translations (message_id, translated_text, detected_language, translated_at)
+INSERT INTO message_translations (message_id, chat_id, translated_text, detected_language, translated_at)
 VALUES (
     96002,
+    -1001322973935,
     'Another old message for cleanup testing (translated)',
     'es',
     NOW() - INTERVAL '60 days'

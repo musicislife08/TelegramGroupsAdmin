@@ -54,7 +54,7 @@ public class TrainingHandlerTests
     {
         // Arrange - message exists and already has a detection record (from automated pipeline)
         var message = CreateTestMessage(messageText: "Buy cheap watches");
-        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
         var existingDetection = new DetectionResultRecord
@@ -69,17 +69,17 @@ public class TrainingHandlerTests
             UserId = TestUserId,
             NetConfidence = 95
         };
-        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new List<DetectionResultRecord> { existingDetection });
 
         _mockImageTrainingRepo.SaveTrainingSampleAsync(
-                TestMessageId, true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                TestMessageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var executor = Actor.FromTelegramUser(12345, "moderator");
 
         // Act
-        await _handler.CreateSpamSampleAsync(TestMessageId, executor);
+        await _handler.CreateSpamSampleAsync(TestMessageId, ChatIdentity.FromId(-100), executor);
 
         // Assert - InsertAsync should NOT be called since detection already exists
         await _mockDetectionRepo.DidNotReceive()
@@ -91,20 +91,20 @@ public class TrainingHandlerTests
     {
         // Arrange - message exists but no detection record yet (manual spam marking)
         var message = CreateTestMessage(messageText: "Buy cheap watches");
-        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new List<DetectionResultRecord>());
 
         _mockImageTrainingRepo.SaveTrainingSampleAsync(
-                TestMessageId, true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                TestMessageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var executor = Actor.FromTelegramUser(12345, "moderator");
 
         // Act
-        await _handler.CreateSpamSampleAsync(TestMessageId, executor);
+        await _handler.CreateSpamSampleAsync(TestMessageId, ChatIdentity.FromId(-100), executor);
 
         // Assert - InsertAsync called with correct fields
         await _mockDetectionRepo.Received(1).InsertAsync(
@@ -122,7 +122,7 @@ public class TrainingHandlerTests
     {
         // Arrange - detection record already exists, but training label should still be created
         var message = CreateTestMessage(messageText: "Buy cheap watches");
-        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
         var existingDetection = new DetectionResultRecord
@@ -137,21 +137,22 @@ public class TrainingHandlerTests
             UserId = TestUserId,
             NetConfidence = 95
         };
-        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new List<DetectionResultRecord> { existingDetection });
 
         _mockImageTrainingRepo.SaveTrainingSampleAsync(
-                TestMessageId, true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+                TestMessageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var executor = Actor.FromTelegramUser(12345, "moderator");
 
         // Act
-        await _handler.CreateSpamSampleAsync(TestMessageId, executor);
+        await _handler.CreateSpamSampleAsync(TestMessageId, ChatIdentity.FromId(-100), executor);
 
         // Assert - training label still created even though detection record was skipped
         await _mockTrainingLabelsRepo.Received(1).UpsertLabelAsync(
             TestMessageId,
+            Arg.Any<long>(),
             TrainingLabel.Spam,
             Arg.Any<long?>(),
             Arg.Is<string>(s => s.Contains("spam")),

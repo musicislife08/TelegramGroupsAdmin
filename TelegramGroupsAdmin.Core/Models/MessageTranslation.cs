@@ -7,6 +7,7 @@ namespace TelegramGroupsAdmin.Core.Models;
 public record MessageTranslation(
     long Id,
     int? MessageId,
+    long? ChatId,
     long? EditId,
     string TranslatedText,
     string DetectedLanguage,

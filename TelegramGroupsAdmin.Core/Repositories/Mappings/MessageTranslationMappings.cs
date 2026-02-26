@@ -13,6 +13,7 @@ public static class MessageTranslationMappings
         public UiModels.MessageTranslation ToModel() => new(
             Id: data.Id,
             MessageId: data.MessageId,
+            ChatId: data.ChatId,
             EditId: data.EditId,
             TranslatedText: data.TranslatedText,
             DetectedLanguage: data.DetectedLanguage,
@@ -27,6 +28,7 @@ public static class MessageTranslationMappings
         {
             Id = ui.Id,
             MessageId = ui.MessageId,
+            ChatId = ui.ChatId,
             EditId = ui.EditId,
             TranslatedText = ui.TranslatedText,
             DetectedLanguage = ui.DetectedLanguage,

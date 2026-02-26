@@ -118,6 +118,7 @@ public class UserAutoTrustService
                 UserId: userId,
                 ActionType: UserActionType.Trust,
                 MessageId: null,
+                ChatId: null,
                 IssuedBy: Actor.AutoTrust, // System-issued
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent (until revoked)

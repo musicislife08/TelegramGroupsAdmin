@@ -13,6 +13,7 @@ public interface ITrainingHandler
     /// </summary>
     Task CreateSpamSampleAsync(
         int messageId,
+        ChatIdentity chat,
         Actor executor,
         CancellationToken cancellationToken = default);
 }

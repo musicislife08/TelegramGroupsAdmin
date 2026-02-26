@@ -464,7 +464,7 @@ public class BotModerationServiceTests
             Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
 
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
-            messageId, executor, Arg.Any<CancellationToken>());
+            messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -547,6 +547,7 @@ public class BotModerationServiceTests
         // Training data should NOT be created on failure
         await _mockTrainingHandler.DidNotReceive().CreateSpamSampleAsync(
             Arg.Any<int>(),
+            Arg.Any<ChatIdentity>(),
             Arg.Any<Actor>(),
             Arg.Any<CancellationToken>());
     }
@@ -1172,7 +1173,7 @@ public class BotModerationServiceTests
         _mockTrustHandler.UntrustAsync(Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(UntrustResult.Succeeded());
 
-        _mockTrainingHandler.CreateSpamSampleAsync(messageId, executor, Arg.Any<CancellationToken>())
+        _mockTrainingHandler.CreateSpamSampleAsync(messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Database error"));
 
         // Act
@@ -1196,7 +1197,7 @@ public class BotModerationServiceTests
 
         // Verify training data creation was attempted
         await _mockTrainingHandler.Received(1).CreateSpamSampleAsync(
-            messageId, executor, Arg.Any<CancellationToken>());
+            messageId, Arg.Any<ChatIdentity>(), executor, Arg.Any<CancellationToken>());
     }
 
     #endregion

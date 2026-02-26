@@ -110,7 +110,7 @@ public class MediaRefetchWorkerService : BackgroundService
             workerId, request.MessageId, request.MediaType);
 
         // Get message data from database
-        var message = await messageRepo.GetMessageAsync(request.MessageId);
+        var message = await messageRepo.GetMessageAsync(request.MessageId, request.ChatId);
         if (message == null)
         {
             _logger.LogWarning("Message {MessageId} not found in database", request.MessageId);
@@ -134,7 +134,7 @@ public class MediaRefetchWorkerService : BackgroundService
         if (localPath != null)
         {
             // Update message with local path
-            await messageRepo.UpdateMediaLocalPathAsync(request.MessageId, localPath);
+            await messageRepo.UpdateMediaLocalPathAsync(request.MessageId, request.ChatId, localPath);
 
             _logger.LogDebug("Worker {WorkerId} completed media refetch: {LocalPath}", workerId, localPath);
 

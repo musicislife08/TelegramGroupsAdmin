@@ -79,7 +79,7 @@ public class AuditHandler : IAuditHandler
     public async Task LogDeleteAsync(int messageId, ChatIdentity chat, UserIdentity user, Actor executor, CancellationToken cancellationToken = default)
     {
         // userId is required for FK constraint to telegram_users (TargetUser navigation)
-        var record = CreateRecord(user.Id, UserActionType.Delete, executor, null, messageId: messageId);
+        var record = CreateRecord(user.Id, UserActionType.Delete, executor, null, messageId: messageId, chatId: chat.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -123,6 +123,7 @@ public class AuditHandler : IAuditHandler
         Actor executor,
         string? reason,
         int? messageId = null,
+        long? chatId = null,
         DateTimeOffset? expiresAt = null)
     {
         return new UserActionRecord(
@@ -130,6 +131,7 @@ public class AuditHandler : IAuditHandler
             UserId: userId,
             ActionType: actionType,
             MessageId: messageId,
+            ChatId: chatId,
             IssuedBy: executor,
             IssuedAt: DateTimeOffset.UtcNow,
             ExpiresAt: expiresAt,

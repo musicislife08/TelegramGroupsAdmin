@@ -29,7 +29,7 @@ public class EditHistoryDialogTestContext : BunitContext
         var logger = Substitute.For<ILogger<EditHistoryDialog>>();
 
         // Default: return empty edit list
-        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>()).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>(), Arg.Any<long>()).Returns([]);
         MessageTranslationService.GetTranslationForEditAsync(Arg.Any<long>()).Returns((MessageTranslation?)null);
 
         // Register mocks
@@ -72,7 +72,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
     {
         MessageEditService.ClearReceivedCalls();
         MessageTranslationService.ClearReceivedCalls();
-        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>()).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>(), Arg.Any<long>()).Returns([]);
     }
 
     #region Helper Methods
@@ -124,6 +124,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         return new MessageEditRecord(
             Id: id,
             MessageId: messageId,
+            ChatId: -100,
             OldText: oldText,
             NewText: newText,
             EditDate: DateTimeOffset.UtcNow.AddMinutes(-30),
@@ -206,7 +207,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns([]);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -229,7 +230,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage(userName: "testuser");
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -248,7 +249,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage(messageId: 12345);
         List<MessageEditRecord> edits = [CreateTestEdit(messageId: 12345)];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -271,7 +272,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -295,7 +296,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
             CreateTestEdit(id: 2),
             CreateTestEdit(id: 3)
         ];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -318,7 +319,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -337,7 +338,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);

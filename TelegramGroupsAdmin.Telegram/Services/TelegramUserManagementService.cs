@@ -120,6 +120,7 @@ public class TelegramUserManagementService : ITelegramUserManagementService
                 UserId: telegramUserId,
                 ActionType: UserActionType.Trust,
                 MessageId: null, // No specific message associated
+                ChatId: null,
                 IssuedBy: modifiedBy,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Trust doesn't expire
@@ -139,6 +140,7 @@ public class TelegramUserManagementService : ITelegramUserManagementService
                 UserId: telegramUserId,
                 ActionType: UserActionType.Untrust,
                 MessageId: null,
+                ChatId: null,
                 IssuedBy: modifiedBy,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Untrust doesn't need expiration - it's a point-in-time action
@@ -203,6 +205,7 @@ public class TelegramUserManagementService : ITelegramUserManagementService
             UserId: telegramUserId,
             ActionType: UserActionType.Unban,
             MessageId: null, // No specific message associated
+            ChatId: null,
             IssuedBy: unbannedBy,
             IssuedAt: DateTimeOffset.UtcNow,
             ExpiresAt: null, // Unban doesn't expire

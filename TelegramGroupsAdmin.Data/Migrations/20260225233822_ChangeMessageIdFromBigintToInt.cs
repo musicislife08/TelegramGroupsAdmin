@@ -180,8 +180,56 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 oldType: "bigint");
 
             // Step 4: Recreate views
-            migrationBuilder.Sql(EnrichedMessageView.CreateViewSql);
-            migrationBuilder.Sql(EnrichedDetectionView.CreateViewSql);
+            // IMPORTANT: EnrichedMessageView and EnrichedDetectionView use inline SQL here
+            // (snapshot at this migration's point in time) because the C# constants were updated
+            // for composite keys in AddCompositeMessageKey, which adds chat_id columns that
+            // don't exist yet at this migration step.
+            migrationBuilder.Sql("""
+                CREATE VIEW enriched_messages AS
+                SELECT
+                    m.message_id, m.user_id, m.chat_id, m.timestamp, m.message_text,
+                    m.photo_file_id, m.photo_file_size, m.urls, m.edit_date, m.content_hash,
+                    m.photo_local_path, m.photo_thumbnail_path, m.deleted_at, m.deletion_source,
+                    m.reply_to_message_id, m.media_type, m.media_file_id, m.media_file_size,
+                    m.media_file_name, m.media_mime_type, m.media_local_path, m.media_duration,
+                    m.content_check_skip_reason, m.similarity_hash,
+                    c.chat_name, c.chat_icon_path,
+                    u.username AS user_name, u.first_name, u.last_name, u.user_photo_path,
+                    parent_user.first_name AS reply_to_first_name,
+                    parent_user.last_name AS reply_to_last_name,
+                    parent_user.username AS reply_to_username,
+                    parent_user.telegram_user_id AS reply_to_user_id,
+                    parent.message_text AS reply_to_text,
+                    t.id AS translation_id, t.translated_text, t.detected_language,
+                    t.confidence AS translation_confidence, t.translated_at
+                FROM messages m
+                LEFT JOIN managed_chats c ON m.chat_id = c.chat_id
+                LEFT JOIN telegram_users u ON m.user_id = u.telegram_user_id
+                LEFT JOIN messages parent ON m.reply_to_message_id = parent.message_id
+                LEFT JOIN telegram_users parent_user ON parent.user_id = parent_user.telegram_user_id
+                LEFT JOIN message_translations t ON m.message_id = t.message_id AND t.edit_id IS NULL;
+                """);
+            migrationBuilder.Sql("""
+                CREATE VIEW enriched_detections AS
+                SELECT
+                    dr.id, dr.message_id, dr.detected_at, dr.detection_source, dr.detection_method,
+                    dr.is_spam, dr.confidence, dr.net_confidence, dr.reason, dr.check_results_json,
+                    dr.edit_version,
+                    dr.web_user_id, dr.telegram_user_id, dr.system_identifier,
+                    wu.email AS actor_web_email,
+                    actor_tu.username AS actor_telegram_username,
+                    actor_tu.first_name AS actor_telegram_first_name,
+                    actor_tu.last_name AS actor_telegram_last_name,
+                    m.user_id AS message_user_id, m.message_text, m.content_hash,
+                    msg_tu.username AS message_author_username,
+                    msg_tu.first_name AS message_author_first_name,
+                    msg_tu.last_name AS message_author_last_name
+                FROM detection_results dr
+                INNER JOIN messages m ON dr.message_id = m.message_id
+                LEFT JOIN users wu ON dr.web_user_id = wu.id
+                LEFT JOIN telegram_users actor_tu ON dr.telegram_user_id = actor_tu.telegram_user_id
+                LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
+                """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
             migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
             migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
@@ -274,9 +322,53 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 oldClrType: typeof(int),
                 oldType: "integer");
 
-            // Recreate views after reverting column types
-            migrationBuilder.Sql(EnrichedMessageView.CreateViewSql);
-            migrationBuilder.Sql(EnrichedDetectionView.CreateViewSql);
+            // Recreate views after reverting column types (inline SQL — see Up() comment)
+            migrationBuilder.Sql("""
+                CREATE VIEW enriched_messages AS
+                SELECT
+                    m.message_id, m.user_id, m.chat_id, m.timestamp, m.message_text,
+                    m.photo_file_id, m.photo_file_size, m.urls, m.edit_date, m.content_hash,
+                    m.photo_local_path, m.photo_thumbnail_path, m.deleted_at, m.deletion_source,
+                    m.reply_to_message_id, m.media_type, m.media_file_id, m.media_file_size,
+                    m.media_file_name, m.media_mime_type, m.media_local_path, m.media_duration,
+                    m.content_check_skip_reason, m.similarity_hash,
+                    c.chat_name, c.chat_icon_path,
+                    u.username AS user_name, u.first_name, u.last_name, u.user_photo_path,
+                    parent_user.first_name AS reply_to_first_name,
+                    parent_user.last_name AS reply_to_last_name,
+                    parent_user.username AS reply_to_username,
+                    parent_user.telegram_user_id AS reply_to_user_id,
+                    parent.message_text AS reply_to_text,
+                    t.id AS translation_id, t.translated_text, t.detected_language,
+                    t.confidence AS translation_confidence, t.translated_at
+                FROM messages m
+                LEFT JOIN managed_chats c ON m.chat_id = c.chat_id
+                LEFT JOIN telegram_users u ON m.user_id = u.telegram_user_id
+                LEFT JOIN messages parent ON m.reply_to_message_id = parent.message_id
+                LEFT JOIN telegram_users parent_user ON parent.user_id = parent_user.telegram_user_id
+                LEFT JOIN message_translations t ON m.message_id = t.message_id AND t.edit_id IS NULL;
+                """);
+            migrationBuilder.Sql("""
+                CREATE VIEW enriched_detections AS
+                SELECT
+                    dr.id, dr.message_id, dr.detected_at, dr.detection_source, dr.detection_method,
+                    dr.is_spam, dr.confidence, dr.net_confidence, dr.reason, dr.check_results_json,
+                    dr.edit_version,
+                    dr.web_user_id, dr.telegram_user_id, dr.system_identifier,
+                    wu.email AS actor_web_email,
+                    actor_tu.username AS actor_telegram_username,
+                    actor_tu.first_name AS actor_telegram_first_name,
+                    actor_tu.last_name AS actor_telegram_last_name,
+                    m.user_id AS message_user_id, m.message_text, m.content_hash,
+                    msg_tu.username AS message_author_username,
+                    msg_tu.first_name AS message_author_first_name,
+                    msg_tu.last_name AS message_author_last_name
+                FROM detection_results dr
+                INNER JOIN messages m ON dr.message_id = m.message_id
+                LEFT JOIN users wu ON dr.web_user_id = wu.id
+                LEFT JOIN telegram_users actor_tu ON dr.telegram_user_id = actor_tu.telegram_user_id
+                LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
+                """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
             migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
             migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
