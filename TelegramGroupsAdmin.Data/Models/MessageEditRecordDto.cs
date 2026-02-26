@@ -14,7 +14,7 @@ public class MessageEditRecordDto
     public long Id { get; set; }
 
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     [Column("edit_date")]
     public DateTimeOffset EditDate { get; set; }

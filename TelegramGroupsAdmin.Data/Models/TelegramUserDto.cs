@@ -39,7 +39,7 @@ public class WarningEntry
     public long ChatId { get; set; }
 
     /// <summary>Context: Message ID that triggered the warning (optional)</summary>
-    public long? MessageId { get; set; }
+    public int? MessageId { get; set; }
 }
 
 /// <summary>

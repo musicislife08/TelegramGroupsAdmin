@@ -24,7 +24,7 @@ public interface ITelegramBotService
     /// <summary>
     /// Event raised when media is downloaded and ready for display.
     /// </summary>
-    event Action<long, MediaType>? OnMediaUpdated;
+    event Action<int, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Event raised when chat health status changes.

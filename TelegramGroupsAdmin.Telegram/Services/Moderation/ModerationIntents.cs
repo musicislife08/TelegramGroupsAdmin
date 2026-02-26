@@ -32,7 +32,7 @@ public abstract record ModerationIntent
 
 public sealed record SpamBanIntent : ModerationIntent
 {
-    public required long MessageId { get; init; }
+    public required int MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
 
     /// <summary>
@@ -43,7 +43,7 @@ public sealed record SpamBanIntent : ModerationIntent
 
 public sealed record BanIntent : ModerationIntent
 {
-    public long? MessageId { get; init; }
+    public int? MessageId { get; init; }
 
     /// <summary>
     /// When set, enables ban celebration in this chat.
@@ -54,12 +54,12 @@ public sealed record BanIntent : ModerationIntent
 public sealed record SyncBanIntent : ModerationIntent
 {
     public required ChatIdentity Chat { get; init; }
-    public long? TriggeredByMessageId { get; init; }
+    public int? TriggeredByMessageId { get; init; }
 }
 
 public sealed record TempBanIntent : ModerationIntent
 {
-    public long? MessageId { get; init; }
+    public int? MessageId { get; init; }
     public required TimeSpan Duration { get; init; }
 }
 
@@ -74,7 +74,7 @@ public sealed record UnbanIntent : ModerationIntent
 
 public sealed record WarnIntent : ModerationIntent
 {
-    public long? MessageId { get; init; }
+    public int? MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
 }
 
@@ -88,7 +88,7 @@ public sealed record UntrustIntent : ModerationIntent;
 
 public sealed record DeleteMessageIntent : ModerationIntent
 {
-    public required long MessageId { get; init; }
+    public required int MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
 }
 
@@ -118,7 +118,7 @@ public sealed record KickIntent : ModerationIntent
 
 public sealed record MalwareViolationIntent : ModerationIntent
 {
-    public required long MessageId { get; init; }
+    public required int MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
     public required string MalwareDetails { get; init; }
 
@@ -130,7 +130,7 @@ public sealed record MalwareViolationIntent : ModerationIntent
 
 public sealed record CriticalViolationIntent : ModerationIntent
 {
-    public required long MessageId { get; init; }
+    public required int MessageId { get; init; }
     public required ChatIdentity Chat { get; init; }
     public required IReadOnlyList<string> Violations { get; init; }
 

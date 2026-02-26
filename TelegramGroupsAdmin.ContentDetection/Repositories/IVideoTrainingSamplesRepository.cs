@@ -29,7 +29,7 @@ public interface IVideoTrainingSamplesRepository
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if sample was saved, False if message has no video or hash computation failed</returns>
     Task<bool> SaveTrainingSampleAsync(
-        long messageId,
+        int messageId,
         bool isSpam,
         Actor markedBy,
         CancellationToken cancellationToken = default);

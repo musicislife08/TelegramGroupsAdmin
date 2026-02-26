@@ -18,7 +18,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation;
 [TestFixture]
 public class TrainingHandlerTests
 {
-    private const long TestMessageId = 456L;
+    private const int TestMessageId = 456;
     private const long TestUserId = 789L;
 
     private IMessageHistoryRepository _mockMessageRepo = null!;

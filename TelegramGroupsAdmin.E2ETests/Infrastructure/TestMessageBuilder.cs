@@ -22,7 +22,7 @@ namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 public class TestMessageBuilder
 {
     private readonly IServiceProvider _services;
-    private long? _messageId;
+    private int? _messageId;
     private long _userId = 123456789;
     private string? _userName;
     private string? _firstName = "Test";
@@ -42,7 +42,7 @@ public class TestMessageBuilder
     private string? _userPhotoPath;
     private DateTimeOffset? _deletedAt;
     private string? _deletionSource;
-    private long? _replyToMessageId;
+    private int? _replyToMessageId;
     private string? _replyToUser;
     private string? _replyToText;
     private MediaType? _mediaType;
@@ -63,7 +63,7 @@ public class TestMessageBuilder
     /// <summary>
     /// Sets the message ID. If not called, a random ID will be generated.
     /// </summary>
-    public TestMessageBuilder WithId(long messageId)
+    public TestMessageBuilder WithId(int messageId)
     {
         _messageId = messageId;
         return this;
@@ -152,7 +152,7 @@ public class TestMessageBuilder
     /// <summary>
     /// Sets the message as a reply to another message.
     /// </summary>
-    public TestMessageBuilder AsReplyTo(long messageId, string? user = null, string? text = null)
+    public TestMessageBuilder AsReplyTo(int messageId, string? user = null, string? text = null)
     {
         _replyToMessageId = messageId;
         _replyToUser = user;
@@ -256,7 +256,7 @@ public class TestMessageBuilder
         var messageRepository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
         // Generate a random message ID if not specified
-        var messageId = _messageId ?? Random.Shared.NextInt64(1, 999_999_999);
+        var messageId = _messageId ?? Random.Shared.Next(1, 999_999_999);
 
         var messageRecord = new MessageRecord(
             MessageId: messageId,
@@ -300,7 +300,7 @@ public class TestMessageBuilder
 /// </summary>
 public record TestMessage(MessageRecord Record)
 {
-    public long MessageId => Record.MessageId;
+    public int MessageId => Record.MessageId;
     public long ChatId => Record.Chat.Id;
     public long UserId => Record.User.Id;
     public string? Text => Record.MessageText;

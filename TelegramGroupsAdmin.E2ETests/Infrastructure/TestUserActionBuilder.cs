@@ -25,7 +25,7 @@ public class TestUserActionBuilder
     private readonly IServiceProvider _services;
     private long _userId;
     private UserActionType _actionType = UserActionType.Ban;
-    private long? _messageId;
+    private int? _messageId;
     private Actor _issuedBy = Actor.BotProtection;
     private DateTimeOffset _issuedAt = DateTimeOffset.UtcNow;
     private DateTimeOffset? _expiresAt;
@@ -57,7 +57,7 @@ public class TestUserActionBuilder
     /// <summary>
     /// Sets the message ID that triggered this action (optional).
     /// </summary>
-    public TestUserActionBuilder WithMessageId(long messageId)
+    public TestUserActionBuilder WithMessageId(int messageId)
     {
         _messageId = messageId;
         return this;

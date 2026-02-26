@@ -12,5 +12,5 @@ public record ContentCheckRecord(
     int Confidence,
     string? Reason,
     string CheckType,
-    long? MatchedMessageId
+    int? MatchedMessageId
 );

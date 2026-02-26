@@ -39,7 +39,7 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
     /// FUTURE: Consider FlexLabs.EntityFrameworkCore.Upsert when EF Core 10 support is added
     /// </remarks>
     public async Task UpsertLabelAsync(
-        long messageId,
+        int messageId,
         TrainingLabel label,
         long? labeledByUserId = null,
         string? reason = null,
@@ -68,7 +68,7 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
     /// <summary>
     /// Gets the training label for a message (if exists).
     /// </summary>
-    public async Task<TrainingLabelRecord?> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<TrainingLabelRecord?> GetByMessageIdAsync(int messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -83,7 +83,7 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
     /// Deletes a training label for a message using atomic ExecuteDeleteAsync.
     /// This is thread-safe and ~42% faster than load-then-delete pattern.
     /// </summary>
-    public async Task DeleteLabelAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task DeleteLabelAsync(int messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 

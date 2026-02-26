@@ -27,7 +27,7 @@ namespace TelegramGroupsAdmin.UnitTests.Services;
 public class ReportActionsServiceTests
 {
     private const long TestReportId = 123L;
-    private const long TestMessageId = 456L;
+    private const int TestMessageId = 456;
     private const long TestChatId = -100123456789L;
     private const long TestUserId = 789L;
     private const string TestReviewerId = "reviewer-user-id";
@@ -217,7 +217,7 @@ public class ReportActionsServiceTests
 
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
             TestChatId,
-            Arg.Is<int>(i => i == (int)TestMessageId),
+            Arg.Is<int>(i => i == TestMessageId),
             deletionSource: "ban_action",
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -424,7 +424,7 @@ public class ReportActionsServiceTests
             TestChatId,
             Arg.Is<string>(s => s.Contains("reviewed") && s.Contains("no action")),
             parseMode: ParseMode.Markdown,
-            replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == (int)TestMessageId),
+            replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == TestMessageId),
             cancellationToken: Arg.Any<CancellationToken>());
     }
 
@@ -486,7 +486,7 @@ public class ReportActionsServiceTests
     {
         return new Report(
             Id: TestReportId,
-            MessageId: (int)TestMessageId,
+            MessageId: TestMessageId,
             Chat: new ChatIdentity(TestChatId, "TestChat"),
             ReportCommandMessageId: reportCommandMessageId,
             ReportedByUserId: 11111L,

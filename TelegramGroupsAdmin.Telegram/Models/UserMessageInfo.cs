@@ -5,6 +5,6 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// </summary>
 public record UserMessageInfo
 {
-    public long MessageId { get; init; }
+    public int MessageId { get; init; }
     public long ChatId { get; init; }
 }

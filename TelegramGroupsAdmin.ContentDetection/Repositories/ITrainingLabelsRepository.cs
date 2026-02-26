@@ -20,7 +20,7 @@ public interface ITrainingLabelsRepository
     /// <param name="auditLogId">Optional audit log ID linking to moderation action</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task UpsertLabelAsync(
-        long messageId,
+        int messageId,
         TrainingLabel label,
         long? labeledByUserId = null,
         string? reason = null,
@@ -33,7 +33,7 @@ public interface ITrainingLabelsRepository
     /// <param name="messageId">Message ID to look up</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Training label record if exists, null otherwise</returns>
-    Task<TrainingLabelRecord?> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<TrainingLabelRecord?> GetByMessageIdAsync(int messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a training label for a message.
@@ -41,5 +41,5 @@ public interface ITrainingLabelsRepository
     /// </summary>
     /// <param name="messageId">Message ID to delete label for</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task DeleteLabelAsync(long messageId, CancellationToken cancellationToken = default);
+    Task DeleteLabelAsync(int messageId, CancellationToken cancellationToken = default);
 }

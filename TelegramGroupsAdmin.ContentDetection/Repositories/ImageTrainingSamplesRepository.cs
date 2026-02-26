@@ -61,7 +61,7 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
     /// Computes photo hash and stores with spam/ham label
     /// </summary>
     public async Task<bool> SaveTrainingSampleAsync(
-        long messageId,
+        int messageId,
         bool isSpam,
         Actor markedBy,
         CancellationToken cancellationToken = default)

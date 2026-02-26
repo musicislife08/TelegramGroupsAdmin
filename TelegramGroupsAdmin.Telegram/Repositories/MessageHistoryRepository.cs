@@ -157,7 +157,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
 
 
-    public async Task<UiModels.MessageRecord?> GetMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<UiModels.MessageRecord?> GetMessageAsync(int messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var result = await (
@@ -220,7 +220,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         return messageModel;
     }
 
-    public async Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default)
+    public async Task UpdateMediaLocalPathAsync(int messageId, string localPath, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Messages.FindAsync([messageId], cancellationToken);
@@ -232,7 +232,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         }
     }
 
-    public async Task UpdateMessageTextAsync(long messageId, string enrichedText, CancellationToken cancellationToken = default)
+    public async Task UpdateMessageTextAsync(int messageId, string enrichedText, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Messages.FindAsync([messageId], cancellationToken);
@@ -246,7 +246,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         }
     }
 
-    public async Task UpdateMessageEditDateAsync(long messageId, DateTimeOffset editDate, CancellationToken cancellationToken = default)
+    public async Task UpdateMessageEditDateAsync(int messageId, DateTimeOffset editDate, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Messages.FindAsync([messageId], cancellationToken);
@@ -290,7 +290,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     /// <summary>
     /// Mark a message as deleted (soft delete)
     /// </summary>
-    public async Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default)
+    public async Task MarkMessageAsDeletedAsync(int messageId, string deletionSource, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Messages.FindAsync([messageId], cancellationToken);

@@ -18,7 +18,7 @@ public interface IBotBanHandler
         UserIdentity user,
         Actor executor,
         string? reason,
-        long? triggeredByMessageId = null,
+        int? triggeredByMessageId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -30,7 +30,7 @@ public interface IBotBanHandler
         ChatIdentity chat,
         Actor executor,
         string? reason,
-        long? triggeredByMessageId = null,
+        int? triggeredByMessageId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -41,7 +41,7 @@ public interface IBotBanHandler
         Actor executor,
         TimeSpan duration,
         string? reason,
-        long? triggeredByMessageId = null,
+        int? triggeredByMessageId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

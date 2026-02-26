@@ -100,7 +100,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
     /// Creates a MessageRecord with realistic spam message pattern.
     /// </summary>
     private static MessageRecord CreateSpamMessage(
-        long messageId = 212408,
+        int messageId = 212408,
         long userId = 8119068862,
         string? messageText = "Good evening everyone!\nI'm buying cryptocurrency (USDT) for cash.\nAmounts up to $120,000.\nIf interested, message me.",
         string? photoFileId = null,

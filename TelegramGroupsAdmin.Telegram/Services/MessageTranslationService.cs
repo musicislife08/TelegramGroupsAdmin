@@ -25,7 +25,7 @@ public class MessageTranslationService : IMessageTranslationService
         _simHashService = simHashService;
     }
 
-    public async Task<MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<MessageTranslation?> GetTranslationForMessageAsync(int messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var translation = await context.MessageTranslations

@@ -13,7 +13,7 @@ public record UserActionRecord(
     long Id,
     long UserId,
     UserActionType ActionType,
-    long? MessageId,
+    int? MessageId,
     Actor IssuedBy,
     DateTimeOffset IssuedAt,
     DateTimeOffset? ExpiresAt,

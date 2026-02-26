@@ -21,7 +21,7 @@ public class ImageTrainingSampleDto
     /// Reference to the message containing this image
     /// </summary>
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     /// <summary>
     /// Path to the image file on disk (/data/media/...)

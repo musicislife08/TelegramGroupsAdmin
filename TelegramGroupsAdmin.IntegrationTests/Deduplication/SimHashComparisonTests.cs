@@ -141,11 +141,11 @@ public class SimHashIntegrationTests
             m => _simHashService.ComputeHash(m.MessageText));
 
         // Define expected near-duplicate groups
-        var group1 = new[] { 95001L, 95002L, 95003L, 95004L }; // Crypto signals variants
-        var group2 = new[] { 95005L, 95006L, 95007L };         // Investment scam variants
-        var group3 = new[] { 95008L, 95009L, 95010L };         // Giveaway scam variants
-        var group6 = new[] { 95017L, 95018L, 95019L };         // Ham ML project variants
-        var group7 = new[] { 95020L, 95021L, 95022L };         // Money fast variants
+        var group1 = new[] { 95001, 95002, 95003, 95004 }; // Crypto signals variants
+        var group2 = new[] { 95005, 95006, 95007 };         // Investment scam variants
+        var group3 = new[] { 95008, 95009, 95010 };         // Giveaway scam variants
+        var group6 = new[] { 95017, 95018, 95019 };         // Ham ML project variants
+        var group7 = new[] { 95020, 95021, 95022 };         // Money fast variants
 
         // Act & Assert: Messages within groups should be similar (low Hamming distance)
         // Note: We check that FIRST message in each group is similar to ALL others
@@ -224,5 +224,5 @@ public class SimHashIntegrationTests
     /// <summary>
     /// DTO for raw SQL Hamming distance query results
     /// </summary>
-    private record HammingResult(long MessageId, string? MessageText, int HammingDistance);
+    private record HammingResult(int MessageId, string? MessageText, int HammingDistance);
 }

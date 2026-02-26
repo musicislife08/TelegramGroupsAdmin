@@ -63,7 +63,7 @@ public record VetoedMessage
     /// <summary>
     /// ID of the message that was vetoed
     /// </summary>
-    public long MessageId { get; init; }
+    public int MessageId { get; init; }
 
     /// <summary>
     /// When the detection occurred

@@ -12,7 +12,7 @@ public interface IMediaRefetchQueueService
     /// Enqueue a media file for download
     /// Returns false if already queued (deduplication)
     /// </summary>
-    ValueTask<bool> EnqueueMediaAsync(long messageId, MediaType mediaType);
+    ValueTask<bool> EnqueueMediaAsync(int messageId, MediaType mediaType);
 
     /// <summary>
     /// Enqueue a user photo for download

@@ -54,7 +54,7 @@ public class BanCommand : IBotCommand
         CancellationToken cancellationToken = default)
     {
         UserIdentity? targetIdentity = null;
-        long? triggerMessageId = null;
+        int? triggerMessageId = null;
 
         using var scope = _serviceProvider.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -177,7 +177,7 @@ public class BanCommand : IBotCommand
     private async Task<CommandResult> ExecuteBanAsync(
         Message message,
         UserIdentity targetIdentity,
-        long? triggerMessageId,
+        int? triggerMessageId,
         CancellationToken cancellationToken)
     {
         try

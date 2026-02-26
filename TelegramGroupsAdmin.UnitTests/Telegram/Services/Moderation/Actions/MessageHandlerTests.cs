@@ -54,7 +54,7 @@ public class MessageHandlerTests
     public async Task EnsureExistsAsync_MessageAlreadyExists_ReturnsAlreadyExists()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
 
         _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
@@ -72,7 +72,7 @@ public class MessageHandlerTests
 
         // Verify backfill was NOT called
         await _mockMessageBackfillService.DidNotReceive().BackfillIfMissingAsync(
-            Arg.Any<long>(),
+            Arg.Any<int>(),
             Arg.Any<long>(),
             Arg.Any<Message>(),
             Arg.Any<CancellationToken>());
@@ -82,7 +82,7 @@ public class MessageHandlerTests
     public async Task EnsureExistsAsync_MessageMissingWithTelegramMessage_BackfillsSuccessfully()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
         var telegramMessage = CreateTestMessage(messageId, chatId);
 
@@ -112,7 +112,7 @@ public class MessageHandlerTests
     public async Task EnsureExistsAsync_MessageMissingNoTelegramMessage_ReturnsNotFound()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
 
         _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
@@ -134,7 +134,7 @@ public class MessageHandlerTests
     public async Task EnsureExistsAsync_BackfillFails_ReturnsNotFound()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
         var telegramMessage = CreateTestMessage(messageId, chatId);
 
@@ -165,7 +165,7 @@ public class MessageHandlerTests
     {
         // Arrange
         const long chatId = -100123456789L;
-        const long messageId = 42L;
+        const int messageId = 42;
         var executor = Actor.FromSystem("SpamDetection");
 
         // Act
@@ -181,7 +181,7 @@ public class MessageHandlerTests
         // Verify deletion was called with correct parameters
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
             chatId,
-            (int)messageId,
+            messageId,
             "moderation_action",
             Arg.Any<CancellationToken>());
     }
@@ -191,11 +191,11 @@ public class MessageHandlerTests
     {
         // Arrange - Message deletion fails (let boss decide what to do)
         const long chatId = -100123456789L;
-        const long messageId = 42L;
+        const int messageId = 42;
         var executor = Actor.FromTelegramUser(999, "Admin");
 
         _mockBotMessageService.DeleteAndMarkMessageAsync(
-                chatId, (int)messageId, Arg.Any<string>(), Arg.Any<CancellationToken>())
+                chatId, messageId, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Message not found"));
 
         // Act
@@ -215,7 +215,7 @@ public class MessageHandlerTests
     {
         // Arrange
         const long chatId = -100123456789L;
-        const long messageId = 42L;
+        const int messageId = 42;
         var executors = new[]
         {
             Actor.FromSystem("AutoMod"),
@@ -239,7 +239,7 @@ public class MessageHandlerTests
     /// Creates a test Telegram Message using JSON deserialization.
     /// Telegram.Bot.Types.Message uses init-only properties, so we use JSON to construct valid instances.
     /// </summary>
-    private static Message CreateTestMessage(long messageId, long chatId)
+    private static Message CreateTestMessage(int messageId, long chatId)
     {
         var json = $$"""
         {
@@ -266,7 +266,7 @@ public class MessageHandlerTests
     /// <summary>
     /// Creates a test MessageRecord with all required parameters.
     /// </summary>
-    private static MessageRecord CreateTestMessageRecord(long messageId, long chatId)
+    private static MessageRecord CreateTestMessageRecord(int messageId, long chatId)
     {
         return new MessageRecord(
             MessageId: messageId,

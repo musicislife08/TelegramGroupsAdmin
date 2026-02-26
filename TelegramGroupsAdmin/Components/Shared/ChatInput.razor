@@ -148,7 +148,7 @@
     public EventCallback OnCancelReply { get; set; }
 
     [Parameter]
-    public EventCallback<long> OnReplyPreviewClick { get; set; }
+    public EventCallback<int> OnReplyPreviewClick { get; set; }
 
     /// <summary>True when sending as personal Telegram account, false for bot.</summary>
     [Parameter]
@@ -245,7 +245,7 @@
         await OnCancelReply.InvokeAsync();
     }
 
-    private async Task HandleReplyPreviewClick(long messageId)
+    private async Task HandleReplyPreviewClick(int messageId)
     {
         await OnReplyPreviewClick.InvokeAsync(messageId);
     }

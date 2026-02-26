@@ -14,7 +14,7 @@ public class DetectionResultRecordDto
     public long Id { get; set; }
 
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     [Column("detected_at")]
     public DateTimeOffset DetectedAt { get; set; }

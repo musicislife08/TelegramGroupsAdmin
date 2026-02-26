@@ -24,7 +24,7 @@ public class BannedUserListItem
     public string? BannedBy { get; set; }
     public string? BanReason { get; set; }
     public DateTimeOffset? BanExpires { get; set; }
-    public long? TriggerMessageId { get; set; }
+    public int? TriggerMessageId { get; set; }
 
     // Display helpers
     public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);

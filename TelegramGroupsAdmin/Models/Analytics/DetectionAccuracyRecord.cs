@@ -14,7 +14,7 @@ public class DetectionAccuracyRecord
     /// <summary>
     /// Message ID this detection relates to
     /// </summary>
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     /// <summary>
     /// Full timestamp of the detection (for timezone-aware grouping)

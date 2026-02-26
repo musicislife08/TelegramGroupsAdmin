@@ -21,7 +21,7 @@ public class UserActionRecordDto
     public UserActionType ActionType { get; set; }
 
     [Column("message_id")]
-    public long? MessageId { get; set; }
+    public int? MessageId { get; set; }
 
     // Exclusive Arc actor system (Phase 4.19) - exactly one must be non-null
     [Column("web_user_id")]

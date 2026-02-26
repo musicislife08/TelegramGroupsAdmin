@@ -87,7 +87,7 @@ public class DeleteUserMessagesJob(
                 {
                     await _messageService.DeleteAndMarkMessageAsync(
                         chatId: message.ChatId,
-                        messageId: (int)message.MessageId,
+                        messageId: message.MessageId,
                         deletionSource: "ban_cleanup",
                         cancellationToken: cancellationToken);
 

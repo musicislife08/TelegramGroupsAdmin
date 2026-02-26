@@ -16,7 +16,7 @@ public class MessageTranslationDto
 
     // Exclusive Arc pattern: exactly one must be non-null
     [Column("message_id")]
-    public long? MessageId { get; set; }
+    public int? MessageId { get; set; }
 
     [Column("edit_id")]
     public long? EditId { get; set; }

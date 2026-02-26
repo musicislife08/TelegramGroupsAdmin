@@ -108,7 +108,7 @@ public class NotificationHandlerTests
     private MessageWithDetectionHistory CreateEnrichedMessage(Actor addedBy)
     {
         var message = new MessageRecord(
-            MessageId: 456L,
+            MessageId: 456,
             User: new UserIdentity(789L, "Spam", "User", "spammer"),
             Chat: new ChatIdentity(TestChatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
@@ -140,7 +140,7 @@ public class NotificationHandlerTests
         var detection = new DetectionResultRecord
         {
             Id = 1,
-            MessageId = 456L,
+            MessageId = 456,
             DetectedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
             DetectionSource = "manual",
             DetectionMethod = "Manual",

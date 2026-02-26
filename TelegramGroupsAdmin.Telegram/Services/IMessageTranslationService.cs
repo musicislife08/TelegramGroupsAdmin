@@ -11,7 +11,7 @@ public interface IMessageTranslationService
     /// <summary>
     /// Get translation for a message
     /// </summary>
-    Task<MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<MessageTranslation?> GetTranslationForMessageAsync(int messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get translation for a message edit

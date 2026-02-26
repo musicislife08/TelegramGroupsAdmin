@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Media;
 public record RefetchRequest
 {
     /// <summary>Message ID (for media refetch)</summary>
-    public long MessageId { get; init; }
+    public int MessageId { get; init; }
 
     /// <summary>Type of media to refetch (null for user photos)</summary>
     public MediaType? MediaType { get; init; }

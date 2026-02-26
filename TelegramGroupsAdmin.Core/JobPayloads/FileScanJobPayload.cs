@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// </summary>
 public record FileScanJobPayload(
     /// <summary>Message ID for audit trail and deletion if infected</summary>
-    long MessageId,
+    int MessageId,
 
     /// <summary>Chat where message was sent</summary>
     ChatIdentity Chat,

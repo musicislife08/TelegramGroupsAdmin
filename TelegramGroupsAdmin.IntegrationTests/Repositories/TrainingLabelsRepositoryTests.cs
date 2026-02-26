@@ -86,7 +86,7 @@ public class TrainingLabelsRepositoryTests
     public async Task UpsertLabelAsync_NewSpamLabel_ShouldInsert()
     {
         // Arrange - Use GoldenDataset message without existing label
-        long messageId = GoldenDataset.Messages.Msg6_Id;
+        int messageId = GoldenDataset.Messages.Msg6_Id;
         long userId = GoldenDataset.TelegramUsers.User3_TelegramUserId;
 
         // Act
@@ -115,7 +115,7 @@ public class TrainingLabelsRepositoryTests
     public async Task UpsertLabelAsync_NewHamLabel_ShouldInsert()
     {
         // Arrange - Use GoldenDataset message without existing label
-        long messageId = GoldenDataset.Messages.Msg7_Id;
+        int messageId = GoldenDataset.Messages.Msg7_Id;
 
         // Act
         await _repository!.UpsertLabelAsync(
@@ -138,7 +138,7 @@ public class TrainingLabelsRepositoryTests
     public async Task UpsertLabelAsync_ExistingLabel_ShouldUpdate()
     {
         // Arrange - Use existing GoldenDataset label (Msg1 = spam)
-        long messageId = GoldenDataset.TrainingLabels.Label1_MessageId;
+        int messageId = GoldenDataset.TrainingLabels.Label1_MessageId;
 
         // Act - Update to ham (false positive correction)
         await _repository!.UpsertLabelAsync(
@@ -166,7 +166,7 @@ public class TrainingLabelsRepositoryTests
     public async Task UpsertLabelAsync_ConcurrentUpserts_ShouldHandleRaceCondition()
     {
         // Arrange - Use GoldenDataset message without existing label
-        long messageId = GoldenDataset.Messages.Msg11_Id;
+        int messageId = GoldenDataset.Messages.Msg11_Id;
         long userId1 = GoldenDataset.TelegramUsers.User3_TelegramUserId;
         long userId2 = GoldenDataset.TelegramUsers.User4_TelegramUserId;
 
@@ -198,7 +198,7 @@ public class TrainingLabelsRepositoryTests
     public async Task GetByMessageIdAsync_LabelExists_ShouldReturnLabel()
     {
         // Arrange - Use existing GoldenDataset label
-        long messageId = GoldenDataset.TrainingLabels.Label2_MessageId;
+        int messageId = GoldenDataset.TrainingLabels.Label2_MessageId;
 
         // Act
         var label = await _repository!.GetByMessageIdAsync(messageId);
@@ -216,7 +216,7 @@ public class TrainingLabelsRepositoryTests
     public async Task GetByMessageIdAsync_LabelNotExists_ShouldReturnNull()
     {
         // Arrange - Use message without label
-        long messageId = GoldenDataset.Messages.Msg8_Id;
+        int messageId = GoldenDataset.Messages.Msg8_Id;
 
         // Act
         var label = await _repository!.GetByMessageIdAsync(messageId);
@@ -233,7 +233,7 @@ public class TrainingLabelsRepositoryTests
     public async Task DeleteLabelAsync_ExistingLabel_ShouldDelete()
     {
         // Arrange - Use existing GoldenDataset label
-        long messageId = GoldenDataset.TrainingLabels.Label3_MessageId;
+        int messageId = GoldenDataset.TrainingLabels.Label3_MessageId;
 
         // Act
         await _repository!.DeleteLabelAsync(messageId);
@@ -247,7 +247,7 @@ public class TrainingLabelsRepositoryTests
     public async Task DeleteLabelAsync_NonExistentLabel_ShouldNotThrow()
     {
         // Arrange - Use message without label
-        long messageId = GoldenDataset.Messages.Msg9_Id;
+        int messageId = GoldenDataset.Messages.Msg9_Id;
 
         // Act & Assert - Should not throw
         Assert.DoesNotThrowAsync(async () =>
@@ -264,7 +264,7 @@ public class TrainingLabelsRepositoryTests
     public async Task Database_TrainingLabels_ShouldEnforceUniqueMessageId()
     {
         // Arrange - Use existing GoldenDataset label
-        long messageId = GoldenDataset.TrainingLabels.Label4_MessageId;
+        int messageId = GoldenDataset.TrainingLabels.Label4_MessageId;
 
         // Raw SQL insert should violate PK constraint
         Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
@@ -280,7 +280,7 @@ public class TrainingLabelsRepositoryTests
     public async Task Database_TrainingLabels_ShouldEnforceCheckConstraint()
     {
         // Arrange - Use message without existing label
-        long messageId = GoldenDataset.Messages.Msg10_Id;
+        int messageId = GoldenDataset.Messages.Msg10_Id;
 
         // Verify check constraint: label IN (0, 1)
         Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
