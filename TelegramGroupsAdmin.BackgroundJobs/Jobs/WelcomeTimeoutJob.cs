@@ -7,8 +7,10 @@ using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -21,7 +23,8 @@ public class WelcomeTimeoutJob(
     ILogger<WelcomeTimeoutJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
     IBotModerationService moderationService,
-    IBotMessageService messageService) : IJob
+    IBotMessageService messageService,
+    IExamSessionRepository examSessionRepository) : IJob
 {
 
     /// <summary>
@@ -49,8 +52,8 @@ public class WelcomeTimeoutJob(
         {
             logger.LogInformation(
                 "Processing welcome timeout for {User} in {Chat}",
-                payload.User.DisplayName,
-                payload.Chat.DisplayName);
+                payload.User.ToLogInfo(),
+                payload.Chat.ToLogInfo());
 
             // Check if user has responded
             await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -64,15 +67,25 @@ public class WelcomeTimeoutJob(
             {
                 logger.LogInformation(
                     "User {User} already responded to welcome in {Chat}, skipping timeout",
-                    payload.User.DisplayName,
-                    payload.Chat.DisplayName);
+                    payload.User.ToLogInfo(),
+                    payload.Chat.ToLogInfo());
+                return;
+            }
+
+            // Check if user has an active exam session — let the exam flow handle timeout
+            if (await examSessionRepository.HasActiveSessionAsync(payload.Chat.Id, payload.User.Id, cancellationToken))
+            {
+                logger.LogInformation(
+                    "User {User} has active exam session in {Chat}, deferring to exam timeout",
+                    payload.User.ToLogInfo(),
+                    payload.Chat.ToLogInfo());
                 return;
             }
 
             logger.LogInformation(
                 "Welcome timeout: {User} did not respond in {Chat}",
-                payload.User.DisplayName,
-                payload.Chat.DisplayName);
+                payload.User.ToLogInfo(),
+                payload.Chat.ToLogInfo());
 
             // Kick user for timeout
             try
@@ -89,16 +102,16 @@ public class WelcomeTimeoutJob(
 
                 logger.LogInformation(
                     "Kicked {User} from {Chat} due to welcome timeout",
-                    payload.User.DisplayName,
-                    payload.Chat.DisplayName);
+                    payload.User.ToLogInfo(),
+                    payload.Chat.ToLogInfo());
             }
             catch (Exception ex)
             {
                 logger.LogError(
                     ex,
                     "Failed to kick {User} from {Chat}",
-                    payload.User.DisplayName,
-                    payload.Chat.DisplayName);
+                    payload.User.ToLogInfo(),
+                    payload.Chat.ToLogInfo());
                 // Continue to delete message and update response even if kick fails
             }
 
@@ -127,8 +140,8 @@ public class WelcomeTimeoutJob(
 
             logger.LogInformation(
                 "Recorded welcome timeout for {User} in {Chat}",
-                payload.User.DisplayName,
-                payload.Chat.DisplayName);
+                payload.User.ToLogInfo(),
+                payload.Chat.ToLogInfo());
 
             success = true;
         }
@@ -136,9 +149,9 @@ public class WelcomeTimeoutJob(
         {
             logger.LogError(
                 ex,
-                "Failed to process welcome timeout for {User} in chat {ChatId}",
-                payload?.User.DisplayName,
-                payload?.Chat.Id);
+                "Failed to process welcome timeout for {User} in {Chat}",
+                payload?.User.ToLogDebug(),
+                payload?.Chat.ToLogDebug());
             throw; // Re-throw for retry logic and exception recording
         }
         finally

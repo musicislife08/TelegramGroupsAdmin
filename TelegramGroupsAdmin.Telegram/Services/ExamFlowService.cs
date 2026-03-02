@@ -90,8 +90,28 @@ public class ExamFlowService : IExamFlowService
             await using var scope = _serviceProvider.CreateAsyncScope();
             var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
-            // Create exam session
-            var expiresAt = DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds);
+            // Check for existing active session (handles double-trigger scenarios)
+            var existingSession = await sessionRepo.GetSessionAsync(chat.Id, user.Id, cancellationToken);
+            if (existingSession != null)
+            {
+                if (!existingSession.IsExpired)
+                {
+                    _logger.LogInformation(
+                        "User {User} already has active exam session in {Chat}, skipping duplicate creation",
+                        user.ToLogInfo(), chat.ToLogInfo());
+                    return new ExamStartResult(Success: true, WelcomeMessageId: 0);
+                }
+
+                await sessionRepo.DeleteSessionAsync(existingSession.Id, cancellationToken);
+            }
+
+            // Align expiry with welcome timeout deadline
+            var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+            var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
+            var expiresAt = welcomeResponse != null
+                ? welcomeResponse.CreatedAt.AddSeconds(config.TimeoutSeconds)
+                : DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds);
+
             var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
 
             _logger.LogInformation(
@@ -149,8 +169,36 @@ public class ExamFlowService : IExamFlowService
             await using var scope = _serviceProvider.CreateAsyncScope();
             var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
-            // Create exam session - store chat ID for permission restore
-            var expiresAt = DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds);
+            // Check for existing active session (user clicked deep link twice, or re-joined)
+            var existingSession = await sessionRepo.GetSessionAsync(chat.Id, user.Id, cancellationToken);
+            if (existingSession != null)
+            {
+                if (!existingSession.IsExpired)
+                {
+                    _logger.LogInformation(
+                        "User {User} already has active exam session in {Chat}, skipping duplicate creation",
+                        user.ToLogInfo(), chat.ToLogInfo());
+
+                    await _dmService.SendDmAsync(dmChatId,
+                        "📝 You already have an active exam session. Please scroll up to find your current question.",
+                        cancellationToken: cancellationToken);
+
+                    return new ExamStartResult(Success: true, WelcomeMessageId: 0);
+                }
+
+                // Expired session still in DB — delete it and start fresh
+                await sessionRepo.DeleteSessionAsync(existingSession.Id, cancellationToken);
+            }
+
+            // Calculate exam expiry aligned with welcome timeout deadline
+            // The welcome timeout fires at joinTime + TimeoutSeconds, so the exam
+            // should expire at the same deadline (not now + TimeoutSeconds)
+            var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+            var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
+            var expiresAt = welcomeResponse != null
+                ? welcomeResponse.CreatedAt.AddSeconds(config.TimeoutSeconds)
+                : DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds); // fallback if no welcome response
+
             var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
 
             _logger.LogInformation(

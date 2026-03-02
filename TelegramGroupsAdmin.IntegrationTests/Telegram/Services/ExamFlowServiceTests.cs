@@ -127,6 +127,7 @@ public class ExamFlowServiceTests
 
         // Real repositories
         services.AddScoped<IExamSessionRepository, ExamSessionRepository>();
+        services.AddScoped<IWelcomeResponsesRepository, WelcomeResponsesRepository>();
         services.AddScoped<IReportsRepository, ReportsRepository>();
         services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();

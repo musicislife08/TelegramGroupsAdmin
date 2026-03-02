@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
@@ -39,6 +40,7 @@ public class WelcomeTimeoutJobTests
     // ── mocks ─────────────────────────────────────────────────────────────────
     private IBotModerationService? _mockModerationService;
     private IBotMessageService? _mockMessageService;
+    private IExamSessionRepository? _mockExamSessionRepository;
     private ILogger<WelcomeTimeoutJob>? _mockLogger;
 
     // ── helper properties ─────────────────────────────────────────────────────
@@ -65,6 +67,7 @@ public class WelcomeTimeoutJobTests
 
         _mockModerationService = Substitute.For<IBotModerationService>();
         _mockMessageService = Substitute.For<IBotMessageService>();
+        _mockExamSessionRepository = Substitute.For<IExamSessionRepository>();
         _mockLogger = Substitute.For<ILogger<WelcomeTimeoutJob>>();
     }
 
@@ -136,7 +139,8 @@ public class WelcomeTimeoutJobTests
             _mockLogger!,
             ContextFactory,
             _mockModerationService!,
-            _mockMessageService!);
+            _mockMessageService!,
+            _mockExamSessionRepository!);
 
     /// <summary>
     /// Creates a mock IJobExecutionContext whose MergedJobDataMap contains the given payload.
@@ -383,5 +387,79 @@ public class WelcomeTimeoutJobTests
         await _mockModerationService!
             .DidNotReceive()
             .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// When a Pending response exists but the user has an active exam session,
+    /// the job should defer to the exam flow and NOT kick the user.
+    /// </summary>
+    [Test]
+    public async Task Execute_PendingWithActiveExamSession_DefersToExamFlow_NoKick()
+    {
+        // Arrange — pending welcome response + active exam session
+        await SeedWelcomeResponseAsync(WelcomeResponseType.Pending);
+
+        _mockExamSessionRepository!
+            .HasActiveSessionAsync(TestChatId, TestUserId, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var payload = BuildPayload();
+        var context = BuildJobContext(payload);
+        var job = BuildJob();
+
+        // Act
+        await job.Execute(context);
+
+        // Assert — no kick, no message deletion
+        await _mockModerationService!
+            .DidNotReceive()
+            .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>());
+
+        await _mockMessageService!
+            .DidNotReceive()
+            .DeleteAndMarkMessageAsync(
+                Arg.Any<long>(),
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>());
+
+        // Assert — welcome response remains Pending (not changed to Timeout)
+        await using var verifyContext = ContextFactory.CreateDbContext();
+        var response = await verifyContext.WelcomeResponses
+            .Where(r => r.ChatId == TestChatId
+                        && r.UserId == TestUserId
+                        && r.WelcomeMessageId == TestWelcomeMessageId)
+            .FirstOrDefaultAsync();
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.Response, Is.EqualTo(WelcomeResponseType.Pending),
+            "Response should remain Pending when exam session is active");
+    }
+
+    /// <summary>
+    /// When a Pending response exists but the user does NOT have an active exam session,
+    /// the job should proceed with kick as normal (exam session check returns false).
+    /// </summary>
+    [Test]
+    public async Task Execute_PendingWithNoExamSession_KicksUser()
+    {
+        // Arrange — pending welcome response, no active exam session (default mock returns false)
+        await SeedWelcomeResponseAsync(WelcomeResponseType.Pending);
+
+        var payload = BuildPayload();
+        var context = BuildJobContext(payload);
+        var job = BuildJob();
+
+        // Act
+        await job.Execute(context);
+
+        // Assert — kick was called
+        await _mockModerationService!
+            .Received(1)
+            .KickUserFromChatAsync(
+                Arg.Is<KickIntent>(intent =>
+                    intent.User.Id == TestUserId
+                    && intent.Chat.Id == TestChatId),
+                Arg.Any<CancellationToken>());
     }
 }
