@@ -195,17 +195,17 @@ public class WelcomeTimeoutJobTests
         // Act
         await job.Execute(context);
 
-        // Assert
+        // Assert — no kick, but welcome message cleanup still runs
         await _mockModerationService!
             .DidNotReceive()
             .KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>());
 
         await _mockMessageService!
-            .DidNotReceive()
+            .Received(1)
             .DeleteAndMarkMessageAsync(
-                Arg.Any<long>(),
-                Arg.Any<int>(),
-                Arg.Any<string>(),
+                TestChatId,
+                TestWelcomeMessageId,
+                "welcome_timeout_cleanup",
                 Arg.Any<CancellationToken>());
     }
 
