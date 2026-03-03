@@ -1,10 +1,8 @@
-using System.Text;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -32,9 +30,6 @@ public class NotificationHandler : INotificationHandler
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly INotificationService _notificationService;
     private readonly IManagedChatsRepository _managedChatsRepository;
-    private readonly IChatAdminsRepository _chatAdminsRepository;
-    private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
-    private readonly IBotDmService _dmDeliveryService;
     private readonly IBotChatService _chatService;
     private readonly IChatCache _chatCache;
     private readonly ILogger<NotificationHandler> _logger;
@@ -43,9 +38,6 @@ public class NotificationHandler : INotificationHandler
         INotificationOrchestrator notificationOrchestrator,
         INotificationService notificationService,
         IManagedChatsRepository managedChatsRepository,
-        IChatAdminsRepository chatAdminsRepository,
-        ITelegramUserMappingRepository telegramUserMappingRepository,
-        IBotDmService dmDeliveryService,
         IBotChatService chatService,
         IChatCache chatCache,
         ILogger<NotificationHandler> logger)
@@ -53,9 +45,6 @@ public class NotificationHandler : INotificationHandler
         _notificationOrchestrator = notificationOrchestrator;
         _notificationService = notificationService;
         _managedChatsRepository = managedChatsRepository;
-        _chatAdminsRepository = chatAdminsRepository;
-        _telegramUserMappingRepository = telegramUserMappingRepository;
-        _dmDeliveryService = dmDeliveryService;
         _chatService = chatService;
         _chatCache = chatCache;
         _logger = logger;
@@ -206,24 +195,16 @@ public class NotificationHandler : INotificationHandler
     }
 
     /// <summary>
-    /// Send ban notification to admins. Routes through SendChatNotificationAsync which
-    /// always includes global admins + owners, plus chat-specific admins when chat is provided.
+    /// Send ban notification to admins via typed notification service.
     /// </summary>
     private async Task SendBanAdminNotificationAsync(UserIdentity user, Actor executor, string? reason, ChatIdentity? chat, CancellationToken cancellationToken)
     {
-        var subject = "User Banned";
-        var chatName = chat?.ChatName ?? chat?.Id.ToString();
-        var message = $"User {user.DisplayName} has been banned.\n\n" +
-                      (chatName != null ? $"Chat: {chatName}\n" : "") +
-                      $"Reason: {reason}\n" +
-                      $"Banned by: {executor.GetDisplayText()}";
-
-        await _notificationService.SendChatNotificationAsync(
-            chat,
-            NotificationEventType.UserBanned,
-            subject,
-            message,
-            cancellationToken: cancellationToken);
+        await _notificationService.SendBanNotificationAsync(
+            user: user,
+            executor: executor,
+            reason: reason,
+            chat: chat,
+            ct: cancellationToken);
 
         _logger.LogDebug(
             "Dispatched UserBanned admin notification for {User} (chat: {Chat})",
@@ -294,61 +275,16 @@ public class NotificationHandler : INotificationHandler
 
         try
         {
-            // Build user display (escaped for MarkdownV2)
-            var userDisplay = TelegramTextUtilities.EscapeMarkdownV2(
-                TelegramDisplayName.FormatMention(msg.User));
-
             // Build message preview (use translated text if available)
             var messageContent = msg.Translation?.TranslatedText ?? msg.MessageText;
-            var messageTextPreview = messageContent != null && messageContent.Length > NotificationConstants.MessagePreviewMaxLength
-                ? messageContent[..(NotificationConstants.MessagePreviewMaxLength - NotificationConstants.PreviewTruncationOffset)] + "..."
-                : messageContent ?? "[No text]";
-            messageTextPreview = TelegramTextUtilities.EscapeMarkdownV2(messageTextPreview);
+            var messagePreview = messageContent != null && messageContent.Length > 100
+                ? messageContent[..97] + "..."
+                : messageContent;
 
-            var chatTitle = TelegramTextUtilities.EscapeMarkdownV2(msg.Chat.ChatName ?? msg.Chat.Id.ToString());
-
-            // Build detection details from DetectionResultRecord
-            var detectionDetails = new StringBuilder();
-            if (detection != null)
-            {
-                detectionDetails.AppendLine($"• Net Confidence: {Math.Abs(detection.NetConfidence)}%");
-                detectionDetails.AppendLine($"• Confidence: {detection.Confidence}%");
-                if (!string.IsNullOrEmpty(detection.Reason))
-                {
-                    var escapedReason = TelegramTextUtilities.EscapeMarkdownV2(
-                        detection.Reason.Length > 100 ? detection.Reason[..97] + "..." : detection.Reason);
-                    detectionDetails.AppendLine($"• Reason: {escapedReason}");
-                }
-            }
-            else
-            {
-                detectionDetails.AppendLine("• Detection details not available");
-            }
-
-            // Build action summary
-            var actionSummary = new StringBuilder();
-            actionSummary.AppendLine($"✅ Banned from {chatsAffected} managed chats");
-            if (messageDeleted)
-            {
-                actionSummary.AppendLine($"✅ Message deleted \\(ID: {msg.MessageId}\\)");
-            }
-
-            // Build dynamic title based on who initiated the ban
-            var title = detection?.AddedBy?.Type switch
-            {
-                ActorType.TelegramUser or ActorType.WebUser =>
-                    $"🚫 *Spam Banned by {TelegramTextUtilities.EscapeMarkdownV2(detection!.AddedBy.GetDisplayText())}*",
-                _ => "🚫 *Spam Auto\\-Banned*"
-            };
-
-            // Build consolidated message
-            var consolidatedMessage =
-                $"{title}\n\n" +
-                $"*User:* {userDisplay}\n" +
-                $"*Chat:* {chatTitle}\n\n" +
-                $"📝 *Message:*\n{messageTextPreview}\n\n" +
-                $"🔍 *Detection:*\n{detectionDetails}\n" +
-                $"⛔ *Action Taken:*\n{actionSummary}";
+            // Truncate detection reason
+            var detectionReason = detection?.Reason is { Length: > 100 }
+                ? detection.Reason[..97] + "..."
+                : detection?.Reason;
 
             // Get media paths from enriched message
             string? photoPath = null;
@@ -364,30 +300,24 @@ public class NotificationHandler : INotificationHandler
                 videoPath = msg.MediaLocalPath;
             }
 
-            // Send to all chat admins
-            var chatAdmins = await _chatAdminsRepository.GetChatAdminsAsync(msg.Chat.Id, cancellationToken);
-            var sentCount = 0;
-
-            foreach (var admin in chatAdmins)
-            {
-                // Check if admin has linked their Telegram account
-                var mapping = await _telegramUserMappingRepository.GetByTelegramIdAsync(admin.User.Id, cancellationToken);
-                if (mapping == null)
-                    continue;
-
-                await _dmDeliveryService.SendDmWithMediaAsync(
-                    admin.User.Id,
-                    "spam_banned",
-                    consolidatedMessage,
-                    photoPath,
-                    videoPath,
-                    cancellationToken);
-                sentCount++;
-            }
+            await _notificationService.SendSpamBanNotificationAsync(
+                chat: msg.Chat,
+                user: msg.User,
+                bannedBy: detection?.AddedBy,
+                netConfidence: detection != null ? Math.Abs(detection.NetConfidence) : 0,
+                confidence: detection?.Confidence ?? 0,
+                detectionReason: detectionReason,
+                chatsAffected: chatsAffected,
+                messageDeleted: messageDeleted,
+                messageId: msg.MessageId,
+                messagePreview: messagePreview,
+                photoPath: photoPath,
+                videoPath: videoPath,
+                ct: cancellationToken);
 
             _logger.LogDebug(
-                "Sent spam ban notification to {Count} admins for message {MessageId}",
-                sentCount, msg.MessageId);
+                "Dispatched spam ban notification for message {MessageId}",
+                msg.MessageId);
 
             return NotificationResult.Succeeded();
         }

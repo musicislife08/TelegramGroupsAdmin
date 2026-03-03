@@ -137,13 +137,10 @@ public class BackupService : IBackupService
                 _logger.LogError(ex, "Failed to export table {TableName}", tableName);
 
                 // Notify Owners about backup failure (Phase 5.1)
-                _ = _notificationService.SendSystemNotificationAsync(
-                    eventType: NotificationEventType.BackupFailed,
-                    subject: "Database Backup Failed",
-                    message: $"Critical: Database backup failed while exporting table '{tableName}'.\n\n" +
-                             $"Error: {ex.Message}\n\n" +
-                             $"Please investigate the database connection and ensure all tables are accessible.",
-                    cancellationToken: CancellationToken.None);
+                _ = _notificationService.SendBackupFailedAsync(
+                    tableName: tableName,
+                    error: ex.Message,
+                    ct: CancellationToken.None);
 
                 throw;
             }

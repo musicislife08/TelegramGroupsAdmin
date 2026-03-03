@@ -4,7 +4,6 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
-using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
@@ -470,24 +469,23 @@ public sealed class ProfileScanService(
 
         var reportId = await reportsRepo.InsertProfileScanAlertAsync(alert, ct);
 
-        // Schedule admin notification only when we have a real chat (admins can't be looked up for sentinel chat_id=0)
+        // Send admin notification only when we have a real chat (admins can't be looked up for sentinel chat_id=0)
         if (chat != null)
         {
-            var jobTrigger = sp.GetRequiredService<IJobTriggerService>();
+            var notificationService = sp.GetRequiredService<INotificationService>();
             var signals = result.AiSignalsDetected is { Length: > 0 }
                 ? string.Join(", ", result.AiSignalsDetected)
                 : "rule-based detection";
 
-            var payload = new SendChatNotificationPayload(
-                Chat: chat,
-                EventType: NotificationEventType.ProfileScanAlert,
-                Subject: $"Profile Scan Alert — {user.DisplayName} — Score {result.Score:F1}/5.0",
-                Message: $"User: {user.DisplayName} (ID: {user.Id})\nSignals: {signals}\nReason: {result.AiReason ?? "rule-based detection"}",
-                ReportId: reportId,
-                ReportedUserId: user.Id,
-                ReportType: ReportType.ProfileScanAlert);
-
-            await jobTrigger.TriggerNowAsync("SendChatNotificationJob", payload, ct);
+            // Fire-and-forget — notification delivery should not block scan
+            _ = notificationService.SendProfileScanAlertAsync(
+                chat: chat,
+                user: user,
+                score: result.Score,
+                signals: signals,
+                aiReason: result.AiReason,
+                reportId: reportId,
+                ct: ct);
 
             logger.LogInformation("Profile scan: created alert #{ReportId} for {User} in {Chat} (score {Score})",
                 reportId, user.ToLogInfo(), chat.ToLogInfo(), result.Score);

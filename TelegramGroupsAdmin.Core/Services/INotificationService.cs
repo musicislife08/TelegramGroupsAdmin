@@ -94,29 +94,4 @@ public interface INotificationService
         IReadOnlyList<string> warnings,
         CancellationToken ct = default);
 
-    // ── Legacy methods (kept temporarily for caller migration in next commit) ──
-
-    Task<Dictionary<string, bool>> SendChatNotificationAsync(
-        ChatIdentity? chat,
-        NotificationEventType eventType,
-        string subject,
-        string message,
-        long? reportId = null,
-        string? photoPath = null,
-        long? reportedUserId = null,
-        ReportType? reportType = null,
-        CancellationToken cancellationToken = default);
-
-    Task<Dictionary<string, bool>> SendSystemNotificationAsync(
-        NotificationEventType eventType,
-        string subject,
-        string message,
-        CancellationToken cancellationToken = default);
-
-    Task<bool> SendNotificationAsync(
-        UserRecord user,
-        NotificationEventType eventType,
-        string subject,
-        string message,
-        CancellationToken cancellationToken = default);
 }

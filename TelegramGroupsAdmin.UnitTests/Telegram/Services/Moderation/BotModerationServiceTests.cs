@@ -1640,10 +1640,10 @@ public class BotModerationServiceTests
             });
 
         // Assert - Admin notification was sent
-        await _mockNotificationService.Received(1).SendSystemNotificationAsync(
-            NotificationEventType.MalwareDetected,
-            Arg.Any<string>(),
-            Arg.Is<string>(msg => msg.Contains(malwareDetails)),
+        await _mockNotificationService.Received(1).SendMalwareDetectedAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Is<string>(details => details.Contains(malwareDetails)),
             Arg.Any<CancellationToken>());
     }
 

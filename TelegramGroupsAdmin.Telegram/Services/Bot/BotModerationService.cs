@@ -573,16 +573,11 @@ public class BotModerationService : IBotModerationService
         // Step 4: Notify admins via system notification
         await SafeExecuteAsync(async () =>
         {
-            var chatName = intent.Chat.ChatName ?? intent.Chat.Id.ToString();
-
-            await _notificationService.SendSystemNotificationAsync(
-                NotificationEventType.MalwareDetected,
-                "Malware Detected and Removed",
-                $"Malware was detected in chat '{chatName}' and the message was deleted.\n\n" +
-                $"User: {intent.User.DisplayName}\n" +
-                $"Detection: {intent.MalwareDetails}\n\n" +
-                $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
-                cancellationToken);
+            await _notificationService.SendMalwareDetectedAsync(
+                chat: intent.Chat,
+                user: intent.User,
+                malwareDetails: intent.MalwareDetails,
+                ct: cancellationToken);
         }, "Malware notification");
 
         _logger.LogInformation(

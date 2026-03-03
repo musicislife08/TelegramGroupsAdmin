@@ -569,41 +569,23 @@ public class ExamFlowService : IExamFlowService
         // Get chat info for notification
         var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
         var failureChat = await managedChatsRepo.GetByChatIdAsync(session.ChatId, cancellationToken);
-        var failureChatName = failureChat?.Identity.ChatName ?? "Unknown Chat";
 
         // Notify admins of exam failure
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-        var userName = TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id);
         var mcTotal = examConfig.McQuestions.Count;
-        var hasOpenEnded = !string.IsNullOrEmpty(examConfig.OpenEndedQuestion);
 
-        var messageBuilder = new System.Text.StringBuilder();
-        messageBuilder.AppendLine($"User: {userName}");
-        messageBuilder.AppendLine($"Chat: {failureChatName}");
-        messageBuilder.AppendLine();
-        messageBuilder.AppendLine($"Answered: {mcCorrectCount}/{mcTotal} correct");
-        messageBuilder.AppendLine($"Score: {mcScore}% (Required: {examConfig.McPassingThreshold}%)");
-        if (hasOpenEnded && !string.IsNullOrEmpty(session.OpenEndedAnswer))
-        {
-            messageBuilder.AppendLine();
-            messageBuilder.AppendLine($"Question: {examConfig.OpenEndedQuestion}");
-            messageBuilder.AppendLine($"Answer: {session.OpenEndedAnswer}");
-            if (!string.IsNullOrEmpty(aiReasoning))
-            {
-                messageBuilder.AppendLine();
-                messageBuilder.AppendLine($"AI: {aiReasoning}");
-            }
-        }
-
-        await notificationService.SendChatNotificationAsync(
+        await notificationService.SendExamFailureNotificationAsync(
             chat: failureChat?.Identity ?? ChatIdentity.FromId(session.ChatId),
-            eventType: NotificationEventType.ExamFailed,
-            subject: "Entrance Exam Review Required",
-            message: messageBuilder.ToString(),
-            reportId: examFailureId,
-            reportedUserId: user.Id,
-            reportType: ReportType.ExamFailure,
-            cancellationToken: cancellationToken);
+            user: UserIdentity.From(user),
+            mcCorrectCount: mcCorrectCount,
+            mcTotal: mcTotal,
+            mcScore: mcScore,
+            mcPassingThreshold: examConfig.McPassingThreshold,
+            openEndedQuestion: examConfig.OpenEndedQuestion,
+            openEndedAnswer: session.OpenEndedAnswer,
+            aiReasoning: aiReasoning,
+            examFailureId: examFailureId,
+            ct: cancellationToken);
 
         // Send pending message to user in DM
         await _dmService.SendDmAsync(

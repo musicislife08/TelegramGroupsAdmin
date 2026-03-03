@@ -25,9 +25,6 @@ public class NotificationHandlerTests
     private INotificationOrchestrator _mockNotificationOrchestrator = null!;
     private INotificationService _mockNotificationService = null!;
     private IManagedChatsRepository _mockManagedChatsRepo = null!;
-    private IChatAdminsRepository _mockChatAdminsRepo = null!;
-    private ITelegramUserMappingRepository _mockUserMappingRepo = null!;
-    private IBotDmService _mockDmService = null!;
     private IBotChatService _mockChatService = null!;
     private IChatCache _mockChatCache = null!;
     private ILogger<NotificationHandler> _mockLogger = null!;
@@ -40,9 +37,6 @@ public class NotificationHandlerTests
         _mockNotificationOrchestrator = Substitute.For<INotificationOrchestrator>();
         _mockNotificationService = Substitute.For<INotificationService>();
         _mockManagedChatsRepo = Substitute.For<IManagedChatsRepository>();
-        _mockChatAdminsRepo = Substitute.For<IChatAdminsRepository>();
-        _mockUserMappingRepo = Substitute.For<ITelegramUserMappingRepository>();
-        _mockDmService = Substitute.For<IBotDmService>();
         _mockChatService = Substitute.For<IBotChatService>();
         _mockChatCache = Substitute.For<IChatCache>();
         _mockLogger = Substitute.For<ILogger<NotificationHandler>>();
@@ -51,9 +45,6 @@ public class NotificationHandlerTests
             _mockNotificationOrchestrator,
             _mockNotificationService,
             _mockManagedChatsRepo,
-            _mockChatAdminsRepo,
-            _mockUserMappingRepo,
-            _mockDmService,
             _mockChatService,
             _mockChatCache,
             _mockLogger);
@@ -65,18 +56,24 @@ public class NotificationHandlerTests
         // Arrange - detection was by the system (automated pipeline)
         var enrichedMessage = CreateEnrichedMessage(
             addedBy: Actor.FromSystem("automated_pipeline"));
-        SetupAdminWithMapping();
 
         // Act
         var result = await _handler.NotifyAdminsSpamBanAsync(
             enrichedMessage, chatsAffected: 5, messageDeleted: true);
 
-        // Assert - title should be "Spam Auto-Banned" (auto-ban title)
+        // Assert - notification service was called (title contains "Auto" for system actors)
         Assert.That(result.Success, Is.True);
-        await _mockDmService.Received(1).SendDmWithMediaAsync(
-            TestAdminTelegramId,
-            "spam_banned",
-            Arg.Is<string>(s => s.Contains("Spam Auto\\-Banned")),
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Is<Actor?>(a => a != null && a.Type == ActorType.System),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            5,
+            true,
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -88,18 +85,24 @@ public class NotificationHandlerTests
         // Arrange - detection was by a Telegram user (manual spam action)
         var enrichedMessage = CreateEnrichedMessage(
             addedBy: Actor.FromTelegramUser(99999, "ModeratorJohn"));
-        SetupAdminWithMapping();
 
         // Act
         var result = await _handler.NotifyAdminsSpamBanAsync(
             enrichedMessage, chatsAffected: 3, messageDeleted: true);
 
-        // Assert - title should include "Banned by <moderator>"
+        // Assert - notification service was called with the TelegramUser actor
         Assert.That(result.Success, Is.True);
-        await _mockDmService.Received(1).SendDmWithMediaAsync(
-            TestAdminTelegramId,
-            "spam_banned",
-            Arg.Is<string>(s => s.Contains("Spam Banned by") && s.Contains("ModeratorJohn")),
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Is<Actor?>(a => a != null && a.Type == ActorType.TelegramUser),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            3,
+            true,
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
@@ -158,27 +161,4 @@ public class NotificationHandlerTests
         };
     }
 
-    private void SetupAdminWithMapping()
-    {
-        // Return one admin for the chat
-        var admin = new ChatAdmin
-        {
-            Id = 1,
-            ChatId = TestChatId,
-            User = new UserIdentity(TestAdminTelegramId, "Admin", null, "admin")
-        };
-        _mockChatAdminsRepo.GetChatAdminsAsync(TestChatId, Arg.Any<CancellationToken>())
-            .Returns(new List<ChatAdmin> { admin });
-
-        // Admin has linked their account
-        var mapping = new TelegramUserMappingRecord(
-            Id: 1,
-            TelegramId: TestAdminTelegramId,
-            TelegramUsername: "admin",
-            UserId: "web-user-1",
-            LinkedAt: DateTimeOffset.UtcNow.AddDays(-30),
-            IsActive: true);
-        _mockUserMappingRepo.GetByTelegramIdAsync(TestAdminTelegramId, Arg.Any<CancellationToken>())
-            .Returns(mapping);
-    }
 }

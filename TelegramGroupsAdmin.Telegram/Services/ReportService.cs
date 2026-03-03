@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -14,7 +14,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class ReportService(
     IReportsRepository reportsRepository,
-    IJobTriggerService jobTriggerService,
+    INotificationService notificationService,
     IAuditService auditService,
     IMessageHistoryRepository messageHistoryRepository,
     ILogger<ReportService> logger) : IReportService
@@ -58,47 +58,34 @@ public class ReportService(
             value: $"Report #{reportId} for message {report.MessageId} in chat {report.Chat.Id}",
             cancellationToken: cancellationToken);
 
-        // 3. Send notification via INotificationService (respects user preferences)
-        var chatName = report.Chat.ChatName ?? $"Chat {report.Chat.Id}";
+        // 3. Send notification via typed notification service
         var messagePreview = GetMessagePreview(originalMessage, report);
-        var reportedUserName = GetReportedUserName(originalMessage, report);
 
-        var notificationSubject = isAutomated
-            ? $"Auto-Detected Report in {chatName}"
-            : $"Message Reported in {chatName}";
-
-        var notificationMessage = BuildNotificationMessage(
-            reportId, chatName, report.ReportedByUserName, reportedUserName, messagePreview, isAutomated);
-
-        // Get reported user's Telegram ID for moderation action buttons
-        var reportedUserId = originalMessage?.From?.Id;
+        // Build reported user identity from original message
+        UserIdentity? reportedUser = originalMessage?.From != null
+            ? UserIdentity.From(originalMessage.From)
+            : null;
 
         // Get photo path from stored message for DM with image
         string? photoPath = null;
         var storedMessage = await messageHistoryRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (storedMessage?.PhotoLocalPath != null)
         {
-            // PhotoLocalPath is stored as relative (e.g., "full/{chatId}/{messageId}.jpg")
-            // Need to construct absolute path for DM delivery
             photoPath = Path.Combine("/data", "media", storedMessage.PhotoLocalPath);
         }
 
-        // Send notification via Quartz job (reliable delivery instead of fire-and-forget)
-        // Now includes report metadata for action buttons and photo for DM with image
-        var notificationPayload = new SendChatNotificationPayload(
-            Chat: report.Chat,
-            EventType: NotificationEventType.MessageReported,
-            Subject: notificationSubject,
-            Message: notificationMessage,
-            ReportId: reportId,
-            PhotoPath: photoPath,
-            ReportedUserId: reportedUserId,
-            ReportType: ReportType.ContentReport);
-
-        await jobTriggerService.TriggerNowAsync(
-            "SendChatNotificationJob",
-            notificationPayload,
-            cancellationToken);
+        // Fire-and-forget — notification delivery should not block report creation
+        _ = notificationService.SendReportNotificationAsync(
+            chat: report.Chat,
+            reportedUser: reportedUser,
+            reporterUserId: report.ReportedByUserId,
+            reporterName: report.ReportedByUserName,
+            isAutomated: isAutomated,
+            messagePreview: messagePreview,
+            photoPath: photoPath,
+            reportId: reportId,
+            reportType: ReportType.ContentReport,
+            ct: cancellationToken);
 
         return new ReportCreationResult(reportId);
     }
@@ -122,32 +109,4 @@ public class ReportService(
         return "[Media message]";
     }
 
-    private static string GetReportedUserName(Message? message, Report report)
-    {
-        if (message?.From != null)
-        {
-            return $"@{message.From.Username ?? message.From.FirstName ?? message.From.Id.ToString()}";
-        }
-
-        return "Unknown";
-    }
-
-    private static string BuildNotificationMessage(
-        long reportId,
-        string chatName,
-        string? reporterName,
-        string reportedUserName,
-        string messagePreview,
-        bool isAutomated)
-    {
-        var reporter = isAutomated
-            ? "Auto-Detection System"
-            : $"@{reporterName ?? "Unknown"}";
-
-        return $"Report ID: #{reportId}\n" +
-               $"Reported by: {reporter}\n" +
-               $"Reported user: {reportedUserName}\n" +
-               $"Message preview: {messagePreview}\n\n" +
-               $"Please review this report in the Reports tab of the admin panel.";
-    }
 }

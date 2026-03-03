@@ -170,17 +170,12 @@ public class ChatHealthRefreshOrchestrator(
             // Send notification if health warnings detected (Phase 5.1)
             if (health.Status is ChatHealthStatusType.Warning or ChatHealthStatusType.Error)
             {
-                var warningsText = string.Join("\n- ", health.Warnings);
-
-                _ = notificationService.SendSystemNotificationAsync(
-                    eventType: NotificationEventType.ChatHealthWarning,
-                    subject: $"Chat Health Warning: {health.Chat.ChatName ?? chat.Id.ToString()}",
-                    message: $"Health check detected issues with chat '{health.Chat.ChatName ?? chat.Id.ToString()}'.\n\n" +
-                             $"Status: {health.Status}\n" +
-                             $"Bot Admin: {health.IsAdmin}\n" +
-                             $"Warnings:\n- {warningsText}\n\n" +
-                             $"Please review the chat settings and bot permissions.",
-                    cancellationToken: cancellationToken);
+                _ = notificationService.SendChatHealthWarningAsync(
+                    chatName: health.Chat.ChatName ?? chat.Id.ToString(),
+                    status: health.Status.ToString(),
+                    isAdmin: health.IsAdmin,
+                    warnings: health.Warnings,
+                    ct: cancellationToken);
             }
         }
         catch (OperationCanceledException cancelEx)
@@ -227,13 +222,12 @@ public class ChatHealthRefreshOrchestrator(
 
                 // Notify about critical health failure (Phase 5.1)
                 // Only send notifications for non-transient errors (e.g., bot kicked, permission issues)
-                _ = notificationService.SendSystemNotificationAsync(
-                    eventType: NotificationEventType.ChatHealthWarning,
-                    subject: $"Chat Health Check Failed: {health.Chat.ChatName ?? chat.Id.ToString()}",
-                    message: $"Critical: Health check failed for chat '{health.Chat.ChatName ?? chat.Id.ToString()}'.\n\n" +
-                             $"Error: {ex.Message}\n\n" +
-                             $"The bot may have been removed from the chat or lost permissions.",
-                    cancellationToken: cancellationToken);
+                _ = notificationService.SendChatHealthWarningAsync(
+                    chatName: health.Chat.ChatName ?? chat.Id.ToString(),
+                    status: health.Status.ToString(),
+                    isAdmin: health.IsAdmin,
+                    warnings: health.Warnings,
+                    ct: cancellationToken);
             }
         }
 

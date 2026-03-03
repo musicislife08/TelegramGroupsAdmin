@@ -808,10 +808,5 @@ public class BackupServiceTests
         public Task<Dictionary<string, bool>> SendAdminChangedAsync(ChatIdentity chat, UserIdentity user, bool promoted, bool isCreator, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendBackupFailedAsync(string tableName, string error, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendChatHealthWarningAsync(string chatName, string status, bool isAdmin, IReadOnlyList<string> warnings, CancellationToken ct = default) => Task.FromResult(EmptyResults);
-
-        // Legacy methods
-        public Task<Dictionary<string, bool>> SendChatNotificationAsync(ChatIdentity? chat, NotificationEventType eventType, string subject, string message, long? reportId = null, string? photoPath = null, long? reportedUserId = null, ReportType? reportType = null, CancellationToken cancellationToken = default) => Task.FromResult(EmptyResults);
-        public Task<Dictionary<string, bool>> SendSystemNotificationAsync(NotificationEventType eventType, string subject, string message, CancellationToken cancellationToken = default) => Task.FromResult(EmptyResults);
-        public Task<bool> SendNotificationAsync(UserRecord user, NotificationEventType eventType, string subject, string message, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 }

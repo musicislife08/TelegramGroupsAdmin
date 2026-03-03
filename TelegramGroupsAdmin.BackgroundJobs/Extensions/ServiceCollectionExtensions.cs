@@ -101,7 +101,6 @@ public static class ServiceCollectionExtensions
         q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity(BackgroundJobNames.WelcomeTimeout).StoreDurably());
 
         q.AddJob<ProfileScanJob>(opts => opts.WithIdentity(BackgroundJobNames.ProfileScan).StoreDurably());
-        q.AddJob<SendChatNotificationJob>(opts => opts.WithIdentity(BackgroundJobNames.SendChatNotification).StoreDurably());
 
         // Note: Triggers will be created dynamically by QuartzSchedulingSyncService
         // based on database configuration (BackgroundJobConfig.Schedule)
