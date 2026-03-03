@@ -108,9 +108,7 @@ public class ExamFlowService : IExamFlowService
             // Align expiry with welcome timeout deadline
             var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
-            var expiresAt = welcomeResponse != null
-                ? welcomeResponse.CreatedAt.AddSeconds(config.TimeoutSeconds)
-                : DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds);
+            var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
             var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
 
@@ -190,14 +188,10 @@ public class ExamFlowService : IExamFlowService
                 await sessionRepo.DeleteSessionAsync(existingSession.Id, cancellationToken);
             }
 
-            // Calculate exam expiry aligned with welcome timeout deadline
-            // The welcome timeout fires at joinTime + TimeoutSeconds, so the exam
-            // should expire at the same deadline (not now + TimeoutSeconds)
+            // Align expiry with welcome timeout deadline
             var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
-            var expiresAt = welcomeResponse != null
-                ? welcomeResponse.CreatedAt.AddSeconds(config.TimeoutSeconds)
-                : DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds); // fallback if no welcome response
+            var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
             var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
 
@@ -983,4 +977,14 @@ public class ExamFlowService : IExamFlowService
 
         return new ModerationResult { Success = true };
     }
+
+    /// <summary>
+    /// Calculates the exam expiry aligned with the welcome timeout deadline.
+    /// If a welcome response exists, the exam expires at welcomeCreatedAt + timeoutSeconds.
+    /// Otherwise falls back to now + timeoutSeconds.
+    /// </summary>
+    private static DateTimeOffset CalculateExamExpiry(WelcomeResponse? welcomeResponse, int timeoutSeconds) =>
+        welcomeResponse != null
+            ? welcomeResponse.CreatedAt.AddSeconds(timeoutSeconds)
+            : DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
 }

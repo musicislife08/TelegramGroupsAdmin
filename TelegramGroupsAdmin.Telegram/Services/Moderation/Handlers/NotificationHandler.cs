@@ -250,18 +250,10 @@ public class NotificationHandler : INotificationHandler
     /// TODO: When rich formatting support is added (GitHub issue to be created), consider using
     /// a proper sanitization library like HtmlSanitizer to allow safe user-provided HTML/Markdown.
     /// </summary>
-    private static string EscapeHtml(string? text)
-    {
-        if (string.IsNullOrEmpty(text))
-            return string.Empty;
-
-        // Escape HTML special characters for Telegram's HTML parseMode
-        // Telegram HTML supports: <b>, <i>, <u>, <s>, <a>, <code>, <pre>
-        return text
-            .Replace("&", "&amp;")   // Must be first to avoid double-escaping
-            .Replace("<", "&lt;")
-            .Replace(">", "&gt;");
-    }
+    private static string EscapeHtml(string? text) =>
+        string.IsNullOrEmpty(text)
+            ? string.Empty
+            : System.Net.WebUtility.HtmlEncode(text);
 
     /// <inheritdoc />
     public async Task<NotificationResult> NotifyAdminsSpamBanAsync(

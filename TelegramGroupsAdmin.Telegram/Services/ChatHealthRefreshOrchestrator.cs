@@ -209,7 +209,7 @@ public class ChatHealthRefreshOrchestrator(
                     health.Chat.ToLogDebug());
                 health.IsReachable = false;
                 health.Status = ChatHealthStatusType.Error;
-                health.Warnings.Add($"Temporary network issue: {ex.Message}");
+                health.Warnings.Add("Temporary network issue contacting chat");
             }
             else
             {
@@ -218,7 +218,7 @@ public class ChatHealthRefreshOrchestrator(
                     health.Chat.ToLogDebug());
                 health.IsReachable = false;
                 health.Status = ChatHealthStatusType.Error;
-                health.Warnings.Add($"Cannot reach chat: {ex.Message}");
+                health.Warnings.Add("Bot may have been removed or lost permissions");
 
                 // Notify about critical health failure (Phase 5.1)
                 // Only send notifications for non-transient errors (e.g., bot kicked, permission issues)

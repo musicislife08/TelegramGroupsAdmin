@@ -73,6 +73,12 @@ public interface IUserRepository
     Task<List<UserRecord>> GetWebUsersWithChatAccessAsync(long? chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get active Owner-level users only, filtered at the database level.
+    /// Used for infrastructure notifications (backup failures, health warnings).
+    /// </summary>
+    Task<List<UserRecord>> GetOwnerUsersAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get the primary owner's email (first Owner account by created_at)
     /// Used for VAPID authentication subject in Web Push notifications
     /// </summary>

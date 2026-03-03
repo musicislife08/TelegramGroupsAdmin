@@ -85,7 +85,7 @@ public class ReportService(
             photoPath: photoPath,
             reportId: reportId,
             reportType: ReportType.ContentReport,
-            ct: cancellationToken);
+            ct: CancellationToken.None);
 
         return new ReportCreationResult(reportId);
     }

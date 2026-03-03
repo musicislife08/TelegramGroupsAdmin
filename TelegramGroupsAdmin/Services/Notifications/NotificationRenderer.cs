@@ -163,5 +163,5 @@ internal static class NotificationRenderer
     internal static string EscapeHtml(string? text) =>
         string.IsNullOrEmpty(text)
             ? string.Empty
-            : text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+            : System.Net.WebUtility.HtmlEncode(text);
 }

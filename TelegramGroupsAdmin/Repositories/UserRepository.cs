@@ -375,6 +375,19 @@ public class UserRepository : IUserRepository
         return entities.Select(e => e.ToModel()).ToList();
     }
 
+    public async Task<List<UserRecord>> GetOwnerUsersAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.Users
+            .AsNoTracking()
+            .Where(u => u.PermissionLevel == Data.Models.PermissionLevel.Owner
+                        && u.Status == Data.Models.UserStatus.Active)
+            .OrderByDescending(u => u.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(e => e.ToModel()).ToList();
+    }
+
     public async Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

@@ -90,7 +90,7 @@ public class NotificationRendererTests
 
         var html = NotificationRenderer.ToTelegramHtml(payload);
 
-        Assert.That(html, Does.Contain("Alert: &lt;User&gt; &amp; &quot;Details&quot;").Or.Contain("Alert: &lt;User&gt; &amp;"));
+        Assert.That(html, Does.Contain("Alert: &lt;User&gt; &amp; &quot;Details&quot;"));
         Assert.That(html, Does.Not.Contain("<User>"));
     }
 
@@ -388,8 +388,8 @@ public class NotificationRendererTests
     public void EscapeHtml_AllSpecialChars_EscapedCorrectly()
     {
         Assert.That(
-            NotificationRenderer.EscapeHtml("A & B < C > D"),
-            Is.EqualTo("A &amp; B &lt; C &gt; D"));
+            NotificationRenderer.EscapeHtml("A & B < C > D \"E\""),
+            Is.EqualTo("A &amp; B &lt; C &gt; D &quot;E&quot;"));
     }
 
     [Test]

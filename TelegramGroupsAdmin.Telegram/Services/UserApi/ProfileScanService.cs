@@ -485,7 +485,7 @@ public sealed class ProfileScanService(
                 signals: signals,
                 aiReason: result.AiReason,
                 reportId: reportId,
-                ct: ct);
+                ct: CancellationToken.None);
 
             logger.LogInformation("Profile scan: created alert #{ReportId} for {User} in {Chat} (score {Score})",
                 reportId, user.ToLogInfo(), chat.ToLogInfo(), result.Score);

@@ -302,18 +302,14 @@ public sealed class NotificationService : INotificationService
                 "Sending {EventType} notification to {WebUserCount} web user(s) + pool 2 (chat: {Chat})",
                 eventType, webUsers.Count, chat?.ToLogInfo() ?? "global");
 
-            // Collect linked Telegram IDs from pool 1 for dedup
-            var pool1TelegramIds = new HashSet<long>();
+            // Batch-fetch linked Telegram IDs from pool 1 for dedup (single query instead of N+1)
+            var pool1TelegramIds = await _telegramMappingRepo.GetTelegramIdsByUserIdsAsync(
+                webUsers.Select(u => u.WebUser.Id), ct);
 
             foreach (var user in webUsers)
             {
                 var success = await SendToUserAsync(user, eventType, payload, ct);
                 results[user.WebUser.Id] = success;
-
-                // Track this web user's linked Telegram IDs for dedup
-                var mappings = await _telegramMappingRepo.GetByUserIdAsync(user.WebUser.Id, ct);
-                foreach (var mapping in mappings)
-                    pool1TelegramIds.Add(mapping.TelegramId);
             }
 
             // Pool 2: Unlinked Telegram chat admins (DM only) — only when chat is provided
@@ -355,8 +351,7 @@ public sealed class NotificationService : INotificationService
     {
         try
         {
-            var allUsers = await _userRepo.GetAllAsync(ct);
-            var owners = allUsers.Where(u => u.WebUser.PermissionLevel == PermissionLevel.Owner).ToList();
+            var owners = await _userRepo.GetOwnerUsersAsync(ct);
 
             if (owners.Count == 0)
             {
