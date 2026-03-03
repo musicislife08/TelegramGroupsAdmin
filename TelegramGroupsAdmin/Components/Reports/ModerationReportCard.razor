@@ -197,29 +197,29 @@
     private async Task OnMarkSpam()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Spam));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Spam)); }
+        finally { _actionInProgress = false; }
     }
 
     private async Task OnBan()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Ban));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Ban)); }
+        finally { _actionInProgress = false; }
     }
 
     private async Task OnWarn()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Warn));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Warn)); }
+        finally { _actionInProgress = false; }
     }
 
     private async Task OnDismiss()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Dismiss));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Dismiss)); }
+        finally { _actionInProgress = false; }
     }
 
     private string GetReportedUserDisplay()

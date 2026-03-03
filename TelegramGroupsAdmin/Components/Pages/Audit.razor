@@ -740,14 +740,4 @@
             user.TelegramUserId);
     }
 
-    // Telegram User Display Helper by ID (with cache lookup)
-    private string GetTelegramUserDisplayNameById(long telegramUserId)
-    {
-        if (_telegramUsersCache.TryGetValue(telegramUserId, out var user))
-        {
-            return GetTelegramUserDisplayName(user);
-        }
-        // Fallback to User {id} format if not in cache
-        return $"User {telegramUserId}";
-    }
 }

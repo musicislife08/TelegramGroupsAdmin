@@ -240,10 +240,9 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         }
 
         // Step 4: Get existing stop words to filter them out
+        var allStopWords = await _stopWordsRepository.GetAllStopWordsAsync(cancellationToken);
         var existingStopWords = new HashSet<string>(
-            await _stopWordsRepository.GetAllStopWordsAsync(cancellationToken).ContinueWith(
-                t => t.Result.Select(sw => sw.Word),
-                cancellationToken),
+            allStopWords.Select(sw => sw.Word),
             StringComparer.OrdinalIgnoreCase);
 
         // Step 5: Calculate frequencies and filter candidates

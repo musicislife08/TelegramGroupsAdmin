@@ -40,6 +40,8 @@ public class ImageContentCheckV2(
     private readonly IPhotoHashService _photoHashService = photoHashService;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
 
+    private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     public CheckName CheckName => CheckName.ImageSpam;
 
     /// <summary>
@@ -334,7 +336,7 @@ public class ImageContentCheckV2(
             };
         }
 
-        var prompt = BuildPrompt(req.Message, req.CustomPrompt);
+        var prompt = BuildPrompt(req.Message);
 
         logger.LogDebug("ImageSpam V2 check for {User}: Calling AI Vision API", req.User.ToLogDebug());
 
@@ -343,7 +345,7 @@ public class ImageContentCheckV2(
             // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
                 AIFeatureType.ImageAnalysis,
-                GetDefaultImagePrompt(),
+                req.CustomPrompt ?? GetDefaultImagePrompt(),
                 prompt,
                 imageData,
                 mimeType,
@@ -389,7 +391,7 @@ public class ImageContentCheckV2(
     /// Build prompt for AI Vision analysis
     /// Uses configurable system prompt if provided, otherwise uses default
     /// </summary>
-    private static string BuildPrompt(string? messageText, string? customPrompt)
+    private static string BuildPrompt(string? messageText)
     {
         var messageContext = messageText != null
             ? $"Message text: \"{messageText}\""
@@ -444,7 +446,7 @@ public class ImageContentCheckV2(
 
             var response = JsonSerializer.Deserialize<VisionSpamResponse>(
                 content,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                CaseInsensitiveJsonOptions);
 
             if (response == null)
             {
