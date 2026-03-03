@@ -1038,6 +1038,11 @@ public class BackupService : IBackupService
             .ToList();
 
         var toDelete = _retentionService.GetBackupsToDelete(backupFiles, retentionConfig);
+
+        _logger.LogInformation(
+            "Backup retention: {TotalBackups} total, deleting {DeleteCount}",
+            backupFiles.Count, toDelete.Count);
+
         var deletedCount = 0;
 
         foreach (var backup in toDelete)

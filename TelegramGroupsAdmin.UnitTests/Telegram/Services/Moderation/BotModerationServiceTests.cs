@@ -211,7 +211,7 @@ public class BotModerationServiceTests
 
         // Verify admins were notified
         await _mockNotificationHandler.Received(1).NotifyAdminsBanAsync(
-            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Is<UserIdentity>(u => u.Id == userId), executor, Arg.Any<string>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1038,7 +1038,7 @@ public class BotModerationServiceTests
 
         // Verify: Admins still notified (non-critical failure doesn't block notification)
         await _mockNotificationHandler.Received(1).NotifyAdminsBanAsync(
-            Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), executor, Arg.Any<string>(), Arg.Any<ChatIdentity?>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

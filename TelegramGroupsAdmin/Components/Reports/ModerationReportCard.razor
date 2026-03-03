@@ -7,7 +7,6 @@
 
 @inject IMessageHistoryRepository MessageRepository
 @inject ITelegramUserRepository TelegramUserRepository
-
 <MudCard Elevation="2" Class="mb-3">
     <MudCardHeader>
         <CardHeaderContent>
@@ -29,7 +28,7 @@
         {
             <MudStack Spacing="2">
                 <MudStack Row="true" Spacing="2">
-                    <MudText Typo="Typo.body2"><b>User:</b> @GetReportedUserDisplay()</MudText>
+                    <MudText Typo="Typo.body2"><b>User:</b> <UserDetailLink UserId="@_message!.User.Id" Typo="Typo.body2">@GetReportedUserDisplay()</UserDetailLink></MudText>
                     @if (_reportedUser?.Username != null || !string.IsNullOrEmpty(_message.User.Username) || _reportedUser?.FirstName != null)
                     {
                         <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @_message.User.Id</MudText>

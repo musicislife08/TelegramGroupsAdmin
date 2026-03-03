@@ -381,6 +381,100 @@
         }
     </MudCard>
 
+    <!-- Channel Reply Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.ChannelReply.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Channel Reply Detection</MudText>
+                    <HelpTooltip Text="Adds a confidence boost when a message replies to a channel post (linked channel system post or anonymous admin posting as the group). Weak signal on its own but strengthens other detections. Very fast, no API calls." />
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.ChannelReply.Enabled ? Color.Success : Color.Default)">
+                        @(_config.ChannelReply.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
+                </MudStack>
+            </CardHeaderContent>
+        </MudCardHeader>
+        @if (_config.ChannelReply.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Boosts spam confidence when message replies to a channel post. Works as a supporting signal alongside other algorithms.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Media Content Detection Header -->
+    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
+        <MudIcon Icon="@Icons.Material.Filled.PermMedia" Class="mr-2" />
+        Media Content Detection
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Analyze images and videos for spam content using OCR, hash similarity, and AI Vision.
+    </MudText>
+
+    <!-- Image Spam Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.ImageSpam.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Image Spam Detection</MudText>
+                    <HelpTooltip Text="3-layer image analysis: (1) Hash similarity against known spam samples (fast), (2) OCR text extraction + text spam checks (medium), (3) AI Vision fallback for comprehensive analysis (slow). Uses OpenAI Vision API (costs apply)." />
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.ImageSpam.Enabled ? Color.Success : Color.Default)">
+                        @(_config.ImageSpam.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Schedule">Slow</MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionImage>("Image Spam Configuration"))">
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.ImageSpam.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Analyzes images using hash matching, OCR text extraction, and AI Vision. Click "Configure" for layer settings and thresholds.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Video Spam Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.VideoSpam.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Video Spam Detection</MudText>
+                    <HelpTooltip Text="3-layer video analysis: (1) Keyframe hash similarity against known spam (fast), (2) OCR on extracted frames + text checks (medium), (3) AI Vision on frames fallback (slow). Requires FFmpeg for frame extraction. Uses OpenAI Vision API (costs apply)." />
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.VideoSpam.Enabled ? Color.Success : Color.Default)">
+                        @(_config.VideoSpam.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Schedule">Slow</MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionVideo>("Video Spam Configuration"))">
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.VideoSpam.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Analyzes video keyframes using hash matching, OCR text extraction, and AI Vision. Click "Configure" for layer settings and thresholds.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
     <!-- URL Content Detection Header -->
     <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
         <MudIcon Icon="@Icons.Material.Filled.Link" Class="mr-2" />

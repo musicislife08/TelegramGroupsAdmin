@@ -11,7 +11,6 @@
 @inject ITelegramUserRepository TelegramUserRepository
 @inject IMessageHistoryRepository MessageRepository
 @inject IManagedChatsRepository ManagedChatsRepository
-
 <MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
     <MudCardHeader>
         <CardHeaderContent>
@@ -52,7 +51,7 @@
                     </MudAvatar>
                 }
                 <MudStack Spacing="1">
-                    <MudText Typo="Typo.h6">@ExamFailure.User.DisplayName</MudText>
+                    <UserDetailLink UserId="@ExamFailure.User.Id" Typo="Typo.h6">@ExamFailure.User.DisplayName</UserDetailLink>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
                         @(ExamFailure.User.Username != null ? $"@{ExamFailure.User.Username}" : "No username") · ID: @ExamFailure.User.Id
                     </MudText>

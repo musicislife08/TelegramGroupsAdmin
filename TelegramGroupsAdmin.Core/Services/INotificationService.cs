@@ -4,16 +4,17 @@ namespace TelegramGroupsAdmin.Core.Services;
 
 /// <summary>
 /// Service for sending notifications to users through configured channels (Telegram DM, Email)
-/// Hybrid approach: chat-specific events notify chat admins, system events notify Owners only
+/// Three-tier routing: chat-scoped moderation, global moderation, and system-only
 /// Respects per-user notification preferences and event filters
 /// </summary>
 public interface INotificationService
 {
     /// <summary>
-    /// Send a chat-specific notification to all admins who manage the specified chat
+    /// Send a moderation notification to admins. Always includes global admins and owners.
+    /// When chat is provided, also includes chat-specific admins.
     /// Used for: SpamDetected, SpamAutoDeleted, UserBanned, MessageReported, MalwareDetected, ExamFailed
     /// </summary>
-    /// <param name="chat">Identity of the chat where the event occurred</param>
+    /// <param name="chat">Optional chat where the event occurred. When null, sends to global admins + owners only.</param>
     /// <param name="eventType">Type of event triggering the notification</param>
     /// <param name="subject">Notification subject/title</param>
     /// <param name="message">Notification message body</param>
@@ -24,7 +25,7 @@ public interface INotificationService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Dictionary mapping userId to delivery success</returns>
     Task<Dictionary<string, bool>> SendChatNotificationAsync(
-        ChatIdentity chat,
+        ChatIdentity? chat,
         NotificationEventType eventType,
         string subject,
         string message,

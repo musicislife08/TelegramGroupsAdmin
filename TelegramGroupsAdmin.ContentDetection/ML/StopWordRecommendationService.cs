@@ -126,7 +126,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         var legitMessageCount = await dbContext.Messages
             .AsNoTracking()
             .Where(m => m.Timestamp >= since)
-            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.IsSpam))
+            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.ChatId == m.ChatId && d.IsSpam))
             .CountAsync(cancellationToken);
 
         // Count total detection results (for precision analysis)
@@ -208,7 +208,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         var legitMessages = await dbContext.Messages
             .AsNoTracking()
             .Where(m => m.Timestamp >= since)
-            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.IsSpam))
+            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.ChatId == m.ChatId && d.IsSpam))
             .Select(m => new
             {
                 MessageId = m.MessageId,

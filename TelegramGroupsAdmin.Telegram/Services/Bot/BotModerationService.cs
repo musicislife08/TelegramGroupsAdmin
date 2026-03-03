@@ -151,7 +151,7 @@ public class BotModerationService : IBotModerationService
                 else
                 {
                     // Fallback if message not found (shouldn't happen, but defensive)
-                    await _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
+                    await _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, intent.Chat, cancellationToken);
                 }
             },
             $"Rich spam notification for user {intent.User.Id}");
@@ -189,7 +189,7 @@ public class BotModerationService : IBotModerationService
 
         // Notify admins
         await SafeExecuteAsync(
-            () => _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            () => _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, intent.Chat, cancellationToken),
             $"Ban notification for user {intent.User.Id}");
 
         // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
@@ -278,7 +278,7 @@ public class BotModerationService : IBotModerationService
 
                 // Notify admins (simple notification - no detection context for warning-based bans)
                 await SafeExecuteAsync(
-                    () => _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken),
+                    () => _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, intent.Chat, cancellationToken),
                     $"Auto-ban notification for user {intent.User.Id}");
 
                 // Schedule cleanup of user's messages

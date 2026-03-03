@@ -47,6 +47,15 @@ public class ImageContentCheckV2(
     /// </summary>
     public bool ShouldExecute(ContentCheckRequest request)
     {
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping ImageSpam check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
         // Run if any image source is provided
         return request.ImageData != null ||
                !string.IsNullOrEmpty(request.PhotoFileId) ||

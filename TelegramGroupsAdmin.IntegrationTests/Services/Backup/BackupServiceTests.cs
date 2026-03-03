@@ -795,7 +795,7 @@ public class BackupServiceTests
     private class MockNotificationService : INotificationService
     {
         public Task<Dictionary<string, bool>> SendChatNotificationAsync(
-            ChatIdentity chat,
+            ChatIdentity? chat,
             NotificationEventType eventType,
             string subject,
             string message,

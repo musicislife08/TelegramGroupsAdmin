@@ -120,7 +120,7 @@ public class MessageQueryService : IMessageQueryService
 
         var enrichedMessages = await context.EnrichedMessages
             .AsNoTracking()
-            .Where(m => messageIds.Contains(m.MessageId))
+            .Where(m => m.ChatId == chatId && messageIds.Contains(m.MessageId))
             .ToListAsync(cancellationToken);
 
         var enrichedDict = enrichedMessages.ToDictionary(x => x.MessageId);

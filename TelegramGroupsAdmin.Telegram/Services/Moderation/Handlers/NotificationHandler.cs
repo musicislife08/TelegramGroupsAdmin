@@ -113,11 +113,12 @@ public class NotificationHandler : INotificationHandler
         UserIdentity user,
         Actor executor,
         string? reason,
+        ChatIdentity? chat = null,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            await SendBanAdminNotificationAsync(user, executor, reason, cancellationToken);
+            await SendBanAdminNotificationAsync(user, executor, reason, chat, cancellationToken);
             return NotificationResult.Succeeded();
         }
         catch (Exception ex)
@@ -205,25 +206,28 @@ public class NotificationHandler : INotificationHandler
     }
 
     /// <summary>
-    /// Send ban notification to admins subscribed to UserBanned events.
+    /// Send ban notification to admins. Routes through SendChatNotificationAsync which
+    /// always includes global admins + owners, plus chat-specific admins when chat is provided.
     /// </summary>
-    private async Task SendBanAdminNotificationAsync(UserIdentity user, Actor executor, string? reason, CancellationToken cancellationToken)
+    private async Task SendBanAdminNotificationAsync(UserIdentity user, Actor executor, string? reason, ChatIdentity? chat, CancellationToken cancellationToken)
     {
         var subject = "User Banned";
+        var chatName = chat?.ChatName ?? chat?.Id.ToString();
         var message = $"User {user.DisplayName} has been banned.\n\n" +
+                      (chatName != null ? $"Chat: {chatName}\n" : "") +
                       $"Reason: {reason}\n" +
                       $"Banned by: {executor.GetDisplayText()}";
 
-        // Send as a system notification to owners
-        await _notificationService.SendSystemNotificationAsync(
+        await _notificationService.SendChatNotificationAsync(
+            chat,
             NotificationEventType.UserBanned,
             subject,
             message,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         _logger.LogDebug(
-            "Dispatched UserBanned admin notification for {User}",
-            user.ToLogDebug());
+            "Dispatched UserBanned admin notification for {User} (chat: {Chat})",
+            user.ToLogDebug(), chat?.ToLogDebug() ?? "global");
     }
 
     /// <summary>

@@ -44,6 +44,15 @@ public class VideoContentCheckV2(
     /// </summary>
     public bool ShouldExecute(ContentCheckRequest request)
     {
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping VideoSpam check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
         // Run if video local path is provided
         var shouldRun = !string.IsNullOrEmpty(request.VideoLocalPath);
         logger.LogDebug("VideoSpamCheck.ShouldExecute: VideoLocalPath={VideoPath}, ShouldRun={ShouldRun}",

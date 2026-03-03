@@ -44,7 +44,7 @@ public class MessageContextProvider(
                     Username = tu != null ? tu.Username : null,
                     m.MessageText,
                     m.Timestamp,
-                    DetectionResults = context.DetectionResults.Where(dr => dr.MessageId == m.MessageId)
+                    DetectionResults = context.DetectionResults.Where(dr => dr.MessageId == m.MessageId && dr.ChatId == m.ChatId)
                 })
                 .OrderByDescending(m => m.Timestamp)
                 .Take(count)

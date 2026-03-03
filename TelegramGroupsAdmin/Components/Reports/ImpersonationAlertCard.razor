@@ -9,7 +9,6 @@
 @inject ITelegramUserRepository TelegramUserRepository
 @inject IMessageHistoryRepository MessageRepository
 @inject IManagedChatsRepository ManagedChatsRepository
-
 <MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
     <MudCardHeader>
         <CardHeaderContent>
@@ -73,7 +72,7 @@
                                 </MudAvatar>
                             }
 
-                            <MudText Typo="Typo.body1"><b>@Alert.SuspectedUser.DisplayName</b></MudText>
+                            <UserDetailLink UserId="@Alert.SuspectedUser.Id" Typo="Typo.body1"><b>@Alert.SuspectedUser.DisplayName</b></UserDetailLink>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.SuspectedUser.Username != null ? $"@{Alert.SuspectedUser.Username}" : "No username")</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.SuspectedUser.Id</MudText>
 
@@ -123,7 +122,7 @@
                                 </MudAvatar>
                             }
 
-                            <MudText Typo="Typo.body1"><b>@Alert.TargetUser.DisplayName</b></MudText>
+                            <UserDetailLink UserId="@Alert.TargetUser.Id" Typo="Typo.body1"><b>@Alert.TargetUser.DisplayName</b></UserDetailLink>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.TargetUser.Username != null ? $"@{Alert.TargetUser.Username}" : "No username")</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.TargetUser.Id</MudText>
 

@@ -55,7 +55,7 @@ public class NotificationService : INotificationService
     }
 
     public async Task<Dictionary<string, bool>> SendChatNotificationAsync(
-        ChatIdentity chat,
+        ChatIdentity? chat,
         NotificationEventType eventType,
         string subject,
         string message,
@@ -67,41 +67,41 @@ public class NotificationService : INotificationService
     {
         try
         {
-            // Get all active admins for this chat (includes LinkedWebUser via JOIN)
-            var chatAdmins = await _chatAdminsRepo.GetChatAdminsAsync(chat.Id, cancellationToken);
+            // Build deduplicated recipient list (keyed by web user ID)
+            var recipients = new Dictionary<string, UserRecord>();
 
-            if (chatAdmins.Count == 0)
+            // Always include global admins + owners (linked accounts)
+            var allUsers = await _userRepo.GetAllAsync(cancellationToken);
+            foreach (var user in allUsers.Where(u => u.WebUser.PermissionLevel >= Core.Models.PermissionLevel.GlobalAdmin))
+                recipients.TryAdd(user.WebUser.Id, user);
+
+            // If chat provided, also include chat-specific admins
+            if (chat != null)
             {
-                _logger.LogWarning("No admins found for {Chat}, cannot send notification",
-                    chat.ToLogDebug());
-                return new Dictionary<string, bool>();
+                var chatAdmins = await _chatAdminsRepo.GetChatAdminsAsync(chat.Id, cancellationToken);
+                foreach (var admin in chatAdmins.Where(a => a.LinkedWebUser != null))
+                    recipients.TryAdd(admin.LinkedWebUser!.WebUser.Id, admin.LinkedWebUser);
             }
 
-            // Filter to admins with linked web accounts
-            var linkedAdmins = chatAdmins
-                .Where(a => a.LinkedWebUser != null)
-                .Select(a => a.LinkedWebUser!)
-                .ToList();
-
-            if (linkedAdmins.Count == 0)
+            if (recipients.Count == 0)
             {
                 _logger.LogWarning(
-                    "{Chat} has {AdminCount} admins, but none are linked to web accounts",
-                    chat.ToLogDebug(), chatAdmins.Count);
+                    "No eligible recipients for {EventType} notification (chat: {Chat})",
+                    eventType, chat?.ToLogDebug() ?? "global");
                 return new Dictionary<string, bool>();
             }
 
             _logger.LogInformation(
-                "Sending chat notification for {Chat} to {UserCount} linked admin(s)",
-                chat.ToLogInfo(), linkedAdmins.Count);
+                "Sending {EventType} notification to {UserCount} recipient(s) (chat: {Chat})",
+                eventType, recipients.Count, chat?.ToLogInfo() ?? "global");
 
-            // Send notifications to all linked admins
+            // Send notifications to all recipients
             var results = new Dictionary<string, bool>();
-            foreach (var user in linkedAdmins)
+            foreach (var user in recipients.Values)
             {
                 var success = await SendNotificationAsync(
                     user, eventType, subject, message,
-                    reportId, photoPath, reportedUserId, chat.Id, reportType,
+                    reportId, photoPath, reportedUserId, chat?.Id, reportType,
                     cancellationToken);
                 results[user.WebUser.Id] = success;
             }
@@ -110,8 +110,8 @@ public class NotificationService : INotificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send chat notification for {Chat}, event {EventType}",
-                chat.ToLogDebug(), eventType);
+            _logger.LogError(ex, "Failed to send {EventType} notification (chat: {Chat})",
+                eventType, chat?.ToLogDebug() ?? "global");
             return new Dictionary<string, bool>();
         }
     }
