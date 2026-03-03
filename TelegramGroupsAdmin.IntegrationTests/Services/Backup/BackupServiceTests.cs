@@ -746,7 +746,9 @@ public class BackupServiceTests
             string notificationType,
             string messageText,
             string? photoPath = null,
+            string? videoPath = null,
             InlineKeyboardMarkup? keyboard = null,
+            ParseMode parseMode = ParseMode.MarkdownV2,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 

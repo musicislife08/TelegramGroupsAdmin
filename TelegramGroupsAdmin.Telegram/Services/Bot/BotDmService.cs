@@ -385,7 +385,9 @@ public class BotDmService(
         string notificationType,
         string messageText,
         string? photoPath = null,
+        string? videoPath = null,
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+        ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default)
     {
         var user = await telegramUserRepository.GetByTelegramIdAsync(telegramUserId, cancellationToken);
@@ -400,11 +402,24 @@ public class BotDmService(
                     chatId: telegramUserId,
                     photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
                     caption: messageText,
-                    parseMode: ParseMode.MarkdownV2,
+                    parseMode: parseMode,
                     replyMarkup: keyboard,
                     ct: cancellationToken);
 
                 logger.LogInformation("DM with photo and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
+            }
+            else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
+            {
+                await using var videoStream = File.OpenRead(videoPath);
+                await messageHandler.SendVideoAsync(
+                    chatId: telegramUserId,
+                    video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
+                    caption: messageText,
+                    parseMode: parseMode,
+                    replyMarkup: keyboard,
+                    ct: cancellationToken);
+
+                logger.LogInformation("DM with video and keyboard sent successfully to {User}", user.ToLogInfo(telegramUserId));
             }
             else
             {
@@ -412,7 +427,7 @@ public class BotDmService(
                 await messageHandler.SendAsync(
                     chatId: telegramUserId,
                     text: messageText,
-                    parseMode: ParseMode.MarkdownV2,
+                    parseMode: parseMode,
                     replyMarkup: keyboard,
                     ct: cancellationToken);
 

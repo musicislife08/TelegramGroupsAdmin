@@ -74,7 +74,9 @@ public interface IBotDmService
     /// <param name="notificationType">Type of notification (e.g., "report")</param>
     /// <param name="messageText">Message text to send (or caption if media present)</param>
     /// <param name="photoPath">Optional local path to photo file</param>
+    /// <param name="videoPath">Optional local path to video file</param>
     /// <param name="keyboard">Optional inline keyboard markup with action buttons</param>
+    /// <param name="parseMode">Telegram parse mode (default: MarkdownV2). Use Html for HTML-formatted messages.</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
@@ -82,7 +84,9 @@ public interface IBotDmService
         string notificationType,
         string messageText,
         string? photoPath = null,
+        string? videoPath = null,
         global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+        ParseMode parseMode = ParseMode.MarkdownV2,
         CancellationToken cancellationToken = default);
 
     /// <summary>

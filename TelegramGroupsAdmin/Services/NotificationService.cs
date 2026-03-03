@@ -301,9 +301,9 @@ public class NotificationService : INotificationService
                     mapping.TelegramId,
                     "report",
                     formattedMessage,
-                    photoPath,
-                    keyboard,
-                    cancellationToken);
+                    photoPath: photoPath,
+                    keyboard: keyboard,
+                    cancellationToken: cancellationToken);
             }
             else
             {
