@@ -65,10 +65,26 @@ public class WelcomeTimeoutJob(
 
             if (response == null || (int)response.Response != (int)Data.Models.WelcomeResponseType.Pending)
             {
-                logger.LogInformation(
-                    "User {User} already responded to welcome in {Chat}, skipping timeout",
-                    payload.User.ToLogInfo(),
-                    payload.Chat.ToLogInfo());
+                logger.LogDebug(
+                    "User {User} already handled in {Chat}, ensuring welcome message cleanup",
+                    payload.User.ToLogDebug(),
+                    payload.Chat.ToLogDebug());
+
+                try
+                {
+                    await messageService.DeleteAndMarkMessageAsync(
+                        chatId: payload.Chat.Id,
+                        messageId: payload.WelcomeMessageId,
+                        deletionSource: "welcome_timeout_cleanup",
+                        cancellationToken: cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex,
+                        "Welcome message {MessageId} already cleaned up or not found",
+                        payload.WelcomeMessageId);
+                }
+
                 return;
             }
 
