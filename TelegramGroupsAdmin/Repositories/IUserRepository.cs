@@ -65,6 +65,14 @@ public interface IUserRepository
     Task UnlockAccountAsync(string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get web users who should receive notifications for a given chat.
+    /// When chatId is provided: chat-scoped admins + global admins + owners (deduplicated by web user ID).
+    /// When chatId is null: global admins + owners only (moderation without chat context).
+    /// Only returns active users.
+    /// </summary>
+    Task<List<UserRecord>> GetWebUsersWithChatAccessAsync(long? chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get the primary owner's email (first Owner account by created_at)
     /// Used for VAPID authentication subject in Web Push notifications
     /// </summary>

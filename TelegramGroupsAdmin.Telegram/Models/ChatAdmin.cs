@@ -19,6 +19,12 @@ public class ChatAdmin
     public bool IsActive { get; init; }
 
     /// <summary>
+    /// Whether this admin's Telegram account has DM enabled (has run /start with the bot).
+    /// Used for delivering notifications to unlinked admins via Telegram DM.
+    /// </summary>
+    public bool BotDmEnabled { get; init; }
+
+    /// <summary>
     /// Web user account linked to this Telegram admin via telegram_user_mappings.
     /// Null if the Telegram user has not linked a web account.
     /// </summary>
