@@ -7,7 +7,6 @@
 
 @inject ITelegramUserRepository TelegramUserRepository
 @inject IManagedChatsRepository ManagedChatsRepository
-
 <MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
     <MudCardHeader>
         <CardHeaderContent>
@@ -76,7 +75,7 @@
                         </MudAvatar>
                     }
 
-                    <MudText Typo="Typo.body1"><b>@Alert.User.DisplayName</b></MudText>
+                    <UserDetailLink UserId="@Alert.User.Id" Typo="Typo.body1"><b>@Alert.User.DisplayName</b></UserDetailLink>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.User.Username != null ? $"@{Alert.User.Username}" : "No username")</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.User.Id</MudText>
 

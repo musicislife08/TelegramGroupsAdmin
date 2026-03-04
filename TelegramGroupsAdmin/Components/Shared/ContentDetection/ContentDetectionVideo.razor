@@ -1,0 +1,173 @@
+@inject IConfigService ConfigService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudText Typo="Typo.h6" Color="Color.Primary">Video Spam Detection</MudText>
+            <HelpTooltip Text="3-layer video analysis pipeline: Layer 1 (Keyframe Hash Similarity) compares extracted keyframes against known spam. Layer 2 (OCR) extracts text from frames and runs text-based spam checks. Layer 3 (AI Vision) uses OpenAI for comprehensive frame analysis. Requires FFmpeg for frame extraction." />
+        </MudStack>
+
+        @if (!IsGlobalView)
+        {
+            <!--suppress CssUnresolvedCustomProperty -->
+            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
+                <MudSwitch T="bool" @bind-Value="_config.VideoSpam.UseGlobal"
+                          Label="@(_config.VideoSpam.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                          Color="@(_config.VideoSpam.UseGlobal ? Color.Default : Color.Primary)" />
+                @if (_config.VideoSpam.UseGlobal)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1">
+                        This chat is using the global video spam configuration. Toggle off to customize.
+                    </MudText>
+                }
+            </MudPaper>
+        }
+
+        @{
+            var activeConfig = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+            var isReadOnly = !IsGlobalView && _config.VideoSpam.UseGlobal;
+        }
+
+        <MudSwitch T="bool" @bind-Value="activeConfig.Enabled"
+                  Label="Enable Video Spam Detection"
+                  Color="Color.Primary"
+                  Disabled="@isReadOnly" />
+
+        @if (activeConfig.Enabled)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Detection Layers</MudText>
+
+            <MudSwitch T="bool" @bind-Value="activeConfig.UseHashSimilarity"
+                      Label="Layer 1: Keyframe Hash Similarity"
+                      Color="Color.Primary"
+                      Disabled="@isReadOnly" />
+            <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                Compare keyframe hashes against known spam training samples (fastest, no API cost)
+            </MudText>
+
+            <MudSwitch T="bool" @bind-Value="activeConfig.UseOCR"
+                      Label="Layer 2: OCR Text Extraction"
+                      Color="Color.Primary"
+                      Disabled="@isReadOnly" />
+            <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                Extract text from video frames and run text-based spam checks (fast, no API cost)
+            </MudText>
+
+            <MudSwitch T="bool" @bind-Value="activeConfig.UseOpenAIVision"
+                      Label="Layer 3: AI Vision Analysis"
+                      Color="Color.Primary"
+                      Disabled="@isReadOnly" />
+            <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                Use OpenAI Vision on extracted frames for comprehensive analysis (slow, API costs apply)
+            </MudText>
+
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2">Thresholds</MudText>
+
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp HelpText="If OCR text-based spam checks return confidence >= this threshold, skip the expensive Vision API call. Higher = more Vision calls, lower = more OCR-only decisions.">
+                        <MudNumericField @bind-Value="activeConfig.OcrConfidenceThreshold"
+                                        Label="OCR Confidence Threshold (%)"
+                                        Min="1" Max="100"
+                                        Disabled="@isReadOnly"
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.OcrConfidenceThreshold}%" : "Skip Vision if OCR text checks are this confident")" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp HelpText="Minimum characters extracted by OCR from frames before attempting text-based spam analysis.">
+                        <MudNumericField @bind-Value="activeConfig.MinOcrTextLength"
+                                        Label="Min OCR Text Length"
+                                        Min="1" Max="100"
+                                        Disabled="@isReadOnly"
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.MinOcrTextLength}" : "Minimum extracted characters for text analysis")" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp HelpText="Minimum keyframe hash similarity (0.0-1.0) to match against spam training samples. Higher = stricter (fewer false positives).">
+                        <MudNumericField @bind-Value="activeConfig.HashSimilarityThreshold"
+                                        Label="Hash Similarity Threshold"
+                                        Min="0.5" Max="1.0" Step="0.01"
+                                        Disabled="@isReadOnly"
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.HashSimilarityThreshold:F2}" : "Similarity score to count as a match")" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp HelpText="Confidence level assigned when a keyframe hash matches a known spam sample.">
+                        <MudNumericField @bind-Value="activeConfig.HashMatchConfidence"
+                                        Label="Hash Match Confidence (%)"
+                                        Min="50" Max="100"
+                                        Disabled="@isReadOnly"
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.HashMatchConfidence}%" : "Confidence when hash matches training sample")" />
+                    </FieldWithHelp>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <FieldWithHelp HelpText="Maximum training samples to compare against. Limits database query size for performance.">
+                        <MudNumericField @bind-Value="activeConfig.MaxTrainingSamplesToCompare"
+                                        Label="Max Training Samples"
+                                        Min="100" Max="10000"
+                                        Disabled="@isReadOnly"
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.MaxTrainingSamplesToCompare}" : "Max samples for hash comparison")" />
+                    </FieldWithHelp>
+                </MudItem>
+            </MudGrid>
+        }
+
+        @if (!IsGlobalView && !_config.VideoSpam.UseGlobal && _globalConfig.VideoSpam.Enabled != _config.VideoSpam.Enabled)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Global setting: @(_globalConfig.VideoSpam.Enabled ? "Enabled" : "Disabled")
+            </MudAlert>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public ChatIdentity? Chat { get; set; }
+
+    private ContentDetectionConfig _config = new();
+    private ContentDetectionConfig _globalConfig = new();
+    private bool IsGlobalView => Chat is null || Chat.Id == 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            _globalConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                            ?? new ContentDetectionConfig();
+
+            if (IsGlobalView)
+            {
+                _config = _globalConfig;
+            }
+            else
+            {
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Chat!.Id);
+                _config = chatConfig ?? new ContentDetectionConfig();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new ContentDetectionConfig();
+            _globalConfig = new ContentDetectionConfig();
+        }
+    }
+
+    public ContentDetectionConfig GetConfig()
+    {
+        if (IsGlobalView)
+        {
+            _config.VideoSpam.UseGlobal = true;
+        }
+
+        return _config;
+    }
+}

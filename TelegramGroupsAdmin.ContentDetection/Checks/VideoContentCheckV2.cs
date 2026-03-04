@@ -37,6 +37,8 @@ public class VideoContentCheckV2(
 {
     // Lazy resolve to break circular dependency
 
+    private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     public CheckName CheckName => CheckName.VideoSpam;
 
     /// <summary>
@@ -44,6 +46,15 @@ public class VideoContentCheckV2(
     /// </summary>
     public bool ShouldExecute(ContentCheckRequest request)
     {
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping VideoSpam check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
         // Run if video local path is provided
         var shouldRun = !string.IsNullOrEmpty(request.VideoLocalPath);
         logger.LogDebug("VideoSpamCheck.ShouldExecute: VideoLocalPath={VideoPath}, ShouldRun={ShouldRun}",
@@ -449,14 +460,14 @@ public class VideoContentCheckV2(
             // Load frame image data
             var imageData = await File.ReadAllBytesAsync(representativeFrame.FramePath, cancellationToken);
 
-            var prompt = BuildVideoPrompt(req.CustomPrompt);
+            var prompt = BuildVideoPrompt();
 
             logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for {User}", req.User.ToLogDebug());
 
             // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
                 AIFeatureType.VideoAnalysis,
-                GetDefaultVideoPrompt(),
+                req.CustomPrompt ?? GetDefaultVideoPrompt(),
                 prompt,
                 imageData,
                 "image/jpeg",
@@ -500,7 +511,7 @@ public class VideoContentCheckV2(
     /// <summary>
     /// Build prompt for AI Vision analysis of video frame
     /// </summary>
-    private static string BuildVideoPrompt(string? customPrompt)
+    private static string BuildVideoPrompt()
     {
         return """
             Note: This is a keyframe extracted from a video message. Analyze the visual content.
@@ -552,7 +563,7 @@ public class VideoContentCheckV2(
 
             var response = JsonSerializer.Deserialize<VideoSpamResponse>(
                 content,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                CaseInsensitiveJsonOptions);
 
             if (response == null)
             {

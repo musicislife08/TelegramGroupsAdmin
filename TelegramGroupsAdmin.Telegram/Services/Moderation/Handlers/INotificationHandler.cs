@@ -32,11 +32,14 @@ public interface INotificationHandler
 
     /// <summary>
     /// Notify admins about a ban action (for audit/awareness).
+    /// When chat is provided, notifies chat admins + global admins + owners.
+    /// When chat is null, notifies global admins + owners only.
     /// </summary>
     Task<NotificationResult> NotifyAdminsBanAsync(
         UserIdentity user,
         Actor executor,
         string? reason,
+        ChatIdentity? chat = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

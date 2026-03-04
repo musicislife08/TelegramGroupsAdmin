@@ -108,9 +108,7 @@ public class ExamFlowService : IExamFlowService
             // Align expiry with welcome timeout deadline
             var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
-            var expiresAt = welcomeResponse != null
-                ? welcomeResponse.CreatedAt.AddSeconds(config.TimeoutSeconds)
-                : DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds);
+            var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
             var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
 
@@ -190,14 +188,10 @@ public class ExamFlowService : IExamFlowService
                 await sessionRepo.DeleteSessionAsync(existingSession.Id, cancellationToken);
             }
 
-            // Calculate exam expiry aligned with welcome timeout deadline
-            // The welcome timeout fires at joinTime + TimeoutSeconds, so the exam
-            // should expire at the same deadline (not now + TimeoutSeconds)
+            // Align expiry with welcome timeout deadline
             var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
-            var expiresAt = welcomeResponse != null
-                ? welcomeResponse.CreatedAt.AddSeconds(config.TimeoutSeconds)
-                : DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds); // fallback if no welcome response
+            var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
             var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
 
@@ -569,41 +563,23 @@ public class ExamFlowService : IExamFlowService
         // Get chat info for notification
         var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
         var failureChat = await managedChatsRepo.GetByChatIdAsync(session.ChatId, cancellationToken);
-        var failureChatName = failureChat?.Identity.ChatName ?? "Unknown Chat";
 
         // Notify admins of exam failure
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-        var userName = TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id);
         var mcTotal = examConfig.McQuestions.Count;
-        var hasOpenEnded = !string.IsNullOrEmpty(examConfig.OpenEndedQuestion);
 
-        var messageBuilder = new System.Text.StringBuilder();
-        messageBuilder.AppendLine($"User: {userName}");
-        messageBuilder.AppendLine($"Chat: {failureChatName}");
-        messageBuilder.AppendLine();
-        messageBuilder.AppendLine($"Answered: {mcCorrectCount}/{mcTotal} correct");
-        messageBuilder.AppendLine($"Score: {mcScore}% (Required: {examConfig.McPassingThreshold}%)");
-        if (hasOpenEnded && !string.IsNullOrEmpty(session.OpenEndedAnswer))
-        {
-            messageBuilder.AppendLine();
-            messageBuilder.AppendLine($"Question: {examConfig.OpenEndedQuestion}");
-            messageBuilder.AppendLine($"Answer: {session.OpenEndedAnswer}");
-            if (!string.IsNullOrEmpty(aiReasoning))
-            {
-                messageBuilder.AppendLine();
-                messageBuilder.AppendLine($"AI: {aiReasoning}");
-            }
-        }
-
-        await notificationService.SendChatNotificationAsync(
+        await notificationService.SendExamFailureNotificationAsync(
             chat: failureChat?.Identity ?? ChatIdentity.FromId(session.ChatId),
-            eventType: NotificationEventType.ExamFailed,
-            subject: "Entrance Exam Review Required",
-            message: messageBuilder.ToString(),
-            reportId: examFailureId,
-            reportedUserId: user.Id,
-            reportType: ReportType.ExamFailure,
-            cancellationToken: cancellationToken);
+            user: UserIdentity.From(user),
+            mcCorrectCount: mcCorrectCount,
+            mcTotal: mcTotal,
+            mcScore: mcScore,
+            mcPassingThreshold: examConfig.McPassingThreshold,
+            openEndedQuestion: examConfig.OpenEndedQuestion,
+            openEndedAnswer: session.OpenEndedAnswer,
+            aiReasoning: aiReasoning,
+            examFailureId: examFailureId,
+            ct: cancellationToken);
 
         // Send pending message to user in DM
         await _dmService.SendDmAsync(
@@ -1001,4 +977,14 @@ public class ExamFlowService : IExamFlowService
 
         return new ModerationResult { Success = true };
     }
+
+    /// <summary>
+    /// Calculates the exam expiry aligned with the welcome timeout deadline.
+    /// If a welcome response exists, the exam expires at welcomeCreatedAt + timeoutSeconds.
+    /// Otherwise falls back to now + timeoutSeconds.
+    /// </summary>
+    private static DateTimeOffset CalculateExamExpiry(WelcomeResponse? welcomeResponse, int timeoutSeconds) =>
+        welcomeResponse != null
+            ? welcomeResponse.CreatedAt.AddSeconds(timeoutSeconds)
+            : DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
 }

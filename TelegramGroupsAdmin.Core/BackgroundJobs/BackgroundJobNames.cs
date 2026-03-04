@@ -95,12 +95,6 @@ public static class BackgroundJobNames
     public const string WelcomeTimeout = "WelcomeTimeout";
 
     /// <summary>
-    /// Send notification to a Telegram chat (admin alerts, system messages)
-    /// Quartz Job: SendChatNotificationJob
-    /// </summary>
-    public const string SendChatNotification = "SendChatNotification";
-
-    /// <summary>
     /// On-demand profile scan triggered by profile diff detection or manual re-scan.
     /// Quartz Job: ProfileScanJob
     /// </summary>

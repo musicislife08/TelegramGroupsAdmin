@@ -40,4 +40,10 @@ public interface ITelegramUserMappingRepository
     /// Returns null if not linked or user not found
     /// </summary>
     Task<int?> GetPermissionLevelByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get all linked Telegram IDs for a batch of web user IDs in a single query.
+    /// Used for deduplication in notification routing (avoid N+1).
+    /// </summary>
+    Task<HashSet<long>> GetTelegramIdsByUserIdsAsync(IEnumerable<string> userIds, CancellationToken cancellationToken = default);
 }

@@ -7,7 +7,6 @@
 
 @inject IMessageHistoryRepository MessageRepository
 @inject ITelegramUserRepository TelegramUserRepository
-
 <MudCard Elevation="2" Class="mb-3">
     <MudCardHeader>
         <CardHeaderContent>
@@ -29,7 +28,7 @@
         {
             <MudStack Spacing="2">
                 <MudStack Row="true" Spacing="2">
-                    <MudText Typo="Typo.body2"><b>User:</b> @GetReportedUserDisplay()</MudText>
+                    <MudText Typo="Typo.body2"><b>User:</b> <UserDetailLink UserId="@_message!.User.Id" Typo="Typo.body2">@GetReportedUserDisplay()</UserDetailLink></MudText>
                     @if (_reportedUser?.Username != null || !string.IsNullOrEmpty(_message.User.Username) || _reportedUser?.FirstName != null)
                     {
                         <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @_message.User.Id</MudText>
@@ -198,29 +197,29 @@
     private async Task OnMarkSpam()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Spam));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Spam)); }
+        finally { _actionInProgress = false; }
     }
 
     private async Task OnBan()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Ban));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Ban)); }
+        finally { _actionInProgress = false; }
     }
 
     private async Task OnWarn()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Warn));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Warn)); }
+        finally { _actionInProgress = false; }
     }
 
     private async Task OnDismiss()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((Report, ReportAction.Dismiss));
-        _actionInProgress = false;
+        try { await OnAction.InvokeAsync((Report, ReportAction.Dismiss)); }
+        finally { _actionInProgress = false; }
     }
 
     private string GetReportedUserDisplay()

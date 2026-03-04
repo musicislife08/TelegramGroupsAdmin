@@ -25,7 +25,7 @@ public interface IReportService
     /// <returns>Result containing report ID and notification counts</returns>
     Task<ReportCreationResult> CreateReportAsync(
         Report report,
-        Message? originalMessage,
+        Message originalMessage,
         bool isAutomated,
         CancellationToken cancellationToken = default);
 }

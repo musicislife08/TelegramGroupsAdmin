@@ -151,7 +151,7 @@ public class BotModerationService : IBotModerationService
                 else
                 {
                     // Fallback if message not found (shouldn't happen, but defensive)
-                    await _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken);
+                    await _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, intent.Chat, cancellationToken);
                 }
             },
             $"Rich spam notification for user {intent.User.Id}");
@@ -189,7 +189,7 @@ public class BotModerationService : IBotModerationService
 
         // Notify admins
         await SafeExecuteAsync(
-            () => _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, cancellationToken),
+            () => _notificationHandler.NotifyAdminsBanAsync(intent.User, intent.Executor, intent.Reason, intent.Chat, cancellationToken),
             $"Ban notification for user {intent.User.Id}");
 
         // Schedule cleanup of user's messages (non-critical - don't fail the ban if this fails)
@@ -278,7 +278,7 @@ public class BotModerationService : IBotModerationService
 
                 // Notify admins (simple notification - no detection context for warning-based bans)
                 await SafeExecuteAsync(
-                    () => _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, cancellationToken),
+                    () => _notificationHandler.NotifyAdminsBanAsync(intent.User, Actor.AutoBan, autoBanReason, intent.Chat, cancellationToken),
                     $"Auto-ban notification for user {intent.User.Id}");
 
                 // Schedule cleanup of user's messages
@@ -567,22 +567,23 @@ public class BotModerationService : IBotModerationService
                 AdminNotes: $"MALWARE DETECTED: {intent.MalwareDetails}\n\nUser was NOT auto-banned (malware upload may be accidental).",
                 WebUserId: null);
 
+            if (intent.TelegramMessage is null)
+            {
+                _logger.LogWarning("Malware report skipped — no Telegram message on intent. Chat={Chat}", intent.Chat.ToLogDebug());
+                return;
+            }
+
             await _reportService.CreateReportAsync(report, intent.TelegramMessage, isAutomated: true, cancellationToken);
         }, "Create malware report");
 
         // Step 4: Notify admins via system notification
         await SafeExecuteAsync(async () =>
         {
-            var chatName = intent.Chat.ChatName ?? intent.Chat.Id.ToString();
-
-            await _notificationService.SendSystemNotificationAsync(
-                NotificationEventType.MalwareDetected,
-                "Malware Detected and Removed",
-                $"Malware was detected in chat '{chatName}' and the message was deleted.\n\n" +
-                $"User: {intent.User.DisplayName}\n" +
-                $"Detection: {intent.MalwareDetails}\n\n" +
-                $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
-                cancellationToken);
+            await _notificationService.SendMalwareDetectedAsync(
+                chat: intent.Chat,
+                user: intent.User,
+                malwareDetails: intent.MalwareDetails,
+                ct: cancellationToken);
         }, "Malware notification");
 
         _logger.LogInformation(

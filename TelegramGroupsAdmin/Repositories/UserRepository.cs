@@ -375,6 +375,19 @@ public class UserRepository : IUserRepository
         return entities.Select(e => e.ToModel()).ToList();
     }
 
+    public async Task<List<UserRecord>> GetOwnerUsersAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await context.Users
+            .AsNoTracking()
+            .Where(u => u.PermissionLevel == Data.Models.PermissionLevel.Owner
+                        && u.Status == Data.Models.UserStatus.Active)
+            .OrderByDescending(u => u.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(e => e.ToModel()).ToList();
+    }
+
     public async Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -513,6 +526,38 @@ public class UserRepository : IUserRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Unlocked account for {User}", LogDisplayName.WebUserInfo(entity.Email, userId));
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<UserRecord>> GetWebUsersWithChatAccessAsync(long? chatId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Start with all active users
+        var query = context.Users
+            .AsNoTracking()
+            .Where(u => u.Status == DataModels.UserStatus.Active);
+
+        if (chatId.HasValue)
+        {
+            // Chat-contextual: global admins + owners (always) + chat-scoped admins (via telegram_user_mappings → chat_admins)
+            query = query.Where(u =>
+                u.PermissionLevel >= DataModels.PermissionLevel.GlobalAdmin
+                || u.TelegramMappings.Any(tum =>
+                    tum.IsActive
+                    && context.ChatAdmins.Any(ca =>
+                        ca.TelegramId == tum.TelegramId
+                        && ca.ChatId == chatId.Value
+                        && ca.IsActive)));
+        }
+        else
+        {
+            // No chat context: global admins + owners only
+            query = query.Where(u => u.PermissionLevel >= DataModels.PermissionLevel.GlobalAdmin);
+        }
+
+        var entities = await query.ToListAsync(cancellationToken);
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken cancellationToken = default)

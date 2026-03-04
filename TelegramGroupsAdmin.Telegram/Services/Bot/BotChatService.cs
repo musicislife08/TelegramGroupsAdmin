@@ -5,7 +5,6 @@ using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -318,17 +317,13 @@ public class BotChatService(
                         chat.ToLogDebug());
                 }
 
-                // Phase 5.2: Notify owners about admin promotion
-                var displayName = TelegramDisplayName.FormatMention(user);
-                _ = notificationService.SendSystemNotificationAsync(
-                    eventType: NotificationEventType.ChatAdminChanged,
-                    subject: $"New Admin Promoted: {chat.Title ?? "Unknown Chat"}",
-                    message: $"A new {(isCreator ? "creator" : "admin")} has been added to '{chat.Title ?? "Unknown"}'.\n\n" +
-                             $"User: {displayName}\n" +
-                             $"Telegram ID: {user.Id}\n" +
-                             $"Chat ID: {chat.Id}\n\n" +
-                             $"This is a security notification to keep you informed of permission changes.",
-                    cancellationToken: ct);
+                // Phase 5.2: Notify admins about admin promotion
+                _ = notificationService.SendAdminChangedAsync(
+                    chat: ChatIdentity.From(chat),
+                    user: UserIdentity.From(user),
+                    promoted: true,
+                    isCreator: isCreator,
+                    ct: ct);
             }
             else
             {
@@ -340,17 +335,13 @@ public class BotChatService(
                     user.ToLogInfo(),
                     chat.ToLogInfo());
 
-                // Phase 5.2: Notify owners about admin demotion
-                var displayName = TelegramDisplayName.FormatMention(user);
-                _ = notificationService.SendSystemNotificationAsync(
-                    eventType: NotificationEventType.ChatAdminChanged,
-                    subject: $"Admin Demoted: {chat.Title ?? "Unknown Chat"}",
-                    message: $"An admin has been removed from '{chat.Title ?? "Unknown"}'.\n\n" +
-                             $"User: {displayName}\n" +
-                             $"Telegram ID: {user.Id}\n" +
-                             $"Chat ID: {chat.Id}\n\n" +
-                             $"This is a security notification to keep you informed of permission changes.",
-                    cancellationToken: ct);
+                // Phase 5.2: Notify admins about admin demotion
+                _ = notificationService.SendAdminChangedAsync(
+                    chat: ChatIdentity.From(chat),
+                    user: UserIdentity.From(user),
+                    promoted: false,
+                    isCreator: false,
+                    ct: ct);
             }
         }
         catch (Exception ex)

@@ -746,7 +746,9 @@ public class BackupServiceTests
             string notificationType,
             string messageText,
             string? photoPath = null,
+            string? videoPath = null,
             InlineKeyboardMarkup? keyboard = null,
+            ParseMode parseMode = ParseMode.MarkdownV2,
             CancellationToken cancellationToken = default)
             => Task.FromResult(SuccessResult);
 
@@ -794,37 +796,17 @@ public class BackupServiceTests
     /// </summary>
     private class MockNotificationService : INotificationService
     {
-        public Task<Dictionary<string, bool>> SendChatNotificationAsync(
-            ChatIdentity chat,
-            NotificationEventType eventType,
-            string subject,
-            string message,
-            long? reportId = null,
-            string? photoPath = null,
-            long? reportedUserId = null,
-            ReportType? reportType = null,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
-        }
+        private static readonly Dictionary<string, bool> EmptyResults = new();
 
-        public Task<Dictionary<string, bool>> SendSystemNotificationAsync(
-            NotificationEventType eventType,
-            string subject,
-            string message,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
-        }
-
-        public Task<bool> SendNotificationAsync(
-            UserRecord user,
-            NotificationEventType eventType,
-            string subject,
-            string message,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(true); // No-op for tests
-        }
+        // Typed methods (no-op for backup tests)
+        public Task<Dictionary<string, bool>> SendSpamBanNotificationAsync(ChatIdentity chat, UserIdentity user, Actor? bannedBy, int netConfidence, int confidence, string? detectionReason, int chatsAffected, bool messageDeleted, int messageId, string? messagePreview, string? photoPath, string? videoPath, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendReportNotificationAsync(ChatIdentity chat, UserIdentity? reportedUser, long? reporterUserId, string? reporterName, bool isAutomated, string messagePreview, string? photoPath, long reportId, ReportType reportType, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendProfileScanAlertAsync(ChatIdentity chat, UserIdentity user, decimal score, string signals, string? aiReason, long reportId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendExamFailureNotificationAsync(ChatIdentity chat, UserIdentity user, int mcCorrectCount, int mcTotal, int mcScore, int mcPassingThreshold, string? openEndedQuestion, string? openEndedAnswer, string? aiReasoning, long examFailureId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendBanNotificationAsync(UserIdentity user, Actor executor, string? reason, ChatIdentity? chat = null, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendMalwareDetectedAsync(ChatIdentity chat, UserIdentity user, string malwareDetails, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendAdminChangedAsync(ChatIdentity chat, UserIdentity user, bool promoted, bool isCreator, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendBackupFailedAsync(string tableName, string error, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendChatHealthWarningAsync(string chatName, string status, bool isAdmin, IReadOnlyList<string> warnings, CancellationToken ct = default) => Task.FromResult(EmptyResults);
     }
 }

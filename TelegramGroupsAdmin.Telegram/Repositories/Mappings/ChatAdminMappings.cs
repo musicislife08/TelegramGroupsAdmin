@@ -31,6 +31,7 @@ public static class ChatAdminMappings
                 PromotedAt = data.PromotedAt,
                 LastVerifiedAt = data.LastVerifiedAt,
                 IsActive = data.IsActive,
+                BotDmEnabled = data.TelegramUser?.BotDmEnabled ?? false,
                 LinkedWebUser = linkedWebUser
             };
         }

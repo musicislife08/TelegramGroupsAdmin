@@ -96,4 +96,20 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
 
         return permissionLevel;
     }
+
+    public async Task<HashSet<long>> GetTelegramIdsByUserIdsAsync(IEnumerable<string> userIds, CancellationToken cancellationToken = default)
+    {
+        var userIdList = userIds.ToList();
+        if (userIdList.Count == 0)
+            return [];
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var telegramIds = await context.TelegramUserMappings
+            .AsNoTracking()
+            .Where(tum => userIdList.Contains(tum.UserId) && tum.IsActive)
+            .Select(tum => tum.TelegramId)
+            .ToListAsync(cancellationToken);
+
+        return telegramIds.ToHashSet();
+    }
 }

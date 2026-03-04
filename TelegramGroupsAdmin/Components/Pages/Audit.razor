@@ -138,7 +138,7 @@
                                         <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
                                     </MudAvatar>
                                 }
-                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(actorUser)</MudText>
+                                <UserDetailLink UserId="@context.ActorTelegramUserId!.Value" Typo="Typo.body2">@GetTelegramUserDisplayName(actorUser)</UserDetailLink>
                             </MudStack>
                         }
                         else
@@ -182,7 +182,7 @@
                                         <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
                                     </MudAvatar>
                                 }
-                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(targetUser)</MudText>
+                                <UserDetailLink UserId="@context.TargetTelegramUserId!.Value" Typo="Typo.body2">@GetTelegramUserDisplayName(targetUser)</UserDetailLink>
                             </MudStack>
                         }
                         else
@@ -312,7 +312,7 @@
                                 </MudAvatar>
                             }
                             <div>
-                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(telegramUser)</MudText>
+                                <UserDetailLink UserId="@context.UserId" Typo="Typo.body2">@GetTelegramUserDisplayName(telegramUser)</UserDetailLink>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-family: monospace;">ID: @context.UserId</MudText>
                             </div>
                         </MudStack>
@@ -362,9 +362,9 @@
                     }
                     else if (context.IssuedBy.Type == ActorType.TelegramUser)
                     {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                        <UserDetailLink UserId="@context.IssuedBy.TelegramUserId!.Value" Chip="true" ChipIcon="@Icons.Material.Filled.SmartToy" ChipColor="Color.Info">
                             @context.IssuedBy.DisplayName
-                        </MudChip>
+                        </UserDetailLink>
                     }
                 </MudTd>
                 <MudTd DataLabel="Reason">
@@ -740,14 +740,4 @@
             user.TelegramUserId);
     }
 
-    // Telegram User Display Helper by ID (with cache lookup)
-    private string GetTelegramUserDisplayNameById(long telegramUserId)
-    {
-        if (_telegramUsersCache.TryGetValue(telegramUserId, out var user))
-        {
-            return GetTelegramUserDisplayName(user);
-        }
-        // Fallback to User {id} format if not in cache
-        return $"User {telegramUserId}";
-    }
 }

@@ -25,6 +25,8 @@ public class AIContentCheckV2(
     HybridCache cache,
     IMessageContextProvider messageContextProvider) : IContentCheckV2
 {
+    private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     public CheckName CheckName => CheckName.OpenAI;
 
     /// <summary>
@@ -237,10 +239,7 @@ public class AIContentCheckV2(
         try
         {
             // Parse JSON response (format defined in our prompt)
-            var jsonResponse = JsonSerializer.Deserialize<AIJsonResponse>(content, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var jsonResponse = JsonSerializer.Deserialize<AIJsonResponse>(content, CaseInsensitiveJsonOptions);
 
             if (jsonResponse == null)
             {
