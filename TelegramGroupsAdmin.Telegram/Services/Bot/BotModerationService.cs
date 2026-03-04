@@ -567,6 +567,12 @@ public class BotModerationService : IBotModerationService
                 AdminNotes: $"MALWARE DETECTED: {intent.MalwareDetails}\n\nUser was NOT auto-banned (malware upload may be accidental).",
                 WebUserId: null);
 
+            if (intent.TelegramMessage is null)
+            {
+                _logger.LogWarning("Malware report skipped — no Telegram message on intent. Chat={Chat}", intent.Chat.ToLogDebug());
+                return;
+            }
+
             await _reportService.CreateReportAsync(report, intent.TelegramMessage, isAutomated: true, cancellationToken);
         }, "Create malware report");
 

@@ -31,7 +31,6 @@ public sealed class NotificationService : INotificationService
     private readonly IUserRepository _userRepo;
     private readonly IReportCallbackContextRepository _callbackContextRepo;
     private readonly ILogger<NotificationService> _logger;
-    private DateTime _lastDeliveryFailureLog = DateTime.MinValue;
 
     public NotificationService(
         INotificationPreferencesRepository preferencesRepo,
@@ -98,7 +97,7 @@ public sealed class NotificationService : INotificationService
 
     public Task<Dictionary<string, bool>> SendReportNotificationAsync(
         ChatIdentity chat,
-        UserIdentity? reportedUser,
+        UserIdentity reportedUser,
         long? reporterUserId,
         string? reporterName,
         bool isAutomated,
@@ -112,12 +111,12 @@ public sealed class NotificationService : INotificationService
 
         var payload = NotificationPayloadBuilder.Create("Message Reported")
             .WithField("Chat", chat.ChatName ?? chat.Id.ToString())
-            .WithFieldIf(reportedUser != null, "Reported user", reportedUser?.DisplayName ?? "Unknown", telegramUserId: reportedUser?.Id)
+            .WithField("Reported user", reportedUser.DisplayName, telegramUserId: reportedUser.Id)
             .WithField("Reported by", reporterDisplay, telegramUserId: isAutomated ? null : reporterUserId)
             .WithSection("Message", s => s
                 .WithText(messagePreview))
             .WithPhoto(photoPath)
-            .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, reportedUser?.Id ?? 0, reportType))
+            .WithKeyboard(new ActionKeyboardContext(reportId, chat.Id, reportedUser.Id, reportType))
             .Build();
 
         return SendToChatAudienceAsync(chat, NotificationEventType.MessageReported, payload, ct);
@@ -583,7 +582,7 @@ public sealed class NotificationService : INotificationService
     }
 
     /// <summary>
-    /// Log delivery failure with throttling to avoid spam during network outages.
+    /// Log delivery failure for diagnostics.
     /// </summary>
     private void LogDeliveryFailure(UserRecord user, NotificationEventType eventType, NotificationConfig config)
     {
@@ -598,14 +597,9 @@ public sealed class NotificationService : INotificationService
         }
         else
         {
-            var now = DateTime.UtcNow;
-            if ((now - _lastDeliveryFailureLog).TotalSeconds >= 60)
-            {
-                _logger.LogWarning(
-                    "Failed to deliver notification to {User} via any enabled channel",
-                    user.ToLogDebug());
-                _lastDeliveryFailureLog = now;
-            }
+            _logger.LogWarning(
+                "Failed to deliver notification to {User} via any enabled channel",
+                user.ToLogDebug());
         }
     }
 

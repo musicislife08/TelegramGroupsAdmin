@@ -28,7 +28,7 @@ public interface INotificationService
 
     Task<Dictionary<string, bool>> SendReportNotificationAsync(
         ChatIdentity chat,
-        UserIdentity? reportedUser,
+        UserIdentity reportedUser,
         long? reporterUserId,
         string? reporterName,
         bool isAutomated,

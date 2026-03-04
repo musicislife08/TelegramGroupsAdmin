@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Repositories;
@@ -21,10 +22,18 @@ public class ReportService(
 {
     public async Task<ReportCreationResult> CreateReportAsync(
         Report report,
-        Message? originalMessage,
+        Message originalMessage,
         bool isAutomated,
         CancellationToken cancellationToken = default)
     {
+        // Guard: every report must have a known sender for moderation actions to work
+        if (originalMessage.From is null)
+        {
+            logger.LogWarning("Report attempted without a message sender — skipping. Chat={Chat}, MessageId={MessageId}",
+                report.Chat.ToLogDebug(), report.MessageId);
+            return new ReportCreationResult(0);
+        }
+
         // 1. Insert report into database
         var reportId = await reportsRepository.InsertContentReportAsync(report, cancellationToken);
 
@@ -43,13 +52,11 @@ public class ReportService(
                 ? Actor.FromTelegramUser(report.ReportedByUserId.Value, report.ReportedByUserName)
                 : Actor.Unknown;
 
-        var target = originalMessage?.From != null
-            ? Actor.FromTelegramUser(
-                originalMessage.From.Id,
-                originalMessage.From.Username,
-                originalMessage.From.FirstName,
-                originalMessage.From.LastName)
-            : null;
+        var target = Actor.FromTelegramUser(
+            originalMessage.From.Id,
+            originalMessage.From.Username,
+            originalMessage.From.FirstName,
+            originalMessage.From.LastName);
 
         await auditService.LogEventAsync(
             AuditEventType.ReportCreated,
@@ -61,10 +68,8 @@ public class ReportService(
         // 3. Send notification via typed notification service
         var messagePreview = GetMessagePreview(originalMessage, report);
 
-        // Build reported user identity from original message
-        UserIdentity? reportedUser = originalMessage?.From != null
-            ? UserIdentity.From(originalMessage.From)
-            : null;
+        // Build reported user identity from original message (From guaranteed non-null by guard above)
+        var reportedUser = UserIdentity.From(originalMessage.From);
 
         // Get photo path from stored message for DM with image
         string? photoPath = null;

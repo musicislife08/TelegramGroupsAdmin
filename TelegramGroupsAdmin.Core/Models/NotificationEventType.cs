@@ -13,7 +13,7 @@ public enum NotificationEventType
     ChatHealthWarning,
     BackupFailed,
     MalwareDetected,
-    ChatAdminChanged, // Phase 5.2: Notify owners when admins are promoted/demoted
+    ChatAdminChanged, // Phase 5.2: Notify admins when admins are promoted/demoted
     ExamFailed, // Notify admins when a user fails entrance exam and is sent to review
     TelegramSessionRevoked, // Notify admin when their WTelegram session is invalidated server-side
     ProfileScanAlert // Notify admins when a profile scan detects suspicious content

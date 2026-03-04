@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
@@ -1593,6 +1594,12 @@ public class BotModerationServiceTests
         _mockMessageHandler.DeleteAsync(Arg.Any<ChatIdentity>(), messageId, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(DeleteResult.Succeeded(messageDeleted: true));
 
+        var telegramMessage = new Message
+        {
+            Chat = new Chat { Id = chatId },
+            From = new User { Id = userId, FirstName = "TestUser" }
+        };
+
         // Act
         await _orchestrator.HandleMalwareViolationAsync(
             new MalwareViolationIntent
@@ -1601,6 +1608,7 @@ public class BotModerationServiceTests
                 MessageId = messageId,
                 Chat = ChatIdentity.FromId(chatId),
                 MalwareDetails = malwareDetails,
+                TelegramMessage = telegramMessage,
                 Executor = Actor.FileScanner,
                 Reason = malwareDetails
             });
@@ -1608,7 +1616,7 @@ public class BotModerationServiceTests
         // Assert - Report was created with isAutomated=true
         await _mockReportService.Received(1).CreateReportAsync(
             Arg.Is<Report>(r => r.MessageId == messageId && r.Chat.Id == chatId),
-            null,
+            telegramMessage,
             true,
             Arg.Any<CancellationToken>());
     }
@@ -1635,6 +1643,11 @@ public class BotModerationServiceTests
                 MessageId = messageId,
                 Chat = ChatIdentity.FromId(chatId),
                 MalwareDetails = malwareDetails,
+                TelegramMessage = new Message
+                {
+                    Chat = new Chat { Id = chatId },
+                    From = new User { Id = userId, FirstName = "TestUser" }
+                },
                 Executor = Actor.FileScanner,
                 Reason = malwareDetails
             });
