@@ -225,37 +225,6 @@ public partial class MessageProcessingService(
                 await repository.InsertMessageAsync(serviceMessageRecord, cancellationToken);
             }
 
-            // Check for banned users joining - lazy sync ban to this chat
-            if (message.NewChatMembers != null)
-            {
-                var userRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<IBotModerationService>();
-
-                foreach (var joiningUser in message.NewChatMembers)
-                {
-                    if (joiningUser.IsBot) continue;
-
-                    var existingUser = await userRepo.GetByTelegramIdAsync(joiningUser.Id, cancellationToken);
-                    if (existingUser?.IsBanned == true)
-                    {
-                        logger.LogWarning(
-                            "Globally banned user {User} attempted to join {Chat} - applying ban",
-                            joiningUser.ToLogInfo(), message.Chat.ToLogInfo());
-
-                        await moderationService.SyncBanToChatAsync(
-                            new SyncBanIntent
-                            {
-                                User = UserIdentity.From(joiningUser),
-                                Chat = ChatIdentity.From(message.Chat),
-                                Executor = Core.Models.Actor.AutoDetection,
-                                Reason = "Lazy ban sync: User was globally banned before this chat was added",
-                                TriggeredByMessageId = message.MessageId
-                            },
-                            cancellationToken);
-                    }
-                }
-            }
-
             // Skip deletion if the bot itself was removed from the group
             // Bot no longer has permissions to delete messages after being kicked
             if (message.LeftChatMember != null)

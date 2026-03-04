@@ -40,6 +40,53 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc/>
+    public async Task<UiModels.TelegramUser> GetOrCreateAsync(
+        long telegramUserId, string? username, string? firstName, string? lastName, bool isBot,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var existing = await context.TelegramUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (existing != null)
+            return existing.ToModel();
+
+        var now = DateTimeOffset.UtcNow;
+        var entity = new DataModels.TelegramUserDto
+        {
+            TelegramUserId = telegramUserId,
+            Username = username,
+            FirstName = firstName,
+            LastName = lastName,
+            IsBot = isBot,
+            IsTrusted = TelegramConstants.IsSystemUser(telegramUserId),
+            IsBanned = false,
+            BotDmEnabled = false,
+            FirstSeenAt = now,
+            LastSeenAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+            IsActive = false
+        };
+
+        context.TelegramUsers.Add(entity);
+        await context.SaveChangesAsync(cancellationToken);
+
+        if (entity.IsTrusted)
+        {
+            _logger.LogInformation("Created Telegram system account {TelegramUserId} with automatic trust", telegramUserId);
+        }
+        else
+        {
+            _logger.LogInformation("Created Telegram user {FirstName} {LastName} ({TelegramUserId})",
+                firstName, lastName, telegramUserId);
+        }
+
+        return entity.ToModel();
+    }
+
+    /// <inheritdoc/>
     public async Task<List<UiModels.TelegramUser>> GetByTelegramIdsAsync(
         IEnumerable<long> telegramIds,
         CancellationToken cancellationToken = default)

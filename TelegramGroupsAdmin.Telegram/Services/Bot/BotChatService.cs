@@ -172,7 +172,7 @@ public class BotChatService(
                     if (isNowAdmin)
                     {
                         // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
-                        await EnsureUserExistsAsync(affectedUser, ct);
+                        await userRepo.GetOrCreateAsync(affectedUser.Id, affectedUser.Username, affectedUser.FirstName, affectedUser.LastName, affectedUser.IsBot, ct);
 
                         var isCreator = newStatus == ChatMemberStatus.Creator;
                         await chatAdminsRepo.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: ct);
@@ -276,7 +276,7 @@ public class BotChatService(
             if (isNowAdmin)
             {
                 // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
-                await EnsureUserExistsAsync(user, ct);
+                await userRepo.GetOrCreateAsync(user.Id, user.Username, user.FirstName, user.LastName, user.IsBot, ct);
 
                 var isCreator = newStatus == ChatMemberStatus.Creator;
                 await chatAdminsRepo.UpsertAsync(chat.Id, user.Id, isCreator, ct);
@@ -439,7 +439,7 @@ public class BotChatService(
             foreach (var admin in admins)
             {
                 // Ensure user exists in telegram_users first (FK constraint)
-                await EnsureUserExistsAsync(admin.User, ct);
+                await userRepo.GetOrCreateAsync(admin.User.Id, admin.User.Username, admin.User.FirstName, admin.User.LastName, admin.User.IsBot, ct);
 
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 var wasNew = !cachedAdminIds.Contains(admin.User.Id);
@@ -587,37 +587,4 @@ public class BotChatService(
         return currentLink;
     }
 
-    /// <summary>
-    /// Ensures a Telegram user exists in the database before creating dependent records (e.g., chat_admins).
-    /// Creates a minimal user record if the user doesn't exist yet (they may not have sent any messages).
-    /// Required for FK constraint: chat_admins.telegram_id → telegram_users.telegram_user_id
-    /// </summary>
-    private async Task EnsureUserExistsAsync(User telegramUser, CancellationToken ct)
-    {
-        var existingUser = await userRepo.GetByTelegramIdAsync(telegramUser.Id, ct);
-        if (existingUser != null)
-            return;
-
-        // Create minimal user record - they haven't messaged yet so we only have basic profile info
-        var now = DateTimeOffset.UtcNow;
-        var newUser = new TelegramUser(
-            TelegramUserId: telegramUser.Id,
-            Username: telegramUser.Username,
-            FirstName: telegramUser.FirstName,
-            LastName: telegramUser.LastName,
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: telegramUser.IsBot,
-            IsTrusted: false, // Will be set to true by auto-trust logic after this
-            IsBanned: false,
-            BotDmEnabled: false,
-            FirstSeenAt: now,
-            LastSeenAt: now,
-            CreatedAt: now,
-            UpdatedAt: now
-        );
-
-        await userRepo.UpsertAsync(newUser, ct);
-    }
 }

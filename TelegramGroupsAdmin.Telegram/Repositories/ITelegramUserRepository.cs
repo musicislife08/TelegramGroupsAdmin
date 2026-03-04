@@ -13,6 +13,14 @@ public interface ITelegramUserRepository
     Task<UiModels.TelegramUser?> GetByIdAsync(long telegramUserId, CancellationToken cancellationToken = default); // Alias for GetByTelegramIdAsync
 
     /// <summary>
+    /// Returns the existing user if found, or creates a minimal inactive record.
+    /// The returned object reflects current DB state (including IsBanned, IsTrusted, etc.).
+    /// </summary>
+    Task<UiModels.TelegramUser> GetOrCreateAsync(
+        long telegramUserId, string? username, string? firstName, string? lastName, bool isBot,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets multiple Telegram users by their Telegram IDs in a single query.
     /// Used for batch hydration to avoid N+1 query patterns.
     /// </summary>
