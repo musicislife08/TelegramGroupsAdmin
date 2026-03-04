@@ -129,11 +129,15 @@
     private async Task LoadMoreAsync()
     {
         _loadingMore = true;
-
-        var oldestTimestamp = _messages[^1].Timestamp;
-        await LoadMessagesAsync(oldestTimestamp);
-
-        _loadingMore = false;
+        try
+        {
+            var oldestTimestamp = _messages[^1].Timestamp;
+            await LoadMessagesAsync(oldestTimestamp);
+        }
+        finally
+        {
+            _loadingMore = false;
+        }
     }
 
     private void NavigateToMessage(MessageRecord message)
