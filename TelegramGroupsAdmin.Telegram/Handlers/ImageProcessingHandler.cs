@@ -14,17 +14,19 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class ImageProcessingHandler
 {
+    private const int ThumbnailSize = 200;
+
     private readonly IBotMediaService _mediaService;
-    private readonly MessageHistoryOptions _historyOptions;
+    private readonly string _dataPath;
     private readonly ILogger<ImageProcessingHandler> _logger;
 
     public ImageProcessingHandler(
         IBotMediaService mediaService,
-        IOptions<MessageHistoryOptions> historyOptions,
+        IOptions<AppOptions> appOptions,
         ILogger<ImageProcessingHandler> logger)
     {
         _mediaService = mediaService;
-        _historyOptions = historyOptions.Value;
+        _dataPath = appOptions.Value.DataPath;
         _logger = logger;
     }
 
@@ -82,8 +84,8 @@ public class ImageProcessingHandler
     {
         try
         {
-            // Create directory structure: {ImageStoragePath}/media/full/{chat_id}/ and media/thumbs/{chat_id}/
-            var basePath = _historyOptions.ImageStoragePath;
+            // Create directory structure: {DataPath}/media/full/{chat_id}/ and media/thumbs/{chat_id}/
+            var basePath = _dataPath;
             var mediaPath = Path.Combine(basePath, "media");
             var fullDir = Path.Combine(mediaPath, "full", chatId.ToString());
             var thumbDir = Path.Combine(mediaPath, "thumbs", chatId.ToString());
@@ -118,7 +120,7 @@ public class ImageProcessingHandler
                 // Generate thumbnail using ImageSharp
                 using (var image = await Image.LoadAsync(tempPath, cancellationToken))
                 {
-                    var thumbnailSize = _historyOptions.ThumbnailSize;
+                    var thumbnailSize = ThumbnailSize;
                     image.Mutate(x => x.Resize(new ResizeOptions
                     {
                         Size = new Size(thumbnailSize, thumbnailSize),

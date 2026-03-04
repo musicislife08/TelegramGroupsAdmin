@@ -24,7 +24,6 @@ public class TelegramPhotoService
     private readonly ILogger<TelegramPhotoService> _logger;
     private readonly IBotMediaService _mediaService;
     private readonly IBotChatService _chatService;
-    private readonly MessageHistoryOptions _options;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
 
@@ -32,15 +31,14 @@ public class TelegramPhotoService
         ILogger<TelegramPhotoService> logger,
         IBotMediaService mediaService,
         IBotChatService chatService,
-        IOptions<MessageHistoryOptions> options)
+        IOptions<AppOptions> appOptions)
     {
         _logger = logger;
         _mediaService = mediaService;
         _chatService = chatService;
-        _options = options.Value;
 
         // Create subdirectories for chat icons and user photos under media/
-        var mediaPath = Path.Combine(_options.ImageStoragePath, "media");
+        var mediaPath = Path.Combine(appOptions.Value.DataPath, "media");
         _chatIconsPath = Path.Combine(mediaPath, "chat_icons");
         _userPhotosPath = Path.Combine(mediaPath, "user_photos");
 

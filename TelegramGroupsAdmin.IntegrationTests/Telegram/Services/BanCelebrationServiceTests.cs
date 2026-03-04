@@ -98,9 +98,9 @@ public class BanCelebrationServiceTests
         services.AddLogging(builder =>
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
-        // Configure MessageHistoryOptions with temp path
-        services.Configure<MessageHistoryOptions>(opt =>
-            opt.ImageStoragePath = _tempMediaPath);
+        // Configure AppOptions with temp path
+        services.Configure<AppOptions>(opt =>
+            opt.DataPath = _tempMediaPath);
 
         // Add HttpClientFactory for URL downloads
         services.AddHttpClient();

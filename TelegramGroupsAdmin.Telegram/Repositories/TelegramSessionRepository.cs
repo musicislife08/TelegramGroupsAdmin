@@ -19,6 +19,7 @@ public sealed class TelegramSessionRepository(
         await using var context = await contextFactory.CreateDbContextAsync(ct);
         var dto = await context.TelegramSessions
             .AsNoTracking()
+            .Include(ts => ts.User)
             .FirstOrDefaultAsync(ts => ts.WebUserId == webUserId && ts.IsActive, ct);
 
         if (dto is null) return null;
@@ -35,6 +36,7 @@ public sealed class TelegramSessionRepository(
         await using var context = await contextFactory.CreateDbContextAsync(ct);
         var dtos = await context.TelegramSessions
             .AsNoTracking()
+            .Include(ts => ts.User)
             .Where(ts => ts.IsActive)
             .ToListAsync(ct);
 

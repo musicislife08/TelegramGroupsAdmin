@@ -25,11 +25,11 @@ public class MessageQueryService : IMessageQueryService
     public MessageQueryService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MessageQueryService> logger,
-        IOptions<MessageHistoryOptions> messageHistoryOptions)
+        IOptions<AppOptions> appOptions)
     {
         _contextFactory = contextFactory;
         _logger = logger;
-        _imageStoragePath = messageHistoryOptions.Value.ImageStoragePath;
+        _imageStoragePath = appOptions.Value.DataPath;
     }
 
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default)

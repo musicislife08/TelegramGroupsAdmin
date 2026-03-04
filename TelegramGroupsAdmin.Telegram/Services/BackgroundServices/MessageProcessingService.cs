@@ -27,16 +27,12 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
-    IOptions<MessageHistoryOptions> historyOptions,
+    IOptions<AppOptions> appOptions,
     CommandRouter commandRouter,
     IChatCache chatCache,
     IServiceProvider serviceProvider,
     ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
-    private readonly IChatCache _chatCache = chatCache;
-
     // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
     // These are NOT injected in constructor since MessageProcessingService is Singleton
     // Instead, resolved from scope when needed
@@ -78,7 +74,7 @@ public partial class MessageProcessingService(
                     if (commandResult?.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                     {
                         // Use BotMessageService to save bot response to database
-                        using var scope = _scopeFactory.CreateScope();
+                        using var scope = scopeFactory.CreateScope();
                         var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
@@ -99,7 +95,7 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    using var scope = _scopeFactory.CreateScope();
+                    using var scope = scopeFactory.CreateScope();
                     var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
                     var examContext = await examFlowService.GetActiveExamContextAsync(UserIdentity.From(message.From), cancellationToken);
@@ -150,7 +146,7 @@ public partial class MessageProcessingService(
         }
 
         // Keep SDK Chat cache warm (used by NotificationHandler and other services)
-        _chatCache.UpdateChat(message.Chat);
+        chatCache.UpdateChat(message.Chat);
 
         // Detect Group → Supergroup migration
         // When a Group is upgraded to Supergroup (e.g., when granting admin), Telegram:
@@ -167,7 +163,7 @@ public partial class MessageProcessingService(
                 newChatId);
 
             // Resolve scoped IBotChatService from scope (singleton can't inject scoped directly)
-            using var migrationScope = _scopeFactory.CreateScope();
+            using var migrationScope = scopeFactory.CreateScope();
             var chatService = migrationScope.ServiceProvider.GetRequiredService<IBotChatService>();
             await chatService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
             return; // Don't process migration message further
@@ -501,7 +497,7 @@ public partial class MessageProcessingService(
 
             // Check if chat icon is cached on disk
             var chatIconFileName = $"{Math.Abs(message.Chat.Id)}.jpg";
-            var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "media", "chat_icons", chatIconFileName);
+            var chatIconCachedPath = Path.Combine(appOptions.Value.DataPath, "media", "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
             // REFACTOR-1: Use ITranslationHandler for translation detection and processing
@@ -804,7 +800,7 @@ public partial class MessageProcessingService(
 
         try
         {
-            using var scope = _scopeFactory.CreateScope();
+            using var scope = scopeFactory.CreateScope();
             var editProcessor = scope.ServiceProvider.GetRequiredService<Handlers.MessageEditProcessor>();
 
             var editRecord = await editProcessor.ProcessEditAsync(editedMessage, scope, cancellationToken);

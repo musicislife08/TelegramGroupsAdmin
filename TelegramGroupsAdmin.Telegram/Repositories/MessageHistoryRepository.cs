@@ -20,12 +20,12 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public MessageHistoryRepository(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MessageHistoryRepository> logger,
-        IOptions<MessageHistoryOptions> messageHistoryOptions,
+        IOptions<AppOptions> appOptions,
         SimHashService simHashService)
     {
         _contextFactory = contextFactory;
         _logger = logger;
-        _imageStoragePath = messageHistoryOptions.Value.ImageStoragePath;
+        _imageStoragePath = appOptions.Value.DataPath;
         _simHashService = simHashService;
     }
 

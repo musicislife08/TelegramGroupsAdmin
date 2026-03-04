@@ -33,14 +33,14 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
     public BanCelebrationGifRepository(
         IDbContextFactory<AppDbContext> contextFactory,
         IVideoFrameExtractionService videoService,
-        IOptions<MessageHistoryOptions> historyOptions,
+        IOptions<AppOptions> appOptions,
         IHttpClientFactory httpClientFactory,
         ILogger<BanCelebrationGifRepository> logger)
     {
         _contextFactory = contextFactory;
         _videoService = videoService;
         _logger = logger;
-        _mediaBasePath = Path.Combine(historyOptions.Value.ImageStoragePath, "media");
+        _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
         _httpClient = httpClientFactory.CreateClient();
 
         // Ensure the ban-gifs directory exists

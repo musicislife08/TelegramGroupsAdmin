@@ -28,10 +28,10 @@ public class BanCelebrationService(
     IBotMessageService messageService,
     IBotDmService dmDeliveryService,
     IUserActionsRepository userActionsRepository,
-    IOptions<MessageHistoryOptions> historyOptions,
+    IOptions<AppOptions> appOptions,
     ILogger<BanCelebrationService> logger) : IBanCelebrationService
 {
-    private readonly string _mediaBasePath = Path.Combine(historyOptions.Value.ImageStoragePath, "media");
+    private readonly string _mediaBasePath = Path.Combine(appOptions.Value.DataPath, "media");
 
     public async Task<bool> SendBanCelebrationAsync(
         ChatIdentity chat,

@@ -22,16 +22,16 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class DataCleanupJob : IJob
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly MessageHistoryOptions _options;
+    private readonly string _dataPath;
     private readonly ILogger<DataCleanupJob> _logger;
 
     public DataCleanupJob(
         IServiceScopeFactory scopeFactory,
-        IOptions<MessageHistoryOptions> options,
+        IOptions<AppOptions> appOptions,
         ILogger<DataCleanupJob> logger)
     {
         _scopeFactory = scopeFactory;
-        _options = options.Value;
+        _dataPath = appOptions.Value.DataPath;
         _logger = logger;
     }
 
@@ -105,7 +105,7 @@ public class DataCleanupJob : IJob
 
         // Delete image files from disk (photo thumbnails)
         var imageDeletedCount = 0;
-        var basePath = _options.ImageStoragePath;
+        var basePath = _dataPath;
         foreach (var relativePath in result.ImagePaths)
         {
             try

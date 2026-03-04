@@ -34,12 +34,6 @@ public class ImageContentCheckV2(
     IPhotoHashService photoHashService,
     IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
 {
-    private readonly IImageTextExtractionService _imageTextExtractionService = imageTextExtractionService;
-    private readonly IServiceProvider _serviceProvider = serviceProvider; // Lazy resolve to break circular dependency
-    private readonly IContentDetectionConfigRepository _configRepository = configRepository;
-    private readonly IPhotoHashService _photoHashService = photoHashService;
-    private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
-
     private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public CheckName CheckName => CheckName.ImageSpam;
@@ -76,7 +70,7 @@ public class ImageContentCheckV2(
         try
         {
             // Load config
-            var config = await _configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
+            var config = await configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
             var imageConfig = config.ImageSpam;
 
             // Extract OCR text early so it's available for all return paths (for AI veto passthrough)
@@ -88,7 +82,7 @@ public class ImageContentCheckV2(
                 !string.IsNullOrEmpty(req.PhotoLocalPath) &&
                 File.Exists(req.PhotoLocalPath))
             {
-                extractedOcrText = await _imageTextExtractionService.ExtractTextAsync(
+                extractedOcrText = await imageTextExtractionService.ExtractTextAsync(
                     req.PhotoLocalPath,
                     req.CancellationToken);
             }
@@ -98,11 +92,11 @@ public class ImageContentCheckV2(
                 !string.IsNullOrEmpty(req.PhotoLocalPath) &&
                 File.Exists(req.PhotoLocalPath))
             {
-                var photoHash = await _photoHashService.ComputePhotoHashAsync(req.PhotoLocalPath);
+                var photoHash = await photoHashService.ComputePhotoHashAsync(req.PhotoLocalPath);
                 if (photoHash != null)
                 {
                     // Query training samples (limited by config for performance)
-                    var trainingSamples = await _imageTrainingSamplesRepository.GetRecentSamplesAsync(
+                    var trainingSamples = await imageTrainingSamplesRepository.GetRecentSamplesAsync(
                         imageConfig.MaxTrainingSamplesToCompare,
                         req.CancellationToken);
 
@@ -114,7 +108,7 @@ public class ImageContentCheckV2(
 
                         foreach (var (sampleHash, isSpam) in trainingSamples)
                         {
-                            var similarity = _photoHashService.CompareHashes(photoHash, sampleHash);
+                            var similarity = photoHashService.CompareHashes(photoHash, sampleHash);
                             if (similarity > bestSimilarity)
                             {
                                 bestSimilarity = similarity;
@@ -204,7 +198,7 @@ public class ImageContentCheckV2(
 
                 // Run all text-based spam checks on OCR text
                 // Lazy-resolve engine to break circular dependency
-                var contentDetectionEngine = _serviceProvider.GetRequiredService<IContentDetectionEngine>();
+                var contentDetectionEngine = serviceProvider.GetRequiredService<IContentDetectionEngine>();
                 var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
 
                 // Check if result is confident enough to skip expensive Vision API

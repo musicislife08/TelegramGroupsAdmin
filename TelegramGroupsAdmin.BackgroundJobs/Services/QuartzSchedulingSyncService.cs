@@ -17,31 +17,26 @@ public class QuartzSchedulingSyncService(
     IBackgroundJobConfigService jobConfigService,
     IQuartzScheduleConverter scheduleConverter) : BackgroundService
 {
-    private readonly ILogger<QuartzSchedulingSyncService> _logger = logger;
-    private readonly ISchedulerFactory _schedulerFactory = schedulerFactory;
-    private readonly IBackgroundJobConfigService _jobConfigService = jobConfigService;
-    private readonly IQuartzScheduleConverter _scheduleConverter = scheduleConverter;
-
     private IScheduler? _scheduler;
     private readonly SemaphoreSlim _resyncSignal = new(0, 1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("QuartzSchedulingSyncService starting...");
+        logger.LogInformation("QuartzSchedulingSyncService starting...");
 
         try
         {
             // Get the scheduler instance
-            _scheduler = await _schedulerFactory.GetScheduler(stoppingToken);
+            _scheduler = await schedulerFactory.GetScheduler(stoppingToken);
 
             // Ensure default job configs exist
-            await _jobConfigService.EnsureDefaultConfigsAsync(stoppingToken);
+            await jobConfigService.EnsureDefaultConfigsAsync(stoppingToken);
 
             // Register this service with BackgroundJobConfigService for live re-sync notifications
-            if (_jobConfigService is BackgroundJobConfigService configService)
+            if (jobConfigService is BackgroundJobConfigService configService)
             {
                 configService.SetSyncService(this);
-                _logger.LogDebug("Registered with BackgroundJobConfigService for live config re-sync");
+                logger.LogDebug("Registered with BackgroundJobConfigService for live config re-sync");
             }
 
             // Perform initial sync on startup
@@ -50,7 +45,7 @@ public class QuartzSchedulingSyncService(
             // Update NextRunAt for all jobs after initial sync
             await UpdateNextRunTimesAsync(stoppingToken);
 
-            _logger.LogInformation("QuartzSchedulingSyncService initial sync complete - listening for config changes");
+            logger.LogInformation("QuartzSchedulingSyncService initial sync complete - listening for config changes");
 
             // Wait for config change notifications (event-driven re-sync)
             while (!stoppingToken.IsCancellationRequested)
@@ -60,13 +55,13 @@ public class QuartzSchedulingSyncService(
                     // Block until TriggerResync() is called or cancellation requested
                     await _resyncSignal.WaitAsync(stoppingToken);
 
-                    _logger.LogInformation("Config change detected - re-syncing job schedules");
+                    logger.LogInformation("Config change detected - re-syncing job schedules");
 
                     // Re-sync all schedules
                     await SyncSchedulesAsync(stoppingToken);
                     await UpdateNextRunTimesAsync(stoppingToken);
 
-                    _logger.LogInformation("Config re-sync complete");
+                    logger.LogInformation("Config re-sync complete");
                 }
                 catch (OperationCanceledException)
                 {
@@ -74,13 +69,13 @@ public class QuartzSchedulingSyncService(
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error during config re-sync - will retry on next change");
+                    logger.LogError(ex, "Error during config re-sync - will retry on next change");
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "QuartzSchedulingSyncService failed to start");
+            logger.LogError(ex, "QuartzSchedulingSyncService failed to start");
             throw;
         }
     }
@@ -96,12 +91,12 @@ public class QuartzSchedulingSyncService(
         try
         {
             _resyncSignal.Release();
-            _logger.LogDebug("Config re-sync triggered");
+            logger.LogDebug("Config re-sync triggered");
         }
         catch (SemaphoreFullException)
         {
             // Resync already pending, no action needed
-            _logger.LogDebug("Resync already pending, ignoring duplicate trigger");
+            logger.LogDebug("Resync already pending, ignoring duplicate trigger");
         }
     }
 
@@ -111,18 +106,18 @@ public class QuartzSchedulingSyncService(
     /// </summary>
     private async Task SyncSchedulesAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Syncing job schedules from database to Quartz...");
+        logger.LogInformation("Syncing job schedules from database to Quartz...");
 
         if (_scheduler == null)
         {
-            _logger.LogError("Scheduler is null, cannot sync schedules");
+            logger.LogError("Scheduler is null, cannot sync schedules");
             return;
         }
 
         // Get all job configs from database
-        var allJobs = await _jobConfigService.GetAllJobsAsync(cancellationToken);
+        var allJobs = await jobConfigService.GetAllJobsAsync(cancellationToken);
 
-        _logger.LogInformation("Found {JobCount} job configurations in database", allJobs.Count);
+        logger.LogInformation("Found {JobCount} job configurations in database", allJobs.Count);
 
         foreach (var (jobName, config) in allJobs)
         {
@@ -135,7 +130,7 @@ public class QuartzSchedulingSyncService(
                 var jobExists = await _scheduler.CheckExists(jobKey, cancellationToken);
                 if (!jobExists)
                 {
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         "Job {JobName} found in database config but not registered in Quartz. Skipping.",
                         jobName);
                     continue;
@@ -157,12 +152,12 @@ public class QuartzSchedulingSyncService(
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to sync schedule for job {JobName}", jobName);
+                logger.LogError(ex, "Failed to sync schedule for job {JobName}", jobName);
                 // Continue processing other jobs
             }
         }
 
-        _logger.LogInformation("Job schedule sync complete");
+        logger.LogInformation("Job schedule sync complete");
     }
 
     /// <summary>
@@ -183,7 +178,7 @@ public class QuartzSchedulingSyncService(
             ? MisfireInstruction.CronTrigger.DoNothing
             : MisfireInstruction.SmartPolicy;
 
-        var parseResult = _scheduleConverter.CreateTriggerBuilder(config.Schedule, misfireInstruction);
+        var parseResult = scheduleConverter.CreateTriggerBuilder(config.Schedule, misfireInstruction);
 
         if (parseResult is not HumanCron.Models.ParseResult<TriggerBuilder>.Success successResult)
         {
@@ -192,7 +187,7 @@ public class QuartzSchedulingSyncService(
                 ? errorResult.Message
                 : "Unknown parse error";
 
-            _logger.LogError(
+            logger.LogError(
                 "Failed to parse schedule '{Schedule}' for job {JobName}: {Error}. Job will not be scheduled.",
                 config.Schedule,
                 config.JobName,
@@ -208,7 +203,7 @@ public class QuartzSchedulingSyncService(
             if (existingTrigger.JobDataMap.TryGetString("NaturalLanguageSchedule", out var existingSchedule) &&
                 existingSchedule == config.Schedule)
             {
-                _logger.LogDebug(
+                logger.LogDebug(
                     "Trigger for {JobName} already exists with same schedule '{Schedule}', skipping",
                     config.JobName,
                     config.Schedule);
@@ -216,7 +211,7 @@ public class QuartzSchedulingSyncService(
             }
 
             // Schedule changed - remove old trigger
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Schedule changed for {JobName} from '{OldSchedule}' to '{NewSchedule}', updating trigger",
                 config.JobName,
                 existingSchedule ?? "unknown",
@@ -236,7 +231,7 @@ public class QuartzSchedulingSyncService(
 
         var nextFireTime = trigger.GetNextFireTimeUtc();
         var nextFireTimeFormatted = FormatNextFireTime(trigger, nextFireTime);
-        _logger.LogInformation(
+        logger.LogInformation(
             "Scheduled {JobName} with schedule '{Schedule}'. Next run: {NextRun}",
             config.JobName,
             config.Schedule,
@@ -257,7 +252,7 @@ public class QuartzSchedulingSyncService(
         if (triggerExists)
         {
             await _scheduler.UnscheduleJob(triggerKey, cancellationToken);
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Removed trigger for disabled job {JobName}",
                 jobName);
         }
@@ -271,9 +266,9 @@ public class QuartzSchedulingSyncService(
     {
         if (_scheduler == null) return;
 
-        _logger.LogInformation("Updating NextRunAt from Quartz scheduler...");
+        logger.LogInformation("Updating NextRunAt from Quartz scheduler...");
 
-        var allJobs = await _jobConfigService.GetAllJobsAsync(cancellationToken);
+        var allJobs = await jobConfigService.GetAllJobsAsync(cancellationToken);
 
         foreach (var (jobName, config) in allJobs)
         {
@@ -288,10 +283,10 @@ public class QuartzSchedulingSyncService(
                     if (nextFireTime.HasValue)
                     {
                         config.NextRunAt = nextFireTime.Value.UtcDateTime;
-                        await _jobConfigService.UpdateJobConfigAsync(jobName, config, cancellationToken);
+                        await jobConfigService.UpdateJobConfigAsync(jobName, config, cancellationToken);
 
                         var nextFireTimeFormatted = FormatNextFireTime(trigger, nextFireTime);
-                        _logger.LogDebug(
+                        logger.LogDebug(
                             "Updated NextRunAt for {JobName}: {NextRun}",
                             jobName,
                             nextFireTimeFormatted);
@@ -300,11 +295,11 @@ public class QuartzSchedulingSyncService(
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update NextRunAt for job {JobName}", jobName);
+                logger.LogError(ex, "Failed to update NextRunAt for job {JobName}", jobName);
             }
         }
 
-        _logger.LogInformation("NextRunAt update complete");
+        logger.LogInformation("NextRunAt update complete");
     }
 
     /// <summary>
@@ -335,7 +330,7 @@ public class QuartzSchedulingSyncService(
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("QuartzSchedulingSyncService stopping...");
+        logger.LogInformation("QuartzSchedulingSyncService stopping...");
         await base.StopAsync(cancellationToken);
     }
 }

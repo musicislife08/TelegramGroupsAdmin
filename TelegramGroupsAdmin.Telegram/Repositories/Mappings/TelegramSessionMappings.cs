@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -14,6 +15,9 @@ public static class TelegramSessionMappings
         {
             Id = dto.Id,
             WebUserId = dto.WebUserId,
+            WebUser = dto.User is not null
+                ? new WebUserIdentity(dto.User.Id, dto.User.Email, (Core.Models.PermissionLevel)dto.User.PermissionLevel)
+                : null,
             TelegramUserId = dto.TelegramUserId,
             DisplayName = dto.DisplayName,
             PhoneNumber = dto.PhoneNumber,

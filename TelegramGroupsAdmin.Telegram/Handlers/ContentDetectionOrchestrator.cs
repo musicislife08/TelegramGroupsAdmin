@@ -64,7 +64,7 @@ public class ContentDetectionOrchestrator
             using var scope = _serviceProvider.CreateScope();
             var coordinator = scope.ServiceProvider.GetRequiredService<IContentCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-            var historyOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Configuration.MessageHistoryOptions>>();
+            var appOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Configuration.AppOptions>>();
 
             // Build spam detection request with photo local path if available
             // Note: ImageSpamCheck uses PhotoLocalPath for all 3 layers (hash, OCR, Vision)
@@ -72,7 +72,7 @@ public class ContentDetectionOrchestrator
             string? photoFullPath = null;
             if (!string.IsNullOrEmpty(photoLocalPath))
             {
-                photoFullPath = Path.Combine(historyOptions.Value.ImageStoragePath, "media", photoLocalPath);
+                photoFullPath = Path.Combine(appOptions.Value.DataPath, "media", photoLocalPath);
                 if (!File.Exists(photoFullPath))
                 {
                     _logger.LogWarning("Photo file not found for spam detection: {PhotoPath}", photoFullPath);

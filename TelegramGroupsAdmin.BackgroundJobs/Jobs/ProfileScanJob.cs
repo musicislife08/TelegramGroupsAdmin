@@ -19,13 +19,9 @@ public class ProfileScanJob(
     IProfileScanService profileScanService,
     ITelegramSessionManager sessionManager) : IJob
 {
-    private readonly ILogger<ProfileScanJob> _logger = logger;
-    private readonly IProfileScanService _profileScanService = profileScanService;
-    private readonly ITelegramSessionManager _sessionManager = sessionManager;
-
     public async Task Execute(IJobExecutionContext context)
     {
-        var payload = await JobPayloadHelper.TryGetPayloadAsync<ProfileScanPayload>(context, _logger);
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<ProfileScanPayload>(context, logger);
         if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
@@ -40,9 +36,9 @@ public class ProfileScanJob(
         try
         {
             // Skip if no User API session available
-            if (!await _sessionManager.HasAnyActiveSessionAsync(cancellationToken))
+            if (!await sessionManager.HasAnyActiveSessionAsync(cancellationToken))
             {
-                _logger.LogDebug("No User API session available, skipping profile scan for user {UserId}",
+                logger.LogDebug("No User API session available, skipping profile scan for user {UserId}",
                     payload.UserId);
                 success = true;
                 return;
@@ -51,12 +47,12 @@ public class ProfileScanJob(
             var user = UserIdentity.FromId(payload.UserId);
             var chat = payload.ChatId.HasValue ? ChatIdentity.FromId(payload.ChatId.Value) : null;
 
-            _logger.LogDebug("Starting background profile scan for user {UserId} (chat: {ChatId})",
+            logger.LogDebug("Starting background profile scan for user {UserId} (chat: {ChatId})",
                 payload.UserId, payload.ChatId);
 
-            var result = await _profileScanService.ScanUserProfileAsync(user, chat, cancellationToken);
+            var result = await profileScanService.ScanUserProfileAsync(user, chat, cancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Background profile scan completed for user {UserId}: score {Score}, outcome {Outcome}",
                 payload.UserId, result.Score, result.Outcome);
 
@@ -64,7 +60,7 @@ public class ProfileScanJob(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
+            logger.LogError(ex,
                 "Failed to run profile scan for user {UserId}",
                 payload.UserId);
             throw; // Re-throw for Quartz retry

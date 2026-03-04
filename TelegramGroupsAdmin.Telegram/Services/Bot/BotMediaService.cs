@@ -31,7 +31,7 @@ public class BotMediaService : IBotMediaService
         IBotMediaHandler mediaHandler,
         IBotChatHandler chatHandler,
         IFileSystem fileSystem,
-        IOptions<MessageHistoryOptions> options,
+        IOptions<AppOptions> appOptions,
         ILogger<BotMediaService> logger)
     {
         _mediaHandler = mediaHandler;
@@ -40,7 +40,7 @@ public class BotMediaService : IBotMediaService
         _logger = logger;
 
         // Create subdirectories for chat icons and user photos under media/
-        var mediaPath = _fileSystem.Path.Combine(options.Value.ImageStoragePath, "media");
+        var mediaPath = _fileSystem.Path.Combine(appOptions.Value.DataPath, "media");
         _chatIconsPath = _fileSystem.Path.Combine(mediaPath, "chat_icons");
         _userPhotosPath = _fileSystem.Path.Combine(mediaPath, "user_photos");
 

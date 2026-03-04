@@ -290,13 +290,13 @@ public class TelegramUserRepository : ITelegramUserRepository
         // REFACTOR-5: Warnings are now JSONB on telegram_users, not a separate table
         var usersWithWarnings = await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => u.Warnings!.Count > 0)
+            .Where(u => u.Warnings!.Any())
             .Select(u => new { u.TelegramUserId, u.Warnings })
             .ToListAsync(cancellationToken);
 
         // Compute active warning counts in-memory (JSONB filtering not supported in EF Core)
         var warningCounts = usersWithWarnings
-            .Where(u => u.Warnings!.Count > 0)
+            .Where(u => u.Warnings!.Any())
             .ToDictionary(
                 u => u.TelegramUserId,
                 u => u.Warnings!.Count(w => w.ExpiresAt == null || w.ExpiresAt > now));
@@ -415,13 +415,13 @@ public class TelegramUserRepository : ITelegramUserRepository
         // REFACTOR-5: Warnings are now JSONB on telegram_users, not a separate table
         var usersWithWarnings = await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => userIdsInChats.Contains(u.TelegramUserId) && u.Warnings!.Count > 0)
+            .Where(u => userIdsInChats.Contains(u.TelegramUserId) && u.Warnings!.Any())
             .Select(u => new { u.TelegramUserId, u.Warnings })
             .ToListAsync(cancellationToken);
 
         // Compute active warning counts in-memory (JSONB filtering not supported in EF Core)
         var warningCounts = usersWithWarnings
-            .Where(u => u.Warnings!.Count > 0)
+            .Where(u => u.Warnings!.Any())
             .ToDictionary(
                 u => u.TelegramUserId,
                 u => u.Warnings!.Count(w => w.ExpiresAt == null || w.ExpiresAt > now));
@@ -681,7 +681,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Warned users count (from JSONB - fetch users with warnings and filter in-memory)
         var usersWithWarnings = await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => u.Warnings!.Count > 0)
+            .Where(u => u.Warnings!.Any())
             .Select(u => u.Warnings)
             .ToListAsync(cancellationToken);
 
@@ -906,7 +906,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
 
-        if (user?.Warnings == null) return 0;
+        if (user?.Warnings is not { Count: > 0 }) return 0;
 
         var now = DateTimeOffset.UtcNow;
         return user.Warnings.Count(w => w.ExpiresAt == null || w.ExpiresAt > now);

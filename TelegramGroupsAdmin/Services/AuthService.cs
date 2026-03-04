@@ -25,8 +25,6 @@ public class AuthService(
     ILogger<AuthService> logger)
     : IAuthService
 {
-    private readonly AppOptions _appOptions = appOptions.Value;
-
     public async Task<AuthResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         var user = await userRepository.GetByEmailAsync(email, cancellationToken);
@@ -480,7 +478,7 @@ public class AuthService(
                 new Dictionary<string, string>
                 {
                     { "VerificationToken", tokenString },
-                    { "BaseUrl", _appOptions.BaseUrl }
+                    { "BaseUrl", appOptions.Value.BaseUrl }
                 },
                 cancellationToken);
 
@@ -542,7 +540,7 @@ public class AuthService(
                 new Dictionary<string, string>
                 {
                     { "VerificationToken", tokenString },
-                    { "BaseUrl", _appOptions.BaseUrl }
+                    { "BaseUrl", appOptions.Value.BaseUrl }
                 },
                 cancellationToken);
 
@@ -592,7 +590,7 @@ public class AuthService(
         // Send password reset email
         try
         {
-            var resetLink = $"{_appOptions.BaseUrl}/reset-password?token={Uri.EscapeDataString(tokenString)}";
+            var resetLink = $"{appOptions.Value.BaseUrl}/reset-password?token={Uri.EscapeDataString(tokenString)}";
 
             await emailService.SendTemplatedEmailAsync(
                 email,

@@ -55,10 +55,22 @@ public static class CoreLoggingExtensions
             => LogDisplayName.WebUserInfo(identity?.Email, identity?.Id);
 
         /// <summary>
+        /// Format web user identity for INFO logs with userId fallback when identity is null.
+        /// </summary>
+        public string ToLogInfo(string userId)
+            => LogDisplayName.WebUserInfo(identity?.Email, userId);
+
+        /// <summary>
         /// Format web user identity for DEBUG/WARNING/ERROR logs (email + ID).
         /// </summary>
         public string ToLogDebug()
             => LogDisplayName.WebUserDebug(identity?.Email, identity?.Id ?? "unknown");
+
+        /// <summary>
+        /// Format web user identity for DEBUG/WARNING/ERROR logs with userId fallback when identity is null.
+        /// </summary>
+        public string ToLogDebug(string userId)
+            => LogDisplayName.WebUserDebug(identity?.Email, userId);
     }
 
     extension(WebUserIdentity identity)

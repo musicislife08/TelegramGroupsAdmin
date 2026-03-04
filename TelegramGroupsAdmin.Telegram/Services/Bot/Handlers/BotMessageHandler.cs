@@ -11,8 +11,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 /// </summary>
 public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBotMessageHandler
 {
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
-
     public async Task<Message> SendAsync(
         long chatId,
         string text,
@@ -21,7 +19,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.SendMessageAsync(
             chatId,
             text,
@@ -40,7 +38,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.SendPhotoAsync(
             chatId,
             photo,
@@ -60,7 +58,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.SendVideoAsync(
             chatId,
             video,
@@ -80,7 +78,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.SendAnimationAsync(
             chatId,
             animation,
@@ -99,7 +97,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.EditMessageTextAsync(
             chatId,
             messageId,
@@ -117,7 +115,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         InlineKeyboardMarkup? replyMarkup = null,
         CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.EditMessageCaptionAsync(
             chatId,
             messageId,
@@ -129,7 +127,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
 
     public async Task DeleteAsync(long chatId, int messageId, CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         await apiClient.DeleteMessageAsync(chatId, messageId, ct);
     }
 
@@ -139,7 +137,7 @@ public class BotMessageHandler(ITelegramBotClientFactory botClientFactory) : IBo
         bool showAlert = false,
         CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         await apiClient.AnswerCallbackQueryAsync(callbackQueryId, text: text, showAlert: showAlert, ct: ct);
     }
 }
