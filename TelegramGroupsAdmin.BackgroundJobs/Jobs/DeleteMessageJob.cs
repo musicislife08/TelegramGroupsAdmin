@@ -17,15 +17,12 @@ public class DeleteMessageJob(
     ILogger<DeleteMessageJob> logger,
     IBotMessageService messageService) : IJob
 {
-    private readonly ILogger<DeleteMessageJob> _logger = logger;
-    private readonly IBotMessageService _messageService = messageService;
-
     /// <summary>
     /// Execute delayed message deletion (Quartz.NET entry point)
     /// </summary>
     public async Task Execute(IJobExecutionContext context)
     {
-        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteMessagePayload>(context, _logger);
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteMessagePayload>(context, logger);
         if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
@@ -42,19 +39,19 @@ public class DeleteMessageJob(
 
         try
         {
-            _logger.LogDebug(
+            logger.LogDebug(
                 "Deleting message {MessageId} in chat {ChatId} (reason: {Reason})",
                 payload.MessageId,
                 payload.ChatId,
                 payload.Reason);
 
-            await _messageService.DeleteAndMarkMessageAsync(
+            await messageService.DeleteAndMarkMessageAsync(
                 chatId: payload.ChatId,
                 messageId: payload.MessageId,
                 deletionSource: payload.Reason ?? "scheduled_delete",
                 cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Deleted message {MessageId} in chat {ChatId} (reason: {Reason})",
                 payload.MessageId,
                 payload.ChatId,
@@ -64,7 +61,7 @@ public class DeleteMessageJob(
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            logger.LogError(
                 ex,
                 "Failed to delete message {MessageId} in chat {ChatId}",
                 payload?.MessageId,

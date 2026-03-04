@@ -53,7 +53,7 @@ public class BackupService : IBackupService
         DependencyResolutionService dependencyResolutionService,
         IBackupRetentionService retentionService,
         IThumbnailService thumbnailService,
-        IOptions<MessageHistoryOptions> historyOptions)
+        IOptions<AppOptions> appOptions)
     {
         _dataSource = dataSource;
         _logger = logger;
@@ -69,7 +69,7 @@ public class BackupService : IBackupService
         _dependencyResolutionService = dependencyResolutionService;
         _retentionService = retentionService;
         _thumbnailService = thumbnailService;
-        _mediaBasePath = historyOptions.Value.ImageStoragePath;
+        _mediaBasePath = appOptions.Value.DataPath;
     }
 
     public async Task<byte[]> ExportAsync()

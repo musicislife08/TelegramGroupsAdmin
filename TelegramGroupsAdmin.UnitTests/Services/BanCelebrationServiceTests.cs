@@ -30,7 +30,7 @@ public class BanCelebrationServiceTests
     private IBotMessageService _mockMessageService = null!;
     private IBotDmService _mockDmService = null!;
     private IUserActionsRepository _mockUserActionsRepository = null!;
-    private IOptions<MessageHistoryOptions> _mockHistoryOptions = null!;
+    private IOptions<AppOptions> _appOptions = null!;
     private ILogger<BanCelebrationService> _mockLogger = null!;
     private BanCelebrationService _sut = null!;
 
@@ -46,9 +46,8 @@ public class BanCelebrationServiceTests
         _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
         _mockLogger = Substitute.For<ILogger<BanCelebrationService>>();
 
-        // Setup MessageHistoryOptions
-        var historyOptions = new MessageHistoryOptions { ImageStoragePath = "/data" };
-        _mockHistoryOptions = Options.Create(historyOptions);
+        // Setup AppOptions
+        _appOptions = Options.Create(new AppOptions { DataPath = "/data" });
 
         // Default config setup - enabled celebration
         var defaultConfig = new BanCelebrationConfig
@@ -74,7 +73,7 @@ public class BanCelebrationServiceTests
             _mockMessageService,
             _mockDmService,
             _mockUserActionsRepository,
-            _mockHistoryOptions,
+            _appOptions,
             _mockLogger);
     }
 

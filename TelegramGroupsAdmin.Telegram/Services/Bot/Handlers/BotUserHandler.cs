@@ -9,17 +9,15 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 /// </summary>
 public class BotUserHandler(ITelegramBotClientFactory botClientFactory) : IBotUserHandler
 {
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
-
     public async Task<User> GetMeAsync(CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.GetMeAsync(ct);
     }
 
     public async Task<ChatMember> GetChatMemberAsync(long chatId, long userId, CancellationToken ct = default)
     {
-        var apiClient = await _botClientFactory.GetApiClientAsync();
+        var apiClient = await botClientFactory.GetApiClientAsync();
         return await apiClient.GetChatMemberAsync(chatId, userId, ct);
     }
 }

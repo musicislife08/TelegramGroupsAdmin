@@ -19,13 +19,9 @@ public class DeleteUserMessagesJob(
     IBotMessageService messageService,
     IMessageHistoryRepository messageHistoryRepository) : IJob
 {
-    private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
-    private readonly IBotMessageService _messageService = messageService;
-    private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
-
     public async Task Execute(IJobExecutionContext context)
     {
-        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteUserMessagesPayload>(context, _logger);
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteUserMessagesPayload>(context, logger);
         if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
@@ -44,25 +40,25 @@ public class DeleteUserMessagesJob(
 
         try
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Starting cross-chat message cleanup for user {UserDisplay} ({UserId})",
                 user.DisplayName, user.Id);
 
             // Fetch all user messages (non-deleted only)
-            var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(
+            var userMessages = await messageHistoryRepository.GetUserMessagesAsync(
                 user.Id,
                 cancellationToken);
 
             if (userMessages.Count == 0)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "No messages found for user {UserDisplay} ({UserId}), cleanup complete",
                     user.DisplayName, user.Id);
                 success = true;
                 return;
             }
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Found {MessageCount} messages to delete for user {UserDisplay} ({UserId})",
                 userMessages.Count,
                 user.DisplayName, user.Id);
@@ -76,7 +72,7 @@ public class DeleteUserMessagesJob(
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         "Message cleanup cancelled for user {UserDisplay} ({UserId}) after {DeletedCount} deletions",
                         user.DisplayName, user.Id,
                         deletedCount);
@@ -85,7 +81,7 @@ public class DeleteUserMessagesJob(
 
                 try
                 {
-                    await _messageService.DeleteAndMarkMessageAsync(
+                    await messageService.DeleteAndMarkMessageAsync(
                         chatId: message.ChatId,
                         messageId: message.MessageId,
                         deletionSource: "ban_cleanup",
@@ -93,7 +89,7 @@ public class DeleteUserMessagesJob(
 
                     deletedCount++;
 
-                    _logger.LogDebug(
+                    logger.LogDebug(
                         "Deleted message {MessageId} in chat {ChatId} for user {UserId}",
                         message.MessageId,
                         message.ChatId,
@@ -107,7 +103,7 @@ public class DeleteUserMessagesJob(
                 {
                     // Expected errors: message already deleted, too old (>48h), or bot lacks permissions
                     skippedCount++;
-                    _logger.LogDebug(
+                    logger.LogDebug(
                         "Skipped message {MessageId} in chat {ChatId} for user {UserId}: {Reason}",
                         message.MessageId,
                         message.ChatId,
@@ -117,7 +113,7 @@ public class DeleteUserMessagesJob(
                 catch (Exception ex)
                 {
                     failedCount++;
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         ex,
                         "Failed to delete message {MessageId} in chat {ChatId} for user {UserId}",
                         message.MessageId,
@@ -127,7 +123,7 @@ public class DeleteUserMessagesJob(
                 }
             }
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Cross-chat message cleanup complete for user {UserDisplay} ({UserId}): {DeletedCount} deleted, {SkippedCount} skipped, {FailedCount} failed",
                 user.DisplayName, user.Id,
                 deletedCount,
@@ -139,7 +135,7 @@ public class DeleteUserMessagesJob(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error in DeleteUserMessagesJobLogic");
+            logger.LogError(ex, "Unexpected error in DeleteUserMessagesJobLogic");
             throw;
         }
         finally

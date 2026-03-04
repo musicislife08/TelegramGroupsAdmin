@@ -90,13 +90,13 @@ public class MessageHistoryRepositoryTests
             builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
         });
 
-        // Configure MessageHistoryOptions with temp image storage
+        // Configure AppOptions with temp image storage
         _imageStoragePath = Path.Combine(Path.GetTempPath(), $"test_images_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_imageStoragePath);
 
-        services.Configure<MessageHistoryOptions>(options =>
+        services.Configure<AppOptions>(options =>
         {
-            options.ImageStoragePath = _imageStoragePath;
+            options.DataPath = _imageStoragePath;
         });
 
         // Register Core services (SimHashService required by MessageHistoryRepository)

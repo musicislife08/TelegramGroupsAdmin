@@ -20,19 +20,6 @@ public static class ConfigurationExtensions
             // NOTE: OpenAIOptions and SendGridOptions removed - now using database config
             // See AIProviderConfig and SendGridConfig in database (configs table)
 
-            // MessageHistoryOptions: Set ImageStoragePath from App:DataPath if not explicitly configured
-            services.Configure<MessageHistoryOptions>(options =>
-            {
-                configuration.GetSection("MessageHistory").Bind(options);
-
-                // If ImageStoragePath is still the default "/data", use App:DataPath as base
-                var dataPath = configuration["App:DataPath"] ?? "/data";
-                if (options.ImageStoragePath == "/data")
-                {
-                    options.ImageStoragePath = dataPath;
-                }
-            });
-
             // Configuration repositories (database-driven config storage)
             services.AddScoped<IConfigRepository, ConfigRepository>();
 

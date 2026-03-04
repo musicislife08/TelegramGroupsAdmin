@@ -169,15 +169,10 @@ public static class WebApplicationExtensions
     /// </summary>
     private static void ConfigureImageStaticFiles(WebApplication app)
     {
-        var messageHistoryOptions = app.Services.GetRequiredService<IOptions<MessageHistoryOptions>>().Value;
-
-        if (!messageHistoryOptions.Enabled)
-        {
-            return;
-        }
+        var appOptions = app.Services.GetRequiredService<IOptions<AppOptions>>().Value;
 
         // Base data path (e.g., /data or ./bin/Debug/net10.0/data)
-        var basePath = Path.GetFullPath(messageHistoryOptions.ImageStoragePath);
+        var basePath = Path.GetFullPath(appOptions.DataPath);
 
         // Serve media/ subdirectory (all user-uploaded content: images, videos, audio, user photos, chat icons, etc.)
         var mediaPath = Path.Combine(basePath, "media");

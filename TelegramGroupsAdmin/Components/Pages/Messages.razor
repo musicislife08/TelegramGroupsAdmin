@@ -497,8 +497,10 @@
             {
                 Logger.LogDebug("SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
 
+                if (!_selectedChatId.HasValue) return;
+
                 // Reload the message from database to get updated media_local_path
-                var updatedMessage = await MessageRepository.GetMessageAsync(messageId, _selectedChatId!.Value);
+                var updatedMessage = await MessageRepository.GetMessageAsync(messageId, _selectedChatId.Value);
                 if (updatedMessage == null)
                 {
                     Logger.LogWarning("Updated message {MessageId} not found in database", messageId);
@@ -506,7 +508,7 @@
                 }
 
                 // Only update if message belongs to currently selected chat
-                if (!_selectedChatId.HasValue || updatedMessage.Chat.Id != _selectedChatId.Value)
+                if (updatedMessage.Chat.Id != _selectedChatId.Value)
                 {
                     Logger.LogTrace("Ignoring media update for message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
                         messageId, updatedMessage.Chat.Id, _selectedChatId);

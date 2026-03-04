@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
@@ -8,6 +10,7 @@ public record TelegramSession
 {
     public long Id { get; init; }
     public required string WebUserId { get; init; }
+    public WebUserIdentity? WebUser { get; init; }
     public long? TelegramUserId { get; init; }
     public string? DisplayName { get; init; }
     public string? PhoneNumber { get; init; }

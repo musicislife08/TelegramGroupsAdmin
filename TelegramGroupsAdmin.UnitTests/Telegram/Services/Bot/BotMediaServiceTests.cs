@@ -85,9 +85,9 @@ public class BotMediaServiceTests
         // Create temp directory (MockFileSystem doesn't have it by default)
         _mockFileSystem.Directory.CreateDirectory(_mockFileSystem.Path.GetTempPath());
 
-        var options = Options.Create(new MessageHistoryOptions
+        var options = Options.Create(new AppOptions
         {
-            ImageStoragePath = _basePath
+            DataPath = _basePath
         });
 
         _service = new BotMediaService(

@@ -1,10 +1,8 @@
 using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Core.JobPayloads;
@@ -19,16 +17,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class TempbanExpiryJob(
     ILogger<TempbanExpiryJob> logger,
-    IDbContextFactory<AppDbContext> contextFactory,
     IBotModerationService moderationService) : IJob
 {
-    private readonly ILogger<TempbanExpiryJob> _logger = logger;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly IBotModerationService _moderationService = moderationService;
-
     public async Task Execute(IJobExecutionContext context)
     {
-        var payload = await JobPayloadHelper.TryGetPayloadAsync<TempbanExpiryJobPayload>(context, _logger);
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<TempbanExpiryJobPayload>(context, logger);
         if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
@@ -47,7 +40,7 @@ public class TempbanExpiryJob(
 
         try
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Processing tempban expiry for {User}. Reason: {Reason}, Expired at: {ExpiresAt}",
                 payload.User.DisplayName,
                 payload.Reason,
@@ -56,7 +49,7 @@ public class TempbanExpiryJob(
             try
             {
                 // Unban user across all managed chats via moderation service
-                var result = await _moderationService.UnbanUserAsync(
+                var result = await moderationService.UnbanUserAsync(
                     new UnbanIntent
                     {
                         User = payload.User,
@@ -68,7 +61,7 @@ public class TempbanExpiryJob(
 
                 if (result.Success)
                 {
-                    _logger.LogInformation(
+                    logger.LogInformation(
                         "Completed tempban expiry for {User}. Unbanned from {ChatsAffected} chats",
                         payload.User.DisplayName,
                         result.ChatsAffected);
@@ -76,7 +69,7 @@ public class TempbanExpiryJob(
                 }
                 else
                 {
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         "Tempban expiry partially failed for {User}: {Error}",
                         payload.User.DisplayName,
                         result.ErrorMessage);
@@ -86,7 +79,7 @@ public class TempbanExpiryJob(
             }
             catch (Exception ex)
             {
-                _logger.LogError(
+                logger.LogError(
                     ex,
                     "Failed to process tempban expiry for {User}",
                     payload.User.DisplayName);

@@ -90,9 +90,9 @@ public class BotMessageServiceTests
         services.AddLogging(builder =>
             builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
-        // Configure MessageHistoryOptions with temp path
-        services.Configure<MessageHistoryOptions>(opt =>
-            opt.ImageStoragePath = _tempMediaPath);
+        // Configure AppOptions with temp path
+        services.Configure<AppOptions>(opt =>
+            opt.DataPath = _tempMediaPath);
 
         // Register Core services (SimHashService required by MessageHistoryRepository)
         services.AddCoreServices();
