@@ -301,11 +301,10 @@
                             </MudButton>
                         }
 
-                        @* TODO: #358 — Wire up mini messages dialog (per-user message history) *@
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Message"
-                                   Disabled="true"
+                                   OnClick="@ViewMessages"
                                    Size="Size.Small">
                             View Messages
                         </MudButton>
@@ -1176,6 +1175,26 @@
         {
             Snackbar.Add($"Error updating exclusion: {ex.Message}", Severity.Error);
         }
+    }
+
+    private async Task ViewMessages()
+    {
+        if (_userDetail == null) return;
+
+        var parameters = new DialogParameters<UserMessagesDialog>
+        {
+            { x => x.UserId, _userDetail.User.Id },
+            { x => x.UserDisplayName, _userDetail.DisplayName }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<UserMessagesDialog>(
+            $"Messages from {_userDetail.DisplayName}", parameters, options);
     }
 
     private async Task RescanProfile()
