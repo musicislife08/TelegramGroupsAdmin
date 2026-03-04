@@ -1445,4 +1445,82 @@ public class MessageHistoryRepositoryTests
     }
 
     #endregion
+
+    #region GetUserMessagesPaginatedAsync Tests (Phase 1 — UserMessagesDialog)
+
+    [Test]
+    public async Task GetUserMessagesPaginatedAsync_ReturnsMessagesForUser()
+    {
+        // Arrange — User2 (Bob) has messages 1, 3, 4, 7 in MainChat
+        var userId = GoldenDataset.TelegramUsers.User2_TelegramUserId;
+        IReadOnlyCollection<long> accessibleChatIds = [GoldenDataset.ManagedChats.MainChat_Id];
+
+        // Act
+        var messages = await _queryService!.GetUserMessagesPaginatedAsync(userId, accessibleChatIds, limit: 50);
+
+        // Assert
+        Assert.That(messages, Is.Not.Empty, "User2 (Bob) should have messages in MainChat");
+        Assert.That(messages, Has.All.Matches<UiModels.MessageRecord>(m => m.User.Id == userId),
+            "All returned messages should belong to the requested user");
+        Assert.That(messages, Has.All.Matches<UiModels.MessageRecord>(m => m.Chat.Id == GoldenDataset.ManagedChats.MainChat_Id),
+            "All messages should be from accessible chats only");
+    }
+
+    [Test]
+    public async Task GetUserMessagesPaginatedAsync_FiltersToAccessibleChats()
+    {
+        // Arrange — User2 has messages in MainChat, but we only grant access to Chat1 (which has none of Bob's messages)
+        var userId = GoldenDataset.TelegramUsers.User2_TelegramUserId;
+        IReadOnlyCollection<long> accessibleChatIds = [GoldenDataset.ManagedChats.Chat1_Id];
+
+        // Act
+        var messages = await _queryService!.GetUserMessagesPaginatedAsync(userId, accessibleChatIds, limit: 50);
+
+        // Assert — Bob's messages are in MainChat, not Chat1, so filtered out
+        Assert.That(messages, Is.Empty,
+            "Should return no messages when user's messages are in a chat not in the accessible list");
+    }
+
+    [Test]
+    public async Task GetUserMessagesPaginatedAsync_CursorPagination()
+    {
+        // Arrange — Get all of User2's messages first, then paginate
+        var userId = GoldenDataset.TelegramUsers.User2_TelegramUserId;
+        IReadOnlyCollection<long> accessibleChatIds = [GoldenDataset.ManagedChats.MainChat_Id];
+
+        var allMessages = await _queryService!.GetUserMessagesPaginatedAsync(userId, accessibleChatIds, limit: 50);
+        Assert.That(allMessages.Count, Is.GreaterThanOrEqualTo(2),
+            "Need at least 2 messages to test pagination");
+
+        // Act — Get first page (limit 1), then use cursor for second page
+        var firstPage = await _queryService.GetUserMessagesPaginatedAsync(userId, accessibleChatIds, limit: 1);
+        Assert.That(firstPage, Has.Count.EqualTo(1), "First page should return exactly 1 message");
+
+        var cursor = firstPage[0].Timestamp;
+        var secondPage = await _queryService.GetUserMessagesPaginatedAsync(userId, accessibleChatIds, limit: 1, beforeTimestamp: cursor);
+
+        // Assert
+        Assert.That(secondPage, Has.Count.EqualTo(1), "Second page should return 1 message");
+        Assert.That(secondPage[0].Timestamp, Is.LessThan(cursor),
+            "Second page message should be older than cursor timestamp");
+        Assert.That(secondPage[0].MessageId, Is.Not.EqualTo(firstPage[0].MessageId),
+            "Pages should return different messages");
+    }
+
+    [Test]
+    public async Task GetUserMessagesPaginatedAsync_EmptyAccessibleChats_ReturnsEmpty()
+    {
+        // Arrange — empty accessible chat list
+        var userId = GoldenDataset.TelegramUsers.User2_TelegramUserId;
+        IReadOnlyCollection<long> accessibleChatIds = [];
+
+        // Act
+        var messages = await _queryService!.GetUserMessagesPaginatedAsync(userId, accessibleChatIds, limit: 50);
+
+        // Assert
+        Assert.That(messages, Is.Empty,
+            "Should return no messages when accessible chat list is empty");
+    }
+
+    #endregion
 }

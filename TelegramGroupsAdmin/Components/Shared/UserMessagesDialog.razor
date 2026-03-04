@@ -1,0 +1,162 @@
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Services
+@inject IMessageQueryService MessageQueryService
+@inject IManagedChatsRepository ChatsRepository
+@inject NavigationManager NavigationManager
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Message" />
+            <MudText Typo="Typo.h6">Messages from @UserDisplayName</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                <MudProgressCircular Indeterminate="true" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Loading messages...</MudText>
+            </MudStack>
+        }
+        else if (_messages.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="ma-4">No messages found for this user.</MudAlert>
+        }
+        else
+        {
+            <div class="user-messages-list" style="max-height: 70vh; overflow-y: auto; padding: 8px;">
+                @foreach (var message in _messages)
+                {
+                    <div class="mb-3">
+                        @* Chat badge with profile picture — shows which group this message is from *@
+                        <div class="d-flex align-center gap-2 mb-1">
+                            @if (!string.IsNullOrEmpty(message.ChatIconPath))
+                            {
+                                <img src="@GetChatIconPath(message.ChatIconPath)"
+                                     alt="@message.Chat.DisplayName"
+                                     style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Forum"
+                                         Size="Size.Small"
+                                         Style="width: 20px; height: 20px;" />
+                            }
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @message.Chat.DisplayName
+                            </MudText>
+                        </div>
+
+                        <MessageBubbleTelegram Message="message" />
+                        <MudLink Typo="Typo.caption"
+                                 Color="Color.Primary"
+                                 OnClick="() => NavigateToMessage(message)"
+                                 Class="ml-14">
+                            Jump to message
+                        </MudLink>
+                    </div>
+                }
+
+                @if (_hasMore)
+                {
+                    <MudStack AlignItems="AlignItems.Center" Class="pa-4">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   OnClick="LoadMoreAsync"
+                                   Disabled="_loadingMore">
+                            @if (_loadingMore)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <text>Loading...</text>
+                            }
+                            else
+                            {
+                                <text>Load More</text>
+                            }
+                        </MudButton>
+                    </MudStack>
+                }
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const int PageSize = 50;
+
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
+    [Parameter, EditorRequired] public long UserId { get; set; }
+    [Parameter] public string? UserDisplayName { get; set; }
+
+    private List<MessageRecord> _messages = [];
+    private bool _loading = true;
+    private bool _loadingMore;
+    private bool _hasMore;
+    private IReadOnlyCollection<long>? _accessibleChatIds;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (WebUser is null) return;
+
+        // Get accessible chats for the current web user (respects permission level)
+        var chats = await ChatsRepository.GetUserAccessibleChatsAsync(
+            WebUser.Id, WebUser.PermissionLevel);
+        _accessibleChatIds = chats.Select(c => c.Identity.Id).ToList();
+
+        await LoadMessagesAsync();
+        _loading = false;
+    }
+
+    private async Task LoadMessagesAsync(DateTimeOffset? beforeTimestamp = null)
+    {
+        if (_accessibleChatIds is null or { Count: 0 }) return;
+
+        var results = await MessageQueryService.GetUserMessagesPaginatedAsync(
+            UserId, _accessibleChatIds, PageSize, beforeTimestamp);
+
+        _messages.AddRange(results);
+        _hasMore = results.Count == PageSize;
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        _loadingMore = true;
+        try
+        {
+            var oldestTimestamp = _messages[^1].Timestamp;
+            await LoadMessagesAsync(oldestTimestamp);
+        }
+        finally
+        {
+            _loadingMore = false;
+        }
+    }
+
+    private void NavigateToMessage(MessageRecord message)
+    {
+        NavigationManager.NavigateTo($"/messages?chat={message.Chat.Id}&highlight={message.MessageId}");
+        MudDialog.Close();
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private static string GetChatIconPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+
+        var relativePath = path.Contains('/') || path.Contains('\\')
+            ? path.Replace('\\', '/')
+            : Path.GetFileName(path);
+
+        return $"/media/{relativePath}";
+    }
+}

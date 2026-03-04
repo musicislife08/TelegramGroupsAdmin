@@ -455,4 +455,31 @@ public class MessageQueryService : IMessageQueryService
             UserNotes = []
         };
     }
+
+    /// <inheritdoc />
+    public async Task<List<UiModels.MessageRecord>> GetUserMessagesPaginatedAsync(
+        long telegramUserId,
+        IReadOnlyCollection<long> accessibleChatIds,
+        int limit = 50,
+        DateTimeOffset? beforeTimestamp = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.UserId == telegramUserId && accessibleChatIds.Contains(m.ChatId));
+
+        if (beforeTimestamp.HasValue)
+        {
+            query = query.Where(m => m.Timestamp < beforeTimestamp.Value);
+        }
+
+        var results = await query
+            .OrderByDescending(m => m.Timestamp)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return results.Select(m => m.ToModel()).ToList();
+    }
 }

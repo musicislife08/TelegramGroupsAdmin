@@ -93,4 +93,15 @@ public interface IMessageQueryService
     Task<UiModels.MessageRecord?> GetMessageByIdAsync(
         UiModels.MessageRecord message,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get paginated messages for a specific user across accessible chats.
+    /// Used by the per-user messages dialog for cross-chat message history.
+    /// </summary>
+    Task<List<UiModels.MessageRecord>> GetUserMessagesPaginatedAsync(
+        long telegramUserId,
+        IReadOnlyCollection<long> accessibleChatIds,
+        int limit = 50,
+        DateTimeOffset? beforeTimestamp = null,
+        CancellationToken cancellationToken = default);
 }

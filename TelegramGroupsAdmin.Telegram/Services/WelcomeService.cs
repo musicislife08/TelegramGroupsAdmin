@@ -132,37 +132,27 @@ public class WelcomeService(
                 return;
             }
 
-            // Step 2: Create user record if not exists (MUST happen before any moderation
-            // actions, because audit logging has a FK constraint on telegram_users)
-            var existingUser = await telegramUserRepository.GetByTelegramIdAsync(user.Id, cancellationToken);
+            // Step 2: Ensure user record exists (FK constraint for audit logging)
+            var existingUser = await telegramUserRepository.GetOrCreateAsync(
+                user.Id, user.Username, user.FirstName, user.LastName, user.IsBot, cancellationToken);
 
-            if (existingUser == null)
+            // Early-out: If user is already globally banned, apply single-chat ban and skip welcome
+            if (existingUser.IsBanned)
             {
-                var now = DateTimeOffset.UtcNow;
-                var newUser = new Models.TelegramUser(
-                    TelegramUserId: user.Id,
-                    Username: user.Username,
-                    FirstName: user.FirstName,
-                    LastName: user.LastName,
-                    UserPhotoPath: null,
-                    PhotoHash: null,
-                    PhotoFileUniqueId: null,
-                    IsBot: user.IsBot,
-                    IsTrusted: false,
-                    IsBanned: false,
-                    BotDmEnabled: false,
-                    FirstSeenAt: now,
-                    LastSeenAt: now,
-                    CreatedAt: now,
-                    UpdatedAt: now,
-                    IsActive: false // Inactive until welcome accepted or message sent
-                );
-                await telegramUserRepository.UpsertAsync(newUser, cancellationToken);
-                existingUser = newUser;
+                logger.LogInformation(
+                    "Pre-banned user {User} joined {Chat} - applying ban and skipping welcome",
+                    user.ToLogInfo(), chatMemberUpdate.Chat.ToLogInfo());
 
-                logger.LogDebug(
-                    "Created inactive user record for {User} on join",
-                    user.ToLogDebug());
+                await moderationService.SyncBanToChatAsync(
+                    new SyncBanIntent
+                    {
+                        User = UserIdentity.From(user),
+                        Chat = ChatIdentity.From(chatMemberUpdate.Chat),
+                        Executor = Actor.AutoDetection,
+                        Reason = "Lazy ban sync: User was globally banned before joining this chat",
+                    },
+                    cancellationToken);
+                return;
             }
 
             // Step 3: Restrict user permissions (mute immediately - no spam window)
