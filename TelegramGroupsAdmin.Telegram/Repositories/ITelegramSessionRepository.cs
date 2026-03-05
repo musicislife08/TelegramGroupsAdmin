@@ -14,9 +14,11 @@ public interface ITelegramSessionRepository
     Task<TelegramSession?> GetActiveSessionAsync(string webUserId, CancellationToken ct);
 
     /// <summary>
-    /// Get all active sessions across all users (for startup reconnection and GetAnyClientAsync)
+    /// Get all active sessions across all users (for startup reconnection and GetAnyClientAsync).
+    /// When <paramref name="preferChatId"/> is provided, sessions whose member_chats contain
+    /// that chat are ordered first. This is a best-effort preference, not a filter.
     /// </summary>
-    Task<List<TelegramSession>> GetAllActiveSessionsAsync(CancellationToken ct);
+    Task<List<TelegramSession>> GetAllActiveSessionsAsync(CancellationToken ct, long? preferChatId = null);
 
     /// <summary>
     /// Check if any active session exists without materializing rows or decrypting session data
@@ -42,4 +44,10 @@ public interface ITelegramSessionRepository
     /// Deactivate a session (set is_active=false, disconnected_at=now, clear session_data)
     /// </summary>
     Task DeactivateSessionAsync(long sessionId, CancellationToken ct);
+
+    /// <summary>
+    /// Update the member_chats JSONB column with the list of accessible chats for session routing.
+    /// Called after WarmPeerCacheAsync to persist which chats a session can access.
+    /// </summary>
+    Task UpdateMemberChatsAsync(long sessionId, string memberChatsJson, CancellationToken ct);
 }

@@ -55,6 +55,10 @@ public interface IWTelegramApiClient : IAsyncDisposable
     /// <summary>Get full channel info including about/description text.</summary>
     Task<Messages_ChatFull> Channels_GetFullChannel(InputChannelBase channel);
 
+    /// <summary>Get a single participant of a channel/supergroup.
+    /// Returns the participant with full user info (including access_hash) in the .users dictionary.</summary>
+    Task<Channels_ChannelParticipant> Channels_GetParticipant(InputChannelBase channel, InputPeer participant);
+
     /// <summary>Get pinned stories for a peer. Returns stories permanently displayed on their profile.</summary>
     Task<Stories_Stories> Stories_GetPinnedStories(InputPeer peer, int offset_id = 0, int limit = 20);
 
@@ -109,6 +113,10 @@ public interface IWTelegramApiClient : IAsyncDisposable
     /// <summary>Resolve a bot API chat ID (e.g. -1001322973935) to an InputPeer.
     /// Returns null if the user is not a member of that chat.</summary>
     InputPeer? GetInputPeerForChat(long botApiChatId);
+
+    /// <summary>Get all chat IDs from the peer cache in bot API format (e.g. -1001322973935).
+    /// Used to persist accessible chats to the database for session routing.</summary>
+    IReadOnlyCollection<long> GetBotApiChatIds();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // GENERIC INVOKE (escape hatch for one-off calls not yet in the interface)

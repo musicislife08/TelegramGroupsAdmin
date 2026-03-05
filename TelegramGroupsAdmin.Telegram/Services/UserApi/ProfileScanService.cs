@@ -66,8 +66,10 @@ public sealed class ProfileScanService(
                 existingUser.ProfileScanScore.Value, cachedOutcome, null, null);
         }
 
-        // ── Get User API client ──
-        var client = await sessionManager.GetAnyClientAsync(ct);
+        // ── Get User API client (prefer one with access to the triggering chat) ──
+        var client = triggeringChat is not null
+            ? await sessionManager.GetClientForChatAsync(triggeringChat.Id, ct)
+            : await sessionManager.GetAnyClientAsync(ct);
         if (client == null)
         {
             logger.LogWarning("No User API client available for profile scan of {User}", user.ToLogDebug());
@@ -99,7 +101,7 @@ public sealed class ProfileScanService(
         CancellationToken ct)
     {
         // ── Step 1: Resolve user (Telegram requires access_hash, not bare IDs) ──
-        var resolvedUser = await ResolveUserAsync(client, user.Id, existingUser, ct);
+        var resolvedUser = await ResolveUserAsync(client, user.Id, existingUser, triggeringChat, ct);
         if (resolvedUser == null)
         {
             logger.LogWarning("Could not resolve {User} — marking as excluded from future rescans", user.ToLogDebug());
@@ -326,14 +328,54 @@ public sealed class ProfileScanService(
     /// <summary>
     /// Resolve a user's access_hash via Telegram API so we can call Users_GetFullUser.
     /// Telegram requires access_hash for user lookups — bare IDs return USER_ID_INVALID.
-    /// Resolution chain: username (exact) → name search (match by ID) → not resolvable.
+    /// Resolution chain: group participant (scoped) → username (exact) → name search (fuzzy) → not resolvable.
     /// </summary>
     private async Task<TL.User?> ResolveUserAsync(
         IWTelegramApiClient client,
         long userId,
         Models.TelegramUser? existingUser,
+        ChatIdentity? triggeringChat,
         CancellationToken ct)
     {
+        // Strategy 0: Resolve via group participant lookup (most reliable when chat is known).
+        // GetClientForChatAsync returns a best-effort preferred client — verify it actually
+        // has access before attempting the API call.
+        if (triggeringChat is not null
+            && client.GetInputPeerForChat(triggeringChat.Id) is InputPeerChannel inputPeerChannel)
+        {
+            try
+            {
+                var inputChannel = new InputChannel(inputPeerChannel.channel_id, inputPeerChannel.access_hash);
+                // access_hash=0: not officially documented for user API sessions (only for bots per
+                // https://core.telegram.org/api/peers), but works in practice because the server
+                // resolves the participant from the channel's member list. If Telegram starts
+                // rejecting this, the RpcException catch below falls through to Strategy 1.
+                var participantResult = await client.Channels_GetParticipant(
+                    inputChannel,
+                    new InputPeerUser(userId, 0));
+
+                if (participantResult.users.TryGetValue(userId, out var participantUser))
+                {
+                    logger.LogDebug("Resolved {UserId} via Channels_GetParticipant in chat {ChatId}",
+                        userId, triggeringChat.Id);
+                    return participantUser;
+                }
+            }
+            catch (RpcException ex) when (ex.Code == 400)
+            {
+                // USER_NOT_PARTICIPANT, CHANNEL_INVALID, etc. — fall through to other strategies
+                logger.LogDebug("Channels_GetParticipant failed for {UserId} in chat {ChatId}: {Error}",
+                    userId, triggeringChat.Id, ex.Message);
+            }
+            catch (TelegramFloodWaitException) { throw; }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Failed to resolve {UserId} via Channels_GetParticipant in chat {ChatId}",
+                    userId, triggeringChat.Id);
+            }
+        }
+
         // Strategy 1: Resolve by username (exact global lookup, most reliable)
         var username = existingUser?.Username;
         if (!string.IsNullOrEmpty(username))
@@ -353,6 +395,7 @@ public sealed class ProfileScanService(
                 logger.LogDebug("Username @{Username} no longer valid for {UserId}", username, userId);
             }
             catch (TelegramFloodWaitException) { throw; }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to resolve username @{Username} for {UserId}", username, userId);
@@ -376,6 +419,7 @@ public sealed class ProfileScanService(
                     searchQuery, found.users.Count, userId);
             }
             catch (TelegramFloodWaitException) { throw; }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to search for \"{Query}\" to resolve {UserId}", searchQuery, userId);

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Repositories;
@@ -86,6 +87,38 @@ public sealed class TelegramSessionManager(
         }
 
         return null;
+    }
+
+    public async Task<IWTelegramApiClient?> GetClientForChatAsync(long botApiChatId, CancellationToken ct)
+    {
+        // Fast path: check in-memory peer caches — prefer a verified match
+        IWTelegramApiClient? fallback = null;
+        foreach (var kvp in _clients)
+        {
+            if (kvp.Value.ApiClient.Disconnected) continue;
+
+            if (kvp.Value.ApiClient.GetInputPeerForChat(botApiChatId) is not null)
+                return kvp.Value.ApiClient; // Verified match
+
+            fallback ??= kvp.Value.ApiClient; // Remember first available
+        }
+
+        // DB path: always query even when a fallback exists in _clients. This discovers
+        // newly connected sessions not yet in the cache (e.g., user added a second Telegram
+        // account via Settings UI). The query is cheap (tiny table, indexed) and
+        // ReconnectWithLockAsync short-circuits for already-cached sessions.
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
+        var sessions = await sessionRepo.GetAllActiveSessionsAsync(ct, preferChatId: botApiChatId);
+
+        foreach (var session in sessions)
+        {
+            var client = await ReconnectWithLockAsync(session.WebUserId, ct);
+            if (client is not null)
+                return client;
+        }
+
+        return fallback; // May be null if no sessions at all
     }
 
     /// <summary>
@@ -199,6 +232,11 @@ public sealed class TelegramSessionManager(
             apiClient = clientFactory.Create(ConfigCallback, sessionStream);
             await apiClient.LoginUserIfNeeded();
             await apiClient.WarmPeerCacheAsync();
+
+            // Persist accessible chats for DB-level session routing
+            var chatIds = apiClient.GetBotApiChatIds();
+            if (chatIds.Count > 0)
+                await sessionRepo.UpdateMemberChatsAsync(sessionId, JsonSerializer.Serialize(chatIds), ct);
 
             var cached = new CachedClient(apiClient, sessionId, sessionStream);
             _clients[webUserId] = cached;
