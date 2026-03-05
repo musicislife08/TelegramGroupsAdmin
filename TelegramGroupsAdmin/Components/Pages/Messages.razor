@@ -269,7 +269,18 @@
 
         // Dispose JavaScript interop resources
         if (_infiniteScrollModule is not null)
-            await _infiniteScrollModule.DisposeAsync();
+        {
+            try
+            {
+                await _infiniteScrollModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Expected when circuit disconnects before disposal — browser-side resources already released
+                // See: https://learn.microsoft.com/aspnet/core/blazor/javascript-interoperability/?view=aspnetcore-10.0#javascript-interop-calls-without-a-circuit
+                Logger.LogDebug("JS module disposal skipped — circuit already disconnected");
+            }
+        }
         _dotNetObjectRef?.Dispose();
     }
 
