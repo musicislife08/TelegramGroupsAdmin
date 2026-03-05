@@ -103,7 +103,10 @@ public sealed class TelegramSessionManager(
             fallback ??= kvp.Value.ApiClient; // Remember first available
         }
 
-        // DB path: sessions with matching member_chats ordered first (best-effort preference)
+        // DB path: always query even when a fallback exists in _clients. This discovers
+        // newly connected sessions not yet in the cache (e.g., user added a second Telegram
+        // account via Settings UI). The query is cheap (tiny table, indexed) and
+        // ReconnectWithLockAsync short-circuits for already-cached sessions.
         await using var scope = scopeFactory.CreateAsyncScope();
         var sessionRepo = scope.ServiceProvider.GetRequiredService<ITelegramSessionRepository>();
         var sessions = await sessionRepo.GetAllActiveSessionsAsync(ct, preferChatId: botApiChatId);

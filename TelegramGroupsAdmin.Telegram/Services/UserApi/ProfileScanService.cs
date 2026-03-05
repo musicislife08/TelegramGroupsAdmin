@@ -346,6 +346,10 @@ public sealed class ProfileScanService(
             try
             {
                 var inputChannel = new InputChannel(inputPeerChannel.channel_id, inputPeerChannel.access_hash);
+                // access_hash=0: not officially documented for user API sessions (only for bots per
+                // https://core.telegram.org/api/peers), but works in practice because the server
+                // resolves the participant from the channel's member list. If Telegram starts
+                // rejecting this, the RpcException catch below falls through to Strategy 1.
                 var participantResult = await client.Channels_GetParticipant(
                     inputChannel,
                     new InputPeerUser(userId, 0));
@@ -364,6 +368,7 @@ public sealed class ProfileScanService(
                     userId, triggeringChat.Id, ex.Message);
             }
             catch (TelegramFloodWaitException) { throw; }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to resolve {UserId} via Channels_GetParticipant in chat {ChatId}",
