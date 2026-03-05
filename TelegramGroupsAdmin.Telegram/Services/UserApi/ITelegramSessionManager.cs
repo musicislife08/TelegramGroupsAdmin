@@ -20,6 +20,13 @@ public interface ITelegramSessionManager : IAsyncDisposable
     /// Returns the first active session's client — safe for read-only operations.</summary>
     Task<IWTelegramApiClient?> GetAnyClientAsync(CancellationToken ct);
 
+    /// <summary>Get a client that preferably has access to the specified chat.
+    /// The chat ID is a best-effort hint, not a contract — the returned client
+    /// is NOT guaranteed to have access to that chat. Callers must verify
+    /// access via <see cref="IWTelegramApiClient.GetInputPeerForChat"/> before
+    /// making chat-scoped API calls.</summary>
+    Task<IWTelegramApiClient?> GetClientForChatAsync(long botApiChatId, CancellationToken ct);
+
     /// <summary>Disconnect and cleanup a session. Deactivates in DB, disposes client, removes from cache.</summary>
     Task DisconnectAsync(string webUserId, Actor executor, CancellationToken ct);
 }

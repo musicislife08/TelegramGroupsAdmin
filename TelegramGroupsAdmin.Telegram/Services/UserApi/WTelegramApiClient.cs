@@ -128,6 +128,9 @@ public sealed class WTelegramApiClient(Client client, ILogger<WTelegramApiClient
     public Task<Messages_ChatFull> Channels_GetFullChannel(InputChannelBase channel)
         => CallAsync(() => client.Channels_GetFullChannel(channel));
 
+    public Task<Channels_ChannelParticipant> Channels_GetParticipant(InputChannelBase channel, InputPeer participant)
+        => CallAsync(() => client.Channels_GetParticipant(channel, participant));
+
     public Task<Stories_Stories> Stories_GetPinnedStories(InputPeer peer, int offset_id = 0, int limit = 20)
         => CallAsync(() => client.Stories_GetPinnedStories(peer, offset_id, limit));
 
@@ -183,6 +186,17 @@ public sealed class WTelegramApiClient(Client client, ILogger<WTelegramApiClient
             channelId = -botApiChatId; // Regular group chats use -{chatId}
 
         return _chats.TryGetValue(channelId, out var chat) ? chat.ToInputPeer() : null;
+    }
+
+    public IReadOnlyCollection<long> GetBotApiChatIds()
+    {
+        // Reverse of GetInputPeerForChat: convert internal IDs to bot API format
+        var ids = new List<long>(_chats.Count);
+        foreach (var (id, chat) in _chats)
+        {
+            ids.Add(chat is Channel ? -1000000000000 - id : -id);
+        }
+        return ids;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

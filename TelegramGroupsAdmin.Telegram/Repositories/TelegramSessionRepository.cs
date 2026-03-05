@@ -31,14 +31,23 @@ public sealed class TelegramSessionRepository(
         };
     }
 
-    public async Task<List<TelegramSession>> GetAllActiveSessionsAsync(CancellationToken ct)
+    public async Task<List<TelegramSession>> GetAllActiveSessionsAsync(CancellationToken ct, long? preferChatId = null)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
-        var dtos = await context.TelegramSessions
+        var query = context.TelegramSessions
             .AsNoTracking()
             .Include(ts => ts.User)
-            .Where(ts => ts.IsActive)
-            .ToListAsync(ct);
+            .Where(ts => ts.IsActive);
+
+        if (preferChatId.HasValue)
+        {
+            // Order sessions that contain the preferred chat first (best-effort, not a filter)
+            var chatIdJson = $"[{preferChatId.Value}]";
+            query = query.OrderByDescending(ts =>
+                ts.MemberChats != null && EF.Functions.JsonContains(ts.MemberChats, chatIdJson));
+        }
+
+        var dtos = await query.ToListAsync(ct);
 
         return dtos.Select(d => d.ToModel() with
         {
@@ -92,6 +101,14 @@ public sealed class TelegramSessionRepository(
                 .SetProperty(ts => ts.IsActive, false)
                 .SetProperty(ts => ts.DisconnectedAt, DateTimeOffset.UtcNow)
                 .SetProperty(ts => ts.SessionData, (byte[])[]), ct);
+    }
+
+    public async Task UpdateMemberChatsAsync(long sessionId, string memberChatsJson, CancellationToken ct)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await context.TelegramSessions
+            .Where(ts => ts.Id == sessionId)
+            .ExecuteUpdateAsync(s => s.SetProperty(ts => ts.MemberChats, memberChatsJson), ct);
     }
 
     private byte[] EncryptSessionData(byte[] data)
