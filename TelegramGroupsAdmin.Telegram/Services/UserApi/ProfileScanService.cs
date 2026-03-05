@@ -395,6 +395,7 @@ public sealed class ProfileScanService(
                 logger.LogDebug("Username @{Username} no longer valid for {UserId}", username, userId);
             }
             catch (TelegramFloodWaitException) { throw; }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to resolve username @{Username} for {UserId}", username, userId);
@@ -418,6 +419,7 @@ public sealed class ProfileScanService(
                     searchQuery, found.users.Count, userId);
             }
             catch (TelegramFloodWaitException) { throw; }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Failed to search for \"{Query}\" to resolve {UserId}", searchQuery, userId);
