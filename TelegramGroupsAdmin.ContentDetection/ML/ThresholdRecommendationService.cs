@@ -184,18 +184,18 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
 
         // Build training pipeline
         var pipeline = mlContext.Transforms.Concatenate("Features",
-                nameof(ThresholdOptimizationFeatures.BayesConfidence),
-                nameof(ThresholdOptimizationFeatures.StopWordsConfidence),
-                nameof(ThresholdOptimizationFeatures.SimilarityConfidence),
-                nameof(ThresholdOptimizationFeatures.CasConfidence),
-                nameof(ThresholdOptimizationFeatures.SpacingConfidence),
-                nameof(ThresholdOptimizationFeatures.MultiLanguageConfidence),
-                nameof(ThresholdOptimizationFeatures.OpenAIConfidence),
-                nameof(ThresholdOptimizationFeatures.ThreatIntelConfidence),
-                nameof(ThresholdOptimizationFeatures.ImageConfidence),
+                nameof(ThresholdOptimizationFeatures.BayesScore),
+                nameof(ThresholdOptimizationFeatures.StopWordsScore),
+                nameof(ThresholdOptimizationFeatures.SimilarityScore),
+                nameof(ThresholdOptimizationFeatures.CasScore),
+                nameof(ThresholdOptimizationFeatures.SpacingScore),
+                nameof(ThresholdOptimizationFeatures.MultiLanguageScore),
+                nameof(ThresholdOptimizationFeatures.OpenAIScore),
+                nameof(ThresholdOptimizationFeatures.ThreatIntelScore),
+                nameof(ThresholdOptimizationFeatures.ImageScore),
                 nameof(ThresholdOptimizationFeatures.TriggeredCheckCount),
-                nameof(ThresholdOptimizationFeatures.AverageConfidence),
-                nameof(ThresholdOptimizationFeatures.MaxConfidence),
+                nameof(ThresholdOptimizationFeatures.AverageScore),
+                nameof(ThresholdOptimizationFeatures.MaxScore),
                 nameof(ThresholdOptimizationFeatures.MessageLength),
                 nameof(ThresholdOptimizationFeatures.HasUrls),
                 nameof(ThresholdOptimizationFeatures.IsMultiLanguage))
@@ -233,14 +233,14 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
 
                 // Identify if this was vetoed by OpenAI
                 var hasOpenAIClean = checkResults.Any(c =>
-                    c.CheckName == CheckName.OpenAI && c.Result == CheckResultType.Clean);
+                    c.CheckName == CheckName.OpenAI && !c.IsSpam);
                 var otherSpamChecks = checkResults.Where(c =>
-                    c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam).ToList();
+                    c.CheckName != CheckName.OpenAI && c.IsSpam).ToList();
                 bool wasVetoed = hasOpenAIClean && otherSpamChecks.Any();
 
                 // Update statistics for each algorithm that flagged spam
                 foreach (var check in checkResults.Where(c =>
-                    c.Result == CheckResultType.Spam && c.CheckName != CheckName.OpenAI))
+                    c.IsSpam && c.CheckName != CheckName.OpenAI))
                 {
                     var checkName = check.CheckName.ToString();
                     if (!stats.ContainsKey(checkName))
@@ -293,7 +293,7 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
 
             foreach (var feature in features)
             {
-                var algorithmConfidence = GetAlgorithmConfidence(feature, algorithmName);
+                var algorithmConfidence = GetAlgorithmScore(feature, algorithmName);
 
                 // Only simulate on samples where this algorithm triggered
                 if (algorithmConfidence >= threshold)
@@ -329,30 +329,30 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
         return bestThreshold;
     }
 
-    private static float GetAlgorithmConfidence(ThresholdOptimizationFeatures features, string algorithmName)
+    private static float GetAlgorithmScore(ThresholdOptimizationFeatures features, string algorithmName)
     {
         return algorithmName switch
         {
-            "Bayes" => features.BayesConfidence,
-            "StopWords" => features.StopWordsConfidence,
-            "TF-IDF Similarity" => features.SimilarityConfidence,
-            "CAS" => features.CasConfidence,
-            "Spacing" => features.SpacingConfidence,
-            "MultiLanguage" => features.MultiLanguageConfidence,
-            "ThreatIntel" => features.ThreatIntelConfidence,
-            "Image" => features.ImageConfidence,
+            "Bayes" => features.BayesScore,
+            "StopWords" => features.StopWordsScore,
+            "TF-IDF Similarity" => features.SimilarityScore,
+            "CAS" => features.CasScore,
+            "Spacing" => features.SpacingScore,
+            "MultiLanguage" => features.MultiLanguageScore,
+            "ThreatIntel" => features.ThreatIntelScore,
+            "Image" => features.ImageScore,
             _ => 0f
         };
     }
 
     private static decimal? GetCurrentThreshold(ContentDetectionConfig config, string algorithmName)
     {
-        // Extract threshold from nested config objects
+        // Extract threshold from nested config objects (cast double → decimal for DB storage)
         // Note: Similarity (ML.NET SDCA) uses spam probability threshold (0.0-1.0), not confidence threshold
         return algorithmName switch
         {
-            "Bayes" => config.Bayes.ConfidenceThreshold,
-            "Spacing" => config.Spacing.ConfidenceThreshold,
+            "Bayes" => (decimal)config.Bayes.ConfidenceThreshold,
+            "Spacing" => (decimal)config.Spacing.ConfidenceThreshold,
             _ => null
         };
     }

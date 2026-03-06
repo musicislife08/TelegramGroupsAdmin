@@ -81,11 +81,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 DetectionSource = x.dr.DetectionSource,
                 DetectionMethod = x.dr.DetectionMethod,
                 IsSpam = x.dr.IsSpam,
-                Confidence = x.dr.Confidence,
+                Score = x.dr.Score,
                 Reason = x.dr.Reason,
                 AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName, x.ActorTelegramLastName),
                 UsedForTraining = x.dr.UsedForTraining,
-                NetConfidence = x.dr.NetConfidence,
+                NetScore = x.dr.NetScore,
                 CheckResultsJson = x.dr.CheckResultsJson,
                 EditVersion = x.dr.EditVersion,
                 UserId = x.m.UserId,
@@ -103,11 +103,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Inserted detection result for message {MessageId}: {IsSpam} (confidence: {Confidence}, net: {NetConfidence}, training: {UsedForTraining}, edit_version: {EditVersion})",
+            "Inserted detection result for message {MessageId}: {IsSpam} (score: {Score}, net: {NetScore}, training: {UsedForTraining}, edit_version: {EditVersion})",
             result.MessageId,
             result.IsSpam ? "spam" : "ham",
-            result.Confidence,
-            result.NetConfidence,
+            result.Score,
+            result.NetScore,
             result.UsedForTraining,
             result.EditVersion);
     }
@@ -294,7 +294,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             {
                 TotalDetections = g.Count(),
                 SpamDetected = g.Count(dr => dr.IsSpam),
-                AverageConfidence = g.Average(dr => (double)dr.Confidence),
+                AverageScore = g.Average(dr => dr.Score),
                 Last24hDetections = g.Count(dr => dr.DetectedAt >= since24h),
                 Last24hSpam = g.Count(dr => dr.DetectedAt >= since24h && dr.IsSpam)
             })
@@ -308,7 +308,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 TotalDetections = 0,
                 SpamDetected = 0,
                 SpamPercentage = 0,
-                AverageConfidence = 0,
+                AverageScore = 0,
                 Last24hDetections = 0,
                 Last24hSpam = 0,
                 Last24hSpamPercentage = 0
@@ -320,7 +320,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             TotalDetections = stats.TotalDetections,
             SpamDetected = stats.SpamDetected,
             SpamPercentage = stats.TotalDetections > 0 ? (double)stats.SpamDetected / stats.TotalDetections * 100 : 0,
-            AverageConfidence = stats.AverageConfidence,
+            AverageScore = stats.AverageScore,
             Last24hDetections = stats.Last24hDetections,
             Last24hSpam = stats.Last24hSpam,
             Last24hSpamPercentage = stats.Last24hDetections > 0 ? (double)stats.Last24hSpam / stats.Last24hDetections * 100 : 0
@@ -405,14 +405,14 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             throw new InvalidOperationException($"Detection result {id} not found");
         }
 
-        // IsSpam is computed from net_confidence, so update that instead
-        entity.NetConfidence = isSpam ? 100 : -100;
+        // IsSpam is computed from net_score, so update that instead
+        entity.NetScore = isSpam ? 5.0 : -5.0;
         entity.UsedForTraining = usedForTraining;
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Updated detection result {Id}: IsSpam={IsSpam} (net_confidence={NetConfidence}), UsedForTraining={UsedForTraining}",
-            id, isSpam, entity.NetConfidence, usedForTraining);
+            "Updated detection result {Id}: IsSpam={IsSpam} (net_score={NetScore}), UsedForTraining={UsedForTraining}",
+            id, isSpam, entity.NetScore, usedForTraining);
     }
 
     public async Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default)
@@ -456,7 +456,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         string messageText,
         bool isSpam,
         string source,
-        int? confidence,
+        double? score,
         string? addedBy,
         string? translatedText = null,
         string? detectedLanguage = null,
@@ -521,12 +521,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             DetectedAt = DateTimeOffset.UtcNow,
             DetectionSource = source,
             DetectionMethod = "Manual",
-            // IsSpam computed from net_confidence
-            Confidence = confidence ?? 100,
+            // IsSpam computed from net_score
+            Score = score ?? 5.0,
             Reason = "Manually added training sample",
             SystemIdentifier = addedBy ?? "System",  // Phase 4.19: Actor system
             UsedForTraining = true,
-            NetConfidence = isSpam ? 100 : -100,  // Manual: 100 = spam, -100 = ham
+            NetScore = isSpam ? 5.0 : -5.0,  // Manual: 5.0 = spam, -5.0 = ham
             CheckResultsJson = null,
             EditVersion = 0
         };
@@ -613,8 +613,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                     var checks = CheckResultsSerializer.Deserialize(d.CheckResultsJson!);
 
                     // Check if OpenAI returned "clean" and at least one other check returned "spam"
-                    var hasOpenAIClean = checks.Any(c => c.CheckName == CheckName.OpenAI && c.Result == CheckResultType.Clean);
-                    var hasOtherSpam = checks.Any(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam);
+                    var hasOpenAIClean = checks.Any(c => c.CheckName == CheckName.OpenAI && !c.IsSpam);
+                    var hasOtherSpam = checks.Any(c => c.CheckName != CheckName.OpenAI && c.IsSpam);
 
                     if (hasOpenAIClean && hasOtherSpam)
                     {
@@ -634,7 +634,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         // Calculate per-algorithm statistics
         var algorithmStats = actualVetoes
-            .SelectMany(v => v!.Checks.Where(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam).Select(c => c.CheckName.ToString()))
+            .SelectMany(v => v!.Checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam).Select(c => c.CheckName.ToString()))
             .GroupBy(name => name)
             .Select(g => new AlgorithmVetoStats
             {
@@ -658,7 +658,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             {
                 var checks = CheckResultsSerializer.Deserialize(json!);
 
-                foreach (var check in checks.Where(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam))
+                foreach (var check in checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam))
                 {
                     var name = check.CheckName.ToString();
                     totalSpamFlagsByAlgorithm[name] = totalSpamFlagsByAlgorithm.GetValueOrDefault(name, 0) + 1;
@@ -719,13 +719,13 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 var openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
 
                 var contentChecks = checks
-                    .Where(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam)
+                    .Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam)
                     .Select(c => c.CheckName.ToString())
                     .ToList();
 
                 // Only include if OpenAI vetoed (clean) and other checks flagged spam
                 if (openAICheck != null &&
-                    openAICheck.Result == CheckResultType.Clean &&
+                    !openAICheck.IsSpam &&
                     contentChecks.Any())
                 {
                     vetoedMessages.Add(new VetoedMessage
@@ -736,8 +736,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                             ? detection.MessageText.Substring(0, 100) + "..."
                             : detection.MessageText,
                         ContentCheckNames = contentChecks,
-                        OpenAIConfidence = openAICheck.Confidence,
-                        OpenAIReason = openAICheck.Reason
+                        OpenAIConfidence = (int)openAICheck.Score,
+                        OpenAIReason = openAICheck.Details
                     });
                 }
 

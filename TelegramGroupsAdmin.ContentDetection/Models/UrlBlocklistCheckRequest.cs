@@ -6,5 +6,5 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 public sealed class UrlBlocklistCheckRequest : ContentCheckRequestBase
 {
     public required List<string> Urls { get; init; }
-    public required int ConfidenceThreshold { get; init; }
+    public required double ConfidenceThreshold { get; init; }
 }

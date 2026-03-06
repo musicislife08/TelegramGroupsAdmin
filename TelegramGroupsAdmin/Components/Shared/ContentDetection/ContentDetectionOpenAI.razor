@@ -74,9 +74,9 @@
 
             <MudNumericField @bind-Value="aiVetoConfig.ConfidenceThreshold"
                             Label="Confidence Threshold"
-                            Min="1" Max="100"
+                            Min="0.0" Max="5.0" Step="0.25"
                             Disabled="@aiVetoReadOnly"
-                            HelperText="@(aiVetoReadOnly ? $"Using global value: {aiVetoConfig.ConfidenceThreshold}" : "Confidence level for AI spam classification")" />
+                            HelperText="@(aiVetoReadOnly ? $"Using global value: {aiVetoConfig.ConfidenceThreshold:F2}" : "Confidence level for AI spam classification (0.0-5.0)")" />
 
             @* AI Prompt Builder - NOW AVAILABLE FOR BOTH GLOBAL AND PER-CHAT *@
             @if (!aiVetoReadOnly)

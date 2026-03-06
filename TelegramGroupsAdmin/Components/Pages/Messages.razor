@@ -861,7 +861,7 @@
             UserId: latest.UserId,
             ContentHash: wrapper.Message.ContentHash,
             IsSpam: latest.IsSpam,
-            Confidence: Math.Abs(latest.NetConfidence),
+            Confidence: Math.Abs(latest.NetScore),
             Reason: latest.Reason,
             CheckType: latest.DetectionMethod,
             MatchedMessageId: messageId
@@ -976,13 +976,13 @@
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
-                // IsSpam computed from net_confidence (-100 = strong ham)
-                Confidence = 0, // 0% spam (ham)
+                // IsSpam computed from net_score (negative = ham)
+                Score = 0.0, // No spam score (ham)
                 Reason = reason,
                 AddedBy = executor,
                 UserId = message.User.Id, // Detection result uses raw ID for DB FK
                 UsedForTraining = false, // History only - training handled by training_labels
-                NetConfidence = -100, // Strong ham signal (manual admin decision)
+                NetScore = -5.0, // Strong ham signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
@@ -1066,7 +1066,7 @@
                 UserId: userId,
                 ContentHash: null,
                 IsSpam: latest.IsSpam,
-                Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
+                Confidence: Math.Abs(latest.NetScore), // Use absolute net_confidence for display
                 Reason: latest.Reason,
                 CheckType: latest.DetectionMethod,
                 MatchedMessageId: null

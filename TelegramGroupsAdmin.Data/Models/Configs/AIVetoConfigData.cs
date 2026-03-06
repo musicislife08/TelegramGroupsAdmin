@@ -15,7 +15,7 @@ public class AIVetoConfigData
 
     public int MessageHistoryCount { get; set; } = 3;
 
-    public int ConfidenceThreshold { get; set; } = 85;
+    public double ConfidenceThreshold { get; set; } = 4.25;
 
     public bool AlwaysRun { get; set; }
 }

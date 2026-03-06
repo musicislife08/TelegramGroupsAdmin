@@ -13,7 +13,7 @@ public class TrainingSampleDto
     public string MessageText { get; set; } = string.Empty;
     public string? ContentHash { get; set; }
     public bool IsSpam { get; set; }
-    public int Confidence { get; set; }
+    public double Score { get; set; }
     public string DetectionSource { get; set; } = string.Empty;
     public DateTimeOffset DetectedAt { get; set; }
     public Actor AddedBy { get; set; } = Actor.Unknown;
@@ -61,9 +61,9 @@ public class DuplicateGroup
     public bool HasCrossClassConflict => !IsSameClass;
 
     /// <summary>
-    /// Average confidence across all samples
+    /// Average score across all samples
     /// </summary>
-    public double AverageConfidence => Samples.Any() ? Samples.Average(s => s.Confidence) : 0;
+    public double AverageScore => Samples.Any() ? Samples.Average(s => s.Score) : 0;
 
     /// <summary>
     /// Recommended sample to keep (highest confidence + most recent date)

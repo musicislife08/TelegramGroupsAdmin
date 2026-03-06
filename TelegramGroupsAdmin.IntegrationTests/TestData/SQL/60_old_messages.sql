@@ -37,15 +37,15 @@ VALUES (
 );
 
 -- Detection result for message 96003 (training data - preserved)
-INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, net_confidence, used_for_training, system_identifier, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, score, net_score, used_for_training, system_identifier, edit_version)
 VALUES (
     96003,
     -1001322973935,
     NOW() - INTERVAL '90 days',
     'TextClassifier',
     'Bayes',
-    95,
-    95,
+    4.75,
+    4.75,
     true,  -- Training data - message will be preserved
     'CleanupTest',
     0  -- Original message (not an edit)
@@ -83,15 +83,15 @@ VALUES (
 );
 
 -- Detection result for message 96006 (NOT training data - will cascade delete with message)
-INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, confidence, net_confidence, used_for_training, system_identifier, edit_version)
+INSERT INTO detection_results (message_id, chat_id, detected_at, detection_source, detection_method, score, net_score, used_for_training, system_identifier, edit_version)
 VALUES (
     96006,
     -1001322973935,
     NOW() - INTERVAL '50 days',
     'TextClassifier',
     'Bayes',
-    80,
-    80,
+    4.0,
+    4.0,
     false,  -- NOT training data - will cascade delete when message deleted
     'CleanupTest',
     0  -- Original message (not an edit)

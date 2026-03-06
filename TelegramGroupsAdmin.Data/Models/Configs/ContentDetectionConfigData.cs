@@ -16,11 +16,11 @@ public class ContentDetectionConfigData
 
     public int MinMessageLength { get; set; } = 10;
 
-    public int AutoBanThreshold { get; set; } = 80;
+    public double AutoBanThreshold { get; set; } = 4.0;
 
-    public int ReviewQueueThreshold { get; set; } = 50;
+    public double ReviewQueueThreshold { get; set; } = 2.5;
 
-    public int MaxConfidenceVetoThreshold { get; set; } = 85;
+    public double MaxConfidenceVetoThreshold { get; set; } = 4.25;
 
     public bool TrainingMode { get; set; }
 

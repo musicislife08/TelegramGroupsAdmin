@@ -303,10 +303,44 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
             // Step 11: Recreate views with updated composite join SQL
             migrationBuilder.Sql(EnrichedMessageView.CreateViewSql);
-            migrationBuilder.Sql(EnrichedDetectionView.CreateViewSql);
+            // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
+            migrationBuilder.Sql("""
+                CREATE VIEW enriched_detections AS
+                SELECT
+                    dr.id, dr.message_id, dr.detected_at, dr.detection_source, dr.detection_method,
+                    dr.is_spam, dr.confidence, dr.net_confidence, dr.reason, dr.check_results_json,
+                    dr.edit_version, dr.chat_id,
+                    dr.web_user_id, dr.telegram_user_id, dr.system_identifier,
+                    wu.email AS actor_web_email,
+                    actor_tu.username AS actor_telegram_username,
+                    actor_tu.first_name AS actor_telegram_first_name,
+                    actor_tu.last_name AS actor_telegram_last_name,
+                    m.user_id AS message_user_id, m.message_text, m.content_hash,
+                    msg_tu.username AS message_author_username,
+                    msg_tu.first_name AS message_author_first_name,
+                    msg_tu.last_name AS message_author_last_name
+                FROM detection_results dr
+                INNER JOIN messages m ON dr.message_id = m.message_id AND dr.chat_id = m.chat_id
+                LEFT JOIN users wu ON dr.web_user_id = wu.id
+                LEFT JOIN telegram_users actor_tu ON dr.telegram_user_id = actor_tu.telegram_user_id
+                LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
+                """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
             migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
-            migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
+            // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
+            migrationBuilder.Sql("""
+                CREATE VIEW hourly_detection_stats AS
+                SELECT
+                    DATE(dr.detected_at) AS detection_date,
+                    EXTRACT(HOUR FROM dr.detected_at)::int AS detection_hour,
+                    COUNT(*) AS total_count,
+                    COUNT(*) FILTER (WHERE dr.is_spam) AS spam_count,
+                    COUNT(*) FILTER (WHERE NOT dr.is_spam) AS ham_count,
+                    COUNT(*) FILTER (WHERE dr.detection_source = 'manual') AS manual_count,
+                    AVG(dr.confidence) AS avg_confidence
+                FROM detection_results dr
+                GROUP BY DATE(dr.detected_at), EXTRACT(HOUR FROM dr.detected_at);
+                """);
         }
 
         /// <inheritdoc />
@@ -581,7 +615,20 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
             migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
-            migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
+            // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
+            migrationBuilder.Sql("""
+                CREATE VIEW hourly_detection_stats AS
+                SELECT
+                    DATE(dr.detected_at) AS detection_date,
+                    EXTRACT(HOUR FROM dr.detected_at)::int AS detection_hour,
+                    COUNT(*) AS total_count,
+                    COUNT(*) FILTER (WHERE dr.is_spam) AS spam_count,
+                    COUNT(*) FILTER (WHERE NOT dr.is_spam) AS ham_count,
+                    COUNT(*) FILTER (WHERE dr.detection_source = 'manual') AS manual_count,
+                    AVG(dr.confidence) AS avg_confidence
+                FROM detection_results dr
+                GROUP BY DATE(dr.detected_at), EXTRACT(HOUR FROM dr.detected_at);
+                """);
         }
     }
 }

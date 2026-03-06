@@ -146,7 +146,7 @@
                                     @(context.IsSpam ? "SPAM" : "HAM")
                                 </MudChip>
                             </MudTd>
-                            <MudTd>@context.Confidence%</MudTd>
+                            <MudTd>@context.Confidence.ToString("F2")</MudTd>
                             <MudTd>
                                 <MudText Style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                     @context.Reason
@@ -453,7 +453,7 @@
                 UserId: d.UserId,
                 ContentHash: null,
                 IsSpam: d.IsSpam,
-                Confidence: d.Confidence,
+                Confidence: d.Score,
                 Reason: d.Reason ?? $"{d.DetectionMethod} detection",
                 CheckType: d.DetectionMethod,
                 MatchedMessageId: d.MessageId

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
@@ -37,54 +38,37 @@ public class FeatureExtractionService
         {
             var checks = CheckResultsSerializer.Deserialize(checkResultsJson);
 
-            // Parse all algorithm results (convert enum-based model to string-based for ML features)
-            var algorithmScores = new Dictionary<string, (string result, float confidence)>();
-
-            foreach (var check in checks)
-            {
-                var name = check.CheckName.ToString();
-                var result = check.Result switch
-                {
-                    CheckResultType.Clean => "clean",
-                    CheckResultType.Spam => "spam",
-                    CheckResultType.Review => "review",
-                    CheckResultType.Malware => "malware",
-                    CheckResultType.HardBlock => "hardblock",
-                    _ => "clean"
-                };
-                var confidence = (float)check.Confidence;
-
-                algorithmScores[name] = (result, confidence);
-            }
+            // Build lookup from check name to score
+            var algorithmScores = checks.ToDictionary(c => c.CheckName, c => (float)c.Score);
 
             // Determine if this was vetoed by OpenAI
-            var hasOpenAIClean = algorithmScores.TryGetValue("OpenAI", out var openAI) && openAI.result == "clean";
-            var hasOtherSpam = algorithmScores.Any(kvp => kvp.Key != "OpenAI" && kvp.Value.result == "spam");
+            var openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
+            var hasOpenAIClean = openAICheck != null && !openAICheck.IsSpam;
+            var hasOtherSpam = checks.Any(c => c.CheckName != CheckName.OpenAI && c.IsSpam);
             var wasVetoed = hasOpenAIClean && hasOtherSpam;
 
-            // Extract individual algorithm confidences
+            // Extract individual algorithm scores
             var features = new ThresholdOptimizationFeatures
             {
-                BayesConfidence = GetConfidence(algorithmScores, "Bayes"),
-                StopWordsConfidence = GetConfidence(algorithmScores, "StopWords"),
-                SimilarityConfidence = GetConfidence(algorithmScores, "TF-IDF Similarity"),
-                CasConfidence = GetConfidence(algorithmScores, "CAS"),
-                SpacingConfidence = GetConfidence(algorithmScores, "Spacing"),
-                MultiLanguageConfidence = GetConfidence(algorithmScores, "MultiLanguage"),
-                OpenAIConfidence = GetConfidence(algorithmScores, "OpenAI"),
-                ThreatIntelConfidence = GetConfidence(algorithmScores, "ThreatIntel"),
-                ImageConfidence = GetConfidence(algorithmScores, "Image"),
+                BayesScore = GetScore(algorithmScores, CheckName.Bayes),
+                StopWordsScore = GetScore(algorithmScores, CheckName.StopWords),
+                SimilarityScore = GetScore(algorithmScores, CheckName.Similarity),
+                CasScore = GetScore(algorithmScores, CheckName.CAS),
+                SpacingScore = GetScore(algorithmScores, CheckName.Spacing),
+                MultiLanguageScore = 0f, // MultiLanguage check no longer exists
+                OpenAIScore = GetScore(algorithmScores, CheckName.OpenAI),
+                ThreatIntelScore = GetScore(algorithmScores, CheckName.ThreatIntel),
+                ImageScore = GetScore(algorithmScores, CheckName.ImageSpam),
 
                 // Aggregate features
-                TriggeredCheckCount = algorithmScores.Count(kvp => kvp.Value.result == "spam"),
-                AverageConfidence = algorithmScores.Values.Where(v => v.confidence > 0).Average(v => v.confidence),
-                MaxConfidence = algorithmScores.Values.Max(v => v.confidence),
+                TriggeredCheckCount = checks.Count(c => c.IsSpam),
+                AverageScore = algorithmScores.Values.Where(v => v > 0).DefaultIfEmpty(0f).Average(),
+                MaxScore = algorithmScores.Values.DefaultIfEmpty(0f).Max(),
 
                 // Message metadata
                 MessageLength = messageLength,
                 HasUrls = 0f,  // Not used - model trained with this feature always 0
-                IsMultiLanguage = algorithmScores.ContainsKey("MultiLanguage") &&
-                                  algorithmScores["MultiLanguage"].result == "spam" ? 1f : 0f,
+                IsMultiLanguage = 0f, // MultiLanguage check no longer exists
 
                 // Label
                 WasVetoed = wasVetoed
@@ -137,10 +121,10 @@ public class FeatureExtractionService
         int MessageLength { get; }
     }
 
-    private static float GetConfidence(
-        Dictionary<string, (string result, float confidence)> scores,
-        string algorithmName)
+    private static float GetScore(
+        Dictionary<CheckName, float> scores,
+        CheckName checkName)
     {
-        return scores.TryGetValue(algorithmName, out var score) ? score.confidence : 0f;
+        return scores.TryGetValue(checkName, out var score) ? score : 0f;
     }
 }

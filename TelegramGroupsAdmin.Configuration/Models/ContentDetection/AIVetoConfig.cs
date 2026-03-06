@@ -31,9 +31,9 @@ public class AIVetoConfig
     public int MessageHistoryCount { get; set; } = 3;
 
     /// <summary>
-    /// Confidence threshold for spam classification (0-100)
+    /// Confidence threshold for spam classification (0.0-5.0)
     /// </summary>
-    public int ConfidenceThreshold { get; set; } = 85;
+    public double ConfidenceThreshold { get; set; } = 4.25;
 
     /// <summary>
     /// Always run this check for all users (bypasses trust/admin status)

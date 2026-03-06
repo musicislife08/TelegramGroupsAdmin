@@ -202,17 +202,17 @@ public class ImageContentCheckV2(
                 var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
 
                 // Check if result is confident enough to skip expensive Vision API
-                if (ocrResult.MaxConfidence >= imageConfig.OcrConfidenceThreshold)
+                if (ocrResult.TotalScore >= imageConfig.OcrConfidenceThreshold)
                 {
-                    // Map OCR text check confidence to score
-                    var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier : 0.0;
+                    // V2: Use total score directly
+                    var score = ocrResult.IsSpam ? ocrResult.TotalScore : 0.0;
 
                     // V2: Only return score if spam detected, otherwise abstain
                     if (!ocrResult.IsSpam)
                     {
                         logger.LogDebug(
-                            "ImageSpam V2 Layer 2: OCR text checks returned clean ({Confidence}%), abstaining",
-                            ocrResult.MaxConfidence);
+                            "ImageSpam V2 Layer 2: OCR text checks returned clean (score {Score:F2}), abstaining",
+                            ocrResult.TotalScore);
 
                         return new ContentCheckResponseV2
                         {
@@ -226,13 +226,13 @@ public class ImageContentCheckV2(
                     }
 
                     var flaggedChecks = ocrResult.CheckResults
-                        .Where(c => c.Result == CheckResultType.Spam)
+                        .Where(c => !c.Abstained && c.Score > 0)
                         .Select(c => c.CheckName)
                         .ToList();
 
                     logger.LogInformation(
-                        "ImageSpam V2 Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning {Score:F2} points",
-                        ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold, score);
+                        "ImageSpam V2 Layer 2: OCR text checks confident (score {Score:F2} >= {Threshold:F2}), returning {ReturnScore:F2} points",
+                        ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold, score);
 
                     return new ContentCheckResponseV2
                     {
@@ -247,8 +247,8 @@ public class ImageContentCheckV2(
 
                 // OCR checks uncertain - proceed to Vision (Layer 3)
                 logger.LogDebug(
-                    "ImageSpam V2 Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
-                    ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold);
+                    "ImageSpam V2 Layer 2: OCR text checks uncertain (score {Score:F2} < {Threshold:F2}), proceeding to Vision",
+                    ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold);
             }
             else if (!string.IsNullOrWhiteSpace(extractedOcrText))
             {

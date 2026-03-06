@@ -1338,7 +1338,7 @@ public class MessageHistoryRepositoryTests
                 {
                     Assert.That(detection.MessageId, Is.GreaterThan(0));
                     Assert.That(detection.DetectionMethod, Is.Not.Null.Or.Empty);
-                    Assert.That(detection.Confidence, Is.GreaterThanOrEqualTo(0));
+                    Assert.That(detection.Score, Is.GreaterThanOrEqualTo(0));
                 }
             }
         }

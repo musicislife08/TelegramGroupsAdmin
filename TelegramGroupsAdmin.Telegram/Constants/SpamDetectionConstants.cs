@@ -16,16 +16,16 @@ public static class SpamDetectionConstants
     // ============================================================
 
     /// <summary>
-    /// Minimum OpenAI confidence required for training data (85%)
+    /// Minimum OpenAI score required for training data (V2 scale: 4.25)
     /// Used in DetermineIfTrainingWorthy to filter high-quality samples
     /// </summary>
-    public const int OpenAIConfidentThreshold = 85;
+    public const double OpenAIConfidentThreshold = 4.25;
 
     /// <summary>
-    /// Minimum net confidence required for training data (80%)
+    /// Minimum total score required for training data (V2 scale: 4.0)
     /// Prevents low-quality auto-detections from polluting training dataset
     /// </summary>
-    public const int TrainingConfidenceThreshold = 80;
+    public const double TrainingConfidenceThreshold = 4.0;
 
     // ============================================================
     // JOB SCHEDULING CONSTANTS

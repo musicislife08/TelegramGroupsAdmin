@@ -7,5 +7,5 @@ public sealed class ThreatIntelCheckRequest : ContentCheckRequestBase
 {
     public required List<string> Urls { get; init; }
     public required string? VirusTotalApiKey { get; init; }
-    public required int ConfidenceThreshold { get; init; }
+    public required double ConfidenceThreshold { get; init; }
 }

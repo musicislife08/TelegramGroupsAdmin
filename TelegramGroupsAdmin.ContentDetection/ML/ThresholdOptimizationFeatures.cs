@@ -8,34 +8,34 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// </summary>
 public class ThresholdOptimizationFeatures
 {
-    // Individual algorithm confidence scores (0-100)
+    // Individual algorithm scores (0.0-5.0)
 
     [LoadColumn(0)]
-    public float BayesConfidence { get; set; }
+    public float BayesScore { get; set; }
 
     [LoadColumn(1)]
-    public float StopWordsConfidence { get; set; }
+    public float StopWordsScore { get; set; }
 
     [LoadColumn(2)]
-    public float SimilarityConfidence { get; set; }
+    public float SimilarityScore { get; set; }
 
     [LoadColumn(3)]
-    public float CasConfidence { get; set; }
+    public float CasScore { get; set; }
 
     [LoadColumn(4)]
-    public float SpacingConfidence { get; set; }
+    public float SpacingScore { get; set; }
 
     [LoadColumn(5)]
-    public float MultiLanguageConfidence { get; set; }
+    public float MultiLanguageScore { get; set; }
 
     [LoadColumn(6)]
-    public float OpenAIConfidence { get; set; }
+    public float OpenAIScore { get; set; }
 
     [LoadColumn(7)]
-    public float ThreatIntelConfidence { get; set; }
+    public float ThreatIntelScore { get; set; }
 
     [LoadColumn(8)]
-    public float ImageConfidence { get; set; }
+    public float ImageScore { get; set; }
 
     // Aggregate features
 
@@ -43,10 +43,10 @@ public class ThresholdOptimizationFeatures
     public float TriggeredCheckCount { get; set; }  // Number of checks that flagged spam
 
     [LoadColumn(10)]
-    public float AverageConfidence { get; set; }  // Average of all non-zero confidences
+    public float AverageScore { get; set; }  // Average of all non-zero scores
 
     [LoadColumn(11)]
-    public float MaxConfidence { get; set; }  // Highest confidence score
+    public float MaxScore { get; set; }  // Highest score
 
     // Message metadata
 
@@ -64,19 +64,4 @@ public class ThresholdOptimizationFeatures
     [LoadColumn(15)]
     [ColumnName("Label")]
     public bool WasVetoed { get; set; }  // True if OpenAI vetoed this detection
-}
-
-/// <summary>
-/// Prediction output from ML.NET model
-/// </summary>
-public class VetoPrediction
-{
-    [ColumnName("PredictedLabel")]
-    public bool WillBeVetoed { get; set; }
-
-    [ColumnName("Probability")]
-    public float Probability { get; set; }  // Probability of being vetoed (0-1)
-
-    [ColumnName("Score")]
-    public float Score { get; set; }  // Raw model score
 }

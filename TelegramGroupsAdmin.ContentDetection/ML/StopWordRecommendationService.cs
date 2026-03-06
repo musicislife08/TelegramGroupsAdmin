@@ -337,7 +337,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
                     continue;
 
                 // Check if this stop word triggered (appears in the Reason field)
-                var triggered = stopWordsCheck.Reason?.Contains(wordLower, StringComparison.OrdinalIgnoreCase) ?? false;
+                var triggered = stopWordsCheck.Details?.Contains(wordLower, StringComparison.OrdinalIgnoreCase) ?? false;
 
                 if (!triggered)
                     continue;

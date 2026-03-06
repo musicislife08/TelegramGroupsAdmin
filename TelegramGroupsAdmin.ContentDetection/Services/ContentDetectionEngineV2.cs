@@ -94,10 +94,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 {
                     IsSpam = true,
                     HardBlock = hardBlock,
-                    NetConfidence = 100,
-                    MaxConfidence = 100,
-                    AvgConfidence = 100,
-                    SpamFlags = 1,
+                    TotalScore = 5.0,
                     PrimaryReason = hardBlock.Reason ?? "Hard block policy violation",
                     RecommendedAction = DetectionAction.AutoBan,
                     ShouldVeto = false,
@@ -106,9 +103,9 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                         new()
                         {
                             CheckName = CheckName.UrlBlocklist,
-                            Result = CheckResultType.HardBlock,
-                            Details = hardBlock.Reason ?? "Domain on hard block list",
-                            Confidence = 100
+                            Score = 5.0,
+                            Abstained = false,
+                            Details = hardBlock.Reason ?? "Domain on hard block list"
                         }
                     ]
                 };
@@ -132,13 +129,13 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
         // AI always runs as veto to confirm ANY spam detection (even low confidence)
         // This reduces false positives by having AI double-check all spam signals
-        var hasAnySpam = pipelineResult.NetConfidence > 0;  // Any check contributed points (NetConfidence = totalScore * 20)
+        var hasAnySpam = pipelineResult.TotalScore > 0;
         var shouldRunAIVeto = hasAnySpam
             && infrastructureEnabled  // Global kill switch
             && spamDetectionEnabled;  // Per-chat spam detection toggle
 
-        _logger.LogDebug("AI veto decision: HasAnySpam={HasAnySpam}, NetConf={NetConf}, InfraEnabled={InfraEnabled}, SpamDetectionEnabled={SpamEnabled}, ShouldRun={ShouldRun}",
-            hasAnySpam, pipelineResult.NetConfidence, infrastructureEnabled, spamDetectionEnabled, shouldRunAIVeto);
+        _logger.LogDebug("AI veto decision: HasAnySpam={HasAnySpam}, TotalScore={TotalScore}, InfraEnabled={InfraEnabled}, SpamDetectionEnabled={SpamEnabled}, ShouldRun={ShouldRun}",
+            hasAnySpam, pipelineResult.TotalScore, infrastructureEnabled, spamDetectionEnabled, shouldRunAIVeto);
 
         if (shouldRunAIVeto)
         {
@@ -157,24 +154,13 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, pipelineResult.VisionAnalysisText, cancellationToken);
                 var vetoResultV2 = await aiVetoCheck.CheckAsync(checkRequest);
 
-                // Convert V2 response to ContentCheckResponse
-                var vetoCheckResult = new ContentCheckResponse
-                {
-                    CheckName = CheckName.OpenAI,
-                    Result = vetoResultV2.Score == 0.0 || vetoResultV2.Abstained
-                        ? CheckResultType.Clean
-                        : CheckResultType.Spam,
-                    Confidence = (int)(vetoResultV2.Score * 20), // V2 score (0-5) → confidence (0-100)
-                    Details = vetoResultV2.Details
-                };
-
-                List<ContentCheckResponse> updatedCheckResults = [.. pipelineResult.CheckResults, vetoCheckResult];
+                List<ContentCheckResponseV2> updatedCheckResults = [.. pipelineResult.CheckResults, vetoResultV2];
 
                 // AI abstained (API error, timeout, rate limit) - defer to pipeline verdict
                 if (vetoResultV2.Abstained)
                 {
-                    _logger.LogWarning("AI veto abstained for {User} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
-                        request.User.ToLogDebug(), vetoResultV2.Details, pipelineResult.NetConfidence);
+                    _logger.LogWarning("AI veto abstained for {User} ({Details}), deferring to pipeline verdict (TotalScore={TotalScore})",
+                        request.User.ToLogDebug(), vetoResultV2.Details, pipelineResult.TotalScore);
 
                     // Return pipeline result with AI check appended for visibility
                     var deferredResult = pipelineResult with { CheckResults = updatedCheckResults };
@@ -187,7 +173,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 {
                     _logger.LogInformation("AI vetoed spam detection for {User} (clean result with 0.0 score)",
                         request.User.ToLogInfo());
-                    var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoCheckResult);
+                    var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoResultV2);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;
                 }
@@ -196,16 +182,13 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 _logger.LogDebug("AI confirmed spam for {User} with score {Score}",
                     request.User.ToLogDebug(), vetoResultV2.Score);
 
-                var newTotalScore = (pipelineResult.NetConfidence / 20.0) + vetoResultV2.Score;
+                var newTotalScore = pipelineResult.TotalScore + vetoResultV2.Score;
 
                 var confirmedResult = pipelineResult with
                 {
                     CheckResults = updatedCheckResults,
                     IsSpam = true,
-                    NetConfidence = (int)(newTotalScore * 20),
-                    MaxConfidence = Math.Max(pipelineResult.MaxConfidence, vetoCheckResult.Confidence),
-                    AvgConfidence = (pipelineResult.AvgConfidence + vetoCheckResult.Confidence) / 2,
-                    SpamFlags = pipelineResult.SpamFlags + 1,
+                    TotalScore = newTotalScore,
                     PrimaryReason = $"AI confirmed spam: {vetoResultV2.Details} (total score: {newTotalScore:F1})",
                     RecommendedAction = newTotalScore >= 5.0 ? DetectionAction.AutoBan : DetectionAction.ReviewQueue,
                     ShouldVeto = false
@@ -253,9 +236,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             }
         }
 
-        // Convert V2 responses to V1 format for backward compatibility
-        var checkResultsV1 = ConvertV2ResponsesToV1(checkResponsesV2, totalScore);
-
         // Extract OCR text and Vision analysis from ImageSpam check for downstream veto use
         var imageSpamResponse = checkResponsesV2.FirstOrDefault(r => r.CheckName == CheckName.ImageSpam);
         var ocrExtractedText = imageSpamResponse?.OcrExtractedText;
@@ -273,15 +253,11 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             ? $"Additive score: {totalScore:F1} points (threshold: {ContentDetectionConstants.SpamThreshold:F1})"
             : "No spam detected";
 
-        // Map to V1 result format for backward compatibility
         var result = new ContentDetectionResult
         {
             IsSpam = isSpam,
-            MaxConfidence = (int)(totalScore * 20), // Scale 5.0 → 100 for display
-            AvgConfidence = (int)(totalScore * 20),
-            SpamFlags = checkResultsV1.Count(r => r.Result == CheckResultType.Spam),
-            NetConfidence = (int)(totalScore * 20),
-            CheckResults = checkResultsV1,
+            TotalScore = totalScore,
+            CheckResults = checkResponsesV2,
             PrimaryReason = primaryReason,
             RecommendedAction = recommendedAction,
             ShouldVeto = shouldVeto,
@@ -325,7 +301,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         ContentDetectionConfig config,
         CancellationToken cancellationToken)
     {
-        // Reuse V1 request building logic - request types are shared between V1/V2
         return check.CheckName switch
         {
             CheckName.StopWords => new StopWordsCheckRequest
@@ -364,7 +339,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
-                ConfidenceThreshold = 70,
+                ConfidenceThreshold = 3.5,
                 SuspiciousRatioThreshold = config.Spacing.ShortWordRatioThreshold,
                 CancellationToken = cancellationToken
             },
@@ -374,7 +349,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
-                ConfidenceThreshold = 80,
+                ConfidenceThreshold = 4.0,
                 CancellationToken = cancellationToken
             },
 
@@ -385,7 +360,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Chat = originalRequest.Chat,
                 Urls = originalRequest.Urls ?? [],
                 VirusTotalApiKey = _spamDetectionOptions.ApiKey,
-                ConfidenceThreshold = 85,
+                ConfidenceThreshold = 4.25,
                 CancellationToken = cancellationToken
             },
 
@@ -395,7 +370,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
                 Urls = originalRequest.Urls ?? [],
-                ConfidenceThreshold = 90,
+                ConfidenceThreshold = 4.5,
                 CancellationToken = cancellationToken
             },
 
@@ -408,7 +383,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 PhotoUrl = originalRequest.PhotoUrl,
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
                 CustomPrompt = null,
-                ConfidenceThreshold = 80,
+                ConfidenceThreshold = 4.0,
                 CancellationToken = cancellationToken
             },
 
@@ -419,7 +394,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Chat = originalRequest.Chat,
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null,
-                ConfidenceThreshold = 80,
+                ConfidenceThreshold = 4.0,
                 CancellationToken = cancellationToken
             },
 
@@ -498,25 +473,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         return result;
     }
 
-    private List<ContentCheckResponse> ConvertV2ResponsesToV1(List<ContentCheckResponseV2> v2Responses, double totalScore)
-    {
-        // Convert V2 score-based responses to V1 vote-based responses for backward compatibility
-        return v2Responses.Select(v2 =>
-        {
-            var result = v2.Abstained ? CheckResultType.Clean : CheckResultType.Spam;
-            var confidence = v2.Abstained ? 0 : (int)(v2.Score * 20); // Scale 5.0 → 100
-
-            return new ContentCheckResponse
-            {
-                CheckName = v2.CheckName,
-                Result = result,
-                Confidence = confidence,
-                Details = v2.Details,
-                Error = v2.Error
-            };
-        }).ToList();
-    }
-
     private DetectionAction DetermineActionFromScore(double totalScore)
     {
         if (totalScore >= ContentDetectionConstants.SpamThreshold)
@@ -528,15 +484,12 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         return DetectionAction.Allow; // <3.0 points
     }
 
-    private ContentDetectionResult CreateVetoedResult(List<ContentCheckResponse> checkResults, ContentCheckResponse vetoResult)
+    private ContentDetectionResult CreateVetoedResult(List<ContentCheckResponseV2> checkResults, ContentCheckResponseV2 vetoResult)
     {
         return new ContentDetectionResult
         {
             IsSpam = false,
-            MaxConfidence = vetoResult.Confidence,
-            AvgConfidence = vetoResult.Confidence,
-            SpamFlags = 0,
-            NetConfidence = 0,
+            TotalScore = 0,
             CheckResults = checkResults,
             PrimaryReason = vetoResult.Details,
             RecommendedAction = DetectionAction.Allow,
@@ -561,8 +514,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         if (activity != null)
         {
             activity.SetTag("spam_detection.is_spam", result.IsSpam);
-            activity.SetTag("spam_detection.net_confidence", result.NetConfidence);
-            activity.SetTag("spam_detection.spam_flags", result.SpamFlags);
+            activity.SetTag("spam_detection.total_score", result.TotalScore);
             activity.SetTag("spam_detection.checks_run", result.CheckResults.Count);
             activity.SetTag("spam_detection.duration_ms", durationMs);
         }

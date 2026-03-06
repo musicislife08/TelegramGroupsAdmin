@@ -36,9 +36,9 @@
         {
             <MudNumericField @bind-Value="activeConfig.ConfidenceThreshold"
                             Label="Confidence Threshold"
-                            Min="1" Max="100"
+                            Min="0.0" Max="5.0" Step="0.25"
                             Disabled="@isReadOnly"
-                            HelperText="@(isReadOnly ? $"Using global value: {activeConfig.ConfidenceThreshold}" : "Confidence level when stop words are detected (0-100%)")" />
+                            HelperText="@(isReadOnly ? $"Using global value: {activeConfig.ConfidenceThreshold:F2}" : "Confidence level when stop words are detected (0.0-5.0)")" />
         }
 
         @if (!IsGlobalView && !_config.StopWords.UseGlobal && _globalConfig.StopWords.Enabled != _config.StopWords.Enabled)

@@ -74,7 +74,7 @@
                 @if (ContentCheck != null)
                 {
                     <span class="tg-badge tg-badge-@(ContentCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
-                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Confidence%
+                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Confidence.ToString("F1")
                         @if (!string.IsNullOrEmpty(_cachedContributingFactors))
                         {
                             <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>
@@ -713,10 +713,10 @@
 
         // Get top 3 contributing algorithms (highest confidence spam or ham checks)
         var topContributors = checkResults
-            .Where(c => c.Confidence > 0)  // Only show checks that had confidence
-            .OrderByDescending(c => c.Confidence)
+            .Where(c => c.Score > 0)  // Only show checks that had a score
+            .OrderByDescending(c => c.Score)
             .Take(3)
-            .Select(c => $"{GetFriendlyCheckName(c.CheckName)} {c.Confidence}%")
+            .Select(c => $"{GetFriendlyCheckName(c.CheckName)} {c.Score:F1}")
             .ToList();
 
         return topContributors.Any() ? topContributors : null;
@@ -732,7 +732,7 @@
         if (latest == null)
             return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
 
-        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetConfidence}% confidence\n";
+        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetScore:F2} score\n";
         tooltip += $"Detection: {latest.DetectionMethod}\n";
         tooltip += $"Source: {latest.DetectionSource}\n";
 

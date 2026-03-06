@@ -13,7 +13,7 @@ public class ImageContentConfigData
 
     public bool UseOCR { get; set; } = true;
 
-    public int OcrConfidenceThreshold { get; set; } = 75;
+    public double OcrConfidenceThreshold { get; set; } = 3.75;
 
     public int MinOcrTextLength { get; set; } = 10;
 

@@ -133,10 +133,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(d => new { d.MessageId, d.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Configure is_spam as computed column (PostgreSQL: net_confidence > 0)
+        // Configure is_spam as computed column (PostgreSQL: net_score > 0)
         modelBuilder.Entity<DetectionResultRecordDto>()
             .Property(d => d.IsSpam)
-            .HasComputedColumnSql("(net_confidence > 0)", stored: true);
+            .HasComputedColumnSql("(net_score > 0)", stored: true);
 
         // Messages → MessageEdits (one-to-many)
         modelBuilder.Entity<MessageEditRecordDto>()

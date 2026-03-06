@@ -37,9 +37,9 @@ public class SpacingConfig
     public double SpaceRatioThreshold { get; set; } = 0.3;
 
     /// <summary>
-    /// Confidence threshold for spam classification (0-100)
+    /// Confidence threshold for spam classification (0.0-5.0)
     /// </summary>
-    public int ConfidenceThreshold { get; set; } = 70;
+    public double ConfidenceThreshold { get; set; } = 3.5;
 
     /// <summary>
     /// Always run this check for all users (bypasses trust/admin status)

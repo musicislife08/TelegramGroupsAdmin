@@ -27,11 +27,11 @@ public class ImageContentConfig
     public bool UseOCR { get; set; } = true;
 
     /// <summary>
-    /// Minimum OCR confidence from text checks to skip OpenAI Vision fallback (0-100)
-    /// If text-based spam checks return confidence >= this threshold, skip Vision call
-    /// Default: 75% (confident spam/ham from text checks skips expensive Vision API)
+    /// Minimum OCR confidence from text checks to skip OpenAI Vision fallback (0.0-5.0)
+    /// If text-based spam checks return score >= this threshold, skip Vision call
+    /// Default: 3.75 (confident spam/ham from text checks skips expensive Vision API)
     /// </summary>
-    public int OcrConfidenceThreshold { get; set; } = 75;
+    public double OcrConfidenceThreshold { get; set; } = 3.75;
 
     /// <summary>
     /// Minimum characters extracted by OCR to attempt text-based spam analysis

@@ -372,24 +372,23 @@ public class VideoContentCheckV2(
             var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, cancellationToken);
 
             // Check if result is confident enough to skip expensive Vision API
-            if (ocrResult.MaxConfidence >= config.OcrConfidenceThreshold)
+            if (ocrResult.TotalScore >= config.OcrConfidenceThreshold)
             {
                 var flaggedChecks = ocrResult.CheckResults
-                    .Where(c => c.Result == CheckResultType.Spam)
+                    .Where(c => !c.Abstained && c.Score > 0)
                     .Select(c => c.CheckName)
                     .ToList();
 
                 logger.LogInformation(
-                    "VideoSpam Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning early with {Result}",
-                    ocrResult.MaxConfidence, config.OcrConfidenceThreshold, ocrResult.IsSpam ? "SPAM" : "CLEAN");
+                    "VideoSpam Layer 2: OCR text checks confident (score {Score:F2} >= {Threshold:F2}), returning early with {Result}",
+                    ocrResult.TotalScore, config.OcrConfidenceThreshold, ocrResult.IsSpam ? "SPAM" : "CLEAN");
 
-                // Convert confidence to score: spam gets full score, clean abstains
+                // V2: Use total score directly
                 double score;
                 bool abstained;
                 if (ocrResult.IsSpam)
                 {
-                    // Spam: map confidence (0-100) to score (0-5.0)
-                    score = (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                    score = ocrResult.TotalScore;
                     abstained = false;
                 }
                 else
@@ -411,8 +410,8 @@ public class VideoContentCheckV2(
 
             // OCR checks uncertain - proceed to Vision (Layer 3)
             logger.LogDebug(
-                "VideoSpam Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
-                ocrResult.MaxConfidence, config.OcrConfidenceThreshold);
+                "VideoSpam Layer 2: OCR text checks uncertain (score {Score:F2} < {Threshold:F2}), proceeding to Vision",
+                ocrResult.TotalScore, config.OcrConfidenceThreshold);
 
             return null; // Proceed to next layer
         }

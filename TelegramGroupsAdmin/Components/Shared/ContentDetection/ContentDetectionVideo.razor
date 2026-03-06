@@ -70,10 +70,10 @@
                 <MudItem xs="12" md="6">
                     <FieldWithHelp HelpText="If OCR text-based spam checks return confidence >= this threshold, skip the expensive Vision API call. Higher = more Vision calls, lower = more OCR-only decisions.">
                         <MudNumericField @bind-Value="activeConfig.OcrConfidenceThreshold"
-                                        Label="OCR Confidence Threshold (%)"
-                                        Min="1" Max="100"
+                                        Label="OCR Confidence Threshold"
+                                        Min="0.0" Max="5.0" Step="0.25"
                                         Disabled="@isReadOnly"
-                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.OcrConfidenceThreshold}%" : "Skip Vision if OCR text checks are this confident")" />
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.OcrConfidenceThreshold:F2}" : "Skip Vision if OCR text checks score >= this (0.0-5.0)")" />
                     </FieldWithHelp>
                 </MudItem>
                 <MudItem xs="12" md="6">

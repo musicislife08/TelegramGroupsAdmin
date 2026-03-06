@@ -125,7 +125,7 @@
                             <MudText Typo="Typo.body2">@context.DetectionMethod</MudText>
                         </MudTd>
                         <MudTd DataLabel="Confidence">
-                            <MudText Typo="Typo.body2">@context.Confidence%</MudText>
+                            <MudText Typo="Typo.body2">@context.Score.ToString("F2")</MudText>
                         </MudTd>
                         <MudTd DataLabel="Detected At">@context.DetectedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
                         <MudTd DataLabel="Added By">@(context.AddedBy.DisplayName ?? "System")</MudTd>
@@ -302,7 +302,7 @@
                     data.MessageText,
                     data.IsSpam,
                     data.Source,
-                    data.Confidence,
+                    data.Score,
                     _currentUserId,
                     data.TranslatedText,
                     data.DetectedLanguage);

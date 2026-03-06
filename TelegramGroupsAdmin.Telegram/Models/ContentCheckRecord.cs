@@ -9,7 +9,7 @@ public record ContentCheckRecord(
     long UserId,
     string? ContentHash,
     bool IsSpam,
-    int Confidence,
+    double Confidence,
     string? Reason,
     string CheckType,
     int? MatchedMessageId

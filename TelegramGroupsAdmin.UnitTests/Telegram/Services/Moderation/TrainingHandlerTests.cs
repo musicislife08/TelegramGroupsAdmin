@@ -64,10 +64,10 @@ public class TrainingHandlerTests
             DetectedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
             DetectionSource = "automated",
             DetectionMethod = "TextClassifier",
-            Confidence = 95,
+            Score = 4.75,
             AddedBy = Actor.FromSystem("automated_pipeline"),
             UserId = TestUserId,
-            NetConfidence = 95
+            NetScore = 4.75
         };
         _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new List<DetectionResultRecord> { existingDetection });
@@ -112,7 +112,7 @@ public class TrainingHandlerTests
                 d.MessageId == TestMessageId &&
                 d.DetectionSource == "manual" &&
                 d.DetectionMethod == "Manual" &&
-                d.Confidence == 100 &&
+                d.Score == 5.0 &&
                 d.UserId == TestUserId),
             Arg.Any<CancellationToken>());
     }
@@ -132,10 +132,10 @@ public class TrainingHandlerTests
             DetectedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
             DetectionSource = "automated",
             DetectionMethod = "TextClassifier",
-            Confidence = 95,
+            Score = 4.75,
             AddedBy = Actor.FromSystem("automated_pipeline"),
             UserId = TestUserId,
-            NetConfidence = 95
+            NetScore = 4.75
         };
         _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(new List<DetectionResultRecord> { existingDetection });

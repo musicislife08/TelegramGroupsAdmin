@@ -65,7 +65,7 @@ public class DetectionActionService(
             var config = await GetConfigAsync(message.Chat, cancellationToken);
 
             // Only take action if spam was detected
-            if (!spamResult.IsSpam || spamResult.NetConfidence <= config.ReviewQueueThreshold)
+            if (!spamResult.IsSpam || spamResult.TotalScore <= config.ReviewQueueThreshold)
             {
                 return;
             }
@@ -76,7 +76,7 @@ public class DetectionActionService(
 
             // Check for hard block or malware (different handling than spam)
             var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
-            var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == ContentDetection.Models.CheckResultType.Malware);
+            // Note: Malware is now handled by FileScanJob directly, not through content detection pipeline
 
             if (hardBlockResult != null)
             {
@@ -103,68 +103,20 @@ public class DetectionActionService(
                 return;
             }
 
-            if (malwareResult != null)
-            {
-                // Malware = delete message + alert admin (no ban - might be accidental)
-                logger.LogWarning(
-                    "Malware detected in message {MessageId} from {User} in {Chat}: {Details}",
-                    message.MessageId,
-                    message.From.ToLogDebug(),
-                    message.Chat.ToLogDebug(),
-                    malwareResult.Details);
-
-                await moderationOrchestrator.HandleMalwareViolationAsync(
-                    new MalwareViolationIntent
-                    {
-                        User = UserIdentity.From(message.From!),
-                        Chat = ChatIdentity.From(message.Chat),
-                        MessageId = message.MessageId,
-                        Executor = Actor.AutoDetection,
-                        Reason = "Malware detected in file",
-                        MalwareDetails = malwareResult.Details ?? "Malware detected",
-                        TelegramMessage = message
-                    },
-                    cancellationToken);
-
-                return;
-            }
-
             // Standard spam detection handling
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-            var openAIConfident = openAIResult != null && openAIResult.Confidence >= config.MaxConfidenceVetoThreshold;
+            var openAIConfident = openAIResult != null && openAIResult.Score >= config.MaxConfidenceVetoThreshold;
 
-            // Skip auto-ban if OpenAI flagged for review
-            if (openAIResult?.Result == ContentDetection.Models.CheckResultType.Review)
-            {
-                var reviewReport = BuildAutoDetectionReport(
-                    message,
-                    spamResult,
-                    detectionResult,
-                    $"OpenAI flagged for review - Net: {spamResult.NetConfidence}");
-
-                await reportService.CreateReportAsync(
-                    reviewReport,
-                    message,
-                    isAutomated: true,
-                    cancellationToken);
-
-                logger.LogInformation(
-                    "Created admin review report for message {MessageId} in {Chat}: OpenAI flagged for human review",
-                    message.MessageId,
-                    message.Chat.ToLogInfo());
-                return;
-            }
-
-            if (spamResult.NetConfidence > config.AutoBanThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
+            if (spamResult.TotalScore > config.AutoBanThreshold && openAIConfident && !openAIResult!.Abstained && openAIResult.Score > 0)
             {
                 // High confidence + OpenAI confirmed = auto-ban
                 logger.LogInformation(
-                    "Message {MessageId} from {User} in {Chat} triggers auto-ban (net: {NetConfidence}, OpenAI: {OpenAIConf}%)",
+                    "Message {MessageId} from {User} in {Chat} triggers auto-ban (score: {TotalScore:F2}, OpenAI: {OpenAIScore:F2})",
                     message.MessageId,
                     message.From.ToLogInfo(),
                     message.Chat.ToLogInfo(),
-                    spamResult.NetConfidence,
-                    openAIResult.Confidence);
+                    spamResult.TotalScore,
+                    openAIResult.Score);
 
                 await moderationOrchestrator.MarkAsSpamAndBanAsync(
                     new SpamBanIntent
@@ -173,17 +125,17 @@ public class DetectionActionService(
                         Chat = ChatIdentity.From(message.Chat),
                         MessageId = message.MessageId,
                         Executor = Actor.AutoDetection,
-                        Reason = $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}%, OpenAI: {openAIResult.Confidence}%)",
+                        Reason = $"Auto-ban: High confidence spam (Score: {spamResult.TotalScore:F2}, OpenAI: {openAIResult.Score:F2})",
                         TelegramMessage = message
                     },
                     cancellationToken);
             }
-            else if (spamResult.NetConfidence > config.ReviewQueueThreshold)
+            else if (spamResult.TotalScore > config.ReviewQueueThreshold)
             {
                 // Borderline detection OR OpenAI uncertain → Admin review
-                var reason = spamResult.NetConfidence > config.AutoBanThreshold
-                    ? $"OpenAI uncertain (<{config.MaxConfidenceVetoThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
-                    : $"Borderline detection - Net: {spamResult.NetConfidence}";
+                var reason = spamResult.TotalScore > config.AutoBanThreshold
+                    ? $"OpenAI uncertain (<{config.MaxConfidenceVetoThreshold:F2}) - Score: {spamResult.TotalScore:F2}, OpenAI: {openAIResult?.Score ?? 0:F2}"
+                    : $"Borderline detection - Score: {spamResult.TotalScore:F2}";
 
                 var borderlineReport = BuildAutoDetectionReport(
                     message,
@@ -239,8 +191,7 @@ public class DetectionActionService(
                 Detection Details:
                 {{detectionResult.Reason}}
 
-                Net Confidence: {{spamResult.NetConfidence}}
-                Max Confidence: {{spamResult.MaxConfidence}}
+                Total Score: {{spamResult.TotalScore:F2}}
                 """,
             WebUserId: null // System-generated
         );

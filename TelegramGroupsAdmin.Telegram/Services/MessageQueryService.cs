@@ -294,8 +294,8 @@ public class MessageQueryService : IMessageQueryService
                     m.UserId,
                     m.ContentHash,
                     dr.IsSpam,
-                    dr.Confidence,
-                    dr.NetConfidence,
+                    dr.Score,
+                    dr.NetScore,
                     Reason = dr.Reason ?? $"{dr.DetectionMethod}: Spam detected",
                     CheckType = dr.DetectionMethod,
                     MatchedMessageId = dr.MessageId
@@ -316,7 +316,7 @@ public class MessageQueryService : IMessageQueryService
                 UserId: r.UserId,
                 ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: Math.Abs(r.NetConfidence), // Use absolute net_confidence for display
+                Confidence: Math.Abs(r.NetScore), // Use absolute net_score for display
                 Reason: r.Reason,
                 CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))

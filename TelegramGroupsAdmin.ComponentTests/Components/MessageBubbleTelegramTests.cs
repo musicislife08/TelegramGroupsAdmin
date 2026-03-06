@@ -61,7 +61,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     /// <summary>
     /// Creates a ContentCheckRecord for testing.
     /// </summary>
-    private static ContentCheckRecord CreateContentCheck(bool isSpam, int confidence)
+    private static ContentCheckRecord CreateContentCheck(bool isSpam, double score)
     {
         return new ContentCheckRecord(
             Id: 1,
@@ -69,7 +69,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
             UserId: 456,
             ContentHash: "abc123",
             IsSpam: isSpam,
-            Confidence: confidence,
+            Confidence: score,
             Reason: isSpam ? "Test spam" : "Test ham",
             CheckType: "test",
             MatchedMessageId: null
@@ -164,7 +164,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     {
         // Arrange
         var message = CreateMessage();
-        var contentCheck = CreateContentCheck(isSpam: true, confidence: 95);
+        var contentCheck = CreateContentCheck(isSpam: true, score: 4.75);
 
         // Act
         var cut = Render<MessageBubbleTelegram>(p => p
@@ -174,7 +174,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         // Assert
         var badge = cut.Find(".tg-badge-spam");
         Assert.That(badge.TextContent, Does.Contain("spam"));
-        Assert.That(badge.TextContent, Does.Contain("95%"));
+        Assert.That(badge.TextContent, Does.Contain("4.8"));
     }
 
     [Test]
@@ -182,7 +182,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     {
         // Arrange
         var message = CreateMessage();
-        var contentCheck = CreateContentCheck(isSpam: false, confidence: 85);
+        var contentCheck = CreateContentCheck(isSpam: false, score: 4.25);
 
         // Act
         var cut = Render<MessageBubbleTelegram>(p => p
@@ -192,7 +192,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         // Assert
         var badge = cut.Find(".tg-badge-ham");
         Assert.That(badge.TextContent, Does.Contain("ham"));
-        Assert.That(badge.TextContent, Does.Contain("85%"));
+        Assert.That(badge.TextContent, Does.Contain("4.2"));
     }
 
     [Test]
@@ -272,7 +272,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     {
         // Arrange
         var message = CreateMessage();
-        var contentCheck = CreateContentCheck(isSpam: true, confidence: 90);
+        var contentCheck = CreateContentCheck(isSpam: true, score: 4.5);
 
         // Act
         var cut = Render<MessageBubbleTelegram>(p => p
@@ -289,7 +289,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     {
         // Arrange
         var message = CreateMessage();
-        var contentCheck = CreateContentCheck(isSpam: false, confidence: 90);
+        var contentCheck = CreateContentCheck(isSpam: false, score: 4.5);
 
         // Act
         var cut = Render<MessageBubbleTelegram>(p => p

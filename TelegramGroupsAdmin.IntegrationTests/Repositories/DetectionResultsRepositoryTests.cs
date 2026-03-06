@@ -129,8 +129,8 @@ public class DetectionResultsRepositoryTests
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "System",
                 DetectionMethod = "TestMethod",
-                Confidence = 95,
-                NetConfidence = 95,
+                Score = 4.75,
+                NetScore = 4.75,
                 Reason = "Test detection",
                 SystemIdentifier = "test",
                 UsedForTraining = true,
@@ -167,8 +167,8 @@ public class DetectionResultsRepositoryTests
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "System",
                 DetectionMethod = "TestMethod",
-                Confidence = 95,
-                NetConfidence = 95,
+                Score = 4.75,
+                NetScore = 4.75,
                 Reason = "Test detection",
                 SystemIdentifier = "test",
                 UsedForTraining = true,
@@ -201,7 +201,7 @@ public class DetectionResultsRepositoryTests
             messageText: "Buy cheap watches now!!!",
             isSpam: true,
             source: "ManualUI",
-            confidence: 100,
+            score: 5.0,
             addedBy: "test-admin");
 
         // Assert — verify the message, detection result, and training label all use ChatId=0
@@ -220,7 +220,7 @@ public class DetectionResultsRepositoryTests
             .FirstOrDefaultAsync(dr => dr.MessageId == message.MessageId && dr.ChatId == 0);
         Assert.That(detection, Is.Not.Null);
         Assert.That(detection!.UsedForTraining, Is.True);
-        Assert.That(detection.NetConfidence, Is.EqualTo(100)); // Spam → positive
+        Assert.That(detection.NetScore, Is.EqualTo(5.0)); // Spam → positive
 
     }
 
@@ -232,7 +232,7 @@ public class DetectionResultsRepositoryTests
             messageText: "Купи дешевые часы!!!",
             isSpam: true,
             source: "ManualUI",
-            confidence: 100,
+            score: 5.0,
             addedBy: "test-admin",
             translatedText: "Buy cheap watches!!!",
             detectedLanguage: "ru");
@@ -256,14 +256,14 @@ public class DetectionResultsRepositoryTests
     }
 
     [Test]
-    public async Task AddManualTrainingSampleAsync_HamSample_UsesNegativeNetConfidence()
+    public async Task AddManualTrainingSampleAsync_HamSample_UsesNegativeNetScore()
     {
         // Act — add a ham sample
         await _repository!.AddManualTrainingSampleAsync(
             messageText: "Hello everyone, how's your day going?",
             isSpam: false,
             source: "ManualUI",
-            confidence: 100,
+            score: 5.0,
             addedBy: "test-admin");
 
         // Assert
@@ -276,7 +276,7 @@ public class DetectionResultsRepositoryTests
         var detection = await context.DetectionResults
             .FirstOrDefaultAsync(dr => dr.MessageId == message!.MessageId && dr.ChatId == 0);
         Assert.That(detection, Is.Not.Null);
-        Assert.That(detection!.NetConfidence, Is.EqualTo(-100), "Ham sample should have negative net_confidence");
+        Assert.That(detection!.NetScore, Is.EqualTo(-5.0), "Ham sample should have negative net_score");
     }
 
     #endregion

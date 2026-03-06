@@ -117,9 +117,7 @@ public class FileScanJob(
                 var scanResult = await _fileScanningCheck.CheckAsync(scanRequest);
 
                 // V2 scoring: 5.0 = malware detected, 0.0 = clean/abstained
-                // Map to V1 concepts: Score >= 4.0 = Infected, < 4.0 = Clean
                 bool isInfected = !scanResult.Abstained && scanResult.Score >= FileScanConstants.InfectedScoreThreshold;
-                int confidenceV1 = (int)(scanResult.Score * FileScanConstants.ScoreToConfidenceMultiplier); // Map 0-5.0 to 0-100
 
                 logger.LogInformation(
                     "File scan complete for message {MessageId}: Score={Score}, Abstained={Abstained}, Infected={Infected}, Details={Details}",
@@ -139,9 +137,9 @@ public class FileScanJob(
                     DetectionSource = "file_scan", // Phase 4.14
                     DetectionMethod = "FileScanningCheck",
                     IsSpam = isInfected,
-                    Confidence = confidenceV1,
+                    Score = scanResult.Score,
                     Reason = scanResult.Details,
-                    NetConfidence = isInfected ? confidenceV1 : -confidenceV1,
+                    NetScore = isInfected ? scanResult.Score : -scanResult.Score,
                     CheckResultsJson = null, // File scanning is a single check, no aggregation
                     UsedForTraining = false, // File scans don't train spam detection
                     MessageText = $"File: {payload.FileName ?? "unknown"} ({payload.FileSize} bytes)",

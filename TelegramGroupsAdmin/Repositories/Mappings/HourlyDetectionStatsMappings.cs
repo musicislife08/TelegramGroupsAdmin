@@ -21,7 +21,7 @@ public static class HourlyDetectionStatsMappings
                 SpamCount = (int)view.SpamCount,
                 HamCount = (int)view.HamCount,
                 ManualCount = (int)view.ManualCount,
-                AvgConfidence = view.AvgConfidence
+                AvgScore = view.AvgScore
             };
         }
     }

@@ -62,7 +62,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
     private static DetectionResultRecord CreateTestResult(
         long id = 1,
         bool isSpam = true,
-        int confidence = 95,
+        double score = 4.75,
         string detectionSource = "automatic",
         string detectionMethod = "BayesClassifier",
         string? reason = null,
@@ -78,8 +78,8 @@ public class DetectionHistoryDialogTests : DialogTestContext
             DetectionSource = detectionSource,
             DetectionMethod = detectionMethod,
             IsSpam = isSpam,
-            Confidence = confidence,
-            NetConfidence = isSpam ? confidence : -confidence,
+            Score = score,
+            NetScore = isSpam ? score : -score,
             AddedBy = Actor.FromSystem("DetectionService"),
             UserId = 67890,
             Reason = reason,
@@ -312,14 +312,14 @@ public class DetectionHistoryDialogTests : DialogTestContext
     }
 
     [Test]
-    public void DisplaysNetConfidence()
+    public void DisplaysNetScore()
     {
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         var results = new List<DetectionResultRecord>
         {
-            CreateTestResult(confidence: 85)
+            CreateTestResult(score: 4.25)
         };
 
         // Act

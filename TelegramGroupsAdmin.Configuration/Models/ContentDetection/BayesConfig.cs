@@ -22,9 +22,9 @@ public class BayesConfig
     public double MinSpamProbability { get; set; } = 50.0;
 
     /// <summary>
-    /// Confidence threshold for spam classification (0-100)
+    /// Confidence threshold for spam classification (0.0-5.0)
     /// </summary>
-    public int ConfidenceThreshold { get; set; } = 75;
+    public double ConfidenceThreshold { get; set; } = 3.75;
 
     /// <summary>
     /// Always run this check for all users (bypasses trust/admin status)

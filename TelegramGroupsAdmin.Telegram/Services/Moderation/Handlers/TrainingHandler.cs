@@ -68,12 +68,12 @@ public class TrainingHandler : ITrainingHandler
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
-                Confidence = 100,
+                Score = 5.0,
                 Reason = "Marked as spam by moderator",
                 AddedBy = executor,
                 UserId = message.User.Id,
                 UsedForTraining = false, // History only - training handled by training_labels table
-                NetConfidence = 100,
+                NetScore = 5.0,
                 CheckResultsJson = null,
                 EditVersion = 0
             };

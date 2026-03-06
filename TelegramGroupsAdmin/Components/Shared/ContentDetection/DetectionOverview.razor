@@ -182,9 +182,9 @@
             <MudCardContent>
                 <MudNumericField @bind-Value="_config.StopWords.ConfidenceThreshold"
                                 Label="Confidence Threshold"
-                                Min="1" Max="100"
+                                Min="0.0" Max="5.0" Step="0.25"
                                 Variant="Variant.Outlined"
-                                helperText="Confidence level when stop words are detected (0-100%)" />
+                                helperText="Confidence level when stop words are detected (0.0-5.0)" />
             </MudCardContent>
         }
     </MudCard>

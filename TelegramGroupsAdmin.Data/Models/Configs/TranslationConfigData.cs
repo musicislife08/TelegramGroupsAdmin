@@ -17,7 +17,7 @@ public class TranslationConfigData
 
     public double LanguageDetectionConfidenceThreshold { get; set; } = 0.80;
 
-    public int ConfidenceThreshold { get; set; } = 80;
+    public double ConfidenceThreshold { get; set; } = 4.0;
 
     public bool WarnNonEnglish { get; set; }
 

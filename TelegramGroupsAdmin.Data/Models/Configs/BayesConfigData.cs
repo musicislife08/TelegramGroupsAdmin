@@ -11,7 +11,7 @@ public class BayesConfigData
 
     public double MinSpamProbability { get; set; } = 50.0;
 
-    public int ConfidenceThreshold { get; set; } = 75;
+    public double ConfidenceThreshold { get; set; } = 3.75;
 
     public bool AlwaysRun { get; set; }
 }
