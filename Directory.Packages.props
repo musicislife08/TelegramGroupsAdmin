@@ -7,7 +7,7 @@
     <PackageVersion Include="AngleSharp" Version="1.4.0" />
     <PackageVersion Include="Blazor-ApexCharts" Version="6.1.0" />
     <PackageVersion Include="bunit" Version="2.5.3" />
-    <PackageVersion Include="MudBlazor" Version="9.0.0" />
+    <PackageVersion Include="MudBlazor" Version="9.1.0" />
 
     <!-- Markdown -->
     <PackageVersion Include="Markdig" Version="1.0.0" />
