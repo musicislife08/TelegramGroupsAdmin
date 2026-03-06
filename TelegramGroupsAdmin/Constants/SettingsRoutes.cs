@@ -80,9 +80,6 @@ public static class SettingsRoutes
         public const string Algorithms = "algorithms";
         public const string AlgorithmsTitle = "Detection Algorithms";
 
-        public const string Tuning = "tuning";
-        public const string TuningTitle = "Algorithm Tuning";
-
         public const string AiIntegration = "ai-integration";
         public const string AiIntegrationTitle = "AI Integration";
 

@@ -289,9 +289,8 @@ public class AIContentCheckV2(
                 };
             }
 
-            // Map confidence (0.0-1.0) to V2 score (0.0-5.0)
-            var confidence = jsonResponse.Confidence ?? ContentDetectionConstants.DefaultOpenAIConfidence;
-            var score = confidence * AIConstants.ConfidenceToScoreMultiplier;
+            // Use AI-provided score directly (0.0-5.0 scale)
+            var score = Math.Clamp(jsonResponse.Score ?? 2.5, 0.0, 5.0);
 
             // Review = medium score (capped at review threshold)
             if (isReview)

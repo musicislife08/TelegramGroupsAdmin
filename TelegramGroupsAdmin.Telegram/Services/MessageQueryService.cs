@@ -308,7 +308,7 @@ public class MessageQueryService : IMessageQueryService
             .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
             .ToList();
 
-        // Build final result with absolute net_confidence as display confidence
+        // Build final result with absolute net_score as display score
         return latestResults
             .Select(r => new UiModels.ContentCheckRecord(
                 Id: r.Id,
@@ -316,7 +316,7 @@ public class MessageQueryService : IMessageQueryService
                 UserId: r.UserId,
                 ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: Math.Abs(r.NetScore), // Use absolute net_score for display
+                Score: Math.Abs(r.NetScore), // Use absolute net_score for display
                 Reason: r.Reason,
                 CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))

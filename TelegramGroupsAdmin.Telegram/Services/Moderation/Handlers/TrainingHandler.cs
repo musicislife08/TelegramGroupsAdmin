@@ -102,7 +102,13 @@ public class TrainingHandler : ITrainingHandler
             // Trigger ML text classifier retraining (immediate, no payload)
             await _jobTriggerService.TriggerNowAsync(
                 BackgroundJobNames.TextClassifierRetraining,
-                payload: new { }, // Empty payload - job doesn't need parameters
+                payload: new { },
+                cancellationToken: cancellationToken);
+
+            // Trigger Bayes classifier retraining
+            await _jobTriggerService.TriggerNowAsync(
+                BackgroundJobNames.BayesClassifierRetraining,
+                payload: new { },
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(

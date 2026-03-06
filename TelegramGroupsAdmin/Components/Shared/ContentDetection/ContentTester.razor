@@ -11,6 +11,7 @@
 @inject IJSRuntime JsRuntime
 @inject ILogger<ContentTester> Logger
 @inject IEnumerable<IContentCheckV2> ContentChecks
+@inject IConfigService ConfigService
 @implements IDisposable
 
 <MudPaper Class="pa-4" Elevation="0">
@@ -366,7 +367,7 @@
                         <MudAlert Severity="Severity.Error">
                             <MudText Typo="Typo.body1"><strong>Action:</strong> Auto-Ban + Delete Message</MudText>
                             <MudText Typo="Typo.body2" Class="mt-1">
-                                High confidence spam (score ≥ 5.0). User would be banned and message deleted immediately.
+                                High confidence spam (score ≥ @_config.AutoBanThreshold). User would be banned and message deleted immediately.
                             </MudText>
                         </MudAlert>
                         break;
@@ -374,7 +375,7 @@
                         <MudAlert Severity="Severity.Warning">
                             <MudText Typo="Typo.body1"><strong>Action:</strong> Create Report for Admin Review</MudText>
                             <MudText Typo="Typo.body2" Class="mt-1">
-                                Borderline spam (score 3.0-5.0). Report created for manual admin review in /reports queue.
+                                Borderline spam (score @_config.ReviewQueueThreshold-@_config.AutoBanThreshold). Report created for manual admin review in /reports queue.
                             </MudText>
                         </MudAlert>
                         break;
@@ -382,7 +383,7 @@
                         <MudAlert Severity="Severity.Success">
                             <MudText Typo="Typo.body1"><strong>Action:</strong> Allow Message</MudText>
                             <MudText Typo="Typo.body2" Class="mt-1">
-                                Low spam score (&lt; 3.0). Message allowed, detection result logged for training.
+                                Low spam score (&lt; @_config.ReviewQueueThreshold). Message allowed, detection result logged for training.
                             </MudText>
                         </MudAlert>
                         break;
@@ -400,6 +401,7 @@
 
 @code {
     // State
+    private ContentDetectionConfig _config = new();
     private long? _selectedChatId;
     private List<ManagedChatRecord> _managedChats = [];
     private string _messageText = string.Empty;
@@ -421,6 +423,10 @@
     {
         // Load managed chats for dropdown
         _managedChats = (await ManagedChatsRepository.GetAllAsync(CancellationToken.None)).ToList();
+
+        // Load content detection config for threshold display
+        _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                  ?? new ContentDetectionConfig();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

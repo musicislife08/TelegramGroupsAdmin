@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// <summary>
 /// ML-powered service for generating stop word recommendations
 /// Analyzes spam/ham corpus to suggest additions, removals, and performance cleanup
-/// Follows ThresholdRecommendationService pattern
+/// Analyzes detection results to produce actionable stop word changes
 /// </summary>
 public class StopWordRecommendationService : IStopWordRecommendationService
 {

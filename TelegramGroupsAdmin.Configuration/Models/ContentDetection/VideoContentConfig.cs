@@ -52,10 +52,10 @@ public class VideoContentConfig
     public double HashSimilarityThreshold { get; set; } = 0.85;
 
     /// <summary>
-    /// Confidence level to assign when keyframe matches a training sample (0-100)
-    /// Default: 95 (very confident if we've seen this exact spam video before)
+    /// Score to assign when keyframe matches a training sample (0.0-5.0)
+    /// Default: 4.75 (very confident if we've seen this exact spam video before)
     /// </summary>
-    public int HashMatchConfidence { get; set; } = 95;
+    public double HashMatchConfidence { get; set; } = 4.75;
 
     /// <summary>
     /// Maximum number of training samples to compare against

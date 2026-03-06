@@ -17,11 +17,6 @@ public class BayesConfig
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Minimum spam probability to trigger (0.0 - 100.0)
-    /// </summary>
-    public double MinSpamProbability { get; set; } = 50.0;
-
-    /// <summary>
     /// Confidence threshold for spam classification (0.0-5.0)
     /// </summary>
     public double ConfidenceThreshold { get; set; } = 3.75;

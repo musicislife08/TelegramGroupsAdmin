@@ -9,6 +9,16 @@ namespace TelegramGroupsAdmin.ContentDetection.Utilities;
 /// </summary>
 public static class CheckResultsSerializer
 {
+    private static readonly JsonSerializerOptions SerializeOptions = new()
+    {
+        WriteIndented = false
+    };
+
+    private static readonly JsonSerializerOptions DeserializeOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     /// <summary>
     /// Serialize V2 check results to JSON.
     /// Returns JSON like: {"Checks":[{"CheckName":0,"Score":3.5,"Abstained":false,"Details":"...","ProcessingTimeMs":42.3},...]}
@@ -27,10 +37,7 @@ public static class CheckResultsSerializer
             }).ToList()
         };
 
-        return JsonSerializer.Serialize(results, new JsonSerializerOptions
-        {
-            WriteIndented = false
-        });
+        return JsonSerializer.Serialize(results, SerializeOptions);
     }
 
     /// <summary>
@@ -44,10 +51,7 @@ public static class CheckResultsSerializer
 
         try
         {
-            var results = JsonSerializer.Deserialize<CheckResults>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var results = JsonSerializer.Deserialize<CheckResults>(json, DeserializeOptions);
 
             return results?.Checks ?? [];
         }

@@ -505,8 +505,8 @@
 
     private MudColor GetConfidenceColor(double confidence)
     {
-        if (confidence >= 80) return MudColor.Success;
-        if (confidence >= 60) return MudColor.Warning;
+        if (confidence >= 4.0) return MudColor.Success;
+        if (confidence >= 3.0) return MudColor.Warning;
         return MudColor.Error;
     }
 

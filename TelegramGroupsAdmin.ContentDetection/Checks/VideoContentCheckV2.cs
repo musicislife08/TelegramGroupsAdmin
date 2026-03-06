@@ -268,8 +268,8 @@ public class VideoContentCheckV2(
                 bool abstained;
                 if (matchedSpamLabel == true)
                 {
-                    // Spam: map confidence (0-100) to score (0-5.0)
-                    score = (config.HashMatchConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                    // Use configured score directly (already 0.0-5.0 scale)
+                    score = Math.Clamp(config.HashMatchConfidence, 0.0, 5.0);
                     abstained = false;
                 }
                 else
@@ -518,7 +518,7 @@ public class VideoContentCheckV2(
             Respond ONLY with valid JSON (no markdown, no code blocks):
             {
               "spam": true or false,
-              "confidence": 1-100,
+              "score": 0.0-5.0 (continuous scale: 0.0 = clearly not spam, 5.0 = unmistakably spam. Use the full range — e.g., 1.2 for mildly suspicious, 3.7 for likely spam),
               "reason": "specific explanation",
               "patterns_detected": ["list", "of", "patterns"]
             }
@@ -579,8 +579,8 @@ public class VideoContentCheckV2(
                 };
             }
 
-            logger.LogDebug("AI Vision analysis for {User}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
-                user.ToLogDebug(), response.Spam, response.Confidence, response.Reason);
+            logger.LogDebug("AI Vision analysis for {User}: Spam={Spam}, Score={Score}, Reason={Reason}",
+                user.ToLogDebug(), response.Spam, response.Score, response.Reason);
 
             var details = response.Reason ?? "No reason provided";
             if (response.PatternsDetected?.Length > 0)
@@ -593,8 +593,8 @@ public class VideoContentCheckV2(
             bool abstained;
             if (response.Spam)
             {
-                // Spam: map confidence (0-100) to score (0-5.0)
-                score = (response.Confidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                // Use AI-provided score directly (0.0-5.0 scale)
+                score = Math.Clamp(response.Score, 0.0, 5.0);
                 abstained = false;
             }
             else
@@ -665,7 +665,7 @@ internal record KeyframeHashJson(
 /// </summary>
 internal record VideoSpamResponse(
     [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("confidence")] int Confidence,
+    [property: JsonPropertyName("score")] double Score,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
 );

@@ -45,7 +45,7 @@
                                             @(result.IsSpam ? "SPAM" : "HAM")
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Info">
-                                            Net: @result.NetScore
+                                            Net: @result.NetScore.ToString("F1")
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Default">
                                             @result.DetectionSource
@@ -65,7 +65,7 @@
 
                                     <MudStack Row="true" Spacing="1">
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                            Score: @Math.Abs(result.NetScore)
+                                            Score: @Math.Abs(result.NetScore).ToString("F1")
                                         </MudChip>
                                         @if (result.UsedForTraining)
                                         {

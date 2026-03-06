@@ -47,17 +47,17 @@ internal class BayesClassifier
     /// <summary>
     /// Classify a message and return spam probability with certainty score
     /// </summary>
-    public (double spamProbability, string details, double certainty) ClassifyMessage(string message)
+    public BayesClassificationResult ClassifyMessage(string message)
     {
         if (_spamMessageCount == 0 || _hamMessageCount == 0)
         {
-            return (0.0, "Classifier not trained", 0.0);
+            return new BayesClassificationResult(0.0, "Classifier not trained", 0.0);
         }
 
         var words = _tokenizerService.Tokenize(message);
         if (!words.Any())
         {
-            return (0.0, "No words to analyze", 0.0);
+            return new BayesClassificationResult(0.0, "No words to analyze", 0.0);
         }
 
         // Calculate prior probabilities
@@ -108,6 +108,6 @@ internal class BayesClassifier
             ? $"Spam probability: {spamProbability:F3}" + (significantWords.Any() ? $" (key words: {string.Join(", ", significantWords.Take(3))})" : "")
             : $"Ham probability: {1 - spamProbability:F3}";
 
-        return (spamProbability, details, certainty);
+        return new BayesClassificationResult(spamProbability, details, certainty);
     }
 }

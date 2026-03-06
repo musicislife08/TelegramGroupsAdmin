@@ -736,7 +736,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                             ? detection.MessageText.Substring(0, 100) + "..."
                             : detection.MessageText,
                         ContentCheckNames = contentChecks,
-                        OpenAIConfidence = (int)openAICheck.Score,
+                        OpenAIScore = openAICheck.Score,
                         OpenAIReason = openAICheck.Details
                     });
                 }

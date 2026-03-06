@@ -54,8 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TrainingLabelDto> TrainingLabels => Set<TrainingLabelDto>();
     public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
-    public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
-    public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
+public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
     public DbSet<VideoTrainingSampleDto> VideoTrainingSamples => Set<VideoTrainingSampleDto>();
 
     // URL filtering tables (Phase 4.13)
@@ -690,14 +689,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Index for analytics (notifications by type)
         modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
-
-        // ThresholdRecommendations indexes
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => tr.Status);  // Filter by status (pending, applied, rejected)
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => tr.CreatedAt);  // Sort by date
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => new { tr.AlgorithmName, tr.Status });  // Filter by algorithm + status
 
         // ImageTrainingSamples indexes
         modelBuilder.Entity<ImageTrainingSampleDto>()

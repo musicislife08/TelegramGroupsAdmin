@@ -25,8 +25,4 @@ public static class AIConstants
     /// </summary>
     public const int VideoVisionMaxTokens = 300;
 
-    /// <summary>
-    /// Confidence multiplier for converting 0-1 confidence to 0-5 score
-    /// </summary>
-    public const double ConfidenceToScoreMultiplier = 5.0;
 }

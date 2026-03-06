@@ -127,7 +127,7 @@ public class TranslationHandler : ITranslationHandler
             EditId: null,
             TranslatedText: translationResult.TranslatedText,
             DetectedLanguage: translationResult.DetectedLanguage,
-            Confidence: null, // OpenAI doesn't return confidence for translation
+            Confidence: translationResult.Confidence,
             TranslatedAt: DateTimeOffset.UtcNow
         );
 

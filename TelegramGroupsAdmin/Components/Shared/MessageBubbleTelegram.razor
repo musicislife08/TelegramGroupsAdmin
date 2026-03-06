@@ -74,7 +74,7 @@
                 @if (ContentCheck != null)
                 {
                     <span class="tg-badge tg-badge-@(ContentCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
-                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Confidence.ToString("F1")
+                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Score.ToString("F1")
                         @if (!string.IsNullOrEmpty(_cachedContributingFactors))
                         {
                             <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>

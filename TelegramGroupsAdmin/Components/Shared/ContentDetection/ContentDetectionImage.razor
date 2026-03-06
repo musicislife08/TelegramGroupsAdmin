@@ -95,12 +95,12 @@
                     </FieldWithHelp>
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <FieldWithHelp HelpText="Confidence level assigned when a hash matches a known spam sample. Should be high since hash matches are reliable.">
+                    <FieldWithHelp HelpText="Score assigned when a hash matches a known spam sample (0.0-5.0). Should be high since hash matches are reliable.">
                         <MudNumericField @bind-Value="activeConfig.HashMatchConfidence"
-                                        Label="Hash Match Confidence (%)"
-                                        Min="50" Max="100"
+                                        Label="Hash Match Score"
+                                        Min="0.0" Max="5.0" Step="0.25"
                                         Disabled="@isReadOnly"
-                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.HashMatchConfidence}%" : "Confidence when hash matches training sample")" />
+                                        HelperText="@(isReadOnly ? $"Using global: {activeConfig.HashMatchConfidence:F2}" : "Score when hash matches training sample (0.0-5.0)")" />
                     </FieldWithHelp>
                 </MudItem>
                 <MudItem xs="12" md="6">

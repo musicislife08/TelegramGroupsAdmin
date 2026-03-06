@@ -278,13 +278,23 @@ if (Environment.GetEnvironmentVariable("SKIP_ML_TRAINING") != "true")
     var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IMLTextClassifierService>();
     app.Logger.LogInformation("Training ML spam classifier model with latest data...");
     await mlClassifier.TrainModelAsync();
-    var metadata = mlClassifier.GetMetadata();
+    var mlMetadata = mlClassifier.GetMetadata();
     app.Logger.LogInformation(
         "ML classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1}, balanced: {Balanced})",
-        metadata?.SpamSampleCount,
-        metadata?.HamSampleCount,
-        metadata?.SpamRatio,
-        metadata?.IsBalanced);
+        mlMetadata?.SpamSampleCount,
+        mlMetadata?.HamSampleCount,
+        mlMetadata?.SpamRatio,
+        mlMetadata?.IsBalanced);
+
+    var bayesClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IBayesClassifierService>();
+    app.Logger.LogInformation("Training Bayes spam classifier with latest data...");
+    await bayesClassifier.TrainAsync();
+    var bayesMetadata = bayesClassifier.GetMetadata();
+    app.Logger.LogInformation(
+        "Bayes classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1})",
+        bayesMetadata?.SpamSampleCount,
+        bayesMetadata?.HamSampleCount,
+        bayesMetadata?.SpamRatio);
 }
 else
 {

@@ -6,5 +6,4 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 public sealed class BayesCheckRequest : ContentCheckRequestBase
 {
     public required int MinMessageLength { get; init; }
-    public required int MinSpamProbability { get; init; }
 }

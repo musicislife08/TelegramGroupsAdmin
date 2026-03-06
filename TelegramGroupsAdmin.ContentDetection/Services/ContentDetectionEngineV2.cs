@@ -318,7 +318,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
                 MinMessageLength = config.MinMessageLength,
-                MinSpamProbability = (int)config.Bayes.MinSpamProbability,
                 CancellationToken = cancellationToken
             },
 

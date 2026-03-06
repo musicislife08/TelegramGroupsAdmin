@@ -20,8 +20,4 @@ public static class ContentDetectionConstants
     /// </summary>
     public const double AllowThreshold = 3.0;
 
-    /// <summary>
-    /// Default confidence value for OpenAI spam detection when API doesn't return confidence
-    /// </summary>
-    public const double DefaultOpenAIConfidence = 0.8;
 }

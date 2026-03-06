@@ -23,7 +23,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Layer 1: Hash similarity (fastest, cheapest, most reliable for known spam)
 /// Layer 2: OCR + text spam checks (fast, cheap, good for text-heavy images)
 /// Layer 3: AI Vision fallback (slow, expensive, comprehensive)
-/// Scoring: Maps confidence (0-100%) to points (0.0-5.0)
+/// Scoring: AI returns scores directly on 0.0-5.0 scale
 /// </summary>
 public class ImageContentCheckV2(
     ILogger<ImageContentCheckV2> logger,
@@ -119,8 +119,8 @@ public class ImageContentCheckV2(
                         // Check if similarity meets threshold
                         if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
                         {
-                            // Map confidence to score
-                            var score = (imageConfig.HashMatchConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                            // Use configured score directly (already 0.0-5.0 scale)
+                            var score = Math.Clamp(imageConfig.HashMatchConfidence, 0.0, 5.0);
 
                             // If matched HAM (not spam), abstain (don't give negative signal in V2)
                             if (matchedSpamLabel == false)
@@ -397,7 +397,7 @@ public class ImageContentCheckV2(
             Respond ONLY with valid JSON (no markdown, no code blocks):
             {
               "spam": true or false,
-              "confidence": 1-100,
+              "score": 0.0-5.0 (continuous scale: 0.0 = clearly not spam, 5.0 = unmistakably spam. Use the full range — e.g., 1.2 for mildly suspicious, 3.7 for likely spam),
               "reason": "specific explanation",
               "patterns_detected": ["list", "of", "patterns"]
             }
@@ -457,8 +457,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            logger.LogDebug("AI Vision V2 analysis for {User}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
-                user.ToLogDebug(), response.Spam, response.Confidence, response.Reason);
+            logger.LogDebug("AI Vision V2 analysis for {User}: Spam={Spam}, Score={Score}, Reason={Reason}",
+                user.ToLogDebug(), response.Spam, response.Score, response.Reason);
 
             // Build raw Vision text for downstream processing (AI veto)
             var rawVisionText = response.Reason ?? "";
@@ -489,8 +489,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            // Map confidence to score: 0-100% → 0.0-5.0 points
-            var score = (response.Confidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+            // Use AI-provided score directly (0.0-5.0 scale)
+            var score = Math.Clamp(response.Score, 0.0, 5.0);
 
             return new ContentCheckResponseV2
             {
@@ -527,7 +527,7 @@ public class ImageContentCheckV2(
 /// </summary>
 internal record VisionSpamResponse(
     [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("confidence")] int Confidence,
+    [property: JsonPropertyName("score")] double Score,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
 );

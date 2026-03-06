@@ -136,7 +136,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = data.UseGlobal,
             Enabled = data.Enabled,
-            MinSpamProbability = data.MinSpamProbability,
             ConfidenceThreshold = data.ConfidenceThreshold,
             AlwaysRun = data.AlwaysRun
         };
@@ -148,7 +147,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = model.UseGlobal,
             Enabled = model.Enabled,
-            MinSpamProbability = model.MinSpamProbability,
             ConfidenceThreshold = model.ConfidenceThreshold,
             AlwaysRun = model.AlwaysRun
         };

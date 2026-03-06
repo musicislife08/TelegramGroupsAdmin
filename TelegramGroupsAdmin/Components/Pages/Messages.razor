@@ -861,7 +861,7 @@
             UserId: latest.UserId,
             ContentHash: wrapper.Message.ContentHash,
             IsSpam: latest.IsSpam,
-            Confidence: Math.Abs(latest.NetScore),
+            Score: Math.Abs(latest.NetScore),
             Reason: latest.Reason,
             CheckType: latest.DetectionMethod,
             MatchedMessageId: messageId
@@ -1029,7 +1029,7 @@
             else
             {
                 Logger.LogInformation(
-                    "Message {MessageId} marked as ham (training sample): detection result created with net_confidence = -100",
+                    "Message {MessageId} marked as ham (training sample): detection result created with net_score = -5.0",
                     message.MessageId);
             }
 
@@ -1066,7 +1066,7 @@
                 UserId: userId,
                 ContentHash: null,
                 IsSpam: latest.IsSpam,
-                Confidence: Math.Abs(latest.NetScore), // Use absolute net_confidence for display
+                Score: Math.Abs(latest.NetScore), // Use absolute net_score for display
                 Reason: latest.Reason,
                 CheckType: latest.DetectionMethod,
                 MatchedMessageId: null
@@ -1508,7 +1508,7 @@
                 EditId: null,
                 TranslatedText: translationResult.TranslatedText,
                 DetectedLanguage: translationResult.DetectedLanguage,
-                Confidence: null, // OpenAI doesn't return confidence for translation
+                Confidence: translationResult.Confidence,
                 TranslatedAt: DateTimeOffset.UtcNow
             );
 

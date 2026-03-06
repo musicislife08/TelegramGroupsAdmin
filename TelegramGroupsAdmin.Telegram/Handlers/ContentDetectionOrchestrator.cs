@@ -208,7 +208,7 @@ public class ContentDetectionOrchestrator
             DetectionMethod = spamResult.CheckResults.Count > 0
                 ? string.Join(", ", spamResult.CheckResults.Select(c => c.CheckName))
                 : "Unknown",
-            // IsSpam is computed from net_confidence (don't set it here)
+            // IsSpam is computed from net_score (don't set it here)
             Score = spamResult.TotalScore,
             Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
             AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
@@ -222,7 +222,7 @@ public class ContentDetectionOrchestrator
 
         var editInfo = editVersion > 0 ? $" (edit #{editVersion})" : "";
         _logger.LogDebug(
-            "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetConfidence}, training: {UsedForTraining})",
+            "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetScore}, training: {UsedForTraining})",
             message.MessageId,
             editInfo,
             spamResult.IsSpam ? "spam" : "ham",

@@ -21,7 +21,7 @@ public class ImageContentConfigData
 
     public double HashSimilarityThreshold { get; set; } = 0.85;
 
-    public int HashMatchConfidence { get; set; } = 95;
+    public double HashMatchConfidence { get; set; } = 4.75;
 
     public int MaxTrainingSamplesToCompare { get; set; } = 1000;
 

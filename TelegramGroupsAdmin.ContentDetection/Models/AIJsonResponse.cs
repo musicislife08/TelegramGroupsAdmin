@@ -8,5 +8,5 @@ public record AIJsonResponse
 {
     public string? Result { get; init; } // "spam", "clean", or "review"
     public string? Reason { get; init; }
-    public double? Confidence { get; init; }
+    public double? Score { get; init; }
 }

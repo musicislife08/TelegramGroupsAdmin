@@ -69,7 +69,7 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
             UserId: 456,
             ContentHash: "abc123",
             IsSpam: isSpam,
-            Confidence: score,
+            Score: score,
             Reason: isSpam ? "Test spam" : "Test ham",
             CheckType: "test",
             MatchedMessageId: null
