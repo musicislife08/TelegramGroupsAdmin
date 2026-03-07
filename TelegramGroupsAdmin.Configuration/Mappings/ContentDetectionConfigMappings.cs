@@ -24,7 +24,6 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = data.MinMessageLength,
             AutoBanThreshold = data.AutoBanThreshold,
             ReviewQueueThreshold = data.ReviewQueueThreshold,
-            MaxConfidenceVetoThreshold = data.MaxConfidenceVetoThreshold,
             TrainingMode = data.TrainingMode,
 
             // Use null-coalescing for sub-configs to handle partial JSON from legacy data
@@ -55,7 +54,6 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = model.MinMessageLength,
             AutoBanThreshold = model.AutoBanThreshold,
             ReviewQueueThreshold = model.ReviewQueueThreshold,
-            MaxConfidenceVetoThreshold = model.MaxConfidenceVetoThreshold,
             TrainingMode = model.TrainingMode,
 
             StopWords = model.StopWords.ToData(),

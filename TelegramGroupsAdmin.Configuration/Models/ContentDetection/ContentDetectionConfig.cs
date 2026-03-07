@@ -53,13 +53,6 @@ public class ContentDetectionConfig
     public double ReviewQueueThreshold { get; set; } = 2.5;
 
     /// <summary>
-    /// Maximum individual check score to trigger AI veto (0.0-5.0)
-    /// Veto runs if: (TotalScore > ReviewQueueThreshold) OR (MaxScore > this value)
-    /// Default: 4.25 (catches high-score outliers that might be outvoted)
-    /// </summary>
-    public double MaxConfidenceVetoThreshold { get; set; } = 4.25;
-
-    /// <summary>
     /// Training mode - forces all spam detections into review queue instead of auto-banning
     /// Use this to validate spam detection is working correctly before enabling auto-ban
     /// </summary>

@@ -105,9 +105,9 @@ public class DetectionActionService(
 
             // Standard spam detection handling
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-            var openAIConfident = openAIResult != null && openAIResult.Score >= config.MaxConfidenceVetoThreshold;
+            var openAIConfident = openAIResult != null && openAIResult.Score >= config.AutoBanThreshold;
 
-            if (spamResult.TotalScore > config.AutoBanThreshold && openAIConfident && !openAIResult!.Abstained && openAIResult.Score > 0)
+            if (spamResult.TotalScore >= config.AutoBanThreshold && openAIConfident && !openAIResult!.Abstained && openAIResult.Score > 0)
             {
                 // High confidence + OpenAI confirmed = auto-ban
                 logger.LogInformation(
@@ -133,8 +133,8 @@ public class DetectionActionService(
             else if (spamResult.TotalScore > config.ReviewQueueThreshold)
             {
                 // Borderline detection OR OpenAI uncertain → Admin review
-                var reason = spamResult.TotalScore > config.AutoBanThreshold
-                    ? $"OpenAI uncertain (<{config.MaxConfidenceVetoThreshold:F2}) - Score: {spamResult.TotalScore:F2}, OpenAI: {openAIResult?.Score ?? 0:F2}"
+                var reason = spamResult.TotalScore >= config.AutoBanThreshold
+                    ? $"OpenAI uncertain (<{config.AutoBanThreshold:F2}) - Score: {spamResult.TotalScore:F2}, OpenAI: {openAIResult?.Score ?? 0:F2}"
                     : $"Borderline detection - Score: {spamResult.TotalScore:F2}";
 
                 var borderlineReport = BuildAutoDetectionReport(

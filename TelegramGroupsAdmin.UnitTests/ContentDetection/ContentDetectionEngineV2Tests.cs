@@ -523,10 +523,12 @@ public class ContentDetectionEngineV2Tests
 
     #region Action Determination
 
+    // Pipeline results cap at ReviewQueue — AutoBan requires AI confirmation
     [TestCase(2.4, DetectionAction.Allow, TestName = "Score_2point4_Returns_Allow")]
     [TestCase(2.5, DetectionAction.ReviewQueue, TestName = "Score_2point5_Returns_ReviewQueue")]
     [TestCase(3.9, DetectionAction.ReviewQueue, TestName = "Score_3point9_Returns_ReviewQueue")]
-    [TestCase(4.0, DetectionAction.AutoBan, TestName = "Score_4point0_Returns_AutoBan")]
+    [TestCase(4.0, DetectionAction.ReviewQueue, TestName = "Score_4point0_Returns_ReviewQueue")]
+    [TestCase(5.0, DetectionAction.ReviewQueue, TestName = "Score_5point0_Returns_ReviewQueue")]
     public async Task CheckMessageAsync_ActionDetermination_CorrectActionForScore(double score, DetectionAction expectedAction)
     {
         // Arrange - configure a single check to return the target score

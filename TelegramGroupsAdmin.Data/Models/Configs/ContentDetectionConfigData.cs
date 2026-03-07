@@ -20,8 +20,6 @@ public class ContentDetectionConfigData
 
     public double ReviewQueueThreshold { get; set; } = 2.5;
 
-    public double MaxConfidenceVetoThreshold { get; set; } = 4.25;
-
     public bool TrainingMode { get; set; }
 
     public StopWordsConfigData StopWords { get; set; } = new();

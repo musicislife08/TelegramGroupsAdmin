@@ -4,8 +4,8 @@ namespace TelegramGroupsAdmin.Telegram.Constants;
 /// Constants for spam detection that are NOT admin-configurable.
 /// These are implementation details of the ML training system and job scheduling.
 ///
-/// NOTE: Detection thresholds (auto-ban, review queue, veto) are now database-driven
-/// via ContentDetectionConfig. See: AutoBanThreshold, ReviewQueueThreshold, MaxConfidenceVetoThreshold.
+/// NOTE: Detection thresholds (auto-ban, review queue) are now database-driven
+/// via ContentDetectionConfig. See: AutoBanThreshold, ReviewQueueThreshold.
 /// </summary>
 public static class SpamDetectionConstants
 {

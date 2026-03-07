@@ -171,7 +171,6 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
                 MinMessageLength = chatConfig.MinMessageLength,
                 AutoBanThreshold = chatConfig.AutoBanThreshold,
                 ReviewQueueThreshold = chatConfig.ReviewQueueThreshold,
-                MaxConfidenceVetoThreshold = chatConfig.MaxConfidenceVetoThreshold,
                 TrainingMode = chatConfig.TrainingMode,
 
                 // Section-by-section merge based on UseGlobal flags

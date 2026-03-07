@@ -237,8 +237,11 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var visionAnalysisText = imageSpamResponse?.VisionAnalysisText;
 
         // Determine action based on total score vs per-chat config thresholds
+        // Pipeline results cap at ReviewQueue — AutoBan requires AI confirmation to guard false positives
         var isSpam = totalScore >= config.ReviewQueueThreshold;
-        var recommendedAction = DetermineActionFromScore(totalScore, config.AutoBanThreshold, config.ReviewQueueThreshold);
+        var recommendedAction = totalScore >= config.ReviewQueueThreshold
+            ? DetectionAction.ReviewQueue
+            : DetectionAction.Allow;
 
         // AI confirmation runs on any spam signal to reduce false positives
         // (actual execution happens in CheckMessageAsync based on config.AIVeto.Enabled)
