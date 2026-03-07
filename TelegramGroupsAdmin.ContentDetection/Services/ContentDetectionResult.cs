@@ -34,9 +34,10 @@ public record ContentDetectionResult
     public DetectionAction RecommendedAction { get; init; }
 
     /// <summary>
-    /// Whether the message should be submitted to OpenAI for veto
+    /// Whether this result still needs AI confirmation before the action is taken.
+    /// True when pipeline checks detected spam signals but AI hasn't reviewed yet.
     /// </summary>
-    public bool ShouldVeto { get; init; }
+    public bool RequiresAIConfirmation { get; init; }
 
     /// <summary>
     /// Phase 4.13: Hard block result if URL pre-filter blocked the message

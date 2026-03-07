@@ -268,8 +268,8 @@ public class VideoContentCheckV2(
                 bool abstained;
                 if (matchedSpamLabel == true)
                 {
-                    // Use configured score directly (already 0.0-5.0 scale)
-                    score = Math.Clamp(config.HashMatchConfidence, 0.0, 5.0);
+                    // Use configured score directly, clamped to safety boundaries
+                    score = Math.Clamp(config.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
                     abstained = false;
                 }
                 else
@@ -593,8 +593,8 @@ public class VideoContentCheckV2(
             bool abstained;
             if (response.Spam)
             {
-                // Use AI-provided score directly (0.0-5.0 scale)
-                score = Math.Clamp(response.Score, 0.0, 5.0);
+                // Use AI-provided score directly, clamped to safety boundaries
+                score = Math.Clamp(response.Score, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
                 abstained = false;
             }
             else

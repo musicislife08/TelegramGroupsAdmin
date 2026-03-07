@@ -88,8 +88,10 @@ public class SpacingContentCheckV2(ILogger<SpacingContentCheckV2> logger) : ICon
         var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         // Skip messages with too few words to analyze reliably
-        if (words.Length < minWordsCount)
-            return (false, $"Too few words ({words.Length} < {minWordsCount})");
+        // Clamp to at least 1 to prevent division by zero if config has MinWordsCount=0
+        var effectiveMinWords = Math.Max(1, minWordsCount);
+        if (words.Length < effectiveMinWords)
+            return (false, $"Too few words ({words.Length} < {effectiveMinWords})");
 
         var shortWords = words.Count(w => w.Length <= shortWordLength);
         var suspiciousRatio = (double)shortWords / words.Length;

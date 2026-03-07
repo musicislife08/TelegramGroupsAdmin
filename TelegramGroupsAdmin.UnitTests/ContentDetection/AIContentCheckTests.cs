@@ -396,9 +396,9 @@ public class AIContentCheckTests
     #region CheckAsync - Review Detection Tests
 
     [Test]
-    public async Task CheckAsync_ReviewResult_HighConfidence_CappedAt3Points()
+    public async Task CheckAsync_ReviewResult_HighConfidence_ScoreFlowsThrough()
     {
-        // Arrange
+        // Arrange - AI returns review with 4.5, no cap applied (downstream engine determines action)
         SetupChatService(CreateReviewResponse("Needs human review", 4.5));
 
         var request = CreateValidRequest();
@@ -408,9 +408,8 @@ public class AIContentCheckTests
 
         using (Assert.EnterMultipleScope())
         {
-            // Assert
-            // Review is capped at ContentDetectionConstants.ReviewThreshold even though AI returned 4.5
-            Assert.That(response.Score, Is.EqualTo(ContentDetectionConstants.ReviewThreshold).Within(0.01));
+            // Assert - score flows through uncapped (safety clamp at MaxScore=5.0 only)
+            Assert.That(response.Score, Is.EqualTo(4.5).Within(0.01));
             Assert.That(response.Abstained, Is.False);
             Assert.That(response.Details, Does.Contain("Review"));
         }

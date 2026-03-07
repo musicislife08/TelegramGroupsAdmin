@@ -1,18 +1,24 @@
 namespace TelegramGroupsAdmin.ContentDetection.Constants;
 
 /// <summary>
-/// Shared constants for content detection scoring system (SpamAssassin-inspired)
+/// Safety boundary constants for the content detection scoring system.
+/// These are architectural invariants (hard limits), not operator-tunable thresholds.
+/// For configurable thresholds (AutoBan, ReviewQueue), see ContentDetectionConfig.
 /// </summary>
 public static class ContentDetectionConstants
 {
     /// <summary>
-    /// Threshold for automatic spam action (≥5.0 points = auto-ban)
+    /// Minimum score any check can return (floor clamp)
     /// </summary>
-    public const double SpamThreshold = 5.0;
+    public const double MinScore = 0.0;
 
     /// <summary>
-    /// Threshold for review queue (3.0-5.0 points = manual review)
+    /// Maximum score any check can return (ceiling clamp)
     /// </summary>
-    public const double ReviewThreshold = 3.0;
+    public const double MaxScore = 5.0;
 
+    /// <summary>
+    /// Default AI score when the AI response doesn't include a score value
+    /// </summary>
+    public const double DefaultAIScore = 2.5;
 }

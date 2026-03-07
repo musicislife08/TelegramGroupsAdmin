@@ -119,8 +119,8 @@ public class ImageContentCheckV2(
                         // Check if similarity meets threshold
                         if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
                         {
-                            // Use configured score directly (already 0.0-5.0 scale)
-                            var score = Math.Clamp(imageConfig.HashMatchConfidence, 0.0, 5.0);
+                            // Use configured score directly, clamped to safety boundaries
+                            var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
 
                             // If matched HAM (not spam), abstain (don't give negative signal in V2)
                             if (matchedSpamLabel == false)
@@ -489,8 +489,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            // Use AI-provided score directly (0.0-5.0 scale)
-            var score = Math.Clamp(response.Score, 0.0, 5.0);
+            // Use AI-provided score directly, clamped to safety boundaries
+            var score = Math.Clamp(response.Score, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
 
             return new ContentCheckResponseV2
             {

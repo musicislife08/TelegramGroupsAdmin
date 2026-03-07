@@ -86,14 +86,14 @@ public class ContentDetectionEngineV2Tests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsSpam, Is.True);
-            Assert.That(result.TotalScore, Is.EqualTo(5.0));
+            Assert.That(result.TotalScore, Is.EqualTo(ContentDetectionConstants.MaxScore));
             Assert.That(result.RecommendedAction, Is.EqualTo(DetectionAction.AutoBan));
-            Assert.That(result.ShouldVeto, Is.False);
+            Assert.That(result.RequiresAIConfirmation, Is.False);
             Assert.That(result.HardBlock, Is.Not.Null);
             Assert.That(result.HardBlock!.ShouldBlock, Is.True);
             Assert.That(result.CheckResults, Has.Count.EqualTo(1));
             Assert.That(result.CheckResults[0].CheckName, Is.EqualTo(CheckName.UrlBlocklist));
-            Assert.That(result.CheckResults[0].Score, Is.EqualTo(5.0));
+            Assert.That(result.CheckResults[0].Score, Is.EqualTo(ContentDetectionConstants.MaxScore));
             Assert.That(result.CheckResults[0].Abstained, Is.False);
         }
     }
@@ -283,7 +283,7 @@ public class ContentDetectionEngineV2Tests
             Assert.That(result.IsSpam, Is.False);
             Assert.That(result.TotalScore, Is.EqualTo(0.0));
             Assert.That(result.RecommendedAction, Is.EqualTo(DetectionAction.Allow));
-            Assert.That(result.ShouldVeto, Is.False);
+            Assert.That(result.RequiresAIConfirmation, Is.False);
             // Both pipeline check and AI check appear in results
             Assert.That(result.CheckResults, Has.Count.EqualTo(2));
         }
@@ -294,11 +294,12 @@ public class ContentDetectionEngineV2Tests
     #region AI Veto - Confirms Spam
 
     [Test]
-    public async Task CheckMessageAsync_AIVetoConfirmsSpam_AddsScoreToTotal()
+    public async Task CheckMessageAsync_AIVetoConfirmsSpam_UsesAIScoreAlone()
     {
-        // Arrange - pipeline 3.0 points, AI adds 1.5 → total 4.5
+        // Arrange - pipeline 3.0 points, AI returns 3.0 → AI score alone determines action
+        // With default config (AutoBanThreshold=4.0, ReviewQueueThreshold=2.5), 3.0 → ReviewQueue
         var pipelineCheck = BuildCheck(CheckName.StopWords, score: 3.0, abstained: false);
-        var aiCheck = BuildAICheck(score: 1.5, abstained: false, details: "AI confirmed spam");
+        var aiCheck = BuildAICheck(score: 3.0, abstained: false, details: "AI confirmed spam");
 
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
@@ -319,7 +320,8 @@ public class ContentDetectionEngineV2Tests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsSpam, Is.True);
-            Assert.That(result.TotalScore, Is.EqualTo(4.5));
+            // AI score replaces pipeline score (not additive)
+            Assert.That(result.TotalScore, Is.EqualTo(3.0));
             Assert.That(result.RecommendedAction, Is.EqualTo(DetectionAction.ReviewQueue));
             // AI check appended to results
             Assert.That(result.CheckResults, Has.Count.EqualTo(2));
@@ -327,11 +329,11 @@ public class ContentDetectionEngineV2Tests
     }
 
     [Test]
-    public async Task CheckMessageAsync_AIVetoConfirmsSpam_ScoreAboveSpamThreshold_ReturnAutoBan()
+    public async Task CheckMessageAsync_AIVetoConfirmsSpam_ScoreAboveAutoBanThreshold_ReturnAutoBan()
     {
-        // Arrange - pipeline 3.0, AI adds 2.5 → total 5.5 → AutoBan
-        var pipelineCheck = BuildCheck(CheckName.StopWords, score: 3.0, abstained: false);
-        var aiCheck = BuildAICheck(score: 2.5, abstained: false, details: "Very high confidence spam");
+        // Arrange - pipeline 2.0, AI returns 4.5 → AI score alone (4.5 >= AutoBanThreshold 4.0) → AutoBan
+        var pipelineCheck = BuildCheck(CheckName.StopWords, score: 2.0, abstained: false);
+        var aiCheck = BuildAICheck(score: 4.5, abstained: false, details: "Very high confidence spam");
 
         var config = BuildPermissiveConfig();
         config.StopWords.Enabled = true;
@@ -351,7 +353,8 @@ public class ContentDetectionEngineV2Tests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.TotalScore, Is.EqualTo(5.5));
+            // AI score alone, not additive with pipeline
+            Assert.That(result.TotalScore, Is.EqualTo(4.5));
             Assert.That(result.RecommendedAction, Is.EqualTo(DetectionAction.AutoBan));
         }
     }
@@ -520,10 +523,10 @@ public class ContentDetectionEngineV2Tests
 
     #region Action Determination
 
-    [TestCase(2.9, DetectionAction.Allow, TestName = "Score_2point9_Returns_Allow")]
-    [TestCase(3.0, DetectionAction.ReviewQueue, TestName = "Score_3point0_Returns_ReviewQueue")]
-    [TestCase(4.9, DetectionAction.ReviewQueue, TestName = "Score_4point9_Returns_ReviewQueue")]
-    [TestCase(5.0, DetectionAction.AutoBan, TestName = "Score_5point0_Returns_AutoBan")]
+    [TestCase(2.4, DetectionAction.Allow, TestName = "Score_2point4_Returns_Allow")]
+    [TestCase(2.5, DetectionAction.ReviewQueue, TestName = "Score_2point5_Returns_ReviewQueue")]
+    [TestCase(3.9, DetectionAction.ReviewQueue, TestName = "Score_3point9_Returns_ReviewQueue")]
+    [TestCase(4.0, DetectionAction.AutoBan, TestName = "Score_4point0_Returns_AutoBan")]
     public async Task CheckMessageAsync_ActionDetermination_CorrectActionForScore(double score, DetectionAction expectedAction)
     {
         // Arrange - configure a single check to return the target score
@@ -546,8 +549,8 @@ public class ContentDetectionEngineV2Tests
         Assert.That(result.RecommendedAction, Is.EqualTo(expectedAction));
     }
 
-    [TestCase(2.9, false, TestName = "Score_2point9_IsSpam_False")]
-    [TestCase(3.0, true, TestName = "Score_3point0_IsSpam_True")]
+    [TestCase(2.4, false, TestName = "Score_2point4_IsSpam_False")]
+    [TestCase(2.5, true, TestName = "Score_2point5_IsSpam_True")]
     public async Task CheckMessageAsync_IsSpamFlag_SetByReviewThreshold(double score, bool expectedIsSpam)
     {
         // Arrange
@@ -897,13 +900,13 @@ public class ContentDetectionEngineV2Tests
     #endregion
 
     // ---------------------------------------------------------------------------
-    // ShouldVeto Flag
+    // RequiresAIConfirmation Flag
     // ---------------------------------------------------------------------------
 
-    #region ShouldVeto Flag
+    #region RequiresAIConfirmation Flag
 
     [Test]
-    public async Task CheckMessageAsync_PositiveScore_ShouldVetoIsTrue()
+    public async Task CheckMessageAsync_PositiveScore_RequiresAIConfirmationIsTrue()
     {
         // Arrange
         var check = BuildCheck(CheckName.StopWords, score: 1.5, abstained: false);
@@ -921,12 +924,12 @@ public class ContentDetectionEngineV2Tests
         // Act
         var result = await engine.CheckMessageAsync(request);
 
-        // Assert - ShouldVeto is true whenever TotalScore > 0
-        Assert.That(result.ShouldVeto, Is.True);
+        // Assert - RequiresAIConfirmation is true whenever TotalScore > 0
+        Assert.That(result.RequiresAIConfirmation, Is.True);
     }
 
     [Test]
-    public async Task CheckMessageAsync_ZeroScore_ShouldVetoIsFalse()
+    public async Task CheckMessageAsync_ZeroScore_RequiresAIConfirmationIsFalse()
     {
         // Arrange
         var check = BuildCheck(CheckName.StopWords, score: 0.0, abstained: true);
@@ -945,7 +948,7 @@ public class ContentDetectionEngineV2Tests
         var result = await engine.CheckMessageAsync(request);
 
         // Assert
-        Assert.That(result.ShouldVeto, Is.False);
+        Assert.That(result.RequiresAIConfirmation, Is.False);
     }
 
     #endregion

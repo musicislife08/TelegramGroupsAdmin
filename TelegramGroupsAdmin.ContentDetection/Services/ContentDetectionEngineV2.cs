@@ -29,8 +29,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly IUrlPreFilterService _preFilterService;
     private readonly ContentDetectionOptions _spamDetectionOptions;
 
-    // SpamAssassin-style thresholds defined in ContentDetectionConstants
-    // ≥5.0 points = spam, 3.0-5.0 = review queue, <3.0 = allow
+    // Action thresholds are per-chat config (ContentDetectionConfig.AutoBanThreshold / ReviewQueueThreshold)
+    // Safety clamps are in ContentDetectionConstants (MinScore / MaxScore)
 
     public ContentDetectionEngineV2(
         ILogger<ContentDetectionEngineV2> logger,
@@ -90,16 +90,16 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 {
                     IsSpam = true,
                     HardBlock = hardBlock,
-                    TotalScore = 5.0,
+                    TotalScore = ContentDetectionConstants.MaxScore,
                     PrimaryReason = hardBlock.Reason ?? "Hard block policy violation",
                     RecommendedAction = DetectionAction.AutoBan,
-                    ShouldVeto = false,
+                    RequiresAIConfirmation = false,
                     CheckResults =
                     [
                         new()
                         {
                             CheckName = CheckName.UrlBlocklist,
-                            Score = 5.0,
+                            Score = ContentDetectionConstants.MaxScore,
                             Abstained = false,
                             Details = hardBlock.Reason ?? "Domain on hard block list"
                         }
@@ -174,20 +174,19 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                     return vetoedResult;
                 }
 
-                // AI confirmed spam - add score to total
+                // AI confirmed spam - AI score is the sole authority for action determination
+                // Pipeline scores served as a gate to trigger the veto; AI verdict drives the action
                 _logger.LogDebug("AI confirmed spam for {User} with score {Score}",
                     request.User.ToLogDebug(), vetoResultV2.Score);
-
-                var newTotalScore = pipelineResult.TotalScore + vetoResultV2.Score;
 
                 var confirmedResult = pipelineResult with
                 {
                     CheckResults = updatedCheckResults,
                     IsSpam = true,
-                    TotalScore = newTotalScore,
-                    PrimaryReason = $"AI confirmed spam: {vetoResultV2.Details} (total score: {newTotalScore:F1})",
-                    RecommendedAction = newTotalScore >= 5.0 ? DetectionAction.AutoBan : DetectionAction.ReviewQueue,
-                    ShouldVeto = false
+                    TotalScore = vetoResultV2.Score,
+                    PrimaryReason = $"AI confirmed spam: {vetoResultV2.Details} (score: {vetoResultV2.Score:F1})",
+                    RecommendedAction = DetermineActionFromScore(vetoResultV2.Score, config.AutoBanThreshold, config.ReviewQueueThreshold),
+                    RequiresAIConfirmation = false
                 };
 
                 RecordDetectionMetrics(startTimestamp, confirmedResult, activity);
@@ -237,16 +236,16 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var ocrExtractedText = imageSpamResponse?.OcrExtractedText;
         var visionAnalysisText = imageSpamResponse?.VisionAnalysisText;
 
-        // Determine action based on total score (SpamAssassin-style thresholds)
-        var isSpam = totalScore >= ContentDetectionConstants.ReviewThreshold; // ≥3.0 is spam (may need review)
-        var recommendedAction = DetermineActionFromScore(totalScore);
+        // Determine action based on total score vs per-chat config thresholds
+        var isSpam = totalScore >= config.ReviewQueueThreshold;
+        var recommendedAction = DetermineActionFromScore(totalScore, config.AutoBanThreshold, config.ReviewQueueThreshold);
 
-        // AI veto runs on any spam detection to reduce false positives
-        // (actual veto execution happens in CheckMessageAsync based on config.AIVeto.Enabled)
-        var shouldVeto = totalScore > 0;
+        // AI confirmation runs on any spam signal to reduce false positives
+        // (actual execution happens in CheckMessageAsync based on config.AIVeto.Enabled)
+        var requiresAIConfirmation = totalScore > 0;
 
-        var primaryReason = totalScore >= ContentDetectionConstants.ReviewThreshold
-            ? $"Additive score: {totalScore:F1} points (threshold: {ContentDetectionConstants.SpamThreshold:F1})"
+        var primaryReason = totalScore >= config.ReviewQueueThreshold
+            ? $"Additive score: {totalScore:F1} points (threshold: {config.AutoBanThreshold:F1})"
             : "No spam detected";
 
         var result = new ContentDetectionResult
@@ -256,7 +255,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckResults = checkResponsesV2,
             PrimaryReason = primaryReason,
             RecommendedAction = recommendedAction,
-            ShouldVeto = shouldVeto,
+            RequiresAIConfirmation = requiresAIConfirmation,
             OcrExtractedText = ocrExtractedText,
             VisionAnalysisText = visionAnalysisText
         };
@@ -463,15 +462,15 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         return result;
     }
 
-    private DetectionAction DetermineActionFromScore(double totalScore)
+    private static DetectionAction DetermineActionFromScore(double totalScore, double autoBanThreshold, double reviewQueueThreshold)
     {
-        if (totalScore >= ContentDetectionConstants.SpamThreshold)
-            return DetectionAction.AutoBan; // ≥5.0 points
+        if (totalScore >= autoBanThreshold)
+            return DetectionAction.AutoBan;
 
-        if (totalScore >= ContentDetectionConstants.ReviewThreshold)
-            return DetectionAction.ReviewQueue; // 3.0-5.0 points
+        if (totalScore >= reviewQueueThreshold)
+            return DetectionAction.ReviewQueue;
 
-        return DetectionAction.Allow; // <3.0 points
+        return DetectionAction.Allow;
     }
 
     private ContentDetectionResult CreateVetoedResult(List<ContentCheckResponseV2> checkResults, ContentCheckResponseV2 vetoResult)
@@ -483,7 +482,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             CheckResults = checkResults,
             PrimaryReason = vetoResult.Details,
             RecommendedAction = DetectionAction.Allow,
-            ShouldVeto = false
+            RequiresAIConfirmation = false
         };
     }
 
