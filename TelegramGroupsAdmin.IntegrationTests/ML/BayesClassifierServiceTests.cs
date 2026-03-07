@@ -170,7 +170,7 @@ public class BayesClassifierServiceTests
 
         // Act & Assert — SemaphoreSlim.WaitAsync throws OperationCanceledException (or subclass)
         // when the token is already cancelled before the wait begins
-        Assert.ThrowsAsync<OperationCanceledException>(
+        Assert.CatchAsync<OperationCanceledException>(
             async () => await _bayesService!.TrainAsync(cts.Token),
             "Pre-cancelled token should throw OperationCanceledException");
     }
