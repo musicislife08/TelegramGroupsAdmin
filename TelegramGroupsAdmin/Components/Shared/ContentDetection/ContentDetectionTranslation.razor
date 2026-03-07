@@ -59,11 +59,6 @@
                 <MudText>Latin Script Threshold: @translationConfig.LatinScriptThreshold.ToString("F2")</MudText>
             </MudSlider>
 
-            <MudNumericField @bind-Value="translationConfig.ConfidenceThreshold"
-                            Label="Confidence Threshold"
-                            Min="0.0" Max="5.0" Step="0.25"
-                            Disabled="@translationReadOnly"
-                            HelperText="@(translationReadOnly ? $"Using global value: {translationConfig.ConfidenceThreshold:F2}" : "Confidence level for translated spam (0.0-5.0)")" />
         }
 
         <MudText Typo="Typo.caption" Class="mud-text-secondary">

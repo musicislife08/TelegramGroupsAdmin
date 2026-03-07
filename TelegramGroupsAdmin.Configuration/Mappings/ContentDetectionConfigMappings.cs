@@ -84,7 +84,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = data.UseGlobal,
             Enabled = data.Enabled,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             AlwaysRun = data.AlwaysRun
         };
     }
@@ -95,7 +94,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = model.UseGlobal,
             Enabled = model.Enabled,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             AlwaysRun = model.AlwaysRun
         };
     }
@@ -136,7 +134,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = data.UseGlobal,
             Enabled = data.Enabled,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             AlwaysRun = data.AlwaysRun
         };
     }
@@ -147,7 +144,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = model.UseGlobal,
             Enabled = model.Enabled,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             AlwaysRun = model.AlwaysRun
         };
     }
@@ -190,7 +186,6 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = data.MinMessageLength,
             LatinScriptThreshold = data.LatinScriptThreshold,
             LanguageDetectionConfidenceThreshold = data.LanguageDetectionConfidenceThreshold,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             WarnNonEnglish = data.WarnNonEnglish,
             WarningMessage = data.WarningMessage,
             AlwaysRun = data.AlwaysRun
@@ -207,7 +202,6 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = model.MinMessageLength,
             LatinScriptThreshold = model.LatinScriptThreshold,
             LanguageDetectionConfidenceThreshold = model.LanguageDetectionConfidenceThreshold,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             WarnNonEnglish = model.WarnNonEnglish,
             WarningMessage = model.WarningMessage,
             AlwaysRun = model.AlwaysRun
@@ -227,8 +221,6 @@ public static class ContentDetectionConfigMappings
             MinWordsCount = data.MinWordsCount,
             ShortWordLength = data.ShortWordLength,
             ShortWordRatioThreshold = data.ShortWordRatioThreshold,
-            SpaceRatioThreshold = data.SpaceRatioThreshold,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             AlwaysRun = data.AlwaysRun
         };
     }
@@ -242,8 +234,6 @@ public static class ContentDetectionConfigMappings
             MinWordsCount = model.MinWordsCount,
             ShortWordLength = model.ShortWordLength,
             ShortWordRatioThreshold = model.ShortWordRatioThreshold,
-            SpaceRatioThreshold = model.SpaceRatioThreshold,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             AlwaysRun = model.AlwaysRun
         };
     }

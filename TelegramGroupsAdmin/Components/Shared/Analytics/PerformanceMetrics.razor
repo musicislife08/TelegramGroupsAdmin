@@ -73,7 +73,7 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="@GetErrorRateColor(_accuracyStats.FalsePositivePercentage)" />
                         <MudText Typo="Typo.body1" Style="flex: 1;">False Positive Rate</MudText>
-                        <MudText Typo="Typo.h6">@_accuracyStats.FalsePositivePercentage.ToString("F2")%</MudText>
+                        <MudText Typo="Typo.h6">@_accuracyStats.FalsePositivePercentage.ToString("F1")%</MudText>
                     </MudStack>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
                         <MudProgressLinear Color="@GetErrorRateColor(_accuracyStats.FalsePositivePercentage)"
@@ -93,7 +93,7 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.VisibilityOff" Color="@GetErrorRateColor(_accuracyStats.FalseNegativePercentage)" />
                         <MudText Typo="Typo.body1" Style="flex: 1;">False Negative Rate</MudText>
-                        <MudText Typo="Typo.h6">@_accuracyStats.FalseNegativePercentage.ToString("F2")%</MudText>
+                        <MudText Typo="Typo.h6">@_accuracyStats.FalseNegativePercentage.ToString("F1")%</MudText>
                     </MudStack>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
                         <MudProgressLinear Color="@GetErrorRateColor(_accuracyStats.FalseNegativePercentage)"
@@ -134,7 +134,7 @@
                         <MudTh>Algorithm</MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.TotalChecks">Total Checks</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.SpamPercentage">Hit Rate</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.AverageSpamConfidence ?? 101">Avg Spam Conf</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.AverageSpamConfidence ?? 101">Avg Spam Score</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.ContributedToFalsePositives">Contrib. to FPs</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.ContributedToFalseNegatives">Contrib. to FNs</MudTableSortLabel></MudTh>
                     </HeaderContent>
@@ -148,11 +148,11 @@
                                 @context.SpamPercentage.ToString("F1")% (@context.SpamDetected)
                             </MudChip>
                         </MudTd>
-                        <MudTd DataLabel="Avg Spam Conf">
+                        <MudTd DataLabel="Avg Spam Score">
                             @if (context.AverageSpamConfidence.HasValue)
                             {
                                 <MudChip T="string" Size="MudSize.Small" Color="@GetConfidenceColor(context.AverageSpamConfidence.Value)">
-                                    @context.AverageSpamConfidence.Value.ToString("F0")
+                                    @context.AverageSpamConfidence.Value.ToString("F1")
                                 </MudChip>
                             }
                             else

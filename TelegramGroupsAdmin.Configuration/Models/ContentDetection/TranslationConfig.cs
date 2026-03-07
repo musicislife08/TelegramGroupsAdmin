@@ -45,11 +45,6 @@ public class TranslationConfig
     public double LanguageDetectionConfidenceThreshold { get; set; } = 0.80;
 
     /// <summary>
-    /// Confidence threshold for spam classification (0.0-5.0)
-    /// </summary>
-    public double ConfidenceThreshold { get; set; } = 4.0;
-
-    /// <summary>
     /// Enable language warnings for non-English messages (Phase 4.21)
     /// When enabled, untrusted users posting non-spam messages in non-English will receive a warning
     /// </summary>

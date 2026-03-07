@@ -64,14 +64,11 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     private static ContentCheckRecord CreateContentCheck(bool isSpam, double score)
     {
         return new ContentCheckRecord(
-            Id: 1,
             CheckTimestamp: DateTimeOffset.UtcNow,
             UserId: 456,
-            ContentHash: "abc123",
             IsSpam: isSpam,
             Score: score,
             Reason: isSpam ? "Test spam" : "Test ham",
-            CheckType: "test",
             MatchedMessageId: null
         );
     }

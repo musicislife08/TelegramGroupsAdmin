@@ -4,7 +4,6 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 
 /// <summary>
 /// Naive Bayes classifier for spam detection
-/// Shared by both V1 and V2 implementations
 /// </summary>
 internal class BayesClassifier
 {
@@ -13,7 +12,6 @@ internal class BayesClassifier
     private readonly ITokenizerService _tokenizerService;
     private int _spamMessageCount;
     private int _hamMessageCount;
-    private int _totalWordCount;
 
     public BayesClassifier(ITokenizerService tokenizerService)
     {
@@ -31,7 +29,6 @@ internal class BayesClassifier
         foreach (var word in words)
         {
             wordCounts[word] = wordCounts.GetValueOrDefault(word, 0) + 1;
-            _totalWordCount++;
         }
 
         if (isSpam)

@@ -35,8 +35,4 @@ public static class FileScanningConstants
     /// </summary>
     public const int VirusTotalPollDelayMinutes = 2;
 
-    /// <summary>
-    /// File scan cache TTL in hours - how long to cache scan results by hash
-    /// </summary>
-    public const int ScanCacheTtlHours = 24;
 }

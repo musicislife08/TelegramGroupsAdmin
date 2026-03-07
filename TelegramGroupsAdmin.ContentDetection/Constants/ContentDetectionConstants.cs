@@ -15,9 +15,4 @@ public static class ContentDetectionConstants
     /// </summary>
     public const double ReviewThreshold = 3.0;
 
-    /// <summary>
-    /// Allow threshold (&lt;3.0 points = safe)
-    /// </summary>
-    public const double AllowThreshold = 3.0;
-
 }

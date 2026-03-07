@@ -15,9 +15,5 @@ public class SpacingConfigData
 
     public double ShortWordRatioThreshold { get; set; } = 0.7;
 
-    public double SpaceRatioThreshold { get; set; } = 0.3;
-
-    public double ConfidenceThreshold { get; set; } = 3.5;
-
     public bool AlwaysRun { get; set; }
 }

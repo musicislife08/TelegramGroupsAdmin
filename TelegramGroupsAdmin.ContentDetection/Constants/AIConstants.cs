@@ -11,11 +11,6 @@ public static class AIConstants
     public const int CacheDurationHours = 1;
 
     /// <summary>
-    /// Maximum tokens for AI spam detection response
-    /// </summary>
-    public const int SpamDetectionMaxTokens = 300;
-
-    /// <summary>
     /// Maximum tokens for image vision analysis response
     /// </summary>
     public const int ImageVisionMaxTokens = 300;

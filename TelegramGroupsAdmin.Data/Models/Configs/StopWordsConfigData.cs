@@ -9,7 +9,5 @@ public class StopWordsConfigData
 
     public bool Enabled { get; set; } = true;
 
-    public double ConfidenceThreshold { get; set; } = 2.5;
-
     public bool AlwaysRun { get; set; }
 }

@@ -45,17 +45,6 @@
                 <MudText>Short Word Ratio: @spacingConfig.ShortWordRatioThreshold.ToString("F2")</MudText>
             </MudSlider>
 
-            <MudSlider @bind-Value="spacingConfig.SpaceRatioThreshold"
-                      Min="0.1" Max="1.0" Step="0.05"
-                      Disabled="@spacingReadOnly">
-                <MudText>Space Ratio: @spacingConfig.SpaceRatioThreshold.ToString("F2")</MudText>
-            </MudSlider>
-
-            <MudNumericField @bind-Value="spacingConfig.ConfidenceThreshold"
-                            Label="Confidence Threshold"
-                            Min="0.0" Max="5.0" Step="0.25"
-                            Disabled="@spacingReadOnly"
-                            HelperText="@(spacingReadOnly ? $"Using global value: {spacingConfig.ConfidenceThreshold:F2}" : "Confidence level when abnormal spacing is detected (0.0-5.0)")" />
         }
     </MudStack>
 </MudPaper>

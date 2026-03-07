@@ -448,14 +448,11 @@
             // Query detection_results table instead of obsolete spam_checks table
             var recentDetections = await MessageStatsService.GetRecentDetectionsAsync();
             _recentContentChecks = recentDetections.Take(20).Select(d => new ContentCheckRecord(
-                Id: d.Id,
                 CheckTimestamp: d.DetectedAt,
                 UserId: d.UserId,
-                ContentHash: null,
                 IsSpam: d.IsSpam,
                 Score: d.Score,
                 Reason: d.Reason ?? $"{d.DetectionMethod} detection",
-                CheckType: d.DetectionMethod,
                 MatchedMessageId: d.MessageId
             )).ToList();
 

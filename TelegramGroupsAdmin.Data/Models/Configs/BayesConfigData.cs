@@ -9,7 +9,5 @@ public class BayesConfigData
 
     public bool Enabled { get; set; } = true;
 
-    public double ConfidenceThreshold { get; set; } = 3.75;
-
     public bool AlwaysRun { get; set; }
 }

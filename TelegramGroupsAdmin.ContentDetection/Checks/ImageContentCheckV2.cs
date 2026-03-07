@@ -438,7 +438,7 @@ public class ImageContentCheckV2(
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<VisionSpamResponse>(
+            var response = JsonSerializer.Deserialize<MediaSpamResponse>(
                 content,
                 CaseInsensitiveJsonOptions);
 
@@ -521,13 +521,3 @@ public class ImageContentCheckV2(
     }
 }
 
-/// <summary>
-/// Expected JSON response structure from AI Vision for spam detection.
-/// This is the format we request in our prompts.
-/// </summary>
-internal record VisionSpamResponse(
-    [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("score")] double Score,
-    [property: JsonPropertyName("reason")] string? Reason,
-    [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
-);

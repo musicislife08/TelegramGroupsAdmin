@@ -11,7 +11,6 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
 
@@ -27,7 +26,6 @@ public class ContentDetectionEngineV2Tests
     private IContentDetectionConfigRepository _configRepository = null!;
     private ISystemConfigRepository _systemConfigRepo = null!;
     private IPromptVersionRepository _promptVersionRepo = null!;
-    private IAITranslationService _translationService = null!;
     private IUrlPreFilterService _preFilterService = null!;
     private IOptions<ContentDetectionOptions> _options = null!;
 
@@ -41,7 +39,6 @@ public class ContentDetectionEngineV2Tests
         _configRepository = Substitute.For<IContentDetectionConfigRepository>();
         _systemConfigRepo = Substitute.For<ISystemConfigRepository>();
         _promptVersionRepo = Substitute.For<IPromptVersionRepository>();
-        _translationService = Substitute.For<IAITranslationService>();
         _preFilterService = Substitute.For<IUrlPreFilterService>();
         _options = Options.Create(new ContentDetectionOptions());
 
@@ -967,7 +964,6 @@ public class ContentDetectionEngineV2Tests
             _systemConfigRepo,
             _promptVersionRepo,
             checks,
-            _translationService,
             _preFilterService,
             _options);
     }

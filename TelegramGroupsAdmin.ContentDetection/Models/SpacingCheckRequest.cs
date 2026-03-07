@@ -5,6 +5,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 /// </summary>
 public sealed class SpacingCheckRequest : ContentCheckRequestBase
 {
-    public required double ConfidenceThreshold { get; init; }
     public required double SuspiciousRatioThreshold { get; init; }
+    public required int ShortWordLength { get; init; }
+    public required int MinWordsCount { get; init; }
 }

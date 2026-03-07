@@ -5,5 +5,4 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 /// </summary>
 public sealed class StopWordsCheckRequest : ContentCheckRequestBase
 {
-    public required double ConfidenceThreshold { get; init; }
 }

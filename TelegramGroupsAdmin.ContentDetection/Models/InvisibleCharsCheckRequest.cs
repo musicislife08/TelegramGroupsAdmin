@@ -5,5 +5,4 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 /// </summary>
 public sealed class InvisibleCharsCheckRequest : ContentCheckRequestBase
 {
-    public required double ConfidenceThreshold { get; init; }
 }

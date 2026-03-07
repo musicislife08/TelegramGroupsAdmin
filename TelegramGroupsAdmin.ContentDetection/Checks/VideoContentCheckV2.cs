@@ -560,7 +560,7 @@ public class VideoContentCheckV2(
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<VideoSpamResponse>(
+            var response = JsonSerializer.Deserialize<MediaSpamResponse>(
                 content,
                 CaseInsensitiveJsonOptions);
 
@@ -659,13 +659,3 @@ internal record KeyframeHashJson(
     [property: JsonPropertyName("hash")] string Hash
 );
 
-/// <summary>
-/// Expected JSON response structure from AI Vision for video spam detection.
-/// This is the format we request in our prompts.
-/// </summary>
-internal record VideoSpamResponse(
-    [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("score")] double Score,
-    [property: JsonPropertyName("reason")] string? Reason,
-    [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
-);

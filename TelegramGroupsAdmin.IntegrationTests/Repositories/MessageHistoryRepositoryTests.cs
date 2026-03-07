@@ -1391,11 +1391,7 @@ public class MessageHistoryRepositoryTests
         {
             foreach (var (messageId, contentCheck) in contentChecks)
             {
-                using (Assert.EnterMultipleScope())
-                {
-                    Assert.That(messageIds, Does.Contain(messageId), "Returned message ID should be in request list");
-                    Assert.That(contentCheck.CheckType, Is.Not.Null.Or.Empty);
-                }
+                Assert.That(messageIds, Does.Contain(messageId), "Returned message ID should be in request list");
             }
         }
     }

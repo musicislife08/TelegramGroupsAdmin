@@ -42,7 +42,6 @@ public static class CheckResultsSerializer
 
     /// <summary>
     /// Deserialize check results JSON back to CheckResult list.
-    /// Expects V2-format JSONB (migrated from V1 by EF migration).
     /// </summary>
     public static List<CheckResult> Deserialize(string json)
     {

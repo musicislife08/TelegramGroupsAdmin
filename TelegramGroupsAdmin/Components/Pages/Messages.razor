@@ -856,14 +856,11 @@
         // Use latest detection result (already ordered DESC by DetectedAt in repository)
         var latest = wrapper.DetectionResults.First();
         return new ContentCheckRecord(
-            Id: latest.Id,
             CheckTimestamp: latest.DetectedAt,
             UserId: latest.UserId,
-            ContentHash: wrapper.Message.ContentHash,
             IsSpam: latest.IsSpam,
             Score: Math.Abs(latest.NetScore),
             Reason: latest.Reason,
-            CheckType: latest.DetectionMethod,
             MatchedMessageId: messageId
         );
     }
@@ -1061,14 +1058,11 @@
         {
             var latest = history.OrderByDescending(h => h.DetectedAt).First();
             _contentChecks[messageId] = new ContentCheckRecord(
-                Id: latest.Id,
                 CheckTimestamp: latest.DetectedAt,
                 UserId: userId,
-                ContentHash: null,
                 IsSpam: latest.IsSpam,
-                Score: Math.Abs(latest.NetScore), // Use absolute net_score for display
+                Score: Math.Abs(latest.NetScore),
                 Reason: latest.Reason,
-                CheckType: latest.DetectionMethod,
                 MatchedMessageId: null
             );
         }

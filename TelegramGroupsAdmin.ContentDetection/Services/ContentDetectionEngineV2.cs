@@ -9,7 +9,6 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Extensions;
 
@@ -27,7 +26,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly ISystemConfigRepository _systemConfigRepo;
     private readonly IPromptVersionRepository _promptVersionRepo;
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
-    private readonly IAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
     private readonly ContentDetectionOptions _spamDetectionOptions;
 
@@ -40,7 +38,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         ISystemConfigRepository systemConfigRepo,
         IPromptVersionRepository promptVersionRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
-        IAITranslationService translationService,
         IUrlPreFilterService preFilterService,
         IOptions<ContentDetectionOptions> spamDetectionOptions)
     {
@@ -49,7 +46,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         _systemConfigRepo = systemConfigRepo;
         _promptVersionRepo = promptVersionRepo;
         _contentChecksV2 = contentChecksV2;
-        _translationService = translationService;
         _preFilterService = preFilterService;
         _spamDetectionOptions = spamDetectionOptions.Value;
     }
@@ -308,7 +304,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
-                ConfidenceThreshold = config.StopWords.ConfidenceThreshold,
                 CancellationToken = cancellationToken
             },
 
@@ -338,8 +333,9 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
-                ConfidenceThreshold = 3.5,
                 SuspiciousRatioThreshold = config.Spacing.ShortWordRatioThreshold,
+                ShortWordLength = config.Spacing.ShortWordLength,
+                MinWordsCount = config.Spacing.MinWordsCount,
                 CancellationToken = cancellationToken
             },
 
@@ -348,7 +344,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Message = originalRequest.Message ?? "",
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
-                ConfidenceThreshold = 4.0,
                 CancellationToken = cancellationToken
             },
 
@@ -359,7 +354,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Chat = originalRequest.Chat,
                 Urls = originalRequest.Urls ?? [],
                 VirusTotalApiKey = _spamDetectionOptions.ApiKey,
-                ConfidenceThreshold = 4.25,
                 CancellationToken = cancellationToken
             },
 
@@ -369,7 +363,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
                 Urls = originalRequest.Urls ?? [],
-                ConfidenceThreshold = 4.5,
                 CancellationToken = cancellationToken
             },
 
@@ -382,7 +375,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 PhotoUrl = originalRequest.PhotoUrl,
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
                 CustomPrompt = null,
-                ConfidenceThreshold = 4.0,
                 CancellationToken = cancellationToken
             },
 
@@ -393,7 +385,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 Chat = originalRequest.Chat,
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null,
-                ConfidenceThreshold = 4.0,
                 CancellationToken = cancellationToken
             },
 

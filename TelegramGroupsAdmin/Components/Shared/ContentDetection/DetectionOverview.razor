@@ -180,11 +180,9 @@
         @if (_config.StopWords.Enabled)
         {
             <MudCardContent>
-                <MudNumericField @bind-Value="_config.StopWords.ConfidenceThreshold"
-                                Label="Confidence Threshold"
-                                Min="0.0" Max="5.0" Step="0.25"
-                                Variant="Variant.Outlined"
-                                helperText="Confidence level when stop words are detected (0.0-5.0)" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Matches messages against a customizable list of spam keywords. Click "Configure" for settings.
+                </MudText>
             </MudCardContent>
         }
     </MudCard>

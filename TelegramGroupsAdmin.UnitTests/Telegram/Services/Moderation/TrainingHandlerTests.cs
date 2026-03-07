@@ -159,9 +159,13 @@ public class TrainingHandlerTests
             Arg.Any<long?>(),
             Arg.Any<CancellationToken>());
 
-        // Retraining still triggered
+        // Retraining still triggered (both text and Bayes classifiers)
         await _mockJobTriggerService.Received(1).TriggerNowAsync(
             BackgroundJobNames.TextClassifierRetraining,
+            Arg.Any<object>(),
+            Arg.Any<CancellationToken>());
+        await _mockJobTriggerService.Received(1).TriggerNowAsync(
+            BackgroundJobNames.BayesClassifierRetraining,
             Arg.Any<object>(),
             Arg.Any<CancellationToken>());
     }
