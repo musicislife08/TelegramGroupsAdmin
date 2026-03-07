@@ -4,6 +4,7 @@ using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -14,15 +15,13 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramMediaService(
     ILogger<TelegramMediaService> logger,
-    ITelegramBotClientFactory botClientFactory,
-    IOptions<MessageHistoryOptions> historyOptions)
+    IBotMediaService mediaService,
+    IOptions<AppOptions> appOptions)
 {
     // Telegram Bot API file download limit (standard api.telegram.org)
     private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
 
-    private readonly ILogger<TelegramMediaService> _logger = logger;
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly string _mediaStoragePath = historyOptions.Value.ImageStoragePath; // Reuse same base path
+    private readonly string _mediaStoragePath = appOptions.Value.DataPath;
 
     /// <summary>
     /// Download and save media file from Telegram
@@ -33,19 +32,16 @@ public class TelegramMediaService(
         MediaType mediaType,
         string? fileName,
         long chatId,
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            // Get operations
-            var operations = await _botClientFactory.GetOperationsAsync();
-
             // Get file info from Telegram
-            var file = await operations.GetFileAsync(fileId, cancellationToken);
+            var file = await mediaService.GetFileAsync(fileId, cancellationToken);
             if (file.FilePath == null)
             {
-                _logger.LogWarning("File path is null for fileId {FileId}", fileId);
+                logger.LogWarning("File path is null for fileId {FileId}", fileId);
                 return null;
             }
 
@@ -68,10 +64,10 @@ public class TelegramMediaService(
             // Download file from Telegram
             await using (var fileStream = File.Create(localFilePath))
             {
-                await operations.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
+                await mediaService.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
             }
 
-            _logger.LogInformation(
+            logger.LogDebug(
                 "Downloaded {MediaType} file for message {MessageId}: {FileName} ({FileSize} bytes)",
                 mediaType,
                 messageId,
@@ -86,7 +82,7 @@ public class TelegramMediaService(
             // File exceeds Telegram Bot API 20MB download limit (standard api.telegram.org)
             // NOTE: This catch block should rarely execute due to proactive size check in MediaProcessingHandler
             // Only catches edge cases where file is requested directly (not through normal message flow)
-            _logger.LogWarning(
+            logger.LogWarning(
                 "File too large for Telegram Bot API (20MB limit): {MediaType} file {FileId} for message {MessageId}. " +
                 "Metadata saved but file_id should have been set to null to prevent retry attempts.",
                 mediaType,
@@ -96,7 +92,7 @@ public class TelegramMediaService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(
+            logger.LogError(
                 ex,
                 "Failed to download {MediaType} file {FileId} for message {MessageId}",
                 mediaType,

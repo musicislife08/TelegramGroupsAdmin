@@ -280,8 +280,11 @@ public class CriticalMigrationTests
             SELECT reported_at FROM reports
             WHERE type = 1 AND context->>'suspectedUserId' = '100001'
         ");
-        Assert.That(reportedAt.Year, Is.EqualTo(2025), "reported_at should be mapped from detected_at");
-        Assert.That(reportedAt.Month, Is.EqualTo(12), "reported_at month should match");
-        Assert.That(reportedAt.Day, Is.EqualTo(15), "reported_at day should match");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reportedAt.Year, Is.EqualTo(2025), "reported_at should be mapped from detected_at");
+            Assert.That(reportedAt.Month, Is.EqualTo(12), "reported_at month should match");
+            Assert.That(reportedAt.Day, Is.EqualTo(15), "reported_at day should match");
+        }
     }
 }

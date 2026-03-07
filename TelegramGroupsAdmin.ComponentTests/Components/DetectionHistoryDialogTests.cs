@@ -20,17 +20,14 @@ public class DetectionHistoryDialogTests : DialogTestContext
     /// Creates a test MessageRecord with default values.
     /// </summary>
     private static MessageRecord CreateTestMessage(
-        long messageId = 12345,
+        int messageId = 12345,
         long userId = 67890,
         string messageText = "Test message")
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "testuser",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: 111222,
+            User: new UserIdentity(userId, "Test", "User", "testuser"),
+            Chat: new ChatIdentity(111222, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow.AddHours(-1),
             MessageText: messageText,
             PhotoFileId: null,
@@ -38,7 +35,6 @@ public class DetectionHistoryDialogTests : DialogTestContext
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -66,7 +62,7 @@ public class DetectionHistoryDialogTests : DialogTestContext
     private static DetectionResultRecord CreateTestResult(
         long id = 1,
         bool isSpam = true,
-        int confidence = 95,
+        double score = 4.75,
         string detectionSource = "automatic",
         string detectionMethod = "BayesClassifier",
         string? reason = null,
@@ -82,8 +78,8 @@ public class DetectionHistoryDialogTests : DialogTestContext
             DetectionSource = detectionSource,
             DetectionMethod = detectionMethod,
             IsSpam = isSpam,
-            Confidence = confidence,
-            NetConfidence = isSpam ? confidence : -confidence,
+            Score = score,
+            NetScore = isSpam ? score : -score,
             AddedBy = Actor.FromSystem("DetectionService"),
             UserId = 67890,
             Reason = reason,
@@ -316,14 +312,14 @@ public class DetectionHistoryDialogTests : DialogTestContext
     }
 
     [Test]
-    public void DisplaysNetConfidence()
+    public void DisplaysNetScore()
     {
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         var results = new List<DetectionResultRecord>
         {
-            CreateTestResult(confidence: 85)
+            CreateTestResult(score: 4.25)
         };
 
         // Act

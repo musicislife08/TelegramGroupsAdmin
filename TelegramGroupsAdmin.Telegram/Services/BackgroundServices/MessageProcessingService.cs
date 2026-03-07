@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -6,7 +5,7 @@ using System.Text.Json;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -14,7 +13,10 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -25,23 +27,12 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
-    IOptions<MessageHistoryOptions> historyOptions,
-    ITelegramBotClientFactory botFactory,
+    IOptions<AppOptions> appOptions,
     CommandRouter commandRouter,
-    IChatManagementService chatManagementService,
     IChatCache chatCache,
-    TelegramPhotoService telegramPhotoService,
-    TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
     ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
-    private readonly ITelegramBotClientFactory _botFactory = botFactory;
-    private readonly IChatCache _chatCache = chatCache;
-    private readonly TelegramPhotoService _photoService = telegramPhotoService;
-    private readonly TelegramMediaService _mediaService = telegramMediaService;
-
     // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
     // These are NOT injected in constructor since MessageProcessingService is Singleton
     // Instead, resolved from scope when needed
@@ -49,12 +40,12 @@ public partial class MessageProcessingService(
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
     public event Action<MessageEditRecord>? OnMessageEdited;
-    public event Action<long, MediaType>? OnMediaUpdated;
+    public event Action<int, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Raises the OnMediaUpdated event (called by MediaRefetchWorkerService)
     /// </summary>
-    public void RaiseMediaUpdated(long messageId, MediaType mediaType)
+    public void RaiseMediaUpdated(int messageId, MediaType mediaType)
     {
         OnMediaUpdated?.Invoke(messageId, mediaType);
     }
@@ -83,12 +74,12 @@ public partial class MessageProcessingService(
                     if (commandResult?.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                     {
                         // Use BotMessageService to save bot response to database
-                        using var scope = _scopeFactory.CreateScope();
+                        using var scope = scopeFactory.CreateScope();
                         var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
                             commandResult.Response,
-                            parseMode: ParseMode.Markdown,
+                            parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
                             cancellationToken: cancellationToken);
                     }
                 }
@@ -104,10 +95,10 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    using var scope = _scopeFactory.CreateScope();
+                    using var scope = scopeFactory.CreateScope();
                     var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
-                    var examContext = await examFlowService.GetActiveExamContextAsync(message.From.Id, cancellationToken);
+                    var examContext = await examFlowService.GetActiveExamContextAsync(UserIdentity.From(message.From), cancellationToken);
                     if (examContext?.AwaitingOpenEndedAnswer == true)
                     {
                         var result = await examFlowService.HandleOpenEndedAnswerAsync(
@@ -117,8 +108,8 @@ public partial class MessageProcessingService(
                             cancellationToken);
 
                         logger.LogInformation(
-                            "Processed open-ended exam answer for user {UserId}: Complete={Complete}, Passed={Passed}",
-                            message.From.Id, result.ExamComplete, result.Passed);
+                            "Processed open-ended exam answer for {User}: Complete={Complete}, Passed={Passed}",
+                            message.From.ToLogInfo(), result.ExamComplete, result.Passed);
 
                         // Cancel welcome timeout and update response if exam completed
                         if (result.ExamComplete && result.GroupChatId.HasValue)
@@ -155,7 +146,7 @@ public partial class MessageProcessingService(
         }
 
         // Keep SDK Chat cache warm (used by NotificationHandler and other services)
-        _chatCache.UpdateChat(message.Chat);
+        chatCache.UpdateChat(message.Chat);
 
         // Detect Group → Supergroup migration
         // When a Group is upgraded to Supergroup (e.g., when granting admin), Telegram:
@@ -171,7 +162,10 @@ public partial class MessageProcessingService(
                 oldChatId,
                 newChatId);
 
-            await chatManagementService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
+            // Resolve scoped IBotChatService from scope (singleton can't inject scoped directly)
+            using var migrationScope = scopeFactory.CreateScope();
+            var chatService = migrationScope.ServiceProvider.GetRequiredService<IBotChatService>();
+            await chatService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
             return; // Don't process migration message further
         }
 
@@ -198,11 +192,8 @@ public partial class MessageProcessingService(
             {
                 var serviceMessageRecord = new MessageRecord(
                     message.MessageId,
-                    message.From.Id,
-                    message.From.Username,
-                    message.From.FirstName,
-                    message.From.LastName,
-                    message.Chat.Id,
+                    User: new Core.Models.UserIdentity(message.From.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                    Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                     DateTimeOffset.UtcNow,
                     serviceMessageText,
                     PhotoFileId: null,
@@ -210,7 +201,6 @@ public partial class MessageProcessingService(
                     Urls: null,
                     EditDate: null,
                     ContentHash: null,
-                    ChatName: message.Chat.Title ?? message.Chat.Username,
                     PhotoLocalPath: null,
                     PhotoThumbnailPath: null,
                     ChatIconPath: null,
@@ -235,39 +225,13 @@ public partial class MessageProcessingService(
                 await repository.InsertMessageAsync(serviceMessageRecord, cancellationToken);
             }
 
-            // Check for banned users joining - lazy sync ban to this chat
-            if (message.NewChatMembers != null)
-            {
-                var userRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
-
-                foreach (var joiningUser in message.NewChatMembers)
-                {
-                    if (joiningUser.IsBot) continue;
-
-                    var existingUser = await userRepo.GetByTelegramIdAsync(joiningUser.Id, cancellationToken);
-                    if (existingUser?.IsBanned == true)
-                    {
-                        logger.LogWarning(
-                            "Globally banned user {User} attempted to join {Chat} - applying ban",
-                            joiningUser.ToLogInfo(), message.Chat.ToLogInfo());
-
-                        await moderationService.SyncBanToChatAsync(
-                            joiningUser,
-                            message.Chat,
-                            "Lazy ban sync: User was globally banned before this chat was added",
-                            triggeredByMessageId: message.MessageId,
-                            cancellationToken: cancellationToken);
-                    }
-                }
-            }
-
             // Skip deletion if the bot itself was removed from the group
             // Bot no longer has permissions to delete messages after being kicked
             if (message.LeftChatMember != null)
             {
-                var operations = await _botFactory.GetOperationsAsync();
-                if (message.LeftChatMember.Id == operations.BotId)
+                var userService = messageScope.ServiceProvider.GetRequiredService<IBotUserService>();
+                var botInfo = await userService.GetMeAsync(cancellationToken);
+                if (message.LeftChatMember.Id == botInfo.Id)
                 {
                     logger.LogInformation(
                         "Skipping deletion of LeftChatMember service message - bot was removed from {Chat}",
@@ -359,7 +323,8 @@ public partial class MessageProcessingService(
 
                     try
                     {
-                        await chatManagementService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
+                        var chatService = messageScope.ServiceProvider.GetRequiredService<IBotChatService>();
+                        await chatService.RefreshChatAdminsAsync(ChatIdentity.From(message.Chat), cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -393,7 +358,7 @@ public partial class MessageProcessingService(
                             var responseMessage = await botMessageService.SendAndSaveMessageAsync(
                                 message.Chat.Id,
                                 commandResult.Response,
-                                parseMode: ParseMode.Markdown,
+                                parseMode: commandResult.ParseMode ?? ParseMode.Markdown,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 cancellationToken: cancellationToken);
 
@@ -501,7 +466,7 @@ public partial class MessageProcessingService(
 
             // Check if chat icon is cached on disk
             var chatIconFileName = $"{Math.Abs(message.Chat.Id)}.jpg";
-            var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "media", "chat_icons", chatIconFileName);
+            var chatIconCachedPath = Path.Combine(appOptions.Value.DataPath, "media", "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
             // REFACTOR-1: Use ITranslationHandler for translation detection and processing
@@ -509,6 +474,7 @@ public partial class MessageProcessingService(
             var translationForDetection = await translationHandler.GetTextForDetectionAsync(
                 text,
                 message.MessageId,
+                message.Chat.Id,
                 cancellationToken);
             var translation = translationForDetection.Translation;
 
@@ -545,11 +511,8 @@ public partial class MessageProcessingService(
             // User photo will be fetched asynchronously after message save (non-blocking)
             var messageRecord = new MessageRecord(
                 message.MessageId,
-                message.From!.Id,
-                message.From.Username,
-                message.From.FirstName,
-                message.From.LastName,
-                message.Chat.Id,
+                User: new Core.Models.UserIdentity(message.From!.Id, message.From.FirstName, message.From.LastName, message.From.Username),
+                Chat: new Core.Models.ChatIdentity(message.Chat.Id, message.Chat.Title ?? message.Chat.Username),
                 now,
                 text,
                 photoFileId,
@@ -557,7 +520,6 @@ public partial class MessageProcessingService(
                 urlsJson != "" ? urlsJson : null,
                 EditDate: message.EditDate.HasValue ? new DateTimeOffset(message.EditDate.Value, TimeSpan.Zero) : null,
                 ContentHash: contentHash,
-                ChatName: message.Chat.Title ?? message.Chat.Username,
                 PhotoLocalPath: photoLocalPath,
                 PhotoThumbnailPath: photoThumbnailPath,
                 ChatIconPath: chatIconPath,
@@ -609,27 +571,34 @@ public partial class MessageProcessingService(
             {
                 logger.LogWarning(
                     "{User} is already banned in {Chat}, deleting message {MessageId} immediately (multi-message spam cleanup)",
-                    LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
-                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                    message.From.ToLogDebug(),
+                    message.Chat.ToLogDebug(),
                     message.MessageId);
 
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.IModerationOrchestrator>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<IBotModerationService>();
                 await moderationService.DeleteMessageAsync(
-                    messageId: message.MessageId,
-                    chatId: message.Chat.Id,
-                    userId: message.From.Id,
-                    deletedBy: Core.Models.Actor.AutoDetection,
-                    reason: "User banned during message processing (multi-message spam campaign)",
-                    cancellationToken: cancellationToken);
+                    new DeleteMessageIntent
+                    {
+                        MessageId = message.MessageId,
+                        Chat = ChatIdentity.From(message.Chat),
+                        User = UserIdentity.From(message.From!),
+                        Executor = Core.Models.Actor.AutoDetection,
+                        Reason = "User banned during message processing (multi-message spam campaign)"
+                    },
+                    cancellationToken);
 
                 // Lazy sync: Apply Telegram-level ban to this chat
                 // (User may have joined this chat before it was added to the bot's managed chats)
                 await moderationService.SyncBanToChatAsync(
-                    message.From,
-                    message.Chat,
-                    "Lazy ban sync: User was globally banned before this chat was added",
-                    triggeredByMessageId: message.MessageId,
-                    cancellationToken: cancellationToken);
+                    new SyncBanIntent
+                    {
+                        User = UserIdentity.From(message.From!),
+                        Chat = ChatIdentity.From(message.Chat),
+                        Executor = Core.Models.Actor.AutoDetection,
+                        Reason = "Lazy ban sync: User was globally banned before this chat was added",
+                        TriggeredByMessageId = message.MessageId
+                    },
+                    cancellationToken);
 
                 // Don't process this message further (no spam detection, no user photo fetch, etc.)
                 return;
@@ -655,7 +624,7 @@ public partial class MessageProcessingService(
 
                 if (enrichedText != text) // Content was enriched
                 {
-                    await repository.UpdateMessageTextAsync(message.MessageId, enrichedText, cancellationToken);
+                    await repository.UpdateMessageTextAsync(message.MessageId, message.Chat.Id, enrichedText, cancellationToken);
                     text = enrichedText; // Use enriched text for content detection later
 
                     logger.LogDebug(
@@ -667,6 +636,10 @@ public partial class MessageProcessingService(
 
             // Upsert user into telegram_users table (centralized user tracking)
             var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+            // Fetch existing user for profile diff detection (before upsert overwrites fields)
+            var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From!.Id, cancellationToken);
+
             var telegramUser = new TelegramUser(
                 TelegramUserId: message.From!.Id,
                 Username: message.From.Username,
@@ -686,50 +659,19 @@ public partial class MessageProcessingService(
             );
             await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
 
-            // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
-            // Check users on their first N messages
-            var impersonationService = messageScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
-            var shouldCheck = await impersonationService.ShouldCheckUserAsync(message.From!.Id, message.Chat.Id);
-
-            if (shouldCheck)
+            // Profile change detection: compare Bot API User fields against stored values
+            // New users (existingUser == null) get scanned on join, not here.
+            // Trusted/admin users are already skipped by contentCheckSkipReason.
+            if (existingUser is not null
+                && contentCheckSkipReason == ContentCheckSkipReason.NotSkipped
+                && ProfileDiffDetected(existingUser, message.From))
             {
+                var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
+                await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
+
                 logger.LogDebug(
-                    "Checking {User} for impersonation on message #{MessageCount}",
-                    message.From.ToLogDebug(),
-                    message.MessageId);
-
-                // Get cached user photo path (may be null if not fetched yet)
-                var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From.Id, cancellationToken);
-                var photoPath = existingUser?.UserPhotoPath;
-
-                // Check for impersonation
-                var impersonationResult = await impersonationService.CheckUserAsync(
-                    message.From,
-                    message.Chat,
-                    photoPath);
-
-                if (impersonationResult != null)
-                {
-                    logger.LogWarning(
-                        "Impersonation detected for {User} in {Chat} (score: {Score}, risk: {Risk})",
-                        message.From.ToLogDebug(),
-                        message.Chat.ToLogDebug(),
-                        impersonationResult.TotalScore,
-                        impersonationResult.RiskLevel);
-
-                    // Execute action (create alert, auto-ban if score >= 100)
-                    await impersonationService.ExecuteActionAsync(impersonationResult);
-
-                    // If auto-banned, message will remain in history for audit trail
-                    // User will be banned from all chats immediately
-                    if (impersonationResult.ShouldAutoBan)
-                    {
-                        logger.LogInformation(
-                            "{User} auto-banned for impersonation (score: {Score})",
-                            message.From.ToLogInfo(),
-                            impersonationResult.TotalScore);
-                    }
-                }
+                    "Profile change detected for {User}, scheduled background scan",
+                    message.From.ToLogDebug());
             }
 
             // Raise event for real-time UI updates
@@ -827,7 +769,7 @@ public partial class MessageProcessingService(
 
         try
         {
-            using var scope = _scopeFactory.CreateScope();
+            using var scope = scopeFactory.CreateScope();
             var editProcessor = scope.ServiceProvider.GetRequiredService<Handlers.MessageEditProcessor>();
 
             var editRecord = await editProcessor.ProcessEditAsync(editedMessage, scope, cancellationToken);
@@ -844,6 +786,18 @@ public partial class MessageProcessingService(
                 "Error handling edit for message {MessageId}",
                 editedMessage.MessageId);
         }
+    }
+
+    /// <summary>
+    /// Compare Bot API User fields against stored values to detect profile changes.
+    /// Pure in-memory comparison — zero DB or API cost.
+    /// Premium status deliberately excluded (weak signal, scammers buy it).
+    /// </summary>
+    private static bool ProfileDiffDetected(TelegramUser existing, global::Telegram.Bot.Types.User current)
+    {
+        return !string.Equals(existing.FirstName, current.FirstName, StringComparison.Ordinal)
+            || !string.Equals(existing.LastName, current.LastName, StringComparison.Ordinal)
+            || !string.Equals(existing.Username, current.Username, StringComparison.Ordinal);
     }
 
     // REFACTOR-2: Extracted methods to specialized handlers

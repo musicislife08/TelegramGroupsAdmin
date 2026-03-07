@@ -2,10 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
-using TelegramGroupsAdmin.Telegram.Services;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -20,12 +20,12 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public MessageHistoryRepository(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MessageHistoryRepository> logger,
-        IOptions<MessageHistoryOptions> messageHistoryOptions,
+        IOptions<AppOptions> appOptions,
         SimHashService simHashService)
     {
         _contextFactory = contextFactory;
         _logger = logger;
-        _imageStoragePath = messageHistoryOptions.Value.ImageStoragePath;
+        _imageStoragePath = appOptions.Value.DataPath;
         _simHashService = simHashService;
     }
 
@@ -41,8 +41,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Inserted message {MessageId} from user {UserId} (photo: {HasPhoto})",
-            message.MessageId, message.UserId, message.PhotoFileId != null);
+            "Inserted message {MessageId} from user {User} (photo: {HasPhoto})",
+            message.MessageId, message.User.ToLogDebug(), message.PhotoFileId != null);
     }
 
 
@@ -55,11 +55,11 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         // MH2: Single query optimization - get all expired message data in one query
         var expiredData = await context.Messages
             .Where(m => m.Timestamp < retentionCutoff
-                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.UsedForTraining))
+                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.ChatId == m.ChatId && dr.UsedForTraining))
             .GroupJoin(
                 context.MessageEdits,
-                m => m.MessageId,
-                e => e.MessageId,
+                m => new { m.MessageId, m.ChatId },
+                e => new { e.MessageId, e.ChatId },
                 (m, edits) => new { Message = m, Edits = edits })
             .Select(x => new
             {
@@ -157,17 +157,20 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
 
 
-    public async Task<UiModels.MessageRecord?> GetMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<UiModels.MessageRecord?> GetMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var result = await (
             from m in context.Messages
-            where m.MessageId == messageId
+            where m.MessageId == messageId && m.ChatId == chatId
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
             from chat in chatGroup.DefaultIfEmpty()
             join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
             from user in userGroup.DefaultIfEmpty()
-            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+            join parent in context.Messages
+                on new { MessageId = m.ReplyToMessageId, m.ChatId }
+                equals new { MessageId = (int?)parent.MessageId, parent.ChatId }
+                into parentGroup
             from parentMsg in parentGroup.DefaultIfEmpty()
             join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
             from parentUserInfo in parentUserGroup.DefaultIfEmpty()
@@ -220,10 +223,10 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         return messageModel;
     }
 
-    public async Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default)
+    public async Task UpdateMediaLocalPathAsync(int messageId, long chatId, string localPath, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync([messageId], cancellationToken);
+        var entity = await context.Messages.FindAsync([messageId, chatId], cancellationToken);
 
         if (entity != null)
         {
@@ -232,10 +235,10 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         }
     }
 
-    public async Task UpdateMessageTextAsync(long messageId, string enrichedText, CancellationToken cancellationToken = default)
+    public async Task UpdateMessageTextAsync(int messageId, long chatId, string enrichedText, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync([messageId], cancellationToken);
+        var entity = await context.Messages.FindAsync([messageId, chatId], cancellationToken);
 
         if (entity != null)
         {
@@ -246,10 +249,10 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         }
     }
 
-    public async Task UpdateMessageEditDateAsync(long messageId, DateTimeOffset editDate, CancellationToken cancellationToken = default)
+    public async Task UpdateMessageEditDateAsync(int messageId, long chatId, DateTimeOffset editDate, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync([messageId], cancellationToken);
+        var entity = await context.Messages.FindAsync([messageId, chatId], cancellationToken);
 
         if (entity != null)
         {
@@ -266,7 +269,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public async Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync([message.MessageId], cancellationToken);
+        var entity = await context.Messages.FindAsync([message.MessageId, message.Chat.Id], cancellationToken);
 
         if (entity != null)
         {
@@ -290,10 +293,10 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     /// <summary>
     /// Mark a message as deleted (soft delete)
     /// </summary>
-    public async Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default)
+    public async Task MarkMessageAsDeletedAsync(int messageId, long chatId, string deletionSource, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync([messageId], cancellationToken);
+        var entity = await context.Messages.FindAsync([messageId, chatId], cancellationToken);
 
         if (entity != null)
         {
@@ -376,13 +379,14 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 SELECT EXISTS (
                     SELECT 1
                     FROM messages m
-                    LEFT JOIN message_translations mt ON mt.message_id = m.message_id AND mt.edit_id IS NULL
+                    LEFT JOIN message_translations mt ON mt.message_id = m.message_id AND mt.chat_id = m.chat_id AND mt.edit_id IS NULL
                     WHERE COALESCE(mt.similarity_hash, m.similarity_hash) IS NOT NULL
                       AND bit_count((COALESCE(mt.similarity_hash, m.similarity_hash) # {hash})::bit(64))::int <= {maxDistance}
                       AND (
                           EXISTS (
                               SELECT 1 FROM detection_results dr
                               WHERE dr.message_id = m.message_id
+                                AND dr.chat_id = m.chat_id
                                 AND dr.is_spam = {isSpam}
                                 AND dr.used_for_training = true
                           )
@@ -390,6 +394,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                           EXISTS (
                               SELECT 1 FROM training_labels tl
                               WHERE tl.message_id = m.message_id
+                                AND tl.chat_id = m.chat_id
                                 AND tl.label = {labelValue}
                           )
                       )

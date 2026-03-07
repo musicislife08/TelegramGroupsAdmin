@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 

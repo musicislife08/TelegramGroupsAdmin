@@ -1,3 +1,4 @@
+@implements IDetectionConfigComponent
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
@@ -37,14 +38,6 @@
 
         @if (activeConfig.Enabled)
         {
-            <FieldWithHelp HelpText="Probability threshold from 1-99%. The classifier calculates spam probability for each message. Recommended: 70-80% for balanced detection. Lower = more aggressive (catches more but risks false positives). Higher = conservative (only confident spam).">
-                <MudNumericField @bind-Value="activeConfig.MinSpamProbability"
-                                Label="Minimum Spam Probability (%)"
-                                Min="1.0" Max="99.0" Step="0.1"
-                                Disabled="@isReadOnly"
-                                HelperText="@(isReadOnly ? $"Using global value: {activeConfig.MinSpamProbability:F1}%" : "Minimum probability (%) to classify as spam")" />
-            </FieldWithHelp>
-
             <ConceptualAlert Severity="Severity.Info" Dense="true">
                 <strong>How it works:</strong> Analyzes word frequency differences between spam and ham training samples.
                 Words that appear more often in spam increase probability. Adapts automatically as you add more training samples.
@@ -62,11 +55,11 @@
 
 @code {
     [Parameter]
-    public long? ChatId { get; set; }
+    public ChatIdentity? Chat { get; set; }
 
     private ContentDetectionConfig _config = new();
     private ContentDetectionConfig _globalConfig = new();
-    private bool IsGlobalView => ChatId is null or 0;
+    private bool IsGlobalView => Chat is null || Chat.Id == 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,7 +82,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, ChatId!.Value);
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Chat!.Id);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }

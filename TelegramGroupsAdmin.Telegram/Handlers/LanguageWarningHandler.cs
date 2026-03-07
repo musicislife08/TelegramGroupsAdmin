@@ -4,11 +4,13 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -18,14 +20,10 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class LanguageWarningHandler
 {
-    private readonly ITelegramBotClientFactory _botFactory;
     private readonly ILogger<LanguageWarningHandler> _logger;
 
-    public LanguageWarningHandler(
-        ITelegramBotClientFactory botFactory,
-        ILogger<LanguageWarningHandler> logger)
+    public LanguageWarningHandler(ILogger<LanguageWarningHandler> logger)
     {
-        _botFactory = botFactory;
         _logger = logger;
     }
 
@@ -42,7 +40,7 @@ public class LanguageWarningHandler
         {
             // Get message translation to check if it was non-English
             var translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
-            var translation = await translationService.GetTranslationForMessageAsync(message.MessageId, cancellationToken);
+            var translation = await translationService.GetTranslationForMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
 
             // Skip if no translation (message was in English)
             if (translation == null)
@@ -65,8 +63,8 @@ public class LanguageWarningHandler
                 return;
 
             // Check if user is admin in this chat
-            var operations = await _botFactory.GetOperationsAsync();
-            var chatMember = await operations.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
+            var userService = scope.ServiceProvider.GetRequiredService<IBotUserService>();
+            var chatMember = await userService.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
                 return;
 
@@ -90,14 +88,17 @@ public class LanguageWarningHandler
                 .Replace("{warnings_remaining}", warningsRemaining.ToString());
 
             // Issue warning using moderation system
-            var moderationService = scope.ServiceProvider.GetRequiredService<Services.Moderation.IModerationOrchestrator>();
+            var moderationService = scope.ServiceProvider.GetRequiredService<IBotModerationService>();
             await moderationService.WarnUserAsync(
-                userId: message.From.Id,
-                messageId: message.MessageId,
-                executor: Actor.LanguageWarning,
-                reason: $"Non-English message ({translation.DetectedLanguage})",
-                chatId: message.Chat.Id,
-                cancellationToken: cancellationToken);
+                new WarnIntent
+                {
+                    User = UserIdentity.From(message.From!),
+                    Chat = ChatIdentity.From(message.Chat),
+                    Executor = Actor.LanguageWarning,
+                    Reason = $"Non-English message ({translation.DetectedLanguage})",
+                    MessageId = message.MessageId
+                },
+                cancellationToken);
 
             // Send warning to user via DM with chat fallback
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();

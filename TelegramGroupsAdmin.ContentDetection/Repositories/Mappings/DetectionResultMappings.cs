@@ -21,15 +21,16 @@ public static class DetectionResultMappings
             {
                 Id = data.Id,
                 MessageId = data.MessageId,
+                ChatId = data.ChatId,
                 DetectedAt = data.DetectedAt,
                 DetectionSource = data.DetectionSource,
                 DetectionMethod = data.DetectionMethod,
                 IsSpam = data.IsSpam,
-                Confidence = data.Confidence,
+                Score = data.Score,
                 Reason = data.Reason,
                 AddedBy = ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
                 UsedForTraining = data.UsedForTraining,
-                NetConfidence = data.NetConfidence,
+                NetScore = data.NetScore,
                 CheckResultsJson = data.CheckResultsJson,  // Phase 2.6
                 EditVersion = data.EditVersion,             // Phase 2.6
                 UserId = 0, // Will be populated by repository join
@@ -48,17 +49,18 @@ public static class DetectionResultMappings
             {
                 Id = ui.Id,
                 MessageId = ui.MessageId,
+                ChatId = ui.ChatId,
                 DetectedAt = ui.DetectedAt,
                 DetectionSource = ui.DetectionSource,
                 DetectionMethod = ui.DetectionMethod,
                 IsSpam = ui.IsSpam,
-                Confidence = ui.Confidence,
+                Score = ui.Score,
                 Reason = ui.Reason,
                 WebUserId = webUserId,
                 TelegramUserId = telegramUserId,
                 SystemIdentifier = systemIdentifier,
                 UsedForTraining = ui.UsedForTraining,
-                NetConfidence = ui.NetConfidence,
+                NetScore = ui.NetScore,
                 CheckResultsJson = ui.CheckResultsJson,  // Phase 2.6
                 EditVersion = ui.EditVersion              // Phase 2.6
             };

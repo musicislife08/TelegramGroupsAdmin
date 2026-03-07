@@ -158,6 +158,47 @@ public interface IReportsRepository
         CancellationToken cancellationToken = default);
 
     // ============================================================
+    // ProfileScanAlert-specific operations (Type = ProfileScanAlert)
+    // ============================================================
+
+    /// <summary>
+    /// Insert a new profile scan alert.
+    /// </summary>
+    Task<long> InsertProfileScanAlertAsync(
+        ProfileScanAlertRecord alert,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get profile scan alert by ID with full context.
+    /// </summary>
+    Task<ProfileScanAlertRecord?> GetProfileScanAlertAsync(
+        long id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Check if a user has a pending profile scan alert in a specific chat.
+    /// </summary>
+    Task<bool> HasPendingProfileScanAlertAsync(
+        long userId,
+        long? chatId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get all pending profile scan alerts for a user across all chats.
+    /// Used for sibling report cleanup after ban/kick.
+    /// </summary>
+    Task<List<ProfileScanAlertRecord>> GetPendingProfileScanAlertsForUserAsync(
+        long userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get profile scan alerts, optionally filtered by status.
+    /// </summary>
+    Task<List<ProfileScanAlertRecord>> GetProfileScanAlertsAsync(
+        bool pendingOnly = true,
+        CancellationToken cancellationToken = default);
+
+    // ============================================================
     // ExamFailure-specific operations (Type = ExamFailure)
     // ============================================================
 

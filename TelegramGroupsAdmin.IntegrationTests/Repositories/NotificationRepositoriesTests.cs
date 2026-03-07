@@ -114,11 +114,14 @@ public class NotificationRepositoriesTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Id, Is.GreaterThan(0), "Should assign ID on create");
-        Assert.That(result.UserId, Is.EqualTo(TestUserId1));
-        Assert.That(result.Endpoint, Is.EqualTo("https://push.example.com/sub/abc123"));
-        Assert.That(result.P256dh, Is.EqualTo("BPubKey123"));
-        Assert.That(result.Auth, Is.EqualTo("AuthKey456"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Id, Is.GreaterThan(0), "Should assign ID on create");
+            Assert.That(result.UserId, Is.EqualTo(TestUserId1));
+            Assert.That(result.Endpoint, Is.EqualTo("https://push.example.com/sub/abc123"));
+            Assert.That(result.P256dh, Is.EqualTo("BPubKey123"));
+            Assert.That(result.Auth, Is.EqualTo("AuthKey456"));
+        }
     }
 
     [Test]
@@ -147,9 +150,12 @@ public class NotificationRepositoriesTests
         };
         var result = await _pushRepo.UpsertAsync(updated);
 
-        // Assert
-        Assert.That(result.P256dh, Is.EqualTo("UpdatedKey"), "Should update P256dh");
-        Assert.That(result.Auth, Is.EqualTo("UpdatedAuth"), "Should update Auth");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result.P256dh, Is.EqualTo("UpdatedKey"), "Should update P256dh");
+            Assert.That(result.Auth, Is.EqualTo("UpdatedAuth"), "Should update Auth");
+        }
 
         // Verify only one subscription exists
         var subscriptions = await _pushRepo.GetByUserIdAsync(TestUserId1);
@@ -173,9 +179,12 @@ public class NotificationRepositoriesTests
         var user1Subs = await _pushRepo.GetByUserIdAsync(TestUserId1);
         var user2Subs = await _pushRepo.GetByUserIdAsync(TestUserId2);
 
-        // Assert
-        Assert.That(user1Subs.Count, Is.EqualTo(2), "User1 should have 2 subscriptions");
-        Assert.That(user2Subs.Count, Is.EqualTo(1), "User2 should have 1 subscription");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(user1Subs.Count, Is.EqualTo(2), "User1 should have 2 subscriptions");
+            Assert.That(user2Subs.Count, Is.EqualTo(1), "User2 should have 1 subscription");
+        }
     }
 
     [Test]
@@ -279,11 +288,14 @@ public class NotificationRepositoriesTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Id, Is.GreaterThan(0), "Should assign ID on create");
-        Assert.That(result.UserId, Is.EqualTo(TestUserId1));
-        Assert.That(result.EventType, Is.EqualTo(NotificationEventType.MessageReported));
-        Assert.That(result.Subject, Is.EqualTo("New Report"));
-        Assert.That(result.IsRead, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Id, Is.GreaterThan(0), "Should assign ID on create");
+            Assert.That(result.UserId, Is.EqualTo(TestUserId1));
+            Assert.That(result.EventType, Is.EqualTo(NotificationEventType.MessageReported));
+            Assert.That(result.Subject, Is.EqualTo("New Report"));
+            Assert.That(result.IsRead, Is.False);
+        }
     }
 
     [Test]
@@ -359,9 +371,12 @@ public class NotificationRepositoriesTests
         // Act - Get page 2 (next 5)
         var page2 = await _notificationRepo.GetRecentAsync(TestUserId1, limit: 5, offset: 5);
 
-        // Assert
-        Assert.That(page1.Count, Is.EqualTo(5), "Page 1 should have 5 notifications");
-        Assert.That(page2.Count, Is.EqualTo(5), "Page 2 should have 5 notifications");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(page1.Count, Is.EqualTo(5), "Page 1 should have 5 notifications");
+            Assert.That(page2.Count, Is.EqualTo(5), "Page 2 should have 5 notifications");
+        }
 
         // Ensure no overlap
         var page1Ids = page1.Select(n => n.Id).ToHashSet();
@@ -396,9 +411,12 @@ public class NotificationRepositoriesTests
         var user1Notifications = await _notificationRepo.GetRecentAsync(TestUserId1);
         var user2Notifications = await _notificationRepo.GetRecentAsync(TestUserId2);
 
-        // Assert
-        Assert.That(user1Notifications.All(n => n.UserId == TestUserId1), Is.True, "Should only return User1's notifications");
-        Assert.That(user2Notifications.All(n => n.UserId == TestUserId2), Is.True, "Should only return User2's notifications");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(user1Notifications.All(n => n.UserId == TestUserId1), Is.True, "Should only return User1's notifications");
+            Assert.That(user2Notifications.All(n => n.UserId == TestUserId2), Is.True, "Should only return User2's notifications");
+        }
     }
 
     [Test]
@@ -464,8 +482,11 @@ public class NotificationRepositoriesTests
         // Assert - Retrieve and verify
         var recent = await _notificationRepo.GetRecentAsync(TestUserId1);
         var marked = recent.First(n => n.Id == notification.Id);
-        Assert.That(marked.IsRead, Is.True, "Should be marked as read");
-        Assert.That(marked.ReadAt, Is.Not.Null, "ReadAt should be set");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(marked.IsRead, Is.True, "Should be marked as read");
+            Assert.That(marked.ReadAt, Is.Not.Null, "ReadAt should be set");
+        }
     }
 
     [Test]
@@ -557,9 +578,12 @@ public class NotificationRepositoriesTests
 
         // Verify the correct notifications remain
         var remaining = await _notificationRepo.GetRecentAsync(TestUserId1, limit: 100);
-        Assert.That(remaining.Any(n => n.Subject == "Old Read"), Is.False, "Old read notification should be deleted");
-        Assert.That(remaining.Any(n => n.Subject == "New Read"), Is.True, "New read notification should remain");
-        Assert.That(remaining.Any(n => n.Subject == "Old Unread"), Is.True, "Old unread notification should remain");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(remaining.Any(n => n.Subject == "Old Read"), Is.False, "Old read notification should be deleted");
+            Assert.That(remaining.Any(n => n.Subject == "New Read"), Is.True, "New read notification should remain");
+            Assert.That(remaining.Any(n => n.Subject == "Old Unread"), Is.True, "Old unread notification should remain");
+        }
     }
 
     #endregion

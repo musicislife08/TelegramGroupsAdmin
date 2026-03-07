@@ -2,15 +2,11 @@
 @using Microsoft.AspNetCore.Authorization
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
-@using TelegramGroupsAdmin.Repositories
-@using TelegramGroupsAdmin.Services
 @attribute [Authorize(Policy = "OwnerOnly")]
 
 @inject INotificationService NotificationService
 @inject IWebPushNotificationService WebPushService
 @inject INotificationStateService NotificationState
-@inject IBlazorAuthHelper AuthHelper
-@inject IUserRepository UserRepository
 
 <PageTitle>Notification Debug</PageTitle>
 
@@ -53,8 +49,8 @@
                                       Placeholder="Test notification message body" />
 
                         <MudSelect T="DeliveryMode" Label="Delivery Mode" @bind-Value="_deliveryMode">
-                            <MudSelectItem Value="DeliveryMode.ToCurrentUser">To Current User (Me)</MudSelectItem>
-                            <MudSelectItem Value="DeliveryMode.SystemNotification">System Notification (All Owners)</MudSelectItem>
+                            <MudSelectItem Value="DeliveryMode.BackupFailed">Backup Failed (Owners)</MudSelectItem>
+                            <MudSelectItem Value="DeliveryMode.ChatHealthWarning">Chat Health Warning (Owners)</MudSelectItem>
                         </MudSelect>
 
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"
@@ -150,10 +146,9 @@
     private NotificationEventType _selectedEventType = NotificationEventType.SpamDetected;
     private string _subject = "Test Notification";
     private string _message = "This is a test notification triggered from the debug page.";
-    private DeliveryMode _deliveryMode = DeliveryMode.ToCurrentUser;
+    private DeliveryMode _deliveryMode = DeliveryMode.BackupFailed;
     private bool _isSending;
     private readonly List<DeliveryResult> _deliveryResults = [];
-    private string? _currentUserId;
 
     private readonly List<EventTypeInfo> _eventTypeInfo =
     [
@@ -166,11 +161,6 @@
         new(NotificationEventType.MalwareDetected, "Malware detected in file", "VirusTotal/ClamAV scan"),
         new(NotificationEventType.ChatAdminChanged, "Chat admin promoted/demoted", "Telegram admin sync")
     ];
-
-    protected override async Task OnInitializedAsync()
-    {
-        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
-    }
 
     private async Task SendTestNotificationAsync()
     {
@@ -185,42 +175,25 @@
             bool success;
             string resultMessage;
 
-            if (_deliveryMode == DeliveryMode.ToCurrentUser && !string.IsNullOrEmpty(_currentUserId))
+            Dictionary<string, bool> results;
+
+            if (_deliveryMode == DeliveryMode.BackupFailed)
             {
-                var user = await UserRepository.GetByIdAsync(_currentUserId);
-                if (user == null)
-                {
-                    _deliveryResults.Add(new DeliveryResult
-                    {
-                        EventType = _selectedEventType,
-                        Mode = _deliveryMode,
-                        Success = false,
-                        Message = "ERROR: Current user not found",
-                        Timestamp = DateTimeOffset.UtcNow
-                    });
-                    return;
-                }
-
-                success = await NotificationService.SendNotificationAsync(
-                    user,
-                    _selectedEventType,
-                    _subject,
-                    _message);
-
-                resultMessage = success
-                    ? "Delivered to at least one channel"
-                    : "No channels delivered (check preferences)";
+                results = await NotificationService.SendBackupFailedAsync(
+                    tableName: _subject,
+                    error: _message);
             }
             else
             {
-                var results = await NotificationService.SendSystemNotificationAsync(
-                    _selectedEventType,
-                    _subject,
-                    _message);
-
-                success = results.Values.Any(v => v);
-                resultMessage = $"Sent to {results.Count} owners, {results.Values.Count(v => v)} succeeded";
+                results = await NotificationService.SendChatHealthWarningAsync(
+                    chatName: _subject,
+                    status: "Debug",
+                    isAdmin: true,
+                    warnings: [_message]);
             }
+
+            success = results.Values.Any(v => v);
+            resultMessage = $"Sent to {results.Count} owners, {results.Values.Count(v => v)} succeeded";
 
             _deliveryResults.Add(new DeliveryResult
             {
@@ -271,8 +244,8 @@
 
     private enum DeliveryMode
     {
-        ToCurrentUser,
-        SystemNotification
+        BackupFailed,
+        ChatHealthWarning
     }
 
     private record DeliveryResult

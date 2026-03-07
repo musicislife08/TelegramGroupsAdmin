@@ -16,7 +16,7 @@
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudText Typo="Typo.h4" Class="mb-4">Audit Log</MudText>
 
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-4" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
         <MudTabPanel Text="Web Admin Log" Icon="@Icons.Material.Filled.Security">
             <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mb-4">
                 <MudIconButton Icon="@Icons.Material.Filled.Refresh"
@@ -49,31 +49,31 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudSelect T="string?"
+                <MudSelect T="string"
                           Label="Actor (Who)"
                           Value="_filterActorUserId"
                           ValueChanged="OnActorFilterChanged"
                           Clearable="true"
                           AnchorOrigin="Origin.BottomCenter">
-                    <MudSelectItem T="string?" Value="null">All Actors</MudSelectItem>
+                    <MudSelectItem T="string" Value="null">All Actors</MudSelectItem>
                     @foreach (var user in _users)
                     {
-                        <MudSelectItem T="string?" Value="@user.Id">@user.Email</MudSelectItem>
+                        <MudSelectItem T="string" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
                     }
-                    <MudSelectItem T="string?" Value="@("SYSTEM")">SYSTEM</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("SYSTEM")">SYSTEM</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudSelect T="string?"
+                <MudSelect T="string"
                           Label="Target User"
                           Value="_filterTargetUserId"
                           ValueChanged="OnTargetFilterChanged"
                           Clearable="true"
                           AnchorOrigin="Origin.BottomCenter">
-                    <MudSelectItem T="string?" Value="null">All Targets</MudSelectItem>
+                    <MudSelectItem T="string" Value="null">All Targets</MudSelectItem>
                     @foreach (var user in _users)
                     {
-                        <MudSelectItem T="string?" Value="@user.Id">@user.Email</MudSelectItem>
+                        <MudSelectItem T="string" Value="@user.WebUser.Id">@user.WebUser.Email</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
@@ -138,7 +138,7 @@
                                         <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
                                     </MudAvatar>
                                 }
-                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(actorUser)</MudText>
+                                <UserDetailLink UserId="@context.ActorTelegramUserId!.Value" Typo="Typo.body2">@GetTelegramUserDisplayName(actorUser)</UserDetailLink>
                             </MudStack>
                         }
                         else
@@ -182,7 +182,7 @@
                                         <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
                                     </MudAvatar>
                                 }
-                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(targetUser)</MudText>
+                                <UserDetailLink UserId="@context.TargetTelegramUserId!.Value" Typo="Typo.body2">@GetTelegramUserDisplayName(targetUser)</UserDetailLink>
                             </MudStack>
                         }
                         else
@@ -312,7 +312,7 @@
                                 </MudAvatar>
                             }
                             <div>
-                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(telegramUser)</MudText>
+                                <UserDetailLink UserId="@context.UserId" Typo="Typo.body2">@GetTelegramUserDisplayName(telegramUser)</UserDetailLink>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-family: monospace;">ID: @context.UserId</MudText>
                             </div>
                         </MudStack>
@@ -362,9 +362,9 @@
                     }
                     else if (context.IssuedBy.Type == ActorType.TelegramUser)
                     {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                        <UserDetailLink UserId="@context.IssuedBy.TelegramUserId!.Value" Chip="true" ChipIcon="@Icons.Material.Filled.SmartToy" ChipColor="Color.Info">
                             @context.IssuedBy.DisplayName
-                        </MudChip>
+                        </UserDetailLink>
                     }
                 </MudTd>
                 <MudTd DataLabel="Reason">
@@ -446,7 +446,7 @@
         try
         {
             _users = await UserRepository.GetAllIncludingDeletedAsync();
-            _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
+            _userEmailCache = _users.ToDictionary(u => u.WebUser.Id, u => u.WebUser.Email!);
         }
         catch (Exception ex)
         {
@@ -740,14 +740,4 @@
             user.TelegramUserId);
     }
 
-    // Telegram User Display Helper by ID (with cache lookup)
-    private string GetTelegramUserDisplayNameById(long telegramUserId)
-    {
-        if (_telegramUsersCache.TryGetValue(telegramUserId, out var user))
-        {
-            return GetTelegramUserDisplayName(user);
-        }
-        // Fallback to User {id} format if not in cache
-        return $"User {telegramUserId}";
-    }
 }

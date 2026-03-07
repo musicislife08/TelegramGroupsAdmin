@@ -11,8 +11,9 @@ public interface IIntermediateAuthService
     /// Token is valid for 5 minutes and can only be used once.
     /// </summary>
     /// <param name="userId">The user ID who passed password verification</param>
+    /// <param name="email">Optional email for structured logging</param>
     /// <returns>A cryptographically secure token string</returns>
-    string CreateToken(string userId);
+    string CreateToken(string userId, string? email = null);
 
     /// <summary>
     /// Validates a temporary authentication token without consuming it.

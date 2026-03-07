@@ -11,11 +11,6 @@ public static class AIConstants
     public const int CacheDurationHours = 1;
 
     /// <summary>
-    /// Maximum tokens for AI spam detection response
-    /// </summary>
-    public const int SpamDetectionMaxTokens = 300;
-
-    /// <summary>
     /// Maximum tokens for image vision analysis response
     /// </summary>
     public const int ImageVisionMaxTokens = 300;
@@ -25,8 +20,4 @@ public static class AIConstants
     /// </summary>
     public const int VideoVisionMaxTokens = 300;
 
-    /// <summary>
-    /// Confidence multiplier for converting 0-1 confidence to 0-5 score
-    /// </summary>
-    public const double ConfidenceToScoreMultiplier = 5.0;
 }

@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -12,7 +14,7 @@ public class UnbanCommand : IBotCommand
 {
     private readonly ILogger<UnbanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IModerationOrchestrator _moderationService;
+    private readonly IBotModerationService _moderationService;
 
     public string Name => "unban";
     public string Description => "Remove ban from user";
@@ -25,7 +27,7 @@ public class UnbanCommand : IBotCommand
     public UnbanCommand(
         ILogger<UnbanCommand> logger,
         IServiceProvider serviceProvider,
-        IModerationOrchestrator moderationService)
+        IBotModerationService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -60,11 +62,14 @@ public class UnbanCommand : IBotCommand
 
             // Execute unban action through ModerationActionService
             var result = await _moderationService.UnbanUserAsync(
-                userId: targetUser.Id,
-                executor: executor,
-                reason: $"Manual unban command by {message.From?.Username ?? message.From?.Id.ToString() ?? "unknown"}",
-                restoreTrust: false,
-                cancellationToken: cancellationToken);
+                new UnbanIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = $"Manual unban command by {message.From?.Username ?? message.From?.Id.ToString() ?? "unknown"}",
+                    RestoreTrust = false
+                },
+                cancellationToken);
 
             // Build response based on result
             if (!result.Success)
@@ -79,7 +84,7 @@ public class UnbanCommand : IBotCommand
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to unban {User}",
-                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
+                targetUser.ToLogDebug());
             return new CommandResult($"❌ Failed to unban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

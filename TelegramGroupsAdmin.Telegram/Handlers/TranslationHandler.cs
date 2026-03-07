@@ -1,11 +1,10 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
@@ -44,6 +43,7 @@ public class TranslationHandler : ITranslationHandler
     public async Task<TranslationProcessingResult?> ProcessTranslationAsync(
         string text,
         int messageId,
+        long chatId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -123,10 +123,11 @@ public class TranslationHandler : ITranslationHandler
         var messageTranslation = new MessageTranslation(
             Id: 0, // Will be set by INSERT
             MessageId: messageId,
+            ChatId: chatId,
             EditId: null,
             TranslatedText: translationResult.TranslatedText,
             DetectedLanguage: translationResult.DetectedLanguage,
-            Confidence: null, // OpenAI doesn't return confidence for translation
+            Confidence: translationResult.Confidence,
             TranslatedAt: DateTimeOffset.UtcNow
         );
 
@@ -144,6 +145,7 @@ public class TranslationHandler : ITranslationHandler
     public async Task<TranslationForDetectionResult> GetTextForDetectionAsync(
         string? text,
         int messageId,
+        long chatId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -151,7 +153,7 @@ public class TranslationHandler : ITranslationHandler
             return new TranslationForDetectionResult(text ?? string.Empty, null, null);
         }
 
-        var result = await ProcessTranslationAsync(text, messageId, cancellationToken);
+        var result = await ProcessTranslationAsync(text, messageId, chatId, cancellationToken);
 
         if (result is { WasTranslated: true })
         {

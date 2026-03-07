@@ -17,7 +17,7 @@ public interface IMessageBackfillService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True if message was backfilled, false if it already existed or has no text content.</returns>
     Task<bool> BackfillIfMissingAsync(
-        long messageId,
+        int messageId,
         long chatId,
         Message telegramMessage,
         CancellationToken cancellationToken = default);

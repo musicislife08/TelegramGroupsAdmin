@@ -7,8 +7,6 @@ namespace TelegramGroupsAdmin.Core.Models;
 public record ExamFailureRecord
 {
     public long Id { get; init; }
-    public long ChatId { get; init; }
-    public long UserId { get; init; }
 
     /// <summary>
     /// User's multiple choice answers.
@@ -56,10 +54,8 @@ public record ExamFailureRecord
     public string? ActionTaken { get; init; }
     public string? AdminNotes { get; init; }
 
-    // Denormalized for display (joined data)
-    public string? UserName { get; init; }
-    public string? UserFirstName { get; init; }
-    public string? UserLastName { get; init; }
+    // Identity objects (populated from view joins on read path)
+    public required UserIdentity User { get; init; }
+    public required ChatIdentity Chat { get; init; }
     public string? UserPhotoPath { get; init; }
-    public string? ChatName { get; init; }
 }

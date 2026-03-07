@@ -24,13 +24,11 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = data.MinMessageLength,
             AutoBanThreshold = data.AutoBanThreshold,
             ReviewQueueThreshold = data.ReviewQueueThreshold,
-            MaxConfidenceVetoThreshold = data.MaxConfidenceVetoThreshold,
             TrainingMode = data.TrainingMode,
 
             // Use null-coalescing for sub-configs to handle partial JSON from legacy data
             StopWords = (data.StopWords ?? new StopWordsConfigData()).ToModel(),
             Similarity = (data.Similarity ?? new SimilarityConfigData()).ToModel(),
-            Cas = (data.Cas ?? new CasConfigData()).ToModel(),
             Bayes = (data.Bayes ?? new BayesConfigData()).ToModel(),
             InvisibleChars = (data.InvisibleChars ?? new InvisibleCharsConfigData()).ToModel(),
             Translation = (data.Translation ?? new TranslationConfigData()).ToModel(),
@@ -56,12 +54,10 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = model.MinMessageLength,
             AutoBanThreshold = model.AutoBanThreshold,
             ReviewQueueThreshold = model.ReviewQueueThreshold,
-            MaxConfidenceVetoThreshold = model.MaxConfidenceVetoThreshold,
             TrainingMode = model.TrainingMode,
 
             StopWords = model.StopWords.ToData(),
             Similarity = model.Similarity.ToData(),
-            Cas = model.Cas.ToData(),
             Bayes = model.Bayes.ToData(),
             InvisibleChars = model.InvisibleChars.ToData(),
             Translation = model.Translation.ToData(),
@@ -86,7 +82,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = data.UseGlobal,
             Enabled = data.Enabled,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             AlwaysRun = data.AlwaysRun
         };
     }
@@ -97,7 +92,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = model.UseGlobal,
             Enabled = model.Enabled,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             AlwaysRun = model.AlwaysRun
         };
     }
@@ -129,36 +123,6 @@ public static class ContentDetectionConfigMappings
     }
 
     // ============================================================================
-    // CasConfig mappings
-    // ============================================================================
-
-    extension(CasConfigData data)
-    {
-        public CasConfig ToModel() => new()
-        {
-            UseGlobal = data.UseGlobal,
-            Enabled = data.Enabled,
-            ApiUrl = data.ApiUrl,
-            Timeout = TimeSpan.FromSeconds(data.TimeoutSeconds),
-            UserAgent = data.UserAgent,
-            AlwaysRun = data.AlwaysRun
-        };
-    }
-
-    extension(CasConfig model)
-    {
-        public CasConfigData ToData() => new()
-        {
-            UseGlobal = model.UseGlobal,
-            Enabled = model.Enabled,
-            ApiUrl = model.ApiUrl,
-            TimeoutSeconds = model.Timeout.TotalSeconds,
-            UserAgent = model.UserAgent,
-            AlwaysRun = model.AlwaysRun
-        };
-    }
-
-    // ============================================================================
     // BayesConfig mappings
     // ============================================================================
 
@@ -168,8 +132,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = data.UseGlobal,
             Enabled = data.Enabled,
-            MinSpamProbability = data.MinSpamProbability,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             AlwaysRun = data.AlwaysRun
         };
     }
@@ -180,8 +142,6 @@ public static class ContentDetectionConfigMappings
         {
             UseGlobal = model.UseGlobal,
             Enabled = model.Enabled,
-            MinSpamProbability = model.MinSpamProbability,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             AlwaysRun = model.AlwaysRun
         };
     }
@@ -224,7 +184,6 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = data.MinMessageLength,
             LatinScriptThreshold = data.LatinScriptThreshold,
             LanguageDetectionConfidenceThreshold = data.LanguageDetectionConfidenceThreshold,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             WarnNonEnglish = data.WarnNonEnglish,
             WarningMessage = data.WarningMessage,
             AlwaysRun = data.AlwaysRun
@@ -241,7 +200,6 @@ public static class ContentDetectionConfigMappings
             MinMessageLength = model.MinMessageLength,
             LatinScriptThreshold = model.LatinScriptThreshold,
             LanguageDetectionConfidenceThreshold = model.LanguageDetectionConfidenceThreshold,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             WarnNonEnglish = model.WarnNonEnglish,
             WarningMessage = model.WarningMessage,
             AlwaysRun = model.AlwaysRun
@@ -261,8 +219,6 @@ public static class ContentDetectionConfigMappings
             MinWordsCount = data.MinWordsCount,
             ShortWordLength = data.ShortWordLength,
             ShortWordRatioThreshold = data.ShortWordRatioThreshold,
-            SpaceRatioThreshold = data.SpaceRatioThreshold,
-            ConfidenceThreshold = data.ConfidenceThreshold,
             AlwaysRun = data.AlwaysRun
         };
     }
@@ -276,8 +232,6 @@ public static class ContentDetectionConfigMappings
             MinWordsCount = model.MinWordsCount,
             ShortWordLength = model.ShortWordLength,
             ShortWordRatioThreshold = model.ShortWordRatioThreshold,
-            SpaceRatioThreshold = model.SpaceRatioThreshold,
-            ConfidenceThreshold = model.ConfidenceThreshold,
             AlwaysRun = model.AlwaysRun
         };
     }

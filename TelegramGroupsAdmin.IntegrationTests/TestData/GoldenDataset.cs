@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 39; // Updated 2026-01-21: +ban_celebration_gifs, +ban_celebration_captions
+    public const int TotalTableCount = 40; // Updated 2026-03-07: -threshold_recommendations (V1 remnant removed)
 
     /// <summary>
     /// Web application users (ASP.NET Identity)
@@ -151,38 +151,38 @@ public static class GoldenDataset
     public static class Messages
     {
         // Message IDs and relationships preserved
-        public const long Msg1_Id = 82619;
+        public const int Msg1_Id = 82619;
         public const long Msg1_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg1_ChatId = ManagedChats.MainChat_Id;
         public const string Msg1_Text = "Fair enough";
         public const int Msg1_ContentCheckSkipReason = 2;
 
-        public const long Msg2_Id = 82618;
+        public const int Msg2_Id = 82618;
         public const long Msg2_UserId = 1232994248; // Additional user
         public const long Msg2_ChatId = ManagedChats.MainChat_Id;
         public const string Msg2_Text = "He was old and crusty 20yrs ago 😂.  I'm guessing he's had enough.";
         public const int Msg2_ContentCheckSkipReason = 2;
 
-        public const long Msg3_Id = 82617;
+        public const int Msg3_Id = 82617;
         public const long Msg3_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg3_ChatId = ManagedChats.MainChat_Id;
         public const string Msg3_Text = "Get while the getting's good?";
         public const int Msg3_ContentCheckSkipReason = 2;
 
-        public const long Msg4_Id = 82616;
+        public const int Msg4_Id = 82616;
         public const long Msg4_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg4_ChatId = ManagedChats.MainChat_Id;
         public const string Msg4_Text = "Sounds like he may wanna do it again at some point. I know looking at the state of things I might want to be in it while watching whatever is gonna go down in the economy";
         public const int Msg4_ContentCheckSkipReason = 2;
 
-        public const long Msg5_Id = 82615;
+        public const int Msg5_Id = 82615;
         public const long Msg5_UserId = 1232994248;
         public const long Msg5_ChatId = ManagedChats.MainChat_Id;
         public const string Msg5_Text = "Sad to see him ride out, he definitely knows how to run an org.";
         public const int Msg5_ContentCheckSkipReason = 2;
 
         // Message with media
-        public const long Msg6_Id = 82612;
+        public const int Msg6_Id = 82612;
         public const long Msg6_UserId = 1232994248;
         public const long Msg6_ChatId = ManagedChats.MainChat_Id;
         public const string? Msg6_Text = null; // Media only
@@ -190,35 +190,35 @@ public static class GoldenDataset
         public const int Msg6_ContentCheckSkipReason = 2;
 
         // Longer message
-        public const long Msg7_Id = 82603;
+        public const int Msg7_Id = 82603;
         public const long Msg7_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg7_ChatId = ManagedChats.MainChat_Id;
         public const string Msg7_Text = "OK, I feel as though I can now say this from a position of competency, trial and error success.\n\nJust pay the feckin $20.\n\nEven with a used car value worth of GPUs, there is not a single sumbitchin local LLM to approach the effectiveness of even the $20 Claude models with Code CLI.\n\nI feel like I have a very expensive chat bot that feeds me a chain of errors to correct in my shed.";
         public const int Msg7_ContentCheckSkipReason = 2;
 
         // Professional conversation
-        public const long Msg8_Id = 82606;
+        public const int Msg8_Id = 82606;
         public const long Msg8_UserId = 934156131;
         public const long Msg8_ChatId = ManagedChats.MainChat_Id;
         public const string Msg8_Text = "I've been active with the American Institute of Architects large firm Roundtable for years. We have an email list. I emailed every single General Counsel at the top 20 architectural firms, and that's how I got this job and why I'm talking to the other firm too.";
         public const int Msg8_ContentCheckSkipReason = 1;
 
         // Healthcare tech discussion
-        public const long Msg9_Id = 82596;
+        public const int Msg9_Id = 82596;
         public const long Msg9_UserId = 468009795;
         public const long Msg9_ChatId = ManagedChats.MainChat_Id;
         public const string Msg9_Text = "I have close to 8 years of experience in Healthcare tech. So I have that momentum.";
         public const int Msg9_ContentCheckSkipReason = 2;
 
         // Software engineering context
-        public const long Msg10_Id = 82594;
+        public const int Msg10_Id = 82594;
         public const long Msg10_UserId = 468009795;
         public const long Msg10_ChatId = ManagedChats.MainChat_Id;
         public const string Msg10_Text = "I'm a software engineering manager.  Like I'm the boss of people who write the code.";
         public const int Msg10_ContentCheckSkipReason = 2;
 
         // Message for Result2
-        public const long Msg11_Id = 82581;
+        public const int Msg11_Id = 82581;
         public const long Msg11_UserId = TelegramUsers.User1_TelegramUserId;
         public const long Msg11_ChatId = ManagedChats.MainChat_Id;
         public const string Msg11_Text = "I hit 30 last summer.";
@@ -230,19 +230,19 @@ public static class GoldenDataset
     /// </summary>
     public static class DetectionResults
     {
-        public const long Result1_MessageId = Messages.Msg1_Id;
+        public const int Result1_MessageId = Messages.Msg1_Id;
         public const string Result1_DetectionMethod = "InvisibleChars, StopWords, CAS, Similarity, Bayes, Spacing";
-        public const int Result1_Confidence = 0;
+        public const double Result1_Score = 0.0;
         public const bool Result1_IsSpam = false;
         public const string Result1_Reason = "No spam detected";
-        public const int Result1_NetConfidence = 0;
+        public const double Result1_NetScore = 0.0;
 
-        public const long Result2_MessageId = 82581; // "I hit 30 last summer"
+        public const int Result2_MessageId = 82581; // "I hit 30 last summer"
         public const string Result2_DetectionMethod = "InvisibleChars, StopWords, CAS, Similarity, Bayes, Spacing";
-        public const int Result2_Confidence = 37;
+        public const double Result2_Score = 1.85;
         public const bool Result2_IsSpam = false;
         public const string Result2_Reason = "Spam probability: 0.752 (key words: hit) (certainty: 0.504)";
-        public const int Result2_NetConfidence = 37;
+        public const double Result2_NetScore = 1.85;
     }
 
     /// <summary>
@@ -251,31 +251,31 @@ public static class GoldenDataset
     public static class TrainingLabels
     {
         // Spam label 1: Msg1 marked as spam by admin
-        public const long Label1_MessageId = Messages.Msg1_Id;
+        public const int Label1_MessageId = Messages.Msg1_Id;
         public const short Label1_Label = 0; // Spam
         public const long Label1_LabeledByUserId = TelegramUsers.User1_TelegramUserId;
         public const string Label1_Reason = "Manual spam marking via /report command";
 
         // Spam label 2: Msg2 marked as spam (no user attribution)
-        public const long Label2_MessageId = Messages.Msg2_Id;
+        public const int Label2_MessageId = Messages.Msg2_Id;
         public const short Label2_Label = 0; // Spam
         public static readonly long? Label2_LabeledByUserId = null;
         public const string Label2_Reason = "Confirmed spam pattern";
 
         // Ham label 1: Msg3 corrected to ham
-        public const long Label3_MessageId = Messages.Msg3_Id;
+        public const int Label3_MessageId = Messages.Msg3_Id;
         public const short Label3_Label = 1; // Ham
         public const long Label3_LabeledByUserId = TelegramUsers.User2_TelegramUserId;
         public const string Label3_Reason = "Admin correction - false positive";
 
         // Ham label 2: Msg4 marked as ham (no reason)
-        public const long Label4_MessageId = Messages.Msg4_Id;
+        public const int Label4_MessageId = Messages.Msg4_Id;
         public const short Label4_Label = 1; // Ham
         public static readonly long? Label4_LabeledByUserId = null;
         public static readonly string? Label4_Reason = null;
 
         // Spam label 3: Msg5 marked as spam (no reason)
-        public const long Label5_MessageId = Messages.Msg5_Id;
+        public const int Label5_MessageId = Messages.Msg5_Id;
         public const short Label5_Label = 0; // Spam
         public static readonly long? Label5_LabeledByUserId = null;
         public static readonly string? Label5_Reason = null;
@@ -345,8 +345,8 @@ public static class GoldenDataset
         public const int BaseHamCount = 2;
 
         // FP/FN test data (references existing message IDs)
-        public const long FalsePositiveMessageId = 82617;  // Spam corrected to ham
-        public const long FalseNegativeMessageId = 82594;  // Ham (from base) corrected to spam
+        public const int FalsePositiveMessageId = 82617;  // Spam corrected to ham
+        public const int FalseNegativeMessageId = 82594;  // Ham (from base) corrected to spam
 
         // Welcome response expected counts (from 50_analytics_test_data.sql)
         public const int TodayAcceptedCount = 2;       // Users 100001, 100002
@@ -380,16 +380,16 @@ public static class GoldenDataset
     public static class OldMessages
     {
         // Messages without training data (eligible for cleanup)
-        public const long Msg45DaysOld_Id = 96001;     // 45 days old, no detection results, HAS edit + translation
-        public const long Msg60DaysOld_Id = 96002;     // 60 days old, no detection results, HAS translation
-        public const long Msg35DaysOld_Id = 96004;     // 35 days old (just past 30-day threshold)
-        public const long MsgNonTraining_Id = 96006;   // 50 days old, has detection but used_for_training=false
+        public const int Msg45DaysOld_Id = 96001;     // 45 days old, no detection results, HAS edit + translation
+        public const int Msg60DaysOld_Id = 96002;     // 60 days old, no detection results, HAS translation
+        public const int Msg35DaysOld_Id = 96004;     // 35 days old (just past 30-day threshold)
+        public const int MsgNonTraining_Id = 96006;   // 50 days old, has detection but used_for_training=false
 
         // Message WITH training data (should be preserved regardless of age)
-        public const long MsgWithTraining_Id = 96003;  // 90 days old but has training data
+        public const int MsgWithTraining_Id = 96003;  // 90 days old but has training data
 
         // Boundary case - 29 days old (just inside retention window)
-        public const long Msg29DaysOld_Id = 96005;
+        public const int Msg29DaysOld_Id = 96005;
 
         // Related data for cascade delete testing
         public const long Edit_ForMsg45Days_Id = 960001;  // Edit of Msg45DaysOld - cascades when message deleted

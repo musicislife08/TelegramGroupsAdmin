@@ -4,10 +4,11 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -19,16 +20,16 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 [DisallowConcurrentExecution]
 public class ChatHealthCheckJob : IJob
 {
-    private readonly IChatManagementService _chatService;
+    private readonly IChatHealthRefreshOrchestrator _chatHealthRefreshOrchestrator;
     private readonly IConfigService _configService;
     private readonly ILogger<ChatHealthCheckJob> _logger;
 
     public ChatHealthCheckJob(
-        IChatManagementService chatService,
+        IChatHealthRefreshOrchestrator chatHealthRefreshOrchestrator,
         IConfigService configService,
         ILogger<ChatHealthCheckJob> logger)
     {
-        _chatService = chatService;
+        _chatHealthRefreshOrchestrator = chatHealthRefreshOrchestrator;
         _configService = configService;
         _logger = logger;
     }
@@ -87,14 +88,16 @@ public class ChatHealthCheckJob : IJob
                 if (payload.ChatId.HasValue)
                 {
                     // Single chat refresh (from manual UI button)
-                    _logger.LogInformation("Running health check for chat {ChatId}", payload.ChatId.Value);
-                    await _chatService.RefreshSingleChatAsync(payload.ChatId.Value, includeIcon: true, cancellationToken);
+                    // Job payload only carries raw ID (serialization boundary) — orchestrator enriches internally
+                    var chat = ChatIdentity.FromId(payload.ChatId.Value);
+                    _logger.LogDebug("Running single-chat health check for {ChatId}", payload.ChatId.Value);
+                    await _chatHealthRefreshOrchestrator.RefreshSingleChatAsync(chat, includeIcon: true, cancellationToken);
                 }
                 else
                 {
                     // All chats refresh (from recurring job)
                     _logger.LogInformation("Running health check for all chats");
-                    await _chatService.RefreshAllHealthAsync(cancellationToken);
+                    await _chatHealthRefreshOrchestrator.RefreshAllHealthAsync(cancellationToken);
                 }
 
                 _logger.LogInformation("Chat health check completed successfully");

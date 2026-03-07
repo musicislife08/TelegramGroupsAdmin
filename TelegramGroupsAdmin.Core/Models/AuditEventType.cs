@@ -114,5 +114,18 @@ public enum AuditEventType
 
     // Report Events
     /// <summary>Report created (user-submitted or auto-detected)</summary>
-    ReportCreated = 34
+    ReportCreated = 34,
+
+    // Telegram User API Events
+    /// <summary>Admin connected their Telegram account via User API</summary>
+    TelegramAccountConnected = 35,
+
+    /// <summary>Admin disconnected their Telegram account (user-initiated or session revoked)</summary>
+    TelegramAccountDisconnected = 36,
+
+    /// <summary>Owner configured or cleared Telegram User API credentials</summary>
+    TelegramApiConfigured = 37,
+
+    /// <summary>Admin's web account auto-linked to their Telegram account after User API auth</summary>
+    TelegramAccountLinked = 38
 }

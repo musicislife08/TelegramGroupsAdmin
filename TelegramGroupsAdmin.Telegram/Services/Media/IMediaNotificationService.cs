@@ -11,7 +11,7 @@ public interface IMediaNotificationService
     /// <summary>
     /// Subscribe to notifications for a specific media file
     /// </summary>
-    void Subscribe(long messageId, MediaType mediaType, Action callback);
+    void Subscribe(int messageId, long chatId, MediaType mediaType, Action callback);
 
     /// <summary>
     /// Subscribe to notifications for a specific user photo
@@ -21,7 +21,7 @@ public interface IMediaNotificationService
     /// <summary>
     /// Unsubscribe from media notifications
     /// </summary>
-    void Unsubscribe(long messageId, MediaType mediaType, Action callback);
+    void Unsubscribe(int messageId, long chatId, MediaType mediaType, Action callback);
 
     /// <summary>
     /// Unsubscribe from user photo notifications
@@ -31,7 +31,7 @@ public interface IMediaNotificationService
     /// <summary>
     /// Notify all subscribers that media is ready
     /// </summary>
-    void NotifyMediaReady(long messageId, MediaType mediaType);
+    void NotifyMediaReady(int messageId, long chatId, MediaType mediaType);
 
     /// <summary>
     /// Notify all subscribers that user photo is ready

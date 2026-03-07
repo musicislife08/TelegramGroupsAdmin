@@ -1,7 +1,7 @@
 @* Chat list sidebar - Telegram Desktop style *@
 
 <div class="chat-list">
-    @if (Chats == null || !Chats.Any())
+    @if (Chats is not { Count: > 0 })
     {
         <div class="chat-list-empty">
             <div class="empty-icon">
@@ -14,17 +14,17 @@
     }
     else
     {
-        @foreach (var chat in Chats.OrderBy(c => c.ChatId))
+        @foreach (var chat in Chats.OrderBy(c => c.Identity.ChatName))
         {
-            <div class="chat-list-item @(IsSelected(chat.ChatId) ? "active" : "")"
-                 @onclick="() => OnChatSelected.InvokeAsync(chat.ChatId)">
+            <div class="chat-list-item @(IsSelected(chat.Identity.Id) ? "active" : "")"
+                 @onclick="() => OnChatSelected.InvokeAsync(chat.Identity.Id)">
 
                 @* Chat Avatar *@
                 <div class="chat-avatar-wrapper">
                     @if (!string.IsNullOrEmpty(chat.ChatIconPath))
                     {
                         <img src="@GetChatIconPath(chat.ChatIconPath)"
-                             alt="@chat.ChatName"
+                             alt="@chat.Identity.ChatName"
                              class="chat-avatar"
                              loading="lazy" />
                     }
@@ -41,20 +41,16 @@
                 @* Chat Info *@
                 <div class="chat-info">
                     <div class="chat-title-row">
-                        <span class="chat-title">@chat.ChatName</span>
-                        @if (MessageCounts.TryGetValue(chat.ChatId, out var count) && count > 0)
+                        <span class="chat-title">@chat.Identity.ChatName</span>
+                        @if (MessageCounts.TryGetValue(chat.Identity.Id, out var count) && count > 0)
                         {
                             <span class="chat-count">@count</span>
                         }
                     </div>
                     <div class="chat-subtitle-row">
                         <span class="chat-last-message">
-                            @GetLastMessagePreview(chat.ChatId)
+                            @GetLastMessagePreview(chat.Identity.Id)
                         </span>
-                        @if (UnreadCounts.TryGetValue(chat.ChatId, out var unread) && unread > 0)
-                        {
-                            <span class="chat-unread-badge">@unread</span>
-                        }
                     </div>
                 </div>
             </div>
@@ -71,9 +67,6 @@
 
     [Parameter]
     public Dictionary<long, int> MessageCounts { get; set; } = new();
-
-    [Parameter]
-    public Dictionary<long, int> UnreadCounts { get; set; } = new();
 
     [Parameter]
     public EventCallback<long> OnChatSelected { get; set; }
@@ -99,7 +92,7 @@
     {
         if (LastMessagePreviews.TryGetValue(chatId, out var preview))
         {
-            return preview.Length > 40 ? preview.Substring(0, 40) + "..." : preview;
+            return preview.Length > 40 ? preview[..40] + "..." : preview;
         }
         return "No messages yet";
     }

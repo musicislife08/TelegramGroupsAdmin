@@ -44,9 +44,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
 
-        // Assert - null input returns null (passthrough, no validation performed)
-        Assert.That(result, Is.Null);
-        Assert.That(fullPath, Is.Null, "fullPathOut should be null when no validation performed");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - null input returns null (passthrough, no validation performed)
+            Assert.That(result, Is.Null);
+            Assert.That(fullPath, Is.Null, "fullPathOut should be null when no validation performed");
+        }
     }
 
     [Test]
@@ -59,9 +62,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
 
-        // Assert - empty input returns empty (passthrough, no validation performed)
-        Assert.That(result, Is.EqualTo(""));
-        Assert.That(fullPath, Is.Null, "fullPathOut should be null when no validation performed");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - empty input returns empty (passthrough, no validation performed)
+            Assert.That(result, Is.EqualTo(""));
+            Assert.That(fullPath, Is.Null, "fullPathOut should be null when no validation performed");
+        }
     }
 
     [Test]
@@ -74,9 +80,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
 
-        // Assert - null mediaType means we can't construct the path, passthrough
-        Assert.That(result, Is.EqualTo(mediaLocalPath));
-        Assert.That(fullPath, Is.Null, "fullPathOut should be null when no validation performed");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - null mediaType means we can't construct the path, passthrough
+            Assert.That(result, Is.EqualTo(mediaLocalPath));
+            Assert.That(fullPath, Is.Null, "fullPathOut should be null when no validation performed");
+        }
     }
 
     #endregion
@@ -95,9 +104,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
-        // Assert - file exists, return the path
-        Assert.That(result, Is.EqualTo(filename));
-        Assert.That(fullPath, Is.EqualTo(fullFilePath));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - file exists, return the path
+            Assert.That(result, Is.EqualTo(filename));
+            Assert.That(fullPath, Is.EqualTo(fullFilePath));
+        }
     }
 
     [Test]
@@ -112,9 +124,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
-        // Assert
-        Assert.That(result, Is.EqualTo(filename));
-        Assert.That(fullPath, Does.Contain(Path.Combine("media", "video")));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result, Is.EqualTo(filename));
+            Assert.That(fullPath, Does.Contain(Path.Combine("media", "video")));
+        }
     }
 
     [Test]
@@ -130,9 +145,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
-        // Assert
-        Assert.That(result, Is.EqualTo(filename));
-        Assert.That(fullPath, Does.Contain(Path.Combine("media", "audio")));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(result, Is.EqualTo(filename));
+            Assert.That(fullPath, Does.Contain(Path.Combine("media", "audio")));
+        }
     }
 
     #endregion
@@ -149,9 +167,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
-        // Assert - validation failed, return null
-        Assert.That(result, Is.Null);
-        Assert.That(fullPath, Is.Not.Null, "fullPathOut should contain the path that was checked");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - validation failed, return null
+            Assert.That(result, Is.Null);
+            Assert.That(fullPath, Is.Not.Null, "fullPathOut should contain the path that was checked");
+        }
         Assert.That(fullPath, Does.EndWith(filename));
     }
 
@@ -165,9 +186,12 @@ public class MediaPathUtilitiesTests
         // Act
         var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
-        // Assert - fullPath should show what was checked for debugging
-        Assert.That(result, Is.Null);
-        Assert.That(fullPath, Does.Contain(Path.Combine("media", "sticker", filename)));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - fullPath should show what was checked for debugging
+            Assert.That(result, Is.Null);
+            Assert.That(fullPath, Does.Contain(Path.Combine("media", "sticker", filename)));
+        }
     }
 
     #endregion

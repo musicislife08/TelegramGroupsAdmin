@@ -53,6 +53,10 @@ public class TrainingHandlerTests
         _mockJobTrigger = Substitute.For<IJobTriggerService>();
         _mockLogger = Substitute.For<ILogger<TrainingHandler>>();
 
+        // Default: no existing detection records (Bug 1+2 guard passes through)
+        _mockDetectionRepo.GetByMessageIdAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(new List<DetectionResultRecord>());
+
         _handler = new TrainingHandler(
             _mockMessageRepo,
             _mockDetectionRepo,
@@ -67,7 +71,7 @@ public class TrainingHandlerTests
     /// Fills all required constructor parameters with defaults.
     /// </summary>
     private static MessageRecord CreateTestMessage(
-        long messageId,
+        int messageId,
         long userId,
         long chatId,
         string? messageText = null,
@@ -76,11 +80,8 @@ public class TrainingHandlerTests
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "test_user",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: chatId,
+            User: new UserIdentity(userId, "Test", "User", "test_user"),
+            Chat: new ChatIdentity(chatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: messageText,
             PhotoFileId: null,
@@ -88,7 +89,6 @@ public class TrainingHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -116,20 +116,20 @@ public class TrainingHandlerTests
     public async Task CreateSpamSampleAsync_MessageWithText_CreatesLabelAndTriggersRetraining()
     {
         // Arrange
-        const long messageId = 12345;
+        const int messageId = 12345;
         const long userId = 67890;
         var executor = Actor.FromTelegramUser(userId);
 
         var message = CreateTestMessage(messageId, userId, chatId: 1, messageText: "spam message text");
 
-        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(false); // No photo
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
 
         // Assert - Verify detection result created (history only)
         await _mockDetectionRepo.Received(1).InsertAsync(
@@ -142,15 +142,20 @@ public class TrainingHandlerTests
         // Assert - Verify training label created (ML training)
         await _mockTrainingRepo.Received(1).UpsertLabelAsync(
             messageId,
+            Arg.Any<long>(),
             TrainingLabel.Spam,
             userId,
             Arg.Any<string>(),
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
 
-        // Assert - Verify retraining job triggered
+        // Assert - Verify retraining jobs triggered (both text and Bayes classifiers)
         await _mockJobTrigger.Received(1).TriggerNowAsync(
             BackgroundJobNames.TextClassifierRetraining,
+            Arg.Any<object>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+        await _mockJobTrigger.Received(1).TriggerNowAsync(
+            BackgroundJobNames.BayesClassifierRetraining,
             Arg.Any<object>(),
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -159,19 +164,19 @@ public class TrainingHandlerTests
     public async Task CreateSpamSampleAsync_MessageNotFound_LogsWarningAndReturns()
     {
         // Arrange
-        const long messageId = 99999;
+        const int messageId = 99999;
         var executor = Actor.FromTelegramUser(123);
 
-        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
 
         // Assert - Should not create any records
         await _mockDetectionRepo.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
-            default, default, default, default, default, default);
+            default, default, default, default, default, default, default);
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
             string.Empty, new object(), default);
     }
@@ -180,7 +185,7 @@ public class TrainingHandlerTests
     public async Task CreateSpamSampleAsync_MessageWithoutText_SkipsTrainingLabelAndRetraining()
     {
         // Arrange
-        const long messageId = 12345;
+        const int messageId = 12345;
         var message = CreateTestMessage(
             messageId,
             userId: 123,
@@ -189,23 +194,23 @@ public class TrainingHandlerTests
             mediaType: MediaType.Document, // Example media type
             mediaLocalPath: "/data/media/document.pdf");
 
-        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(false); // No photo
 
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
 
         // Assert - Detection result still created
         await _mockDetectionRepo.Received(1).InsertAsync(Arg.Any<DetectionResultRecord>(), Arg.Any<CancellationToken>());
 
         // Assert - NO training label created (no text)
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
-            default, default, default, default, default, default);
+            default, default, default, default, default, default, default);
 
         // Assert - NO retraining triggered (no text training data)
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
@@ -216,7 +221,7 @@ public class TrainingHandlerTests
     public async Task CreateSpamSampleAsync_MessageWithPhoto_SavesImageSample()
     {
         // Arrange
-        const long messageId = 12345;
+        const int messageId = 12345;
         var message = CreateTestMessage(
             messageId,
             userId: 123,
@@ -224,20 +229,21 @@ public class TrainingHandlerTests
             messageText: "spam with image");
         // Note: Photos use PhotoFileId/PhotoLocalPath fields in MessageRecord, not MediaType
 
-        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
-        _mockImageRepo.SaveTrainingSampleAsync(messageId, true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+        _mockImageRepo.SaveTrainingSampleAsync(messageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         var executor = Actor.FromTelegramUser(123);
 
         // Act
-        await _handler.CreateSpamSampleAsync(messageId, executor);
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
 
         // Assert - Image sample saved
         await _mockImageRepo.Received(1).SaveTrainingSampleAsync(
             messageId,
+            Arg.Any<long>(),
             isSpam: true,
             Arg.Any<Actor>(),
             cancellationToken: Arg.Any<CancellationToken>());
@@ -250,16 +256,17 @@ public class TrainingHandlerTests
         const long telegramUserId = 999888;
         var message = CreateTestMessage(12345, userId: 123, chatId: 1, messageText: "test");
 
-        _mockMessageRepo.GetMessageAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
 
         var executor = Actor.FromTelegramUser(telegramUserId);
 
         // Act
-        await _handler.CreateSpamSampleAsync(12345, executor);
+        await _handler.CreateSpamSampleAsync(12345, ChatIdentity.FromId(-100), executor);
 
         // Assert - Training label should have correct user ID
         await _mockTrainingRepo.Received(1).UpsertLabelAsync(
+            Arg.Any<int>(),
             Arg.Any<long>(),
             Arg.Any<TrainingLabel>(),
             telegramUserId, // Should extract from Actor

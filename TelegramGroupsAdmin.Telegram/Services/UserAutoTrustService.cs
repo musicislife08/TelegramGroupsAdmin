@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -118,6 +118,7 @@ public class UserAutoTrustService
                 UserId: userId,
                 ActionType: UserActionType.Trust,
                 MessageId: null,
+                ChatId: null,
                 IssuedBy: Actor.AutoTrust, // System-issued
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent (until revoked)

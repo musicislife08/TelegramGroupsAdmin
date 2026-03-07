@@ -20,30 +20,26 @@ public class MLTrainingDataRepository(
     ILogger<MLTrainingDataRepository> logger) : IMLTrainingDataRepository
 {
 
-    public async Task<HashSet<long>> GetLabeledMessageIdsAsync(CancellationToken cancellationToken = default)
-    {
-        var ids = await context.TrainingLabels
-            .AsNoTracking()
-            .Select(tl => tl.MessageId)
-            .ToListAsync(cancellationToken);
-        return ids.ToHashSet();
-    }
-
-    public async Task<List<TrainingSample>> GetSpamSamplesAsync(HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default)
+    public async Task<List<TrainingSample>> GetSpamSamplesAsync(CancellationToken cancellationToken = default)
     {
         // Explicit spam labels (admin decisions override auto-detection)
         // Note: OrderByDescending ensures deterministic results when multiple translations exist
         var explicitSpam = await context.TrainingLabels
             .AsNoTracking()
             .Where(tl => tl.Label == (short)TrainingLabel.Spam)
-            .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => new { tl, m })
+            .Join(context.Messages,
+                  tl => new { tl.MessageId, tl.ChatId },
+                  m => new { m.MessageId, m.ChatId },
+                  (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => x.m.MessageId, mt => mt.MessageId,
+                       x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
+                       mt => new { mt.MessageId, mt.ChatId },
                        (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
                 x.tl.MessageId,
+                x.tl.ChatId,
                 x.tl.LabeledByUserId,
                 x.tl.LabeledAt
             })
@@ -53,15 +49,20 @@ public class MLTrainingDataRepository(
         // Implicit spam (high-confidence auto, not corrected) - use passed-in labeled IDs to avoid duplicate query
         var implicitSpam = await context.DetectionResults
             .AsNoTracking()
-            .Where(dr => dr.IsSpam && dr.UsedForTraining && !labeledMessageIds.Contains(dr.MessageId))
-            .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => m)
+            .Where(dr => dr.IsSpam && dr.UsedForTraining && !context.TrainingLabels.Any(tl => tl.MessageId == dr.MessageId && tl.ChatId == dr.ChatId))
+            .Join(context.Messages,
+                  dr => new { dr.MessageId, dr.ChatId },
+                  m => new { m.MessageId, m.ChatId },
+                  (dr, m) => m)
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       m => m.MessageId, mt => mt.MessageId,
+                       m => new { MessageId = (int?)m.MessageId, ChatId = (long?)m.ChatId },
+                       mt => new { mt.MessageId, mt.ChatId },
                        (m, mts) => new { m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
-                x.m.MessageId
+                x.m.MessageId,
+                x.m.ChatId
             })
             .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
             .ToListAsync(cancellationToken);
@@ -74,6 +75,7 @@ public class MLTrainingDataRepository(
                 Label = TrainingLabel.Spam,
                 Source = TrainingSampleSource.Explicit,
                 MessageId = x.MessageId,
+                ChatId = x.ChatId,
                 LabeledByUserId = x.LabeledByUserId,
                 LabeledAt = x.LabeledAt
             }),
@@ -83,6 +85,7 @@ public class MLTrainingDataRepository(
                 Label = TrainingLabel.Spam,
                 Source = TrainingSampleSource.Implicit,
                 MessageId = x.MessageId,
+                ChatId = x.ChatId,
                 LabeledByUserId = null,
                 LabeledAt = null
             })
@@ -96,7 +99,7 @@ public class MLTrainingDataRepository(
         return DeduplicateSamples(samples, "spam");
     }
 
-    public async Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default)
+    public async Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(spamCount);
 
@@ -110,14 +113,19 @@ public class MLTrainingDataRepository(
         var explicitHamRaw = await context.TrainingLabels
             .AsNoTracking()
             .Where(tl => tl.Label == (short)TrainingLabel.Ham)
-            .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => new { tl, m })
+            .Join(context.Messages,
+                  tl => new { tl.MessageId, tl.ChatId },
+                  m => new { m.MessageId, m.ChatId },
+                  (tl, m) => new { tl, m })
             .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       x => x.m.MessageId, mt => mt.MessageId,
+                       x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
+                       mt => new { mt.MessageId, mt.ChatId },
                        (x, mts) => new { x.tl, x.m, mt = mts.OrderByDescending(t => t.TranslatedAt).FirstOrDefault() })
             .Select(x => new
             {
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
                 x.tl.MessageId,
+                x.tl.ChatId,
                 x.tl.LabeledByUserId,
                 x.tl.LabeledAt
             })
@@ -131,6 +139,7 @@ public class MLTrainingDataRepository(
             Label = TrainingLabel.Ham,
             Source = TrainingSampleSource.Explicit,
             MessageId = x.MessageId,
+            ChatId = x.ChatId,
             LabeledByUserId = x.LabeledByUserId,
             LabeledAt = x.LabeledAt
         }).ToList();
@@ -161,27 +170,23 @@ public class MLTrainingDataRepository(
         // Calculate how many implicit ham we need after explicit ham
         var maxImplicitHam = Math.Max(dynamicHamCap - explicitHam.Count, 0);
 
-        // Materialize spam exclusion set once (avoids N+1 correlated subqueries)
-        var spamDetectedMessageIds = (await context.DetectionResults.AsNoTracking()
-            .Where(dr => dr.IsSpam)
-            .Select(dr => dr.MessageId).ToListAsync(cancellationToken)).ToHashSet();
-
         // Implicit ham: fetch ALL candidates, dedupe in memory, then cap
         // No limit here - deduplication happens after fetch, then we take what we need
         // For homelab scale (~20k messages), this is trivial memory/CPU
         // Uses ix_messages_text_length expression index for efficient sorting
+        // NOT EXISTS correlated subqueries use composite (MessageId, ChatId) to prevent cross-chat data leakage
         var implicitHamRaw = await (
             from m in context.Messages.AsNoTracking()
-            where !labeledMessageIds.Contains(m.MessageId)
-               && !spamDetectedMessageIds.Contains(m.MessageId)
+            where !context.TrainingLabels.Any(tl => tl.MessageId == m.MessageId && tl.ChatId == m.ChatId)
+               && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.ChatId == m.ChatId && dr.IsSpam)
                && m.DeletedAt == null  // Message-level filter (better signal than user-level ban)
             from mt in context.MessageTranslations
-                .Where(mt => mt.MessageId == m.MessageId && mt.EditId == null)
+                .Where(mt => mt.MessageId == m.MessageId && mt.ChatId == m.ChatId && mt.EditId == null)
                 .DefaultIfEmpty()
             let text = mt != null ? mt.TranslatedText : m.MessageText
             where text != null && text.Length > MLConstants.MinTextLength
             orderby text.Length descending  // Sort by LENGTH (uses expression index)
-            select new { Text = text, m.MessageId }
+            select new { Text = text, m.MessageId, m.ChatId }
         ).ToListAsync(cancellationToken);
 
         // Convert to samples for deduplication
@@ -191,6 +196,7 @@ public class MLTrainingDataRepository(
             Label = TrainingLabel.Ham,
             Source = TrainingSampleSource.Implicit,
             MessageId = x.MessageId,
+            ChatId = x.ChatId,
             LabeledByUserId = null,
             LabeledAt = null
         }).ToList();
@@ -200,7 +206,7 @@ public class MLTrainingDataRepository(
         var implicitHam = implicitHamDeduped.Take(maxImplicitHam).ToList();
 
         // Combine explicit and implicit ham
-        List<TrainingSample> samples = [..explicitHam, ..implicitHam];
+        List<TrainingSample> samples = [.. explicitHam, .. implicitHam];
 
         var totalHam = explicitHam.Count + implicitHam.Count;
         var totalSamples = spamCount + totalHam;
@@ -220,9 +226,8 @@ public class MLTrainingDataRepository(
     {
         // Call the same methods that training uses to ensure UI shows accurate counts
         // This includes deduplication, so UI matches exactly what model training will use
-        var labeledMessageIds = await GetLabeledMessageIdsAsync(cancellationToken);
-        var spamSamples = await GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
-        var hamSamples = await GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
+        var spamSamples = await GetSpamSamplesAsync(cancellationToken);
+        var hamSamples = await GetHamSamplesAsync(spamSamples.Count, cancellationToken);
 
         // Count by source (explicit vs implicit)
         var explicitSpamCount = spamSamples.Count(s => s.Source == TrainingSampleSource.Explicit);

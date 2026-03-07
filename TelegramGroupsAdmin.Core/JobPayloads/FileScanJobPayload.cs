@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
@@ -6,13 +8,13 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// </summary>
 public record FileScanJobPayload(
     /// <summary>Message ID for audit trail and deletion if infected</summary>
-    long MessageId,
+    int MessageId,
 
-    /// <summary>Chat ID where message was sent</summary>
-    long ChatId,
+    /// <summary>Chat where message was sent</summary>
+    ChatIdentity Chat,
 
-    /// <summary>User ID who sent the file (for DM notifications)</summary>
-    long UserId,
+    /// <summary>User who sent the file (for DM notifications)</summary>
+    UserIdentity User,
 
     /// <summary>Telegram file ID for download</summary>
     string FileId,

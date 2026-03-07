@@ -86,6 +86,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .MinimumLevel.Override("Npgsql", config.GetSwitch("Npgsql"))
         .MinimumLevel.Override("System", config.GetSwitch("System"))
         .MinimumLevel.Override("TelegramGroupsAdmin", config.GetSwitch("TelegramGroupsAdmin"))
+        .MinimumLevel.Override("WTelegram", config.GetSwitch("WTelegram"))
         .Enrich.FromLogContext()
         .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
 
@@ -131,7 +132,7 @@ builder.Services.AddBackgroundJobs(builder.Configuration);
 // Readiness: Checks database connectivity (if DB is down, stop receiving traffic but don't restart)
 builder.Services.AddHealthChecks()
     .AddNpgSql(
-        connectionString,
+        dbDataSourceFactory: sp => sp.GetRequiredService<Npgsql.NpgsqlDataSource>(),
         name: "postgresql",
         tags: ["ready", "db"]);
 
@@ -277,13 +278,23 @@ if (Environment.GetEnvironmentVariable("SKIP_ML_TRAINING") != "true")
     var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IMLTextClassifierService>();
     app.Logger.LogInformation("Training ML spam classifier model with latest data...");
     await mlClassifier.TrainModelAsync();
-    var metadata = mlClassifier.GetMetadata();
+    var mlMetadata = mlClassifier.GetMetadata();
     app.Logger.LogInformation(
         "ML classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1}, balanced: {Balanced})",
-        metadata?.SpamSampleCount,
-        metadata?.HamSampleCount,
-        metadata?.SpamRatio,
-        metadata?.IsBalanced);
+        mlMetadata?.SpamSampleCount,
+        mlMetadata?.HamSampleCount,
+        mlMetadata?.SpamRatio,
+        mlMetadata?.IsBalanced);
+
+    var bayesClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IBayesClassifierService>();
+    app.Logger.LogInformation("Training Bayes spam classifier with latest data...");
+    await bayesClassifier.TrainAsync();
+    var bayesMetadata = bayesClassifier.GetMetadata();
+    app.Logger.LogInformation(
+        "Bayes classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1})",
+        bayesMetadata?.SpamSampleCount,
+        bayesMetadata?.HamSampleCount,
+        bayesMetadata?.SpamRatio);
 }
 else
 {

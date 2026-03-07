@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -38,12 +39,12 @@ public interface IChatAdminsRepository
     /// <summary>
     /// Mark admin as demoted (soft delete via is_active=false)
     /// </summary>
-    Task DeactivateAsync(long chatId, long telegramId, CancellationToken cancellationToken = default);
+    Task DeactivateAsync(ChatIdentity chat, UserIdentity user, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete all admins for a chat (when bot leaves group)
     /// </summary>
-    Task DeleteByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
+    Task DeleteByChatIdAsync(ChatIdentity chat, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Refresh all admin records for a chat (mark existing as verified, used during startup)

@@ -49,7 +49,12 @@ public enum AIFeatureType
     /// <summary>
     /// Meta-AI prompt generation
     /// </summary>
-    PromptBuilder
+    PromptBuilder,
+
+    /// <summary>
+    /// Vision API for user profile scanning (bio, photos, stories)
+    /// </summary>
+    ProfileScan
 }
 
 /// <summary>
@@ -177,6 +182,7 @@ public class AIProviderConfig
         [AIFeatureType.Translation] = new(),
         [AIFeatureType.ImageAnalysis] = new() { RequiresVision = true },
         [AIFeatureType.VideoAnalysis] = new() { RequiresVision = true },
-        [AIFeatureType.PromptBuilder] = new()
+        [AIFeatureType.PromptBuilder] = new(),
+        [AIFeatureType.ProfileScan] = new() { RequiresVision = true }
     };
 }

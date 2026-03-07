@@ -4,7 +4,7 @@
     <DialogContent>
         <MudStack Spacing="3">
             <MudText Typo="Typo.body1">
-                Issue a warning to <strong>@Username</strong>?
+                Issue a warning to <strong>@User.DisplayName</strong>?
             </MudText>
 
             <MudText Typo="Typo.body2" Color="Color.Secondary">
@@ -42,8 +42,7 @@
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter] public long UserId { get; set; }
-    [Parameter] public string Username { get; set; } = string.Empty;
+    [Parameter] public UserIdentity User { get; set; } = UserIdentity.FromId(0);
     [Parameter] public int CurrentWarningCount { get; set; }
 
     private string _reason = string.Empty;

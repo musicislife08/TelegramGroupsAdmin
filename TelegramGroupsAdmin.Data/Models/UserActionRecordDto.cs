@@ -21,7 +21,10 @@ public class UserActionRecordDto
     public UserActionType ActionType { get; set; }
 
     [Column("message_id")]
-    public long? MessageId { get; set; }
+    public int? MessageId { get; set; }
+
+    [Column("chat_id")]
+    public long? ChatId { get; set; }
 
     // Exclusive Arc actor system (Phase 4.19) - exactly one must be non-null
     [Column("web_user_id")]
@@ -45,7 +48,6 @@ public class UserActionRecordDto
     public string? Reason { get; set; }
 
     // Navigation properties
-    [ForeignKey(nameof(MessageId))]
     public virtual MessageRecordDto? Message { get; set; }
 
     /// <summary>

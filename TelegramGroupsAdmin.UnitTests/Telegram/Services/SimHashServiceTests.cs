@@ -350,9 +350,12 @@ public class SimHashServiceTests
         var hash2 = _service.ComputeHash(text);
         var hash3 = _service.ComputeHash(text);
 
-        // Assert
-        Assert.That(hash1, Is.EqualTo(hash2));
-        Assert.That(hash2, Is.EqualTo(hash3));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(hash1, Is.EqualTo(hash2));
+            Assert.That(hash2, Is.EqualTo(hash3));
+        }
     }
 
     [Test]

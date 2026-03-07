@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -122,14 +124,14 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
-    public async Task DeactivateAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
+    public async Task DeactivateAsync(ChatIdentity chat, UserIdentity user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
         var admins = await context.ChatAdmins
-            .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId)
+            .Where(ca => ca.ChatId == chat.Id && ca.TelegramId == user.Id)
             .ToListAsync(cancellationToken);
 
         foreach (var admin in admins)
@@ -143,17 +145,18 @@ public class ChatAdminsRepository : IChatAdminsRepository
 
         if (rowsAffected > 0)
         {
-            _logger.LogInformation("Deactivated admin: chat={ChatId}, user={TelegramId}", chatId, telegramId);
+            _logger.LogInformation("Deactivated admin: chat={Chat}, user={User}",
+                chat.ToLogInfo(), user.ToLogInfo());
         }
     }
 
     /// <inheritdoc/>
-    public async Task DeleteByChatIdAsync(long chatId, CancellationToken cancellationToken = default)
+    public async Task DeleteByChatIdAsync(ChatIdentity chat, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var toDelete = await context.ChatAdmins
-            .Where(ca => ca.ChatId == chatId)
+            .Where(ca => ca.ChatId == chat.Id)
             .ToListAsync(cancellationToken);
 
         var rowsAffected = toDelete.Count;
@@ -163,7 +166,8 @@ public class ChatAdminsRepository : IChatAdminsRepository
             context.ChatAdmins.RemoveRange(toDelete);
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Deleted {Count} admin records for chat {ChatId}", rowsAffected, chatId);
+            _logger.LogInformation("Deleted {Count} admin records for {Chat}",
+                rowsAffected, chat.ToLogInfo());
         }
     }
 

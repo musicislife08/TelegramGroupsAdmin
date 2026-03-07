@@ -135,7 +135,7 @@
                         <HeaderContent>
                             <MudTh>Timestamp</MudTh>
                             <MudTh>Result</MudTh>
-                            <MudTh>Confidence</MudTh>
+                            <MudTh>Score</MudTh>
                             <MudTh>Reason</MudTh>
                             <MudTh>User</MudTh>
                         </HeaderContent>
@@ -146,7 +146,7 @@
                                     @(context.IsSpam ? "SPAM" : "HAM")
                                 </MudChip>
                             </MudTd>
-                            <MudTd>@context.Confidence%</MudTd>
+                            <MudTd>@context.Score.ToString("F1")</MudTd>
                             <MudTd>
                                 <MudText Style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                     @context.Reason
@@ -329,7 +329,7 @@
                                                     </MudStack>
                                                 </td>
                                                 <td style="text-align: right;">
-                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@msg.OpenAIConfidence%</MudChip>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@msg.OpenAIScore.ToString("F1")</MudChip>
                                                 </td>
                                             </tr>
                                         }
@@ -448,14 +448,11 @@
             // Query detection_results table instead of obsolete spam_checks table
             var recentDetections = await MessageStatsService.GetRecentDetectionsAsync();
             _recentContentChecks = recentDetections.Take(20).Select(d => new ContentCheckRecord(
-                Id: d.Id,
                 CheckTimestamp: d.DetectedAt,
                 UserId: d.UserId,
-                ContentHash: null,
                 IsSpam: d.IsSpam,
-                Confidence: d.Confidence,
+                Score: d.Score,
                 Reason: d.Reason ?? $"{d.DetectionMethod} detection",
-                CheckType: d.DetectionMethod,
                 MatchedMessageId: d.MessageId
             )).ToList();
 

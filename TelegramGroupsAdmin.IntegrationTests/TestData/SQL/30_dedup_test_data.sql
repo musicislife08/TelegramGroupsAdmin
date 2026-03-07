@@ -69,29 +69,29 @@ VALUES
 -- Insert training labels for the test messages
 -- Group 1-3 and 7 are spam (label=0), Group 4 is spam too
 -- Groups 5-6 are ham (label=1)
-INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at)
+INSERT INTO training_labels (message_id, chat_id, label, labeled_by_user_id, labeled_at)
 VALUES
 -- Spam labels
-(95001, 0, NULL, NOW() - INTERVAL '1 hour'),
-(95002, 0, NULL, NOW() - INTERVAL '2 hours'),
-(95003, 0, NULL, NOW() - INTERVAL '3 hours'),
-(95004, 0, NULL, NOW() - INTERVAL '4 hours'),
-(95005, 0, NULL, NOW() - INTERVAL '5 hours'),
-(95006, 0, NULL, NOW() - INTERVAL '6 hours'),
-(95007, 0, NULL, NOW() - INTERVAL '7 hours'),
-(95008, 0, NULL, NOW() - INTERVAL '8 hours'),
-(95009, 0, NULL, NOW() - INTERVAL '9 hours'),
-(95010, 0, NULL, NOW() - INTERVAL '10 hours'),
-(95011, 0, NULL, NOW() - INTERVAL '11 hours'),
-(95012, 0, NULL, NOW() - INTERVAL '12 hours'),
-(95013, 0, NULL, NOW() - INTERVAL '13 hours'),
-(95020, 0, NULL, NOW() - INTERVAL '20 hours'),
-(95021, 0, NULL, NOW() - INTERVAL '21 hours'),
-(95022, 0, NULL, NOW() - INTERVAL '22 hours'),
+(95001, -1002152207375, 0, NULL, NOW() - INTERVAL '1 hour'),
+(95002, -1002152207375, 0, NULL, NOW() - INTERVAL '2 hours'),
+(95003, -1002152207375, 0, NULL, NOW() - INTERVAL '3 hours'),
+(95004, -1002152207375, 0, NULL, NOW() - INTERVAL '4 hours'),
+(95005, -1002152207375, 0, NULL, NOW() - INTERVAL '5 hours'),
+(95006, -1002152207375, 0, NULL, NOW() - INTERVAL '6 hours'),
+(95007, -1002152207375, 0, NULL, NOW() - INTERVAL '7 hours'),
+(95008, -1002152207375, 0, NULL, NOW() - INTERVAL '8 hours'),
+(95009, -1002152207375, 0, NULL, NOW() - INTERVAL '9 hours'),
+(95010, -1002152207375, 0, NULL, NOW() - INTERVAL '10 hours'),
+(95011, -1002152207375, 0, NULL, NOW() - INTERVAL '11 hours'),
+(95012, -1002152207375, 0, NULL, NOW() - INTERVAL '12 hours'),
+(95013, -1002152207375, 0, NULL, NOW() - INTERVAL '13 hours'),
+(95020, -1002152207375, 0, NULL, NOW() - INTERVAL '20 hours'),
+(95021, -1002152207375, 0, NULL, NOW() - INTERVAL '21 hours'),
+(95022, -1002152207375, 0, NULL, NOW() - INTERVAL '22 hours'),
 -- Ham labels
-(95014, 1, NULL, NOW() - INTERVAL '14 hours'),
-(95015, 1, NULL, NOW() - INTERVAL '15 hours'),
-(95016, 1, NULL, NOW() - INTERVAL '16 hours'),
-(95017, 1, NULL, NOW() - INTERVAL '17 hours'),
-(95018, 1, NULL, NOW() - INTERVAL '18 hours'),
-(95019, 1, NULL, NOW() - INTERVAL '19 hours');
+(95014, -1002152207375, 1, NULL, NOW() - INTERVAL '14 hours'),
+(95015, -1002152207375, 1, NULL, NOW() - INTERVAL '15 hours'),
+(95016, -1002152207375, 1, NULL, NOW() - INTERVAL '16 hours'),
+(95017, -1002152207375, 1, NULL, NOW() - INTERVAL '17 hours'),
+(95018, -1002152207375, 1, NULL, NOW() - INTERVAL '18 hours'),
+(95019, -1002152207375, 1, NULL, NOW() - INTERVAL '19 hours');

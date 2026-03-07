@@ -25,11 +25,11 @@ public class MessageQueryService : IMessageQueryService
     public MessageQueryService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<MessageQueryService> logger,
-        IOptions<MessageHistoryOptions> messageHistoryOptions)
+        IOptions<AppOptions> appOptions)
     {
         _contextFactory = contextFactory;
         _logger = logger;
-        _imageStoragePath = messageHistoryOptions.Value.ImageStoragePath;
+        _imageStoragePath = appOptions.Value.DataPath;
     }
 
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default)
@@ -120,7 +120,7 @@ public class MessageQueryService : IMessageQueryService
 
         var enrichedMessages = await context.EnrichedMessages
             .AsNoTracking()
-            .Where(m => messageIds.Contains(m.MessageId))
+            .Where(m => m.ChatId == chatId && messageIds.Contains(m.MessageId))
             .ToListAsync(cancellationToken);
 
         var enrichedDict = enrichedMessages.ToDictionary(x => x.MessageId);
@@ -130,10 +130,10 @@ public class MessageQueryService : IMessageQueryService
                               where userIds.Contains(ut.TelegramUserId) && ut.RemovedAt == null
                               join td in context.TagDefinitions on ut.TagName equals td.TagName into tagGroup
                               from tag in tagGroup.DefaultIfEmpty()
-                              // JOIN to get AddedBy actor Telegram user data
+                                  // JOIN to get AddedBy actor Telegram user data
                               join addedByUser in context.TelegramUsers on ut.ActorTelegramUserId equals addedByUser.TelegramUserId into addedByGroup
                               from addedBy in addedByGroup.DefaultIfEmpty()
-                              // JOIN to get RemovedBy actor Telegram user data
+                                  // JOIN to get RemovedBy actor Telegram user data
                               join removedByUser in context.TelegramUsers on ut.RemovedByTelegramUserId equals removedByUser.TelegramUserId into removedByGroup
                               from removedBy in removedByGroup.DefaultIfEmpty()
                               select new
@@ -271,21 +271,20 @@ public class MessageQueryService : IMessageQueryService
         return results.Select(m => m.ToModel()).ToList();
     }
 
-    public async Task<Dictionary<long, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
 
-        // Query detection_results table (spam_checks table was dropped in normalized schema)
-        // Map detection_results fields to ContentCheckRecord for backward compatibility
+        // Query detection_results table
         // Note: Returns only the LATEST detection result per message for quick display
         // Full detection history is available via GetByMessageIdAsync in DetectionResultsRepository
         var results = await context.DetectionResults
             .AsNoTracking()
-            .Where(dr => messageIdArray.Contains(dr.MessageId))
+            .Where(dr => dr.ChatId == chatId && messageIdArray.Contains(dr.MessageId))
             .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
+                dr => new { dr.MessageId, dr.ChatId },
+                m => new { m.MessageId, m.ChatId },
                 (dr, m) => new
                 {
                     dr.Id,
@@ -294,8 +293,8 @@ public class MessageQueryService : IMessageQueryService
                     m.UserId,
                     m.ContentHash,
                     dr.IsSpam,
-                    dr.Confidence,
-                    dr.NetConfidence,
+                    dr.Score,
+                    dr.NetScore,
                     Reason = dr.Reason ?? $"{dr.DetectionMethod}: Spam detected",
                     CheckType = dr.DetectionMethod,
                     MatchedMessageId = dr.MessageId
@@ -308,17 +307,14 @@ public class MessageQueryService : IMessageQueryService
             .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
             .ToList();
 
-        // Build final result with absolute net_confidence as display confidence
+        // Build final result with absolute net_score as display score
         return latestResults
             .Select(r => new UiModels.ContentCheckRecord(
-                Id: r.Id,
                 CheckTimestamp: r.CheckTimestamp,
                 UserId: r.UserId,
-                ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: Math.Abs(r.NetConfidence), // Use absolute net_confidence for display
+                Score: Math.Abs(r.NetScore),
                 Reason: r.Reason,
-                CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))
             .Where(c => c.MatchedMessageId.HasValue)
             .ToDictionary(c => c.MatchedMessageId!.Value, c => c);
@@ -389,7 +385,7 @@ public class MessageQueryService : IMessageQueryService
 
         var result = await context.EnrichedMessages
             .AsNoTracking()
-            .Where(m => m.ChatId == message.ChatId && m.MessageId == message.MessageId)
+            .Where(m => m.ChatId == message.Chat.Id && m.MessageId == message.MessageId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (result == null)
@@ -403,7 +399,8 @@ public class MessageQueryService : IMessageQueryService
 
     /// <inheritdoc />
     public async Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
-        long messageId,
+        int messageId,
+        long chatId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -412,7 +409,7 @@ public class MessageQueryService : IMessageQueryService
         var messageWithDetections = await context.Messages
             .AsNoTracking()
             .Include(m => m.DetectionResults)
-            .Where(m => m.MessageId == messageId)
+            .Where(m => m.MessageId == messageId && m.ChatId == chatId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (messageWithDetections == null)
@@ -421,7 +418,7 @@ public class MessageQueryService : IMessageQueryService
         // Step 2: Load enriched message data from view
         var enrichedMessage = await context.EnrichedMessages
             .AsNoTracking()
-            .Where(m => m.MessageId == messageId)
+            .Where(m => m.MessageId == messageId && m.ChatId == chatId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (enrichedMessage == null)
@@ -453,5 +450,32 @@ public class MessageQueryService : IMessageQueryService
             UserTags = [],
             UserNotes = []
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<List<UiModels.MessageRecord>> GetUserMessagesPaginatedAsync(
+        long telegramUserId,
+        IReadOnlyCollection<long> accessibleChatIds,
+        int limit = 50,
+        DateTimeOffset? beforeTimestamp = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.EnrichedMessages
+            .AsNoTracking()
+            .Where(m => m.UserId == telegramUserId && accessibleChatIds.Contains(m.ChatId));
+
+        if (beforeTimestamp.HasValue)
+        {
+            query = query.Where(m => m.Timestamp < beforeTimestamp.Value);
+        }
+
+        var results = await query
+            .OrderByDescending(m => m.Timestamp)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return results.Select(m => m.ToModel()).ToList();
     }
 }

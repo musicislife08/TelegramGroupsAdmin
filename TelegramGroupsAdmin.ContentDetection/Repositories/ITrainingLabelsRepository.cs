@@ -14,13 +14,15 @@ public interface ITrainingLabelsRepository
     /// Admin corrections override auto-detection with no invalidation dance.
     /// </summary>
     /// <param name="messageId">Message ID to label</param>
+    /// <param name="chatId">Chat ID the message belongs to</param>
     /// <param name="label">Training label (Spam or Ham)</param>
     /// <param name="labeledByUserId">User ID who created the label (nullable for system/migrated labels)</param>
     /// <param name="reason">Optional reason/explanation for the label</param>
     /// <param name="auditLogId">Optional audit log ID linking to moderation action</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task UpsertLabelAsync(
-        long messageId,
+        int messageId,
+        long chatId,
         TrainingLabel label,
         long? labeledByUserId = null,
         string? reason = null,
@@ -31,15 +33,17 @@ public interface ITrainingLabelsRepository
     /// Gets the training label for a message (if exists).
     /// </summary>
     /// <param name="messageId">Message ID to look up</param>
+    /// <param name="chatId">Chat ID the message belongs to</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Training label record if exists, null otherwise</returns>
-    Task<TrainingLabelRecord?> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<TrainingLabelRecord?> GetByMessageIdAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a training label for a message.
     /// Used when removing a sample from training data.
     /// </summary>
     /// <param name="messageId">Message ID to delete label for</param>
+    /// <param name="chatId">Chat ID the message belongs to</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    Task DeleteLabelAsync(long messageId, CancellationToken cancellationToken = default);
+    Task DeleteLabelAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 }

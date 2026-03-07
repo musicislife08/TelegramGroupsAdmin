@@ -51,7 +51,7 @@ public class UsersPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/users");
+        await _page.GotoAsync("/users", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
         await Expect(_page.Locator(PageTitle)).ToBeVisibleAsync();
     }
 

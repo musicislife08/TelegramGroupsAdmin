@@ -42,6 +42,11 @@ public class PromptBuilderRequest
     public int MessageHistoryCount { get; set; } = 20;
 
     /// <summary>
+    /// Chat identity for logging context (nullable for test/UI scenarios)
+    /// </summary>
+    public ChatIdentity? Chat { get; set; }
+
+    /// <summary>
     /// Chat ID to pull message history from
     /// </summary>
     public long ChatId { get; set; }

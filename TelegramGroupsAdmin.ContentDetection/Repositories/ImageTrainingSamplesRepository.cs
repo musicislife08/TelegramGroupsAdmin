@@ -61,7 +61,8 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
     /// Computes photo hash and stores with spam/ham label
     /// </summary>
     public async Task<bool> SaveTrainingSampleAsync(
-        long messageId,
+        int messageId,
+        long chatId,
         bool isSpam,
         Actor markedBy,
         CancellationToken cancellationToken = default)
@@ -73,7 +74,7 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
             // Get message to check for photo
             var message = await context.Messages
                 .AsNoTracking()
-                .Where(m => m.MessageId == messageId)
+                .Where(m => m.MessageId == messageId && m.ChatId == chatId)
                 .Select(m => new
                 {
                     m.MessageId,
@@ -114,7 +115,7 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
 
             // Check if training sample already exists for this message
             var existingSample = await context.ImageTrainingSamples
-                .Where(its => its.MessageId == messageId)
+                .Where(its => its.MessageId == messageId && its.ChatId == chatId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (existingSample != null)
@@ -127,6 +128,7 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
             var trainingSample = new ImageTrainingSampleDto
             {
                 MessageId = messageId,
+                ChatId = chatId,
                 PhotoHash = photoHash,
                 IsSpam = isSpam,
                 MarkedAt = DateTimeOffset.UtcNow,

@@ -98,7 +98,31 @@
     opacity: 0.5;
 }
 
-.mode-icon {
+::deep .mode-skeleton {
+    border-radius: 16px;
+}
+
+.mode-button:not(:disabled) {
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.mode-button:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.mode-button.user-mode:not(:disabled) {
+    color: #81c784;
+    border-color: rgba(129, 199, 132, 0.3);
+}
+
+.mode-button.bot-mode:not(:disabled) {
+    color: #64b5f6;
+    border-color: rgba(100, 181, 246, 0.3);
+}
+
+::deep .mode-icon {
     width: 16px;
     height: 16px;
 }

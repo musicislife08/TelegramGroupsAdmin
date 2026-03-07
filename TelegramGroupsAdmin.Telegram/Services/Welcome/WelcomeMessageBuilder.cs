@@ -1,5 +1,4 @@
 using Humanizer;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 
@@ -75,6 +74,17 @@ public static class WelcomeMessageBuilder
     }
 
     /// <summary>
+    /// Formats the verifying message shown while security checks run.
+    /// This message is displayed briefly (~2s) while CAS/impersonation checks execute.
+    /// </summary>
+    /// <param name="username">User's @username or first name</param>
+    /// <returns>Verifying message text</returns>
+    public static string FormatVerifyingMessage(string username)
+    {
+        return $"{username} ⏳ Verifying...";
+    }
+
+    /// <summary>
     /// Formats the exam intro message (MainWelcomeMessage with variable substitution).
     /// Used in EntranceExam mode as the first DM message before questions.
     /// No footer, no buttons - just the rules/guidelines.
@@ -93,6 +103,17 @@ public static class WelcomeMessageBuilder
             username,
             chatName,
             config.TimeoutSeconds);
+    }
+
+    /// <summary>
+    /// Formats the profile hold message shown when a user's profile is held for admin review.
+    /// The user remains muted until an admin acts on the profile scan alert.
+    /// </summary>
+    /// <param name="username">User's @username or first name</param>
+    /// <returns>Profile hold message text</returns>
+    public static string FormatProfileHoldMessage(string username)
+    {
+        return $"{username} ⏳ Your profile is under admin review. Please wait...";
     }
 
     private static string SubstituteVariables(

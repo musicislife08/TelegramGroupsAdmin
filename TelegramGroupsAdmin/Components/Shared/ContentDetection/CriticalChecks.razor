@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.ContentDetection
-@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Auth
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
@@ -193,13 +193,13 @@
                 new() { CheckName = "StopWords", DisplayName = "Stop Words", Description = "Pattern matching against banned keywords/phrases", Category = "Spam", Enabled = _config.StopWords.Enabled, AlwaysRun = _config.StopWords.AlwaysRun },
                 new() { CheckName = "ImageSpam", DisplayName = "Image Spam (Vision)", Description = "OpenAI Vision API image content analysis", Category = "Spam", Enabled = _config.ImageSpam.Enabled, AlwaysRun = _config.ImageSpam.AlwaysRun },
                 new() { CheckName = "VideoSpam", DisplayName = "Video Spam", Description = "Video content analysis for spam detection", Category = "Spam", Enabled = _config.VideoSpam.Enabled, AlwaysRun = _config.VideoSpam.AlwaysRun },
-                new() { CheckName = "Cas", DisplayName = "CAS (Combot)", Description = "Check against Combot Anti-Spam database", Category = "Spam", Enabled = _config.Cas.Enabled, AlwaysRun = _config.Cas.AlwaysRun },
                 new() { CheckName = "Similarity", DisplayName = "Similarity (TF-IDF)", Description = "Detect duplicate/similar spam messages", Category = "Spam", Enabled = _config.Similarity.Enabled, AlwaysRun = _config.Similarity.AlwaysRun },
                 new() { CheckName = "Bayes", DisplayName = "Bayesian Filter", Description = "Statistical spam classification", Category = "Spam", Enabled = _config.Bayes.Enabled, AlwaysRun = _config.Bayes.AlwaysRun },
                 new() { CheckName = "Translation", DisplayName = "Multi-Language", Description = "Detect excessive language mixing", Category = "Spam", Enabled = _config.Translation.Enabled, AlwaysRun = _config.Translation.AlwaysRun },
                 new() { CheckName = "Spacing", DisplayName = "Spacing Check", Description = "Detect excessive spacing/formatting abuse", Category = "Spam", Enabled = _config.Spacing.Enabled, AlwaysRun = _config.Spacing.AlwaysRun },
                 new() { CheckName = "InvisibleChars", DisplayName = "Invisible Characters", Description = "Detect hidden Unicode characters", Category = "Spam", Enabled = _config.InvisibleChars.Enabled, AlwaysRun = _config.InvisibleChars.AlwaysRun },
-                new() { CheckName = "SeoScraping", DisplayName = "SEO Scraping", Description = "Detect SEO spam and scraping patterns", Category = "Spam", Enabled = _config.SeoScraping.Enabled, AlwaysRun = _config.SeoScraping.AlwaysRun }
+                new() { CheckName = "SeoScraping", DisplayName = "SEO Scraping", Description = "Detect SEO spam and scraping patterns", Category = "Spam", Enabled = _config.SeoScraping.Enabled, AlwaysRun = _config.SeoScraping.AlwaysRun },
+                new() { CheckName = "ChannelReply", DisplayName = "Channel Reply", Description = "Boost score for replies to channel posts", Category = "Spam", Enabled = _config.ChannelReply.Enabled, AlwaysRun = _config.ChannelReply.AlwaysRun }
             ];
         }
         catch (Exception ex)
@@ -226,13 +226,13 @@
             case "ImageSpam": _config.ImageSpam.AlwaysRun = newValue; break;
             case "VideoSpam": _config.VideoSpam.AlwaysRun = newValue; break;
             case "StopWords": _config.StopWords.AlwaysRun = newValue; break;
-            case "Cas": _config.Cas.AlwaysRun = newValue; break;
             case "Similarity": _config.Similarity.AlwaysRun = newValue; break;
             case "Bayes": _config.Bayes.AlwaysRun = newValue; break;
             case "Translation": _config.Translation.AlwaysRun = newValue; break;
             case "Spacing": _config.Spacing.AlwaysRun = newValue; break;
             case "InvisibleChars": _config.InvisibleChars.AlwaysRun = newValue; break;
             case "SeoScraping": _config.SeoScraping.AlwaysRun = newValue; break;
+            case "ChannelReply": _config.ChannelReply.AlwaysRun = newValue; break;
         }
 
         StateHasChanged();
@@ -252,7 +252,7 @@
             StateHasChanged();
 
             // Save the entire config (which now includes AlwaysRun in each sub-config)
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, 0, _config);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, ChatIdentity.FromId(0), _config);
 
             Snackbar.Add("Critical checks configuration saved successfully", Severity.Success);
         }

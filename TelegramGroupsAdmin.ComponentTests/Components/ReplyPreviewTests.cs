@@ -31,7 +31,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, null)
             .Add(x => x.ReplyToText, null));
 
@@ -44,7 +44,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "")
             .Add(x => x.ReplyToText, ""));
 
@@ -57,7 +57,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, null));
 
@@ -71,7 +71,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, null)
             .Add(x => x.ReplyToText, "Hello world"));
 
@@ -89,7 +89,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "Alice")
             .Add(x => x.ReplyToText, "Some text"));
 
@@ -103,7 +103,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, null)
             .Add(x => x.ReplyToText, "Some text"));
 
@@ -117,7 +117,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "")
             .Add(x => x.ReplyToText, "Some text"));
 
@@ -135,7 +135,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, "This is the reply text"));
 
@@ -149,7 +149,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, null));
 
@@ -163,7 +163,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, ""));
 
@@ -182,7 +182,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
         // Arrange - text under 60 characters
         const string shortText = "Short message";
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, shortText));
 
@@ -198,7 +198,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
         // Arrange - text over 60 characters
         const string longText = "This is a very long message that definitely exceeds sixty characters and should be truncated";
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, longText));
 
@@ -214,7 +214,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
         // Arrange - exactly 60 character text
         var exactText = new string('A', 60);
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, exactText));
 
@@ -230,7 +230,7 @@ public class ReplyPreviewTests : MudBlazorTestContext
         // Arrange - 61 character text (one over limit)
         var longText = new string('A', 61);
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, longText));
 
@@ -247,19 +247,19 @@ public class ReplyPreviewTests : MudBlazorTestContext
     public async Task InvokesOnReplyClick_WhenClicked()
     {
         // Arrange
-        long? clickedMessageId = null;
+        int? clickedMessageId = null;
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 456L)
+            .Add(x => x.ReplyToMessageId, 456)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, "Hello")
-            .Add(x => x.OnReplyClick, EventCallback.Factory.Create<long>(this, id => clickedMessageId = id)));
+            .Add(x => x.OnReplyClick, EventCallback.Factory.Create<int>(this, id => clickedMessageId = id)));
 
         // Act
         var preview = cut.Find(".reply-preview");
         await preview.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         // Assert
-        Assert.That(clickedMessageId, Is.EqualTo(456L));
+        Assert.That(clickedMessageId, Is.EqualTo(456));
     }
 
     #endregion
@@ -271,16 +271,19 @@ public class ReplyPreviewTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ReplyPreview>(p => p
-            .Add(x => x.ReplyToMessageId, 123L)
+            .Add(x => x.ReplyToMessageId, 123)
             .Add(x => x.ReplyToUser, "John")
             .Add(x => x.ReplyToText, "Hello"));
 
-        // Assert - verify expected elements exist
-        Assert.That(cut.FindAll(".reply-preview").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-bar").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-content").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-user").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".reply-text").Count, Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - verify expected elements exist
+            Assert.That(cut.FindAll(".reply-preview").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-bar").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-content").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-user").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".reply-text").Count, Is.EqualTo(1));
+        }
     }
 
     #endregion

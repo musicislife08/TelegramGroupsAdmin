@@ -153,9 +153,12 @@ public class TelegramReturnButtonTests : MudBlazorTestContext
         var children = button.Children.ToList();
 
         Assert.That(children.Count, Is.EqualTo(3));
-        Assert.That(children[0].ClassList, Does.Contain("telegram-return-icon"));
-        Assert.That(children[1].ClassList, Does.Contain("telegram-return-text"));
-        Assert.That(children[2].ClassList, Does.Contain("telegram-return-arrow"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(children[0].ClassList, Does.Contain("telegram-return-icon"));
+            Assert.That(children[1].ClassList, Does.Contain("telegram-return-text"));
+            Assert.That(children[2].ClassList, Does.Contain("telegram-return-arrow"));
+        }
     }
 
     #endregion
@@ -184,9 +187,12 @@ public class TelegramReturnButtonTests : MudBlazorTestContext
         var text = cut.Find(".telegram-return-text");
         var arrow = cut.Find(".telegram-return-arrow");
 
-        Assert.That(icon.TagName.ToLower(), Is.EqualTo("div"));
-        Assert.That(text.TagName.ToLower(), Is.EqualTo("div"));
-        Assert.That(arrow.TagName.ToLower(), Is.EqualTo("div"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(icon.TagName.ToLower(), Is.EqualTo("div"));
+            Assert.That(text.TagName.ToLower(), Is.EqualTo("div"));
+            Assert.That(arrow.TagName.ToLower(), Is.EqualTo("div"));
+        }
     }
 
     #endregion

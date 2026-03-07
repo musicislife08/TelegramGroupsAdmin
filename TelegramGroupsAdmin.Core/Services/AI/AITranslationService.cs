@@ -113,7 +113,8 @@ public class AITranslationService : IAITranslationService
             {
                 TranslatedText = translationResult.Translation ?? text,
                 DetectedLanguage = translationResult.Language,
-                WasTranslated = !isEnglish && !string.IsNullOrEmpty(translationResult.Translation)
+                WasTranslated = !isEnglish && !string.IsNullOrEmpty(translationResult.Translation),
+                Confidence = translationResult.Confidence > 0 ? translationResult.Confidence : null
             };
         }
         catch (Exception ex)
@@ -130,6 +131,6 @@ public class AITranslationService : IAITranslationService
     {
         public string Language { get; init; } = string.Empty;
         public string? Translation { get; init; }
-        public double Confidence { get; init; }
+        public decimal Confidence { get; init; }
     }
 }

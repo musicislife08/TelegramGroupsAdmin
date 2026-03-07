@@ -41,13 +41,16 @@ public class RegistrationTests : E2ETestBase
         // Act - Register the first (owner) account
         await _registerPage.NavigateAsync();
 
-        // Verify we're in first-run mode
-        Assert.That(await _registerPage.IsFirstRunModeAsync(), Is.True,
-            "Should show 'Setup Owner Account' for first user");
+        using (Assert.EnterMultipleScope())
+        {
+            // Verify we're in first-run mode
+            Assert.That(await _registerPage.IsFirstRunModeAsync(), Is.True,
+                "Should show 'Setup Owner Account' for first user");
 
-        // First-run should NOT show invite code field
-        Assert.That(await _registerPage.IsInviteCodeVisibleAsync(), Is.False,
-            "First-run registration should not require invite code");
+            // First-run should NOT show invite code field
+            Assert.That(await _registerPage.IsInviteCodeVisibleAsync(), Is.False,
+                "First-run registration should not require invite code");
+        }
 
         await _registerPage.RegisterAsync(email, password);
 
@@ -83,11 +86,14 @@ public class RegistrationTests : E2ETestBase
         // Arrange & Act - Navigate to registration
         await _registerPage.NavigateAsync();
 
-        // Assert - First-run mode should offer backup restore option
-        Assert.That(await _registerPage.IsFirstRunModeAsync(), Is.True,
-            "Should be in first-run mode");
-        Assert.That(await _registerPage.IsRestoreBackupAvailableAsync(), Is.True,
-            "First-run should show 'Restore from Backup' option");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - First-run mode should offer backup restore option
+            Assert.That(await _registerPage.IsFirstRunModeAsync(), Is.True,
+                "Should be in first-run mode");
+            Assert.That(await _registerPage.IsRestoreBackupAvailableAsync(), Is.True,
+                "First-run should show 'Restore from Backup' option");
+        }
     }
 
     [Test]

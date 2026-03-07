@@ -61,14 +61,14 @@ public static class AIPromptBuilder
 
             {{contextBuilder}}
             <current_message>
-              <username>{{req.UserName}}</username>
-              <user_id>{{req.UserId}}</user_id>
+              <username>{{req.User.DisplayName}}</username>
+              <user_id>{{req.User.Id}}</user_id>
               <content>
             {{effectiveText}}
               </content>
             </current_message>
 
-            Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "confidence": 0.0-1.0}
+            Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "score": 0.0-5.0 (continuous scale: 0.0 = clearly not spam, 5.0 = unmistakably spam. Use the full range — e.g., 1.2 for mildly suspicious, 3.7 for likely spam)}
             """;
 
         return new AIPromptResult(systemPrompt, userPrompt);
@@ -106,7 +106,7 @@ public static class AIPromptBuilder
             {
               "result": "spam" | "clean" | "review",
               "reason": "clear explanation of your decision",
-              "confidence": 0.0-1.0
+              "score": 0.0-5.0 (continuous scale: 0.0 = clearly not spam, 5.0 = unmistakably spam. Use the full range — e.g., 1.2 for mildly suspicious, 3.7 for likely spam)
             }
 
             Result types:

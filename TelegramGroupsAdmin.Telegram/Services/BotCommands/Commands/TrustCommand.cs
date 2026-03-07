@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -15,7 +17,7 @@ public class TrustCommand : IBotCommand
 {
     private readonly ILogger<TrustCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IModerationOrchestrator _moderationService;
+    private readonly IBotModerationService _moderationService;
 
     public string Name => "trust";
     public string Description => "Toggle trust status (bypass spam detection)";
@@ -28,7 +30,7 @@ public class TrustCommand : IBotCommand
     public TrustCommand(
         ILogger<TrustCommand> logger,
         IServiceProvider serviceProvider,
-        IModerationOrchestrator moderationService)
+        IBotModerationService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -42,7 +44,7 @@ public class TrustCommand : IBotCommand
         CancellationToken cancellationToken = default)
     {
         User? targetUser = null;
-        long? messageId = null;
+        int? messageId = null;
 
         // Option 1: Reply to message
         if (message.ReplyToMessage != null)
@@ -94,24 +96,27 @@ public class TrustCommand : IBotCommand
             var reason = $"Untrusted by admin in chat {chatName}";
 
             var result = await _moderationService.UntrustUserAsync(
-                userId: targetUser.Id,
-                executor: executor,
-                reason: reason,
-                cancellationToken: cancellationToken);
+                new UntrustIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = reason
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
                 _logger.LogError("Failed to untrust {User}: {Error}",
-                    LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                    targetUser.ToLogDebug(),
                     result.ErrorMessage);
                 return new CommandResult($"❌ Failed to untrust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             _logger.LogInformation(
                 "{TargetUser} untrusted by {Executor} in {Chat}",
-                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
-                LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id));
+                targetUser.ToLogInfo(),
+                message.From.ToLogInfo(),
+                message.Chat.ToLogInfo());
 
             return new CommandResult($"✅ User @{userDisplay} is no longer trusted\n\n" +
                    $"This user's messages will now be subject to spam detection.", DeleteCommandMessage, DeleteResponseAfterSeconds);
@@ -122,24 +127,27 @@ public class TrustCommand : IBotCommand
             var reason = $"Trusted by admin in chat {chatName}";
 
             var result = await _moderationService.TrustUserAsync(
-                userId: targetUser.Id,
-                executor: executor,
-                reason: reason,
-                cancellationToken: cancellationToken);
+                new TrustIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = reason
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
                 _logger.LogError("Failed to trust {User}: {Error}",
-                    LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                    targetUser.ToLogDebug(),
                     result.ErrorMessage);
                 return new CommandResult($"❌ Failed to trust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             _logger.LogInformation(
                 "{TargetUser} trusted by {Executor} in {Chat}",
-                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
-                LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id));
+                targetUser.ToLogInfo(),
+                message.From.ToLogInfo(),
+                message.Chat.ToLogInfo());
 
             return new CommandResult($"✅ User @{userDisplay} marked as trusted\n\n" +
                    $"This user's messages will bypass spam detection globally.", DeleteCommandMessage, DeleteResponseAfterSeconds);

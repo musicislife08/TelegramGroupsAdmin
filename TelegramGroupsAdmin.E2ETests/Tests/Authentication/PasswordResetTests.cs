@@ -93,8 +93,11 @@ public class PasswordResetTests : SharedE2ETestBase
         Assert.That(emails, Has.Count.EqualTo(1), "Should send exactly one reset email");
 
         var email = emails[0];
-        Assert.That(email.To, Does.Contain(user.Email), "Email should be sent to correct address");
-        Assert.That(email.Parameters, Does.ContainKey("resetLink"), "Email should contain reset link");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(email.To, Does.Contain(user.Email), "Email should be sent to correct address");
+            Assert.That(email.Parameters, Does.ContainKey("resetLink"), "Email should contain reset link");
+        }
     }
 
     [Test]
@@ -221,11 +224,14 @@ public class PasswordResetTests : SharedE2ETestBase
         await Page.GotoAsync("/reset-password");
         await _resetPage.WaitForPageAsync();
 
-        // Assert - should show error
-        Assert.That(await _resetPage.HasErrorMessageAsync(), Is.True,
-            "Should show error when no token provided");
-        Assert.That(await _resetPage.IsRequestNewLinkVisibleAsync(), Is.True,
-            "Should show 'Request New Link' button when no token");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - should show error
+            Assert.That(await _resetPage.HasErrorMessageAsync(), Is.True,
+                "Should show error when no token provided");
+            Assert.That(await _resetPage.IsRequestNewLinkVisibleAsync(), Is.True,
+                "Should show 'Request New Link' button when no token");
+        }
     }
 
     [Test]

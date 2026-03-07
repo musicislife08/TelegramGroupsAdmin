@@ -40,12 +40,15 @@ public class MessageProcessingServiceTests
 
         // Assert: Returns Animation metadata
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Animation));
-        Assert.That(result.Value.FileId, Is.EqualTo("test_anim_id"));
-        Assert.That(result.Value.FileSize, Is.EqualTo(1024000L));
-        Assert.That(result.Value.FileName, Is.EqualTo("test.gif"));
-        Assert.That(result.Value.MimeType, Is.EqualTo("video/mp4"));
-        Assert.That(result.Value.Duration, Is.EqualTo(5));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Animation));
+            Assert.That(result.Value.FileId, Is.EqualTo("test_anim_id"));
+            Assert.That(result.Value.FileSize, Is.EqualTo(1024000L));
+            Assert.That(result.Value.FileName, Is.EqualTo("test.gif"));
+            Assert.That(result.Value.MimeType, Is.EqualTo("video/mp4"));
+            Assert.That(result.Value.Duration, Is.EqualTo(5));
+        }
     }
 
     [Test]
@@ -69,12 +72,15 @@ public class MessageProcessingServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Video));
-        Assert.That(result.Value.FileId, Is.EqualTo("test_video_id"));
-        Assert.That(result.Value.FileSize, Is.EqualTo(5242880L));
-        Assert.That(result.Value.FileName, Is.EqualTo("vacation.mp4"));
-        Assert.That(result.Value.MimeType, Is.EqualTo("video/mp4"));
-        Assert.That(result.Value.Duration, Is.EqualTo(120));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Video));
+            Assert.That(result.Value.FileId, Is.EqualTo("test_video_id"));
+            Assert.That(result.Value.FileSize, Is.EqualTo(5242880L));
+            Assert.That(result.Value.FileName, Is.EqualTo("vacation.mp4"));
+            Assert.That(result.Value.MimeType, Is.EqualTo("video/mp4"));
+            Assert.That(result.Value.Duration, Is.EqualTo(120));
+        }
     }
 
     [Test]
@@ -99,12 +105,15 @@ public class MessageProcessingServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Audio));
-        Assert.That(result.Value.FileId, Is.EqualTo("test_audio_id"));
-        Assert.That(result.Value.FileSize, Is.EqualTo(3145728L));
-        Assert.That(result.Value.FileName, Is.EqualTo("song.mp3"));
-        Assert.That(result.Value.MimeType, Is.EqualTo("audio/mpeg"));
-        Assert.That(result.Value.Duration, Is.EqualTo(180));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Audio));
+            Assert.That(result.Value.FileId, Is.EqualTo("test_audio_id"));
+            Assert.That(result.Value.FileSize, Is.EqualTo(3145728L));
+            Assert.That(result.Value.FileName, Is.EqualTo("song.mp3"));
+            Assert.That(result.Value.MimeType, Is.EqualTo("audio/mpeg"));
+            Assert.That(result.Value.Duration, Is.EqualTo(180));
+        }
     }
 
     [Test]
@@ -177,12 +186,15 @@ public class MessageProcessingServiceTests
 
         // Assert: Voice always generates filename
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Voice));
-        Assert.That(result.Value.FileId, Is.EqualTo("test_voice_id"));
-        Assert.That(result.Value.FileSize, Is.EqualTo(51200L));
-        Assert.That(result.Value.FileName, Is.EqualTo("voice_voice789.ogg"));
-        Assert.That(result.Value.MimeType, Is.EqualTo("audio/ogg"));
-        Assert.That(result.Value.Duration, Is.EqualTo(10));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Voice));
+            Assert.That(result.Value.FileId, Is.EqualTo("test_voice_id"));
+            Assert.That(result.Value.FileSize, Is.EqualTo(51200L));
+            Assert.That(result.Value.FileName, Is.EqualTo("voice_voice789.ogg"));
+            Assert.That(result.Value.MimeType, Is.EqualTo("audio/ogg"));
+            Assert.That(result.Value.Duration, Is.EqualTo(10));
+        }
     }
 
     [Test]
@@ -206,12 +218,15 @@ public class MessageProcessingServiceTests
 
         // Assert: Stickers have no duration, always WebP
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Sticker));
-        Assert.That(result.Value.FileId, Is.EqualTo("test_sticker_id"));
-        Assert.That(result.Value.FileSize, Is.EqualTo(20480L));
-        Assert.That(result.Value.FileName, Is.EqualTo("sticker_sticker999.webp"));
-        Assert.That(result.Value.MimeType, Is.EqualTo("image/webp"));
-        Assert.That(result.Value.Duration, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Sticker));
+            Assert.That(result.Value.FileId, Is.EqualTo("test_sticker_id"));
+            Assert.That(result.Value.FileSize, Is.EqualTo(20480L));
+            Assert.That(result.Value.FileName, Is.EqualTo("sticker_sticker999.webp"));
+            Assert.That(result.Value.MimeType, Is.EqualTo("image/webp"));
+            Assert.That(result.Value.Duration, Is.Null);
+        }
     }
 
     [Test]
@@ -234,12 +249,15 @@ public class MessageProcessingServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.VideoNote));
-        Assert.That(result.Value.FileId, Is.EqualTo("test_videonote_id"));
-        Assert.That(result.Value.FileSize, Is.EqualTo(1048576L));
-        Assert.That(result.Value.FileName, Is.EqualTo("videonote_videonote888.mp4"));
-        Assert.That(result.Value.MimeType, Is.EqualTo("video/mp4"));
-        Assert.That(result.Value.Duration, Is.EqualTo(30));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.VideoNote));
+            Assert.That(result.Value.FileId, Is.EqualTo("test_videonote_id"));
+            Assert.That(result.Value.FileSize, Is.EqualTo(1048576L));
+            Assert.That(result.Value.FileName, Is.EqualTo("videonote_videonote888.mp4"));
+            Assert.That(result.Value.MimeType, Is.EqualTo("video/mp4"));
+            Assert.That(result.Value.Duration, Is.EqualTo(30));
+        }
     }
 
     [Test]
@@ -262,12 +280,15 @@ public class MessageProcessingServiceTests
 
         // Assert: Document has no duration
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Document));
-        Assert.That(result.Value.FileId, Is.EqualTo("test_doc_id"));
-        Assert.That(result.Value.FileSize, Is.EqualTo(2097152L));
-        Assert.That(result.Value.FileName, Is.EqualTo("report.pdf"));
-        Assert.That(result.Value.MimeType, Is.EqualTo("application/pdf"));
-        Assert.That(result.Value.Duration, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Document));
+            Assert.That(result.Value.FileId, Is.EqualTo("test_doc_id"));
+            Assert.That(result.Value.FileSize, Is.EqualTo(2097152L));
+            Assert.That(result.Value.FileName, Is.EqualTo("report.pdf"));
+            Assert.That(result.Value.MimeType, Is.EqualTo("application/pdf"));
+            Assert.That(result.Value.Duration, Is.Null);
+        }
     }
 
     [Test]
@@ -337,8 +358,11 @@ public class MessageProcessingServiceTests
 
         // Assert: Should return Animation (priority order)
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Animation));
-        Assert.That(result.Value.FileId, Is.EqualTo("anim_id"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Value.MediaType, Is.EqualTo(MediaType.Animation));
+            Assert.That(result.Value.FileId, Is.EqualTo("anim_id"));
+        }
     }
 
     #endregion
@@ -363,12 +387,15 @@ public class MessageProcessingServiceTests
         // Act
         var result = CallHasFileAttachment(message, out var fileId, out var size, out var name, out var type);
 
-        // Assert: Returns true with metadata
-        Assert.That(result, Is.True);
-        Assert.That(fileId, Is.EqualTo("doc_id"));
-        Assert.That(size, Is.EqualTo(2048000L));
-        Assert.That(name, Is.EqualTo("report.pdf"));
-        Assert.That(type, Is.EqualTo("application/pdf"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Returns true with metadata
+            Assert.That(result, Is.True);
+            Assert.That(fileId, Is.EqualTo("doc_id"));
+            Assert.That(size, Is.EqualTo(2048000L));
+            Assert.That(name, Is.EqualTo("report.pdf"));
+            Assert.That(type, Is.EqualTo("application/pdf"));
+        }
     }
 
     [Test]
@@ -385,12 +412,15 @@ public class MessageProcessingServiceTests
         // Act
         var result = CallHasFileAttachment(message, out var fileId, out var size, out var name, out var type);
 
-        // Assert: Returns false (GIF is media, not scannable document)
-        Assert.That(result, Is.False);
-        Assert.That(fileId, Is.Null);
-        Assert.That(size, Is.EqualTo(0));
-        Assert.That(name, Is.Null);
-        Assert.That(type, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Returns false (GIF is media, not scannable document)
+            Assert.That(result, Is.False);
+            Assert.That(fileId, Is.Null);
+            Assert.That(size, Is.EqualTo(0));
+            Assert.That(name, Is.Null);
+            Assert.That(type, Is.Null);
+        }
     }
 
     [Test]
@@ -490,12 +520,15 @@ public class MessageProcessingServiceTests
         // Act
         var result = CallHasFileAttachment(message, out var fileId, out var size, out var name, out var type);
 
-        // Assert: No document found
-        Assert.That(result, Is.False);
-        Assert.That(fileId, Is.Null);
-        Assert.That(size, Is.EqualTo(0));
-        Assert.That(name, Is.Null);
-        Assert.That(type, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: No document found
+            Assert.That(result, Is.False);
+            Assert.That(fileId, Is.Null);
+            Assert.That(size, Is.EqualTo(0));
+            Assert.That(name, Is.Null);
+            Assert.That(type, Is.Null);
+        }
     }
 
     #endregion
@@ -676,9 +709,12 @@ public class MessageProcessingServiceTests
                               text.Length >= minLength &&
                               latinRatio < threshold;
 
-        // Assert: Don't translate (already English)
-        Assert.That(shouldTranslate, Is.False);
-        Assert.That(latinRatio, Is.GreaterThan(0.9)); // High Latin ratio
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Don't translate (already English)
+            Assert.That(shouldTranslate, Is.False);
+            Assert.That(latinRatio, Is.GreaterThan(0.9)); // High Latin ratio
+        }
     }
 
     [Test]
@@ -696,9 +732,12 @@ public class MessageProcessingServiceTests
                               text.Length >= minLength &&
                               latinRatio < threshold;
 
-        // Assert: Should translate
-        Assert.That(shouldTranslate, Is.True);
-        Assert.That(latinRatio, Is.LessThan(0.1)); // Low Latin ratio
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Should translate
+            Assert.That(shouldTranslate, Is.True);
+            Assert.That(latinRatio, Is.LessThan(0.1)); // Low Latin ratio
+        }
     }
 
     [Test]
@@ -715,9 +754,12 @@ public class MessageProcessingServiceTests
                               text.Length >= minLength &&
                               CallCalculateLatinScriptRatio(text) < threshold;
 
-        // Assert: Should translate (>= check)
-        Assert.That(shouldTranslate, Is.True);
-        Assert.That(text.Length, Is.EqualTo(20));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Should translate (>= check)
+            Assert.That(shouldTranslate, Is.True);
+            Assert.That(text.Length, Is.EqualTo(20));
+        }
     }
 
     [Test]
@@ -737,9 +779,12 @@ public class MessageProcessingServiceTests
                               text.Length >= minLength &&
                               latinRatio < threshold;
 
-        // Assert: Don't translate (< check, not <=)
-        Assert.That(shouldTranslate, Is.False);
-        Assert.That(latinRatio, Is.EqualTo(0.8).Within(0.01));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert: Don't translate (< check, not <=)
+            Assert.That(shouldTranslate, Is.False);
+            Assert.That(latinRatio, Is.EqualTo(0.8).Within(0.01));
+        }
     }
 
     #endregion

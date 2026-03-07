@@ -14,10 +14,10 @@ public interface IWarnHandler
     /// Issue a warning to user. Returns the post-insert active warning count.
     /// </summary>
     Task<WarnResult> WarnAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         long chatId,
-        long? messageId = null,
+        int? messageId = null,
         CancellationToken cancellationToken = default);
 }

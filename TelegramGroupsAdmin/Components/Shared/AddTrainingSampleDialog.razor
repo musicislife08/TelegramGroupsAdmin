@@ -164,7 +164,7 @@
                 MessageText = _messageText.Trim(),
                 IsSpam = _isSpam,
                 Source = _source,
-                Confidence = 100, // Always 100 for manual samples (will be converted to ±100 net_confidence)
+                Score = 5.0, // Always 5.0 for manual samples (will be converted to ±5.0 net_score)
                 TranslatedText = string.IsNullOrWhiteSpace(_translatedText) ? null : _translatedText.Trim(),
                 DetectedLanguage = string.IsNullOrWhiteSpace(_detectedLanguage) ? null : _detectedLanguage.Trim().ToLower()
             };

@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Abstractions
 @using TelegramGroupsAdmin.ContentDetection.Constants
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Handlers
 @inject IContentCheckCoordinator ContentCheckCoordinator
@@ -9,7 +10,8 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @inject ILogger<ContentTester> Logger
-@inject IEnumerable<IContentCheck> ContentChecks
+@inject IEnumerable<IContentCheckV2> ContentChecks
+@inject IConfigService ConfigService
 @implements IDisposable
 
 <MudPaper Class="pa-4" Elevation="0">
@@ -32,10 +34,10 @@
                 </MudSelectItem>
                 @foreach (var chat in _managedChats)
                 {
-                    <MudSelectItem T="long?" Value="@((long?)chat.ChatId)">
+                    <MudSelectItem T="long?" Value="@((long?)chat.Identity.Id)">
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
-                            <MudText>@chat.ChatName (@chat.ChatId)</MudText>
+                            <MudText>@chat.Identity.ChatName (@chat.Identity.Id)</MudText>
                         </MudStack>
                     </MudSelectItem>
                 }
@@ -79,21 +81,23 @@
         <MudItem xs="12">
             <MudText Typo="Typo.subtitle2" Class="mb-2">Media (optional)</MudText>
             <MudFileUpload T="IBrowserFile" Accept="image/*,video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska" @bind-Files="_selectedMedia" MaximumFileCount="1">
-                <ActivatorContent>
-                    <MudButton HtmlTag="label"
-                               Variant="Variant.Outlined"
+                <CustomContent Context="fileUpload">
+                    <MudButton Variant="Variant.Outlined"
                                Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.CloudUpload">
+                               StartIcon="@Icons.Material.Filled.CloudUpload"
+                               OnClick="@fileUpload.OpenFilePickerAsync">
                         Upload Image/Video or Paste (Ctrl+V)
                     </MudButton>
-                </ActivatorContent>
+                </CustomContent>
+                <SelectedTemplate Context="file">
+                    @if (file != null)
+                    {
+                        <MudChip T="string" Color="Color.Success" Icon="@GetMediaIcon(file.ContentType)" OnClose="@ClearMedia" Class="mt-2">
+                            @file.Name (@FormatFileSize(file.Size)) · @GetMediaType(file.ContentType)
+                        </MudChip>
+                    }
+                </SelectedTemplate>
             </MudFileUpload>
-            @if (_selectedMedia != null)
-            {
-                <MudChip T="string" Color="Color.Success" Icon="@GetMediaIcon(_selectedMedia.ContentType)" OnClose="@ClearMedia" Class="mt-2">
-                    @_selectedMedia.Name (@FormatFileSize(_selectedMedia.Size)) • @GetMediaType(_selectedMedia.ContentType)
-                </MudChip>
-            }
             @if (_pastedImageData?.Length > 0)
             {
                 <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.ContentPaste" OnClose="@ClearPastedImage" Class="mt-2">
@@ -109,28 +113,30 @@
         <MudItem xs="12">
             <MudText Typo="Typo.subtitle2" Class="mb-2">File Attachment (optional)</MudText>
             <MudFileUpload T="IBrowserFile" @bind-Files="_selectedFile" MaximumFileCount="1">
-                <ActivatorContent>
-                    <MudButton HtmlTag="label"
-                               Variant="Variant.Outlined"
+                <CustomContent Context="fileUpload">
+                    <MudButton Variant="Variant.Outlined"
                                Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.UploadFile">
+                               StartIcon="@Icons.Material.Filled.UploadFile"
+                               OnClick="@fileUpload.OpenFilePickerAsync">
                         Upload File (for malware scanning)
                     </MudButton>
-                </ActivatorContent>
+                </CustomContent>
+                <SelectedTemplate Context="file">
+                    @if (file != null)
+                    {
+                        <MudPaper Class="pa-3 mt-3" Outlined="true">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@GetFileIcon(file.Name)" Size="Size.Large" Color="Color.Primary" />
+                                <MudStack Spacing="0" Style="flex: 1;">
+                                    <MudText Typo="Typo.body1"><strong>@file.Name</strong></MudText>
+                                    <MudText Typo="Typo.caption">@FormatFileSize(file.Size) · @file.ContentType</MudText>
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@ClearFile" />
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </SelectedTemplate>
             </MudFileUpload>
-            @if (_selectedFile != null)
-            {
-                <MudPaper Class="pa-3 mt-3" Outlined="true">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@GetFileIcon(_selectedFile.Name)" Size="Size.Large" Color="Color.Primary" />
-                        <MudStack Spacing="0" Style="flex: 1;">
-                            <MudText Typo="Typo.body1"><strong>@_selectedFile.Name</strong></MudText>
-                            <MudText Typo="Typo.caption">@FormatFileSize(_selectedFile.Size) • @_selectedFile.ContentType</MudText>
-                        </MudStack>
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@ClearFile" />
-                    </MudStack>
-                </MudPaper>
-            }
             <MudText Typo="Typo.caption" Class="mt-1">
                 Upload files to test malware scanning (ClamAV + VirusTotal). Test with eicar.com test file.
             </MudText>
@@ -223,7 +229,7 @@
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.body1"><strong>Primary Reason:</strong> @_result.SpamResult.PrimaryReason</MudText>
                     <MudText Typo="Typo.body2">
-                        <strong>Confidence:</strong> Max @_result.SpamResult.MaxConfidence% | Avg @_result.SpamResult.AvgConfidence% | Net @_result.SpamResult.NetConfidence | Flags @_result.SpamResult.SpamFlags
+                        <strong>Total Score:</strong> @_result.SpamResult.TotalScore.ToString("F2")
                     </MudText>
                     <MudText Typo="Typo.body2">
                         <strong>Determination:</strong> @(_result.SpamResult.IsSpam ? "SPAM" : "NOT SPAM")
@@ -236,26 +242,26 @@
                     <HeaderContent>
                         <MudTh>Check Name</MudTh>
                         <MudTh>Result</MudTh>
-                        <MudTh>Confidence</MudTh>
+                        <MudTh>Score</MudTh>
                         <MudTh>Details</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>@context.CheckName</MudTd>
                         <MudTd>
-                            @switch (context.Result)
+                            @if (context.IsSpam)
                             {
-                                case CheckResultType.Spam:
-                                    <MudChip T="string" Color="Color.Error" Size="Size.Small">SPAM</MudChip>
-                                    break;
-                                case CheckResultType.Review:
-                                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">REVIEW</MudChip>
-                                    break;
-                                default:
-                                    <MudChip T="string" Color="Color.Success" Size="Size.Small">CLEAN</MudChip>
-                                    break;
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small">SPAM</MudChip>
+                            }
+                            else if (context.Abstained)
+                            {
+                                <MudChip T="string" Color="Color.Default" Size="Size.Small">ABSTAINED</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small">CLEAN</MudChip>
                             }
                         </MudTd>
-                        <MudTd>@context.Confidence%</MudTd>
+                        <MudTd>@context.Score.ToString("F2")</MudTd>
                         <MudTd>@context.Details</MudTd>
                     </RowTemplate>
                 </MudTable>
@@ -278,26 +284,26 @@
         <!-- File Scan Results -->
         @if (_fileScanResult != null)
         {
-            <MudPaper Class="pa-3 mb-3" Outlined="true" Style="@(_fileScanResult.Result == CheckResultType.Spam ? "border-left: 4px solid var(--mud-palette-error);" : "border-left: 4px solid var(--mud-palette-success);")">
-                <MudText Typo="Typo.h6" Color="@(_fileScanResult.Result == CheckResultType.Spam ? Color.Error : Color.Success)" Class="mb-2">
-                    <MudIcon Icon="@(_fileScanResult.Result == CheckResultType.Spam ? Icons.Material.Filled.Warning : Icons.Material.Filled.Shield)" Color="@(_fileScanResult.Result == CheckResultType.Spam ? Color.Error : Color.Success)" />
+            <MudPaper Class="pa-3 mb-3" Outlined="true" Style="@(_fileScanResult.IsSpam ? "border-left: 4px solid var(--mud-palette-error);" : "border-left: 4px solid var(--mud-palette-success);")">
+                <MudText Typo="Typo.h6" Color="@(_fileScanResult.IsSpam ? Color.Error : Color.Success)" Class="mb-2">
+                    <MudIcon Icon="@(_fileScanResult.IsSpam ? Icons.Material.Filled.Warning : Icons.Material.Filled.Shield)" Color="@(_fileScanResult.IsSpam ? Color.Error : Color.Success)" />
                     File Scan Results
                 </MudText>
                 <MudStack Spacing="2">
-                    <MudAlert Severity="@(_fileScanResult.Result == CheckResultType.Spam ? Severity.Error : Severity.Success)" Dense="true">
-                        <strong>Status:</strong> @(_fileScanResult.Result == CheckResultType.Spam ? "⚠️ MALWARE DETECTED" : "✅ Clean")
+                    <MudAlert Severity="@(_fileScanResult.IsSpam ? Severity.Error : Severity.Success)" Dense="true">
+                        <strong>Status:</strong> @(_fileScanResult.IsSpam ? "⚠️ MALWARE DETECTED" : "✅ Clean")
                     </MudAlert>
                     @if (!string.IsNullOrEmpty(_fileScanResult.Details))
                     {
                         <MudText Typo="Typo.body2"><strong>Details:</strong> @_fileScanResult.Details</MudText>
                     }
-                    <MudText Typo="Typo.body2"><strong>Confidence:</strong> @_fileScanResult.Confidence%</MudText>
+                    <MudText Typo="Typo.body2"><strong>Score:</strong> @_fileScanResult.Score.ToString("F2")</MudText>
                     @if (_fileScanResult.ProcessingTimeMs > 0)
                     {
                         <MudText Typo="Typo.caption">Scan time: @_fileScanResult.ProcessingTimeMs ms</MudText>
                     }
                 </MudStack>
-                @if (_fileScanResult.Result == CheckResultType.Spam)
+                @if (_fileScanResult.IsSpam)
                 {
                     <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
                         <strong>Production Action:</strong> This file would be immediately deleted and the user would receive a DM notification.
@@ -361,7 +367,7 @@
                         <MudAlert Severity="Severity.Error">
                             <MudText Typo="Typo.body1"><strong>Action:</strong> Auto-Ban + Delete Message</MudText>
                             <MudText Typo="Typo.body2" Class="mt-1">
-                                High confidence spam (score ≥ 5.0). User would be banned and message deleted immediately.
+                                High confidence spam (score ≥ @_config.AutoBanThreshold). User would be banned and message deleted immediately.
                             </MudText>
                         </MudAlert>
                         break;
@@ -369,7 +375,7 @@
                         <MudAlert Severity="Severity.Warning">
                             <MudText Typo="Typo.body1"><strong>Action:</strong> Create Report for Admin Review</MudText>
                             <MudText Typo="Typo.body2" Class="mt-1">
-                                Borderline spam (score 3.0-5.0). Report created for manual admin review in /reports queue.
+                                Borderline spam (score @_config.ReviewQueueThreshold-@_config.AutoBanThreshold). Report created for manual admin review in /reports queue.
                             </MudText>
                         </MudAlert>
                         break;
@@ -377,7 +383,7 @@
                         <MudAlert Severity="Severity.Success">
                             <MudText Typo="Typo.body1"><strong>Action:</strong> Allow Message</MudText>
                             <MudText Typo="Typo.body2" Class="mt-1">
-                                Low spam score (&lt; 3.0). Message allowed, detection result logged for training.
+                                Low spam score (&lt; @_config.ReviewQueueThreshold). Message allowed, detection result logged for training.
                             </MudText>
                         </MudAlert>
                         break;
@@ -395,6 +401,7 @@
 
 @code {
     // State
+    private ContentDetectionConfig _config = new();
     private long? _selectedChatId;
     private List<ManagedChatRecord> _managedChats = [];
     private string _messageText = string.Empty;
@@ -405,7 +412,7 @@
     private IBrowserFile? _selectedFile;
     private bool _isRunning;
     private ContentCheckCoordinatorResult? _result;
-    private ContentCheckResponse? _fileScanResult;
+    private ContentCheckResponseV2? _fileScanResult;
     private bool _fileScanRunning;
 
     // JS interop for paste listener
@@ -416,6 +423,10 @@
     {
         // Load managed chats for dropdown
         _managedChats = (await ManagedChatsRepository.GetAllAsync(CancellationToken.None)).ToList();
+
+        // Load content detection config for threshold display
+        _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, 0)
+                  ?? new ContentDetectionConfig();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -547,6 +558,7 @@
             var translationResult = await TranslationHandler.GetTextForDetectionAsync(
                 _messageText,
                 messageId: 0, // Test message, no real ID
+                chatId: 0, // Test content, no real chat
                 CancellationToken.None);
 
             if (translationResult.DetectedLanguage != null)
@@ -561,9 +573,8 @@
             var request = new ContentCheckRequest
             {
                 Message = translationResult.TextForDetection, // Use translated text if available
-                UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
-                UserName = _userName,
-                ChatId = _selectedChatId ?? 0, // 0 = global config
+                User = UserIdentity.FromId(string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId)),
+                Chat = ChatIdentity.FromId(_selectedChatId ?? 0), // 0 = global config
                 ImageData = isVideo ? null : imageStream, // Only for images
                 ImageFileName = isVideo ? null : imageFileName,
                 PhotoLocalPath = tempImagePath, // ML-5: Enable OCR + hash similarity layers
@@ -672,9 +683,8 @@
             var scanRequest = new FileScanCheckRequest
             {
                 Message = $"File attachment: {_selectedFile.Name}",
-                UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
-                UserName = _userName,
-                ChatId = _selectedChatId ?? 0,
+                User = UserIdentity.FromId(string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId)),
+                Chat = ChatIdentity.FromId(_selectedChatId ?? 0),
                 FilePath = tempFilePath,
                 FileName = _selectedFile.Name,
                 FileSize = _selectedFile.Size,
@@ -693,7 +703,7 @@
             _fileScanResult = await fileScanningCheck.CheckAsync(scanRequest);
 
             // Show summary
-            if (_fileScanResult.Result == CheckResultType.Spam)
+            if (_fileScanResult.IsSpam)
             {
                 Snackbar.Add($"⚠️ Malware detected: {_fileScanResult.Details}", Severity.Error);
             }
@@ -779,8 +789,8 @@
             return "Global Configuration";
         }
 
-        var chat = _managedChats.FirstOrDefault(c => c.ChatId == chatId);
-        return chat != null ? $"{chat.ChatName} ({chat.ChatId})" : $"Chat {chatId}";
+        var chat = _managedChats.FirstOrDefault(c => c.Identity.Id == chatId);
+        return chat != null ? $"{chat.Identity.ChatName} ({chat.Identity.Id})" : $"Chat {chatId}";
     }
 
     private string GetFileIcon(string fileName)

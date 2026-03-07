@@ -6,12 +6,12 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
-using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 
@@ -23,7 +23,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Layer 1: Hash similarity (fastest, cheapest, most reliable for known spam)
 /// Layer 2: OCR + text spam checks (fast, cheap, good for text-heavy images)
 /// Layer 3: AI Vision fallback (slow, expensive, comprehensive)
-/// Scoring: Maps confidence (0-100%) to points (0.0-5.0)
+/// Scoring: AI returns scores directly on 0.0-5.0 scale
 /// </summary>
 public class ImageContentCheckV2(
     ILogger<ImageContentCheckV2> logger,
@@ -34,11 +34,7 @@ public class ImageContentCheckV2(
     IPhotoHashService photoHashService,
     IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
 {
-    private readonly IImageTextExtractionService _imageTextExtractionService = imageTextExtractionService;
-    private readonly IServiceProvider _serviceProvider = serviceProvider; // Lazy resolve to break circular dependency
-    private readonly IContentDetectionConfigRepository _configRepository = configRepository;
-    private readonly IPhotoHashService _photoHashService = photoHashService;
-    private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
+    private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     public CheckName CheckName => CheckName.ImageSpam;
 
@@ -47,6 +43,15 @@ public class ImageContentCheckV2(
     /// </summary>
     public bool ShouldExecute(ContentCheckRequest request)
     {
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping ImageSpam check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
         // Run if any image source is provided
         return request.ImageData != null ||
                !string.IsNullOrEmpty(request.PhotoFileId) ||
@@ -65,7 +70,7 @@ public class ImageContentCheckV2(
         try
         {
             // Load config
-            var config = await _configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
+            var config = await configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
             var imageConfig = config.ImageSpam;
 
             // Extract OCR text early so it's available for all return paths (for AI veto passthrough)
@@ -77,7 +82,7 @@ public class ImageContentCheckV2(
                 !string.IsNullOrEmpty(req.PhotoLocalPath) &&
                 File.Exists(req.PhotoLocalPath))
             {
-                extractedOcrText = await _imageTextExtractionService.ExtractTextAsync(
+                extractedOcrText = await imageTextExtractionService.ExtractTextAsync(
                     req.PhotoLocalPath,
                     req.CancellationToken);
             }
@@ -87,11 +92,11 @@ public class ImageContentCheckV2(
                 !string.IsNullOrEmpty(req.PhotoLocalPath) &&
                 File.Exists(req.PhotoLocalPath))
             {
-                var photoHash = await _photoHashService.ComputePhotoHashAsync(req.PhotoLocalPath);
+                var photoHash = await photoHashService.ComputePhotoHashAsync(req.PhotoLocalPath);
                 if (photoHash != null)
                 {
                     // Query training samples (limited by config for performance)
-                    var trainingSamples = await _imageTrainingSamplesRepository.GetRecentSamplesAsync(
+                    var trainingSamples = await imageTrainingSamplesRepository.GetRecentSamplesAsync(
                         imageConfig.MaxTrainingSamplesToCompare,
                         req.CancellationToken);
 
@@ -103,7 +108,7 @@ public class ImageContentCheckV2(
 
                         foreach (var (sampleHash, isSpam) in trainingSamples)
                         {
-                            var similarity = _photoHashService.CompareHashes(photoHash, sampleHash);
+                            var similarity = photoHashService.CompareHashes(photoHash, sampleHash);
                             if (similarity > bestSimilarity)
                             {
                                 bestSimilarity = similarity;
@@ -114,8 +119,8 @@ public class ImageContentCheckV2(
                         // Check if similarity meets threshold
                         if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
                         {
-                            // Map confidence to score
-                            var score = (imageConfig.HashMatchConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                            // Use configured score directly, clamped to safety boundaries
+                            var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
 
                             // If matched HAM (not spam), abstain (don't give negative signal in V2)
                             if (matchedSpamLabel == false)
@@ -177,9 +182,8 @@ public class ImageContentCheckV2(
                 var ocrRequest = new ContentCheckRequest
                 {
                     Message = extractedOcrText,
-                    UserId = req.UserId,
-                    UserName = req.UserName,
-                    ChatId = req.ChatId,
+                    User = req.User,
+                    Chat = req.Chat,
                     Metadata = new ContentCheckMetadata(),
                     CheckOnly = false,
                     HasSpamFlags = false,
@@ -194,21 +198,21 @@ public class ImageContentCheckV2(
 
                 // Run all text-based spam checks on OCR text
                 // Lazy-resolve engine to break circular dependency
-                var contentDetectionEngine = _serviceProvider.GetRequiredService<IContentDetectionEngine>();
+                var contentDetectionEngine = serviceProvider.GetRequiredService<IContentDetectionEngine>();
                 var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
 
                 // Check if result is confident enough to skip expensive Vision API
-                if (ocrResult.MaxConfidence >= imageConfig.OcrConfidenceThreshold)
+                if (ocrResult.TotalScore >= imageConfig.OcrConfidenceThreshold)
                 {
-                    // Map OCR text check confidence to score
-                    var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier : 0.0;
+                    // V2: Use total score directly
+                    var score = ocrResult.IsSpam ? ocrResult.TotalScore : 0.0;
 
                     // V2: Only return score if spam detected, otherwise abstain
                     if (!ocrResult.IsSpam)
                     {
                         logger.LogDebug(
-                            "ImageSpam V2 Layer 2: OCR text checks returned clean ({Confidence}%), abstaining",
-                            ocrResult.MaxConfidence);
+                            "ImageSpam V2 Layer 2: OCR text checks returned clean (score {Score:F2}), abstaining",
+                            ocrResult.TotalScore);
 
                         return new ContentCheckResponseV2
                         {
@@ -222,13 +226,13 @@ public class ImageContentCheckV2(
                     }
 
                     var flaggedChecks = ocrResult.CheckResults
-                        .Where(c => c.Result == CheckResultType.Spam)
+                        .Where(c => !c.Abstained && c.Score > 0)
                         .Select(c => c.CheckName)
                         .ToList();
 
                     logger.LogInformation(
-                        "ImageSpam V2 Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning {Score:F2} points",
-                        ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold, score);
+                        "ImageSpam V2 Layer 2: OCR text checks confident (score {Score:F2} >= {Threshold:F2}), returning {ReturnScore:F2} points",
+                        ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold, score);
 
                     return new ContentCheckResponseV2
                     {
@@ -243,8 +247,8 @@ public class ImageContentCheckV2(
 
                 // OCR checks uncertain - proceed to Vision (Layer 3)
                 logger.LogDebug(
-                    "ImageSpam V2 Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
-                    ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold);
+                    "ImageSpam V2 Layer 2: OCR text checks uncertain (score {Score:F2} < {Threshold:F2}), proceeding to Vision",
+                    ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold);
             }
             else if (!string.IsNullOrWhiteSpace(extractedOcrText))
             {
@@ -257,7 +261,7 @@ public class ImageContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in ImageSpamCheckV2 for user {UserId}, abstaining", req.UserId);
+            logger.LogError(ex, "Error in ImageSpamCheckV2 for {User}, abstaining", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -326,16 +330,16 @@ public class ImageContentCheckV2(
             };
         }
 
-        var prompt = BuildPrompt(req.Message, req.CustomPrompt);
+        var prompt = BuildPrompt(req.Message);
 
-        logger.LogDebug("ImageSpam V2 check for user {UserId}: Calling AI Vision API", req.UserId);
+        logger.LogDebug("ImageSpam V2 check for {User}: Calling AI Vision API", req.User.ToLogDebug());
 
         try
         {
             // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
                 AIFeatureType.ImageAnalysis,
-                GetDefaultImagePrompt(),
+                req.CustomPrompt ?? GetDefaultImagePrompt(),
                 prompt,
                 imageData,
                 mimeType,
@@ -347,7 +351,7 @@ public class ImageContentCheckV2(
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
-                logger.LogWarning("Empty response from AI Vision for user {UserId}, abstaining", req.UserId);
+                logger.LogWarning("Empty response from AI Vision for {User}, abstaining", req.User.ToLogDebug());
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -359,11 +363,11 @@ public class ImageContentCheckV2(
                 };
             }
 
-            return ParseSpamResponse(result.Content, req.UserId, startTimestamp, extractedOcrText);
+            return ParseSpamResponse(result.Content, req.User, startTimestamp, extractedOcrText);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "AI Vision API error for user {UserId}, abstaining", req.UserId);
+            logger.LogError(ex, "AI Vision API error for {User}, abstaining", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -381,7 +385,7 @@ public class ImageContentCheckV2(
     /// Build prompt for AI Vision analysis
     /// Uses configurable system prompt if provided, otherwise uses default
     /// </summary>
-    private static string BuildPrompt(string? messageText, string? customPrompt)
+    private static string BuildPrompt(string? messageText)
     {
         var messageContext = messageText != null
             ? $"Message text: \"{messageText}\""
@@ -393,7 +397,7 @@ public class ImageContentCheckV2(
             Respond ONLY with valid JSON (no markdown, no code blocks):
             {
               "spam": true or false,
-              "confidence": 1-100,
+              "score": 0.0-5.0 (continuous scale: 0.0 = clearly not spam, 5.0 = unmistakably spam. Use the full range — e.g., 1.2 for mildly suspicious, 3.7 for likely spam),
               "reason": "specific explanation",
               "patterns_detected": ["list", "of", "patterns"]
             }
@@ -422,7 +426,7 @@ public class ImageContentCheckV2(
     /// <summary>
     /// Parse AI Vision response and create V2 spam check result with scoring
     /// </summary>
-    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp, string? extractedOcrText)
+    private ContentCheckResponseV2 ParseSpamResponse(string content, UserIdentity user, long startTimestamp, string? extractedOcrText)
     {
         try
         {
@@ -434,14 +438,14 @@ public class ImageContentCheckV2(
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<VisionSpamResponse>(
+            var response = JsonSerializer.Deserialize<MediaSpamResponse>(
                 content,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                CaseInsensitiveJsonOptions);
 
             if (response == null)
             {
-                logger.LogWarning("Failed to deserialize AI Vision response for user {UserId}: {Content}, abstaining",
-                    userId, content);
+                logger.LogWarning("Failed to deserialize AI Vision response for {User}: {Content}, abstaining",
+                    user.ToLogDebug(), content);
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -453,8 +457,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            logger.LogDebug("AI Vision V2 analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
-                userId, response.Spam, response.Confidence, response.Reason);
+            logger.LogDebug("AI Vision V2 analysis for {User}: Spam={Spam}, Score={Score}, Reason={Reason}",
+                user.ToLogDebug(), response.Spam, response.Score, response.Reason);
 
             // Build raw Vision text for downstream processing (AI veto)
             var rawVisionText = response.Reason ?? "";
@@ -485,8 +489,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            // Map confidence to score: 0-100% → 0.0-5.0 points
-            var score = (response.Confidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+            // Use AI-provided score directly, clamped to safety boundaries
+            var score = Math.Clamp(response.Score, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
 
             return new ContentCheckResponseV2
             {
@@ -501,8 +505,8 @@ public class ImageContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error parsing AI Vision response for user {UserId}: {Content}, abstaining",
-                userId, content);
+            logger.LogError(ex, "Error parsing AI Vision response for {User}: {Content}, abstaining",
+                user.ToLogDebug(), content);
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -517,13 +521,3 @@ public class ImageContentCheckV2(
     }
 }
 
-/// <summary>
-/// Expected JSON response structure from AI Vision for spam detection.
-/// This is the format we request in our prompts.
-/// </summary>
-internal record VisionSpamResponse(
-    [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("confidence")] int Confidence,
-    [property: JsonPropertyName("reason")] string? Reason,
-    [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
-);

@@ -1,5 +1,5 @@
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
@@ -10,10 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 public class TelegramUserDetail
 {
     // Base user data
-    public long TelegramUserId { get; set; }
-    public string? Username { get; set; }
-    public string? FirstName { get; set; }
-    public string? LastName { get; set; }
+    public UserIdentity User { get; set; } = UserIdentity.FromId(0);
     public string? UserPhotoPath { get; set; }
     public string? PhotoHash { get; set; }
     public bool IsTrusted { get; set; }
@@ -26,6 +23,22 @@ public class TelegramUserDetail
     public DateTimeOffset? BanExpiresAt { get; set; }
     public List<WarningEntry> Warnings { get; set; } = [];  // JSONB from telegram_users
 
+    // Profile scan data
+    public string? Bio { get; set; }
+    public long? PersonalChannelId { get; set; }
+    public string? PersonalChannelTitle { get; set; }
+    public string? PersonalChannelAbout { get; set; }
+    public bool HasPinnedStories { get; set; }
+    public string? PinnedStoryCaptions { get; set; }
+    public bool IsScam { get; set; }
+    public bool IsFake { get; set; }
+    public bool IsVerified { get; set; }
+    public bool ProfileScanExcluded { get; set; }
+    public DateTimeOffset? ProfileScannedAt { get; set; }
+    public decimal? ProfileScanScore { get; set; }
+    public string? LatestAiReason { get; set; }
+    public string? LatestAiSignals { get; set; }
+
     // Related data
     public List<UserChatMembership> ChatMemberships { get; set; } = [];
     public List<UserActionRecord> Actions { get; set; } = [];  // Audit history (read-only)
@@ -34,7 +47,7 @@ public class TelegramUserDetail
     public List<UserTag> Tags { get; set; } = [];  // Phase 4.12
 
     // Display helpers
-    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);
+    public string DisplayName => User.DisplayName;
     public TelegramUserStatus Status
     {
         get

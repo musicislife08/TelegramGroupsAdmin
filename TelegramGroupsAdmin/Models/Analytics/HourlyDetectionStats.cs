@@ -37,7 +37,7 @@ public class HourlyDetectionStats
     public int ManualCount { get; set; }
 
     /// <summary>
-    /// Average confidence score for this hour (nullable if no detections)
+    /// Average score for this hour (nullable if no detections)
     /// </summary>
-    public double? AvgConfidence { get; set; }
+    public double? AvgScore { get; set; }
 }

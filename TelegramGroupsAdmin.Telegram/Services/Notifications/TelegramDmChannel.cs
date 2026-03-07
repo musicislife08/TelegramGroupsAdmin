@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Notifications;
 
@@ -8,13 +10,13 @@ namespace TelegramGroupsAdmin.Telegram.Services.Notifications;
 public class TelegramDmChannel : INotificationChannel
 {
     private readonly ILogger<TelegramDmChannel> _logger;
-    private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IBotDmService _dmDeliveryService;
 
     public string ChannelName => "telegram-dm";
 
     public TelegramDmChannel(
         ILogger<TelegramDmChannel> logger,
-        IDmDeliveryService dmDeliveryService)
+        IBotDmService dmDeliveryService)
     {
         _logger = logger;
         _dmDeliveryService = dmDeliveryService;
@@ -33,10 +35,12 @@ public class TelegramDmChannel : INotificationChannel
         }
 
         // Delegate to DmDeliveryService with queue-on-failure behavior
+        // NotificationHandler formats messages in HTML (<b>, EscapeHtml), so use Html parse mode
         var result = await _dmDeliveryService.SendDmWithQueueAsync(
             telegramUserId,
             notification.Type,
             notification.Message,
+            ParseMode.Html,
             cancellationToken);
 
         // Convert DmDeliveryResult to DeliveryResult

@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Services;
@@ -130,17 +128,6 @@ public static class WebApplicationExtensions
 
             app.Logger.LogInformation("PostgreSQL database migration complete");
 
-            // One-time migration: Populate api_keys column from environment variables
-            try
-            {
-                var apiKeyMigration = scope.ServiceProvider.GetRequiredService<ApiKeyMigrationService>();
-                await apiKeyMigration.MigrateApiKeysFromEnvironmentAsync();
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex, "Failed to migrate API keys from environment variables (non-fatal)");
-            }
-
             // One-time backfill: Populate similarity_hash columns for SimHash deduplication
             try
             {
@@ -182,15 +169,10 @@ public static class WebApplicationExtensions
     /// </summary>
     private static void ConfigureImageStaticFiles(WebApplication app)
     {
-        var messageHistoryOptions = app.Services.GetRequiredService<IOptions<MessageHistoryOptions>>().Value;
-
-        if (!messageHistoryOptions.Enabled)
-        {
-            return;
-        }
+        var appOptions = app.Services.GetRequiredService<IOptions<AppOptions>>().Value;
 
         // Base data path (e.g., /data or ./bin/Debug/net10.0/data)
-        var basePath = Path.GetFullPath(messageHistoryOptions.ImageStoragePath);
+        var basePath = Path.GetFullPath(appOptions.DataPath);
 
         // Serve media/ subdirectory (all user-uploaded content: images, videos, audio, user photos, chat icons, etc.)
         var mediaPath = Path.Combine(basePath, "media");

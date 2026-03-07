@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Core.Mappings;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 

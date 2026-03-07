@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -12,5 +13,5 @@ public interface IUrlPreFilterService
     /// Check if message should be hard-blocked based on URL filters
     /// Runs BEFORE spam detection - instant ban, no OpenAI veto
     /// </summary>
-    Task<HardBlockResult> CheckHardBlockAsync(string messageText, long chatId, CancellationToken cancellationToken = default);
+    Task<HardBlockResult> CheckHardBlockAsync(string messageText, ChatIdentity chat, CancellationToken cancellationToken = default);
 }

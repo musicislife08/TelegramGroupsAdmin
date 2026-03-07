@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
-using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -30,7 +29,7 @@ public class InvisibleCharsContentCheckV2(ILogger<InvisibleCharsContentCheckV2> 
         {
             logger.LogDebug(
                 "Skipping InvisibleChars check for user {UserId}: User is {UserType}",
-                request.UserId,
+                request.User.Id,
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
         }

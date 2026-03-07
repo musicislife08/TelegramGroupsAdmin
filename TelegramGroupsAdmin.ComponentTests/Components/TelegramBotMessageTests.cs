@@ -115,13 +115,16 @@ public class TelegramBotMessageTests : MudBlazorTestContext
         var cut = Render<TelegramBotMessage>(p => p
             .Add(x => x.Text, "Test message"));
 
-        // Assert - verify expected CSS classes exist
-        Assert.That(cut.FindAll(".telegram-message-wrapper").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".telegram-bot-message").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".telegram-message-bubble").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".telegram-bubble-bot").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".telegram-message-text").Count, Is.EqualTo(1));
-        Assert.That(cut.FindAll(".telegram-message-time").Count, Is.EqualTo(1));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - verify expected CSS classes exist
+            Assert.That(cut.FindAll(".telegram-message-wrapper").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".telegram-bot-message").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".telegram-message-bubble").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".telegram-bubble-bot").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".telegram-message-text").Count, Is.EqualTo(1));
+            Assert.That(cut.FindAll(".telegram-message-time").Count, Is.EqualTo(1));
+        }
     }
 
     [Test]

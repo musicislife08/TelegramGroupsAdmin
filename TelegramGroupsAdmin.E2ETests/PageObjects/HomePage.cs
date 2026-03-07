@@ -1,5 +1,4 @@
 using Microsoft.Playwright;
-using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -217,14 +216,6 @@ public class HomePage
     public async Task<bool> IsActivityFeedVisibleAsync()
     {
         return await _page.Locator("text=Recent Activity").IsVisibleAsync();
-    }
-
-    /// <summary>
-    /// Checks if the threshold recommendations alert is visible.
-    /// </summary>
-    public async Task<bool> IsThresholdRecommendationsAlertVisibleAsync()
-    {
-        return await _page.Locator(".mud-alert:has-text('threshold recommendation')").IsVisibleAsync();
     }
 
     /// <summary>

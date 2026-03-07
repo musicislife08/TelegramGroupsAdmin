@@ -6,13 +6,16 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Telegram.Services;
 
@@ -35,7 +38,9 @@ public class ExamFlowServiceTests
 
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
-    private ITelegramOperations? _mockOperations;
+    private IBotMessageService? _mockMessageService;
+    private IBotChatService? _mockChatService;
+    private IBotDmService? _mockDmService;
 
     [SetUp]
     public async Task SetUp()
@@ -43,9 +48,10 @@ public class ExamFlowServiceTests
         _testHelper = new MigrationTestHelper();
         await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
 
-        // Set up mocks
-        _mockOperations = Substitute.For<ITelegramOperations>();
-        var mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
+        // Set up mocks for the new Bot*Service interfaces
+        _mockMessageService = Substitute.For<IBotMessageService>();
+        _mockChatService = Substitute.For<IBotChatService>();
+        _mockDmService = Substitute.For<IBotDmService>();
         var mockExamEvaluationService = Substitute.For<IExamEvaluationService>();
         var mockConfigService = Substitute.For<IConfigService>();
 
@@ -61,19 +67,20 @@ public class ExamFlowServiceTests
 
         // Mock GetChatAsync to return chat info (needed for exam intro message)
         var testChatInfo = TelegramTestFactory.CreateChatFullInfo(id: TestChatId, type: ChatType.Supergroup, title: "Test Chat");
-        _mockOperations.GetChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _mockChatService.GetChatAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(testChatInfo));
 
-        _mockOperations.SendMessageAsync(
+        // Mock message service methods
+        _mockMessageService.SendAndSaveMessageAsync(
                 Arg.Any<long>(),
                 Arg.Any<string>(),
                 Arg.Any<ParseMode?>(),
                 Arg.Any<ReplyParameters?>(),
-                Arg.Any<ReplyMarkup?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(responseMessage));
 
-        _mockOperations.EditMessageTextAsync(
+        _mockMessageService.EditAndUpdateMessageAsync(
                 Arg.Any<long>(),
                 Arg.Any<int>(),
                 Arg.Any<string>(),
@@ -82,7 +89,28 @@ public class ExamFlowServiceTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(responseMessage));
 
-        mockBotClientFactory.GetOperationsAsync().Returns(Task.FromResult(_mockOperations));
+        // Mock DM service methods - exam questions are sent via DM
+        var dmSuccessResult = new DmDeliveryResult { DmSent = true, MessageId = 1 };
+        _mockDmService.SendDmWithKeyboardAsync(
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<InlineKeyboardMarkup>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(dmSuccessResult));
+
+        _mockDmService.SendDmAsync(
+                Arg.Any<long>(),
+                Arg.Any<string>(),
+                Arg.Any<long?>(),
+                Arg.Any<int?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(dmSuccessResult));
+
+        _mockDmService.DeleteDmMessageAsync(
+                Arg.Any<long>(),
+                Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
 
         // Build service provider with real database and mocked externals
         var services = new ServiceCollection();
@@ -99,14 +127,18 @@ public class ExamFlowServiceTests
 
         // Real repositories
         services.AddScoped<IExamSessionRepository, ExamSessionRepository>();
+        services.AddScoped<IWelcomeResponsesRepository, WelcomeResponsesRepository>();
         services.AddScoped<IReportsRepository, ReportsRepository>();
         services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
         // Mocked external services (match scopes from main app registration)
-        services.AddSingleton(mockBotClientFactory);  // Singleton in main app
+        services.AddSingleton(_mockMessageService);
+        services.AddSingleton(_mockChatService);
+        services.AddSingleton(_mockDmService);
         services.AddScoped(_ => mockExamEvaluationService);  // Scoped in main app
         services.AddScoped(_ => mockConfigService);  // Scoped in main app
+        services.AddSingleton(Substitute.For<IWelcomeAdmissionHandler>());
 
         // The service under test
         services.AddScoped<IExamFlowService, ExamFlowService>();
@@ -155,16 +187,19 @@ public class ExamFlowServiceTests
 
         // Act
         var result = await examFlowService.StartExamInDmAsync(
-            TestChatId, user, TestDmChatId, config);
+            new ChatIdentity(TestChatId, "Test Chat"), user, TestDmChatId, config);
 
         // Assert
         Assert.That(result.Success, Is.True);
 
         var session = await sessionRepo.GetSessionAsync(TestChatId, TestUserId);
         Assert.That(session, Is.Not.Null);
-        Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
-        Assert.That(session.UserId, Is.EqualTo(TestUserId));
-        Assert.That(session.CurrentQuestionIndex, Is.EqualTo(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
+            Assert.That(session.UserId, Is.EqualTo(TestUserId));
+            Assert.That(session.CurrentQuestionIndex, Is.EqualTo(0));
+        }
     }
 
     [Test]
@@ -179,7 +214,7 @@ public class ExamFlowServiceTests
 
         // Act
         var result = await examFlowService.StartExamInDmAsync(
-            TestChatId, user, TestDmChatId, config);
+            new ChatIdentity(TestChatId, "Test Chat"), user, TestDmChatId, config);
 
         // Assert
         Assert.That(result.Success, Is.False);
@@ -201,7 +236,7 @@ public class ExamFlowServiceTests
         var config = CreateValidExamConfig();
 
         // Start exam to create session
-        await examFlowService.StartExamInDmAsync(TestChatId, user, TestDmChatId, config);
+        await examFlowService.StartExamInDmAsync(new ChatIdentity(TestChatId, "Test Chat"), user, TestDmChatId, config);
 
         var session = await sessionRepo.GetSessionAsync(TestChatId, TestUserId);
         Assert.That(session, Is.Not.Null);
@@ -220,8 +255,11 @@ public class ExamFlowServiceTests
         Assert.That(result.ExamComplete, Is.False); // Only 1 of 2 MC questions answered
 
         var updatedSession = await sessionRepo.GetByIdAsync(session.Id);
-        Assert.That(updatedSession!.CurrentQuestionIndex, Is.EqualTo(1));
-        Assert.That(updatedSession.McAnswers, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedSession!.CurrentQuestionIndex, Is.EqualTo(1));
+            Assert.That(updatedSession.McAnswers, Is.Not.Null);
+        }
         Assert.That(updatedSession.McAnswers!.ContainsKey(0), Is.True);
     }
 
@@ -246,9 +284,12 @@ public class ExamFlowServiceTests
         var result = await examFlowService.HandleMcAnswerAsync(
             sessionId, questionIndex: 0, answerIndex: 0, user, message);
 
-        // Assert - expired session should be treated as complete/failed
-        Assert.That(result.ExamComplete, Is.True);
-        Assert.That(result.Passed, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - expired session should be treated as complete/failed
+            Assert.That(result.ExamComplete, Is.True);
+            Assert.That(result.Passed, Is.False);
+        }
     }
 
     [Test]
@@ -273,9 +314,12 @@ public class ExamFlowServiceTests
         var result = await examFlowService.HandleMcAnswerAsync(
             sessionId, questionIndex: 0, answerIndex: 0, wrongUser, message);
 
-        // Assert - wrong user is rejected, but legitimate user's exam is still active (not complete)
-        Assert.That(result.ExamComplete, Is.False);
-        Assert.That(result.Passed, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - wrong user is rejected, but legitimate user's exam is still active (not complete)
+            Assert.That(result.ExamComplete, Is.False);
+            Assert.That(result.Passed, Is.Null);
+        }
 
         // Verify the session still exists for the legitimate user
         var session = await sessionRepo.GetByIdAsync(sessionId);
@@ -298,7 +342,9 @@ public class ExamFlowServiceTests
         await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
 
         // Act
-        var hasSession = await examFlowService.HasActiveSessionAsync(TestChatId, TestUserId);
+        var hasSession = await examFlowService.HasActiveSessionAsync(
+            new ChatIdentity(TestChatId, "Test Chat"),
+            UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(hasSession, Is.True);
@@ -312,7 +358,9 @@ public class ExamFlowServiceTests
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
         // Act
-        var hasSession = await examFlowService.HasActiveSessionAsync(TestChatId, TestUserId);
+        var hasSession = await examFlowService.HasActiveSessionAsync(
+            new ChatIdentity(TestChatId, "Test Chat"),
+            UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(hasSession, Is.False);
@@ -334,7 +382,7 @@ public class ExamFlowServiceTests
         await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
 
         // Act
-        var context = await examFlowService.GetActiveExamContextAsync(TestUserId);
+        var context = await examFlowService.GetActiveExamContextAsync(UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(context, Is.Not.Null);
@@ -349,7 +397,7 @@ public class ExamFlowServiceTests
         var examFlowService = scope.ServiceProvider.GetRequiredService<IExamFlowService>();
 
         // Act
-        var context = await examFlowService.GetActiveExamContextAsync(TestUserId);
+        var context = await examFlowService.GetActiveExamContextAsync(UserIdentity.FromId(TestUserId));
 
         // Assert
         Assert.That(context, Is.Null);
@@ -371,7 +419,9 @@ public class ExamFlowServiceTests
         await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
 
         // Act
-        await examFlowService.CancelSessionAsync(TestChatId, TestUserId);
+        await examFlowService.CancelSessionAsync(
+            new ChatIdentity(TestChatId, "Test Chat"),
+            UserIdentity.FromId(TestUserId));
 
         // Assert
         var session = await sessionRepo.GetSessionAsync(TestChatId, TestUserId);
@@ -387,7 +437,9 @@ public class ExamFlowServiceTests
 
         // Act & Assert - should not throw
         Assert.DoesNotThrowAsync(async () =>
-            await examFlowService.CancelSessionAsync(TestChatId, TestUserId));
+            await examFlowService.CancelSessionAsync(
+                new ChatIdentity(TestChatId, "Test Chat"),
+                UserIdentity.FromId(TestUserId)));
     }
 
     #endregion

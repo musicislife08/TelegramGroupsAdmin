@@ -265,20 +265,26 @@ public class LogDisplayNameTests
     [Test]
     public void InfoMethods_NeverIncludeId_WhenNameAvailable()
     {
-        // Info methods should return name only (no ID) when name is available
-        Assert.That(LogDisplayName.ChatInfo("My Chat", -100123), Does.Not.Contain("-100123"));
-        Assert.That(LogDisplayName.UserInfo("John", "Doe", null, 12345), Does.Not.Contain("12345"));
-        Assert.That(LogDisplayName.WebUserInfo("john@example.com", "abc-123"), Does.Not.Contain("abc-123"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Info methods should return name only (no ID) when name is available
+            Assert.That(LogDisplayName.ChatInfo("My Chat", -100123), Does.Not.Contain("-100123"));
+            Assert.That(LogDisplayName.UserInfo("John", "Doe", null, 12345), Does.Not.Contain("12345"));
+            Assert.That(LogDisplayName.WebUserInfo("john@example.com", "abc-123"), Does.Not.Contain("abc-123"));
+        }
     }
 
     [Test]
     public void DebugMethods_AlwaysIncludeId()
     {
-        // Debug methods should always include ID for investigation
-        Assert.That(LogDisplayName.ChatDebug("My Chat", -100123), Does.Contain("-100123"));
-        Assert.That(LogDisplayName.UserDebug("John", "Doe", null, 12345), Does.Contain("12345"));
-        Assert.That(LogDisplayName.UserDebug("John Doe", 12345), Does.Contain("12345"));
-        Assert.That(LogDisplayName.WebUserDebug("john@example.com", "abc-123"), Does.Contain("abc-123"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Debug methods should always include ID for investigation
+            Assert.That(LogDisplayName.ChatDebug("My Chat", -100123), Does.Contain("-100123"));
+            Assert.That(LogDisplayName.UserDebug("John", "Doe", null, 12345), Does.Contain("12345"));
+            Assert.That(LogDisplayName.UserDebug("John Doe", 12345), Does.Contain("12345"));
+            Assert.That(LogDisplayName.WebUserDebug("john@example.com", "abc-123"), Does.Contain("abc-123"));
+        }
     }
 
     #endregion

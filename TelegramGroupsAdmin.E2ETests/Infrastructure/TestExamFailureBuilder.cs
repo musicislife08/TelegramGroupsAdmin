@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 
@@ -234,8 +232,6 @@ public class TestExamFailureBuilder
         var examFailure = new ExamFailureRecord
         {
             Id = 0, // Will be assigned by database
-            ChatId = _chatId,
-            UserId = _userId,
             McAnswers = _mcAnswers,
             ShuffleState = _shuffleState,
             OpenEndedAnswer = _openEndedAnswer,
@@ -247,12 +243,10 @@ public class TestExamFailureBuilder
             ReviewedAt = _reviewedAt,
             ActionTaken = _actionTaken,
             AdminNotes = _adminNotes,
-            // Denormalized display fields
-            UserName = _userName,
-            UserFirstName = _userFirstName,
-            UserLastName = _userLastName,
-            UserPhotoPath = _userPhotoPath,
-            ChatName = _chatName
+            // Identity objects
+            User = new UserIdentity(_userId, _userFirstName, _userLastName, _userName),
+            Chat = new ChatIdentity(_chatId, _chatName),
+            UserPhotoPath = _userPhotoPath
         };
 
         var id = await reportsRepository.InsertExamFailureAsync(examFailure, cancellationToken);

@@ -20,13 +20,13 @@ public interface IDetectionResultsRepository
     /// <summary>
     /// Get all detection results for a specific message
     /// </summary>
-    Task<List<DetectionResultRecord>> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<List<DetectionResultRecord>> GetByMessageIdAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all detection results for multiple messages in a single batch query (avoids N+1 problem)
     /// Returns dictionary keyed by message_id for efficient lookup in UI components
     /// </summary>
-    Task<Dictionary<long, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default);
+    Task<Dictionary<int, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get recent detection results with limit
@@ -107,7 +107,7 @@ public interface IDetectionResultsRepository
     /// Invalidate all training data for a specific message (set used_for_training = false).
     /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
     /// </summary>
-    Task InvalidateTrainingDataForMessageAsync(long messageId, CancellationToken cancellationToken = default);
+    Task InvalidateTrainingDataForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
@@ -118,7 +118,7 @@ public interface IDetectionResultsRepository
         string messageText,
         bool isSpam,
         string source,
-        int? confidence,
+        double? score,
         string? addedBy,
         string? translatedText = null,
         string? detectedLanguage = null,

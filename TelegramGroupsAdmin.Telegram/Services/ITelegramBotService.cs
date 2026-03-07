@@ -1,5 +1,4 @@
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -25,7 +24,7 @@ public interface ITelegramBotService
     /// <summary>
     /// Event raised when media is downloaded and ready for display.
     /// </summary>
-    event Action<long, MediaType>? OnMediaUpdated;
+    event Action<int, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Event raised when chat health status changes.

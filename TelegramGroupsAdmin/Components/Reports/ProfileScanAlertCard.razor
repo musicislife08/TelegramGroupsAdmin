@@ -1,0 +1,292 @@
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Helpers
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Constants
+
+@inject ITelegramUserRepository TelegramUserRepository
+@inject IManagedChatsRepository ManagedChatsRepository
+<MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.PersonSearch" Color="@GetIconColor()" Size="Size.Small" />
+                <MudText Typo="Typo.h6">Profile Scan Alert</MudText>
+                <MudSpacer />
+                <MudChip T="string" Size="Size.Small" Color="@ProfileScanDisplayHelpers.GetOutcomeColor(Alert.Outcome)">
+                    @Alert.Outcome.ToString()
+                </MudChip>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    <span class="local-timestamp" data-utc="@Alert.DetectedAt.ToString("o")">@Alert.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                </MudText>
+            </MudStack>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudStack Spacing="3">
+            @* Score Summary *@
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                <MudStack Row="true" Spacing="4" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Score</MudText>
+                        <MudText Typo="Typo.h5" Color="@ProfileScanDisplayHelpers.GetScoreColor(Alert.Score)"><b>@Alert.Score.ToString("F1")/5.0</b></MudText>
+                    </MudStack>
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                        @if (Alert.IsScam)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
+                                Scam
+                            </MudChip>
+                        }
+                        @if (Alert.IsFake)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
+                                Fake
+                            </MudChip>
+                        }
+                        @if (Alert.HasPinnedStories)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.PhotoLibrary">
+                                Pinned Stories
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+
+            @* User Info *@
+            <MudPaper Elevation="1" Class="pa-3">
+                <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Error"><b>Flagged User</b></MudText>
+
+                    @if (_userPhotoUrl != null)
+                    {
+                        <MudImage Src="@_userPhotoUrl"
+                                  Alt="User photo"
+                                  Elevation="2"
+                                  Class="rounded-lg"
+                                  Style="width: 100px; height: 100px; object-fit: cover;" />
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Large" Style="width: 100px; height: 100px;">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" />
+                        </MudAvatar>
+                    }
+
+                    <UserDetailLink UserId="@Alert.User.Id" Typo="Typo.body1"><b>@Alert.User.DisplayName</b></UserDetailLink>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.User.Username != null ? $"@{Alert.User.Username}" : "No username")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.User.Id</MudText>
+
+                    @if (_user != null)
+                    {
+                        <MudDivider Class="my-1" Style="width: 80%;" />
+
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            First seen: @DateTimeUtilities.FormatRelativeTimeVerbose(_user.FirstSeenAt)
+                        </MudText>
+
+                        @if (_user.IsTrusted)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.VerifiedUser">
+                                Trusted
+                            </MudChip>
+                        }
+                        @if (_user.IsBanned)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.Block">
+                                Banned
+                            </MudChip>
+                        }
+                    }
+                </MudStack>
+            </MudPaper>
+
+            @* Scan Details *@
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Scan Details</b></MudText>
+                <MudStack Spacing="2">
+                    @if (Alert.AiReason != null)
+                    {
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">AI Reason</MudText>
+                            <MudText Typo="Typo.body2">@Alert.AiReason</MudText>
+                        </MudStack>
+                    }
+
+                    @if (Alert.AiSignalsDetected is { Length: > 0 })
+                    {
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Signals Detected</MudText>
+                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                @foreach (var signal in Alert.AiSignalsDetected)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                        @signal
+                                    </MudChip>
+                                }
+                            </MudStack>
+                        </MudStack>
+                    }
+
+                    @if (Alert.Bio != null)
+                    {
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Bio</MudText>
+                            <MudPaper Elevation="0" Class="pa-2" Style="border: 1px solid var(--mud-palette-lines-default); background-color: transparent;">
+                                <MudText Typo="Typo.body2">@Alert.Bio</MudText>
+                            </MudPaper>
+                        </MudStack>
+                    }
+
+                    @if (Alert.PersonalChannelTitle != null)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Small" Color="Color.Secondary" />
+                            <MudText Typo="Typo.body2">Channel: <b>@Alert.PersonalChannelTitle</b></MudText>
+                        </MudStack>
+                    }
+                </MudStack>
+            </MudPaper>
+
+            @* Context *@
+            <MudPaper Elevation="0" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Context</b></MudText>
+                <MudStack Spacing="1">
+                    @* Chat *@
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
+                        <MudText Typo="Typo.body2">
+                            Chat: @(Alert.Chat.Id == 0 ? "Global" : Alert.Chat.DisplayName)
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+
+            @* Review info *@
+            @if (Alert.ReviewedAt.HasValue)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <b>Reviewed:</b> @(Alert.ActionTaken ?? "Unknown action") by @(Alert.ReviewedByEmail ?? Alert.ReviewedByUserId ?? "Unknown")
+                    on <span class="local-timestamp" data-utc="@Alert.ReviewedAt.Value.ToString("o")">@Alert.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                </MudAlert>
+            }
+        </MudStack>
+    </MudCardContent>
+    <MudCardActions>
+        @if (!Alert.ReviewedAt.HasValue)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.CheckCircle"
+                       OnClick="@OnAllow"
+                       Disabled="@_actionInProgress">
+                Allow
+            </MudButton>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Block"
+                       OnClick="@OnBan"
+                       Disabled="@_actionInProgress">
+                Ban
+            </MudButton>
+
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.ExitToApp"
+                       OnClick="@OnKick"
+                       Disabled="@_actionInProgress">
+                Kick
+            </MudButton>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Action: <b>@(Alert.ActionTaken ?? "Unknown")</b>
+            </MudText>
+        }
+    </MudCardActions>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public required ProfileScanAlertRecord Alert { get; set; }
+
+    [Parameter]
+    public EventCallback<(ProfileScanAlertRecord Alert, ProfileScanAction Action)> OnAction { get; set; }
+
+    private bool _actionInProgress;
+    private TelegramUser? _user;
+    private string? _userPhotoUrl;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _user = await TelegramUserRepository.GetByTelegramIdAsync(Alert.User.Id);
+        _userPhotoUrl = _user?.UserPhotoPath != null
+            ? MediaPathUtilities.GetPhotoWebPath(_user.UserPhotoPath)
+            : null;
+    }
+
+    private string GetCardStyle()
+    {
+        return Alert.Outcome switch
+        {
+            ProfileScanOutcome.Banned => "border-left: 4px solid var(--mud-palette-error);",
+            ProfileScanOutcome.HeldForReview => "border-left: 4px solid var(--mud-palette-warning);",
+            _ => ""
+        };
+    }
+
+    private Color GetIconColor()
+    {
+        return Alert.Outcome switch
+        {
+            ProfileScanOutcome.Banned => Color.Error,
+            ProfileScanOutcome.HeldForReview => Color.Warning,
+            _ => Color.Success
+        };
+    }
+
+    private async Task OnAllow()
+    {
+        _actionInProgress = true;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ProfileScanAction.Allow));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
+    }
+
+    private async Task OnBan()
+    {
+        _actionInProgress = true;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ProfileScanAction.Ban));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
+    }
+
+    private async Task OnKick()
+    {
+        _actionInProgress = true;
+        try
+        {
+            await OnAction.InvokeAsync((Alert, ProfileScanAction.Kick));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
+    }
+}

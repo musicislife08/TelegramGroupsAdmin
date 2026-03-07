@@ -36,26 +36,26 @@ public class MessageEditService : IMessageEditService
             edit.EditDate);
     }
 
-    public async Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.MessageEdits
             .AsNoTracking()
-            .Where(e => e.MessageId == messageId)
+            .Where(e => e.MessageId == messageId && e.ChatId == chatId)
             .OrderBy(e => e.EditDate)
             .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<Dictionary<long, int>> GetEditCountsForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<int, int>> GetEditCountsForMessagesAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
 
         var results = await context.MessageEdits
             .AsNoTracking()
-            .Where(e => messageIdArray.Contains(e.MessageId))
+            .Where(e => e.ChatId == chatId && messageIdArray.Contains(e.MessageId))
             .GroupBy(e => e.MessageId)
             .Select(g => new { MessageId = g.Key, EditCount = g.Count() })
             .ToListAsync(cancellationToken);

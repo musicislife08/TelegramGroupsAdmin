@@ -12,9 +12,6 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Listeners;
 /// </summary>
 public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactory schedulerFactory) : IJobListener
 {
-    private readonly ILogger<RetryJobListener> _logger = logger;
-    private readonly ISchedulerFactory _schedulerFactory = schedulerFactory;
-
     public string Name => "RetryJobListener";
 
     public Task JobToBeExecuted(IJobExecutionContext context, CancellationToken cancellationToken = default)
@@ -40,7 +37,7 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
             // Job succeeded - clear retry count if it exists
             if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.RetryCount))
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Job {JobName} succeeded after previous retry attempts",
                     context.JobDetail.Key.Name);
             }
@@ -54,7 +51,7 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
 
         if (retryCount >= RetryConstants.MaxRetries)
         {
-            _logger.LogError(
+            logger.LogError(
                 jobException,
                 "Job {JobName} failed after {MaxRetries} retry attempts. Giving up.",
                 context.JobDetail.Key.Name,
@@ -67,7 +64,7 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
         var backoffDelay = TimeSpan.FromTicks(baseBackoffInterval.Ticks * (long)Math.Pow(2, retryCount));
         var nextRetryCount = retryCount + 1;
 
-        _logger.LogWarning(
+        logger.LogWarning(
             jobException,
             "Job {JobName} failed (attempt {CurrentAttempt}/{MaxAttempts}). Retrying in {Delay}...",
             context.JobDetail.Key.Name,
@@ -76,7 +73,7 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
             backoffDelay);
 
         // Create new trigger for retry with exponential backoff
-        var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
+        var scheduler = await schedulerFactory.GetScheduler(cancellationToken);
 
         // Build new job data map with incremented retry count and preserved payload
         // CRITICAL: Must preserve PayloadJson and PayloadType from original job for ad-hoc jobs
@@ -99,9 +96,17 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
             .UsingJobData(retryJobData)
             .Build();
 
+        // Remove stale retry trigger if it exists from a previous failure cycle
+        // (e.g., job failed yesterday, retry trigger was created but never cleaned up)
+        var triggerKey = retryTrigger.Key;
+        if (await scheduler.GetTrigger(triggerKey, cancellationToken) != null)
+        {
+            await scheduler.UnscheduleJob(triggerKey, cancellationToken);
+        }
+
         await scheduler.ScheduleJob(retryTrigger, cancellationToken);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Scheduled retry {RetryCount}/{MaxRetries} for job {JobName} at {RetryTime}",
             nextRetryCount,
             RetryConstants.MaxRetries,

@@ -1,11 +1,11 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
+@implements IDetectionConfigComponent
 @inject IConfigService ConfigService
 @inject IPromptVersionRepository PromptVersionRepository
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject IBlazorAuthHelper AuthHelper
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">
@@ -60,7 +60,7 @@
                 <MudTextField Value="@_activePromptText"
                              Label="Active System Prompt"
                              Lines="4"
-                             AutoGrow="true"
+                             Sizing="InputSizing.Auto"
                              Variant="Variant.Outlined"
                              ReadOnly="true"
                              HelperText="Use AI Prompt Builder below to generate or modify prompts" />
@@ -74,9 +74,9 @@
 
             <MudNumericField @bind-Value="aiVetoConfig.ConfidenceThreshold"
                             Label="Confidence Threshold"
-                            Min="1" Max="100"
+                            Min="0.0" Max="5.0" Step="0.25"
                             Disabled="@aiVetoReadOnly"
-                            HelperText="@(aiVetoReadOnly ? $"Using global value: {aiVetoConfig.ConfidenceThreshold}" : "Confidence level for AI spam classification")" />
+                            HelperText="@(aiVetoReadOnly ? $"Using global value: {aiVetoConfig.ConfidenceThreshold:F2}" : "Confidence level for AI spam classification (0.0-5.0)")" />
 
             @* AI Prompt Builder - NOW AVAILABLE FOR BOTH GLOBAL AND PER-CHAT *@
             @if (!aiVetoReadOnly)
@@ -154,17 +154,21 @@
 </MudPaper>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter]
-    public long? ChatId { get; set; }
+    public ChatIdentity? Chat { get; set; }
 
     private ContentDetectionConfig _config = new();
     private ContentDetectionConfig _globalConfig = new();
     private List<PromptVersion> _promptVersions = [];
     private string? _activePromptText; // Current active prompt from prompt_versions table
-    private bool IsGlobalView => ChatId is null or 0;
+    private bool IsGlobalView => Chat is null || Chat.Id == 0;
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         await LoadConfiguration();
         await LoadPromptVersions();
     }
@@ -185,7 +189,7 @@
             else
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, ChatId!.Value);
+                var chatConfig = await ConfigService.GetAsync<ContentDetectionConfig>(ConfigType.ContentDetection, Chat!.Id);
                 _config = chatConfig ?? new ContentDetectionConfig();
             }
         }
@@ -211,7 +215,7 @@
     private async Task LoadPromptVersions()
     {
         // Load prompt versions for the current scope (global or chat-specific)
-        long targetChatId = IsGlobalView ? 0 : (ChatId ?? 0);
+        long targetChatId = Chat?.Id ?? 0;
 
         try
         {
@@ -228,11 +232,11 @@
 
     private async Task OpenPromptBuilder()
     {
-        long targetChatId = IsGlobalView ? 0 : (ChatId ?? 0);
+        long targetChatId = Chat?.Id ?? 0;
 
         var parameters = new DialogParameters<PromptBuilderDialog>
         {
-            { x => x.ChatId, targetChatId }
+            { x => x.Chat, Chat ?? ChatIdentity.FromId(0) }
         };
 
         var options = new DialogOptions
@@ -249,7 +253,7 @@
         {
             try
             {
-                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+                var userEmail = WebUser!.Email;
 
                 // Save as new version
                 var newVersion = await PromptVersionRepository.CreateVersionAsync(
@@ -290,7 +294,7 @@
 
     private async Task ViewVersion(PromptVersion version)
     {
-        await DialogService.ShowMessageBox(
+        await DialogService.ShowMessageBoxAsync(
             $"Prompt Version {version.Version}",
             version.PromptText,
             "Close");
@@ -321,8 +325,8 @@
         {
             try
             {
-                long targetChatId = IsGlobalView ? 0 : (ChatId ?? 0);
-                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+                long targetChatId = Chat?.Id ?? 0;
+                var userEmail = WebUser!.Email;
 
                 // Save as new version
                 var newVersion = await PromptVersionRepository.CreateVersionAsync(

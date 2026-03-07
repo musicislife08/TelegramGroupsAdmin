@@ -27,8 +27,8 @@ public class DetectionMethodStats
     public double SpamPercentage { get; set; }
 
     /// <summary>
-    /// Average confidence when voting spam (null for binary checks like CAS)
-    /// Binary checks always return 0 or 100, so avg is meaningless
+    /// Average score when voting spam (null for binary checks like CAS)
+    /// Binary checks return 0 or the configured score, so avg is meaningless
     /// </summary>
     public double? AverageSpamConfidence { get; set; }
 

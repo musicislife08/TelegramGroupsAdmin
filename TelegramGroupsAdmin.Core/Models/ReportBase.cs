@@ -8,7 +8,7 @@ public record ReportBase
 {
     public long Id { get; init; }
     public ReportType Type { get; init; }
-    public long ChatId { get; init; }
+    public required ChatIdentity Chat { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public ReportStatus Status { get; init; }
     public string? ReviewedBy { get; init; }
@@ -21,9 +21,6 @@ public record ReportBase
     /// Callers needing typed access should use type-specific repository methods.
     /// </summary>
     public string? Context { get; init; }
-
-    // Denormalized for display (joined data - optional)
-    public string? ChatName { get; init; }
 
     /// <summary>
     /// For ImpersonationAlert: the suspected user ID

@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
@@ -11,29 +13,19 @@ public record ContentCheckRequest
     public required string Message { get; init; }
 
     /// <summary>
-    /// Telegram user ID who sent the message
+    /// User who sent the message (carries ID, name, username for logging and functional use)
     /// </summary>
-    public required long UserId { get; init; }
+    public required UserIdentity User { get; init; }
 
     /// <summary>
-    /// Pre-formatted user display name for logging (e.g., "John Doe (123)")
+    /// Chat where the message was sent (carries ID and name for logging and functional use)
     /// </summary>
-    public string? UserName { get; init; }
-
-    /// <summary>
-    /// Pre-formatted chat display name for logging (e.g., "My Group (-123)")
-    /// </summary>
-    public string? ChatName { get; init; }
+    public required ChatIdentity Chat { get; init; }
 
     /// <summary>
     /// Message metadata from Telegram
     /// </summary>
     public ContentCheckMetadata Metadata { get; init; } = new();
-
-    /// <summary>
-    /// Chat ID for per-chat configuration
-    /// </summary>
-    public required long ChatId { get; init; }
 
     /// <summary>
     /// If true, don't update approved users database

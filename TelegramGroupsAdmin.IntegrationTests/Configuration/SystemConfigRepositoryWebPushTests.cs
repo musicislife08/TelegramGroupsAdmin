@@ -86,9 +86,12 @@ public class SystemConfigRepositoryWebPushTests
 
         // Assert - Should return a default config (never null)
         Assert.That(config, Is.Not.Null);
-        Assert.That(config.Enabled, Is.True, "Default should have Enabled = true");
-        Assert.That(config.VapidPublicKey, Is.Null, "Default should have null VapidPublicKey");
-        Assert.That(config.ContactEmail, Is.Null, "Default should have null ContactEmail");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(config.Enabled, Is.True, "Default should have Enabled = true");
+            Assert.That(config.VapidPublicKey, Is.Null, "Default should have null VapidPublicKey");
+            Assert.That(config.ContactEmail, Is.Null, "Default should have null ContactEmail");
+        }
     }
 
     [Test]
@@ -106,10 +109,13 @@ public class SystemConfigRepositoryWebPushTests
         await _configRepo!.SaveWebPushConfigAsync(configToSave);
         var retrievedConfig = await _configRepo.GetWebPushConfigAsync();
 
-        // Assert
-        Assert.That(retrievedConfig.Enabled, Is.False);
-        Assert.That(retrievedConfig.ContactEmail, Is.EqualTo("admin@example.com"));
-        Assert.That(retrievedConfig.VapidPublicKey, Is.EqualTo("BNxHHKRkAg0WNUBuHqAQjPILp5FXxF4YZ3sGc3Lw6wXz2Ks8qBY1HqJR3nMdFgHi"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(retrievedConfig.Enabled, Is.False);
+            Assert.That(retrievedConfig.ContactEmail, Is.EqualTo("admin@example.com"));
+            Assert.That(retrievedConfig.VapidPublicKey, Is.EqualTo("BNxHHKRkAg0WNUBuHqAQjPILp5FXxF4YZ3sGc3Lw6wXz2Ks8qBY1HqJR3nMdFgHi"));
+        }
     }
 
     [Test]
@@ -145,8 +151,11 @@ public class SystemConfigRepositoryWebPushTests
 
         // Assert - Verify by reading back
         var retrieved = await _configRepo.GetWebPushConfigAsync();
-        Assert.That(retrieved.ContactEmail, Is.EqualTo("test@example.com"));
-        Assert.That(retrieved.VapidPublicKey, Is.EqualTo("TestPublicKey123"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved.ContactEmail, Is.EqualTo("test@example.com"));
+            Assert.That(retrieved.VapidPublicKey, Is.EqualTo("TestPublicKey123"));
+        }
     }
 
     [Test]
@@ -170,8 +179,11 @@ public class SystemConfigRepositoryWebPushTests
 
         // Assert
         var retrieved = await _configRepo.GetWebPushConfigAsync();
-        Assert.That(retrieved.Enabled, Is.False);
-        Assert.That(retrieved.ContactEmail, Is.EqualTo("updated@example.com"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved.Enabled, Is.False);
+            Assert.That(retrieved.ContactEmail, Is.EqualTo("updated@example.com"));
+        }
     }
 
     [Test]
@@ -191,8 +203,11 @@ public class SystemConfigRepositoryWebPushTests
         // Assert - AI provider config should still be there
         var retrievedAI = await _configRepo.GetAIProviderConfigAsync();
         Assert.That(retrievedAI, Is.Not.Null);
-        Assert.That(retrievedAI!.Connections, Has.Count.EqualTo(1));
-        Assert.That(retrievedAI.Connections[0].Id, Is.EqualTo("test"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrievedAI!.Connections, Has.Count.EqualTo(1));
+            Assert.That(retrievedAI.Connections[0].Id, Is.EqualTo("test"));
+        }
     }
 
     #endregion
@@ -295,8 +310,11 @@ public class SystemConfigRepositoryWebPushTests
 
         // Assert - WebPush config should be unchanged
         var webPushConfig = await _configRepo.GetWebPushConfigAsync();
-        Assert.That(webPushConfig.ContactEmail, Is.EqualTo("test@example.com"));
-        Assert.That(webPushConfig.VapidPublicKey, Is.EqualTo("PublicKey123"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(webPushConfig.ContactEmail, Is.EqualTo("test@example.com"));
+            Assert.That(webPushConfig.VapidPublicKey, Is.EqualTo("PublicKey123"));
+        }
     }
 
     [Test]
@@ -473,9 +491,12 @@ public class SystemConfigRepositoryWebPushTests
         var retrievedApiKeys = await _configRepo.GetApiKeysAsync();
         var retrievedVapidKey = await _configRepo.GetVapidPrivateKeyAsync();
 
-        // Assert - Both should decrypt correctly to their original values
-        Assert.That(retrievedApiKeys?.VirusTotal, Is.EqualTo("vt-api-key-test"));
-        Assert.That(retrievedVapidKey, Is.EqualTo("vapid-private-key-test"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Both should decrypt correctly to their original values
+            Assert.That(retrievedApiKeys?.VirusTotal, Is.EqualTo("vt-api-key-test"));
+            Assert.That(retrievedVapidKey, Is.EqualTo("vapid-private-key-test"));
+        }
     }
 
     #endregion

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -26,13 +27,13 @@ public class MessageBackfillService : IMessageBackfillService
 
     /// <inheritdoc />
     public async Task<bool> BackfillIfMissingAsync(
-        long messageId,
+        int messageId,
         long chatId,
         Message telegramMessage,
         CancellationToken cancellationToken = default)
     {
         // Check if message already exists in database
-        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
+        var existingMessage = await _messageHistoryRepository.GetMessageAsync(messageId, chatId, cancellationToken);
         if (existingMessage != null)
         {
             _logger.LogDebug(
@@ -58,11 +59,8 @@ public class MessageBackfillService : IMessageBackfillService
         {
             var messageRecord = new MessageRecord(
                 MessageId: messageId,
-                UserId: telegramMessage.From?.Id ?? 0,
-                UserName: telegramMessage.From?.Username,
-                FirstName: telegramMessage.From?.FirstName,
-                LastName: telegramMessage.From?.LastName,
-                ChatId: chatId,
+                User: telegramMessage.From is { } from ? UserIdentity.From(from) : UserIdentity.FromId(0),
+                Chat: ChatIdentity.FromId(chatId),
                 Timestamp: telegramMessage.Date,
                 MessageText: messageText,
                 PhotoFileId: null,
@@ -70,7 +68,6 @@ public class MessageBackfillService : IMessageBackfillService
                 Urls: null,
                 EditDate: null,
                 ContentHash: null,
-                ChatName: null,
                 PhotoLocalPath: null,
                 PhotoThumbnailPath: null,
                 ChatIconPath: null,

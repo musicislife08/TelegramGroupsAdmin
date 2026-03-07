@@ -8,7 +8,6 @@ using System.Security.Claims;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Services;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 

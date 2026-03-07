@@ -1,5 +1,4 @@
 using Microsoft.Playwright;
-using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
 
@@ -34,13 +33,13 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
 
         // Assert - page loads with algorithm toggles
         var toggleCount = await _settingsPage.GetAlgorithmToggleCountAsync();
-        Assert.That(toggleCount, Is.GreaterThanOrEqualTo(5),
-            "Should show at least 5 algorithm toggle switches (Stop Words, CAS, Similarity, Bayes, Spacing, etc.)");
+        Assert.That(toggleCount, Is.GreaterThanOrEqualTo(4),
+            "Should show at least 4 algorithm toggle switches (Stop Words, Similarity, Bayes, Spacing, etc.)");
 
         // Verify specific algorithms are visible by checking the h6 headings inside card headers
         // These are unique to the algorithm cards and won't match nav items
+        // NOTE: CAS moved to Welcome Settings > JoinSecurity as of refactor
         await Expect(Page.Locator(".mud-card-header:has-text('Stop Words Detection')")).ToBeVisibleAsync();
-        await Expect(Page.Locator(".mud-card-header:has-text('CAS (Combot Anti-Spam)')")).ToBeVisibleAsync();
         await Expect(Page.Locator(".mud-card-header:has-text('Similarity Detection')")).ToBeVisibleAsync();
         await Expect(Page.Locator(".mud-card-header:has-text('Naive Bayes Classifier')")).ToBeVisibleAsync();
     }
@@ -304,8 +303,9 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
 
         // Assert - GlobalAdmin should see the page
         // Look for algorithm cards specifically (not nav items)
+        // NOTE: CAS moved to Welcome Settings > JoinSecurity as of refactor
         await Expect(Page.Locator(".mud-card-header:has-text('Stop Words Detection')")).ToBeVisibleAsync();
-        await Expect(Page.Locator(".mud-card-header:has-text('CAS (Combot Anti-Spam)')")).ToBeVisibleAsync();
+        await Expect(Page.Locator(".mud-card-header:has-text('Similarity Detection')")).ToBeVisibleAsync();
     }
 
     #endregion

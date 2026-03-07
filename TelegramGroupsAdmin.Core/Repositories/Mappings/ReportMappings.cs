@@ -17,7 +17,7 @@ public static class ReportMappings
         public Report ToModel() => new(
             Id: data.Id,
             MessageId: data.MessageId,
-            ChatId: data.ChatId,
+            Chat: new ChatIdentity(data.ChatId, null),
             ReportCommandMessageId: data.ReportCommandMessageId,
             ReportedByUserId: data.ReportedByUserId,
             ReportedByUserName: data.ReportedByUserName,
@@ -37,7 +37,7 @@ public static class ReportMappings
         {
             Id = data.Id,
             Type = (ReportType)data.Type,  // short → enum
-            ChatId = data.ChatId,
+            Chat = new ChatIdentity(data.ChatId, chatName),
             CreatedAt = data.ReportedAt,
             Status = (ReportStatus)data.Status,  // int → enum
             ReviewedBy = data.ReviewedBy,
@@ -45,7 +45,6 @@ public static class ReportMappings
             ActionTaken = data.ActionTaken,
             AdminNotes = data.AdminNotes,
             Context = data.Context,
-            ChatName = chatName,
             SubjectUserId = subjectUserId,
             // ContentReport-specific fields
             MessageId = data.MessageId > 0 ? data.MessageId : null,
@@ -60,7 +59,7 @@ public static class ReportMappings
             Id = ui.Id,
             Type = (short)ReportType.ContentReport,  // enum → short
             MessageId = ui.MessageId,
-            ChatId = ui.ChatId,
+            ChatId = ui.Chat.Id,
             ReportCommandMessageId = ui.ReportCommandMessageId,
             ReportedByUserId = ui.ReportedByUserId,
             ReportedByUserName = ui.ReportedByUserName,

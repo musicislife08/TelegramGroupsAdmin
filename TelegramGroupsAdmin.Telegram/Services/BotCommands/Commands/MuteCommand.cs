@@ -1,8 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Constants;
 
@@ -15,7 +18,7 @@ public class MuteCommand : IBotCommand
 {
     private readonly ILogger<MuteCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IModerationOrchestrator _moderationService;
+    private readonly IBotModerationService _moderationService;
 
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
@@ -28,7 +31,7 @@ public class MuteCommand : IBotCommand
     public MuteCommand(
         ILogger<MuteCommand> logger,
         IServiceProvider serviceProvider,
-        IModerationOrchestrator moderationService)
+        IBotModerationService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -94,12 +97,15 @@ public class MuteCommand : IBotCommand
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(
-                userId: targetUser.Id,
-                messageId: message.ReplyToMessage.MessageId,
-                executor: executor,
-                reason: reason,
-                duration: duration,
-                cancellationToken: cancellationToken);
+                new RestrictIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = reason,
+                    Duration = duration
+                    // Chat = null → global restriction
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
@@ -114,8 +120,8 @@ public class MuteCommand : IBotCommand
 
             _logger.LogInformation(
                 "{TargetUser} muted by {Executor} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
-                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                targetUser.ToLogInfo(),
+                message.From.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
             return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
@@ -123,7 +129,7 @@ public class MuteCommand : IBotCommand
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to mute {User}",
-                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
+                targetUser.ToLogDebug());
             return new CommandResult($"❌ Failed to mute user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

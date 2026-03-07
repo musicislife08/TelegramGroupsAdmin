@@ -13,5 +13,8 @@ public enum ReportType
     ImpersonationAlert = 1,
 
     /// <summary>Failed entrance exam awaiting admin decision</summary>
-    ExamFailure = 2
+    ExamFailure = 2,
+
+    /// <summary>Profile scan flagged user for admin review</summary>
+    ProfileScanAlert = 3
 }

@@ -1,6 +1,7 @@
 @using Humanizer
 @using TelegramGroupsAdmin.Configuration
-@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Configuration.Models.Welcome
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Extensions
 @using TelegramGroupsAdmin.Telegram.Models
 @inject IConfigService ConfigService
@@ -30,6 +31,136 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
                         When enabled, new members will be restricted until they accept the rules
                     </MudText>
+                </MudItem>
+
+                @* Security on Join Section - These run REGARDLESS of welcome system enabled state *@
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Small" Class="mr-1" />
+                        Security on Join
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                        Security checks run for ALL new members, regardless of welcome system state. Users are muted during verification.
+                    </MudText>
+                </MudItem>
+
+                @* CAS Check Configuration *@
+                <MudItem xs="12">
+                    <MudExpansionPanels>
+                        <MudExpansionPanel Text="CAS (Combot Anti-Spam)" Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.JoinSecurity.Cas.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>CAS (Combot Anti-Spam)</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(_config.JoinSecurity.Cas.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.JoinSecurity.Cas.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                                    Automatically bans users listed in the Combot Anti-Spam database (known spammers).
+                                </MudText>
+                                <MudGrid>
+                                    <MudItem xs="12" md="6">
+                                        <MudTextField @bind-Value="_config.JoinSecurity.Cas.ApiUrl"
+                                                      Label="API URL"
+                                                      HelperText="CAS API endpoint (default: https://api.cas.chat)"
+                                                      Disabled="!_config.JoinSecurity.Cas.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="3">
+                                        <MudNumericField T="int"
+                                                         Value="@((int)_config.JoinSecurity.Cas.Timeout.TotalSeconds)"
+                                                         ValueChanged="@(v => _config.JoinSecurity.Cas.Timeout = TimeSpan.FromSeconds(v))"
+                                                         Label="Timeout (seconds)"
+                                                         Min="1"
+                                                         Max="30"
+                                                         HelperText="API request timeout"
+                                                         Disabled="!_config.JoinSecurity.Cas.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="3">
+                                        <MudTextField @bind-Value="_config.JoinSecurity.Cas.UserAgent"
+                                                      Label="User Agent"
+                                                      HelperText="Optional UA header"
+                                                      Disabled="!_config.JoinSecurity.Cas.Enabled" />
+                                    </MudItem>
+                                </MudGrid>
+                            </ChildContent>
+                        </MudExpansionPanel>
+
+                        <MudExpansionPanel Text="Impersonation Detection" Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.JoinSecurity.Impersonation.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>Impersonation Detection</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(_config.JoinSecurity.Impersonation.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.JoinSecurity.Impersonation.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Detects users trying to impersonate chat admins by comparing names and profile photos.
+                                    Auto-bans high-confidence matches (score 5.0), flags medium-confidence for review (score 2.5-5.0).
+                                </MudText>
+                            </ChildContent>
+                        </MudExpansionPanel>
+
+                        <MudExpansionPanel Text="Profile Scan" Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>Profile Scan (User API)</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(_config.JoinSecurity.ProfileScan.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.JoinSecurity.ProfileScan.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                                    Scans user profiles via Telegram User API on join. Detects spam signals in bios,
+                                    personal channels, and pinned stories. Requires an active User API session.
+                                </MudText>
+                                <MudGrid>
+                                    <MudItem xs="6">
+                                        <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.BanThreshold"
+                                                         Label="Auto-Ban Threshold"
+                                                         Variant="Variant.Outlined"
+                                                         Min="1.0m" Max="5.0m" Step="0.5m"
+                                                         HelperText="Score at which users are auto-banned (default: 4.0)"
+                                                         Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudNumericField @bind-Value="_config.JoinSecurity.ProfileScan.NotifyThreshold"
+                                                         Label="Admin Notify Threshold"
+                                                         Variant="Variant.Outlined"
+                                                         Min="0.5m" Max="5.0m" Step="0.5m"
+                                                         HelperText="Score at which admins are notified for review (default: 2.0)"
+                                                         Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.ScanOnJoin"
+                                                   Color="Color.Primary"
+                                                   Label="Scan on join"
+                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                    <MudItem xs="6">
+                                        <MudSwitch @bind-Value="_config.JoinSecurity.ProfileScan.ScanOnProfileChange"
+                                                   Color="Color.Primary"
+                                                   Label="Scan on profile change"
+                                                   Disabled="!_config.JoinSecurity.ProfileScan.Enabled" />
+                                    </MudItem>
+                                </MudGrid>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
                 </MudItem>
 
                 <MudItem xs="12">
@@ -302,6 +433,7 @@
     private bool _saving;
     private string? _lastFocusedInputId;
 
+
     protected override async Task OnInitializedAsync()
     {
         await LoadConfig();
@@ -323,7 +455,7 @@
         try
         {
             // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
-            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, Chat?.ChatId ?? 0);
+            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, Chat?.Identity.Id ?? 0);
 
             if (config == null)
             {
@@ -382,8 +514,8 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.ChatId ?? 0, _config, Chat?.ToLogInfo());
-            Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.ToLogInfo()}" : "globally")}", Severity.Success);
+            await ConfigService.SaveAsync(ConfigType.Welcome, Chat?.Identity ?? ChatIdentity.FromId(0), _config);
+            Snackbar.Add($"Welcome configuration saved {(Chat != null ? $"for {Chat.Identity.ToLogInfo()}" : "globally")}", Severity.Success);
 
             // Invoke callback if provided
             if (OnSaved.HasDelegate)

@@ -23,9 +23,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.False);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.False);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     [Test]
@@ -42,9 +45,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.False);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.False);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     [Test]
@@ -57,9 +63,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.False);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.False);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     #endregion
@@ -80,9 +89,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True, "Default config should delete join messages");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True, "Default config should delete join messages");
+        }
     }
 
     [Test]
@@ -99,9 +111,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True, "Still a service message");
-        Assert.That(shouldDelete, Is.False, "Config says don't delete");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True, "Still a service message");
+            Assert.That(shouldDelete, Is.False, "Config says don't delete");
+        }
     }
 
     #endregion
@@ -122,9 +137,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True, "Default config should delete leave messages");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True, "Default config should delete leave messages");
+        }
     }
 
     [Test]
@@ -141,9 +159,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     #endregion
@@ -164,9 +185,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True);
+        }
     }
 
     [Test]
@@ -183,9 +207,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True);
+        }
     }
 
     [Test]
@@ -202,9 +229,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     #endregion
@@ -225,9 +255,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True);
+        }
     }
 
     [Test]
@@ -244,9 +277,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     #endregion
@@ -267,9 +303,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True);
+        }
     }
 
     [Test]
@@ -286,9 +325,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     #endregion
@@ -309,9 +351,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True);
+        }
     }
 
     [Test]
@@ -328,9 +373,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True);
+        }
     }
 
     [Test]
@@ -347,9 +395,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.True);
+        }
     }
 
     [Test]
@@ -366,9 +417,12 @@ public class ServiceMessageHelperTests
         // Act
         var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
 
-        // Assert
-        Assert.That(isServiceMessage, Is.True);
-        Assert.That(shouldDelete, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(isServiceMessage, Is.True);
+            Assert.That(shouldDelete, Is.False);
+        }
     }
 
     #endregion
@@ -403,8 +457,11 @@ public class ServiceMessageHelperTests
         foreach (var message in messages)
         {
             var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
-            Assert.That(isServiceMessage, Is.True, $"Message should be recognized as service message");
-            Assert.That(shouldDelete, Is.False, $"shouldDelete should be false when config disabled");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(isServiceMessage, Is.True, $"Message should be recognized as service message");
+                Assert.That(shouldDelete, Is.False, $"shouldDelete should be false when config disabled");
+            }
         }
     }
 
@@ -428,8 +485,11 @@ public class ServiceMessageHelperTests
         foreach (var message in messages)
         {
             var isServiceMessage = ServiceMessageHelper.IsServiceMessage(message, config, out var shouldDelete);
-            Assert.That(isServiceMessage, Is.True);
-            Assert.That(shouldDelete, Is.True, "Default config should delete all service messages");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(isServiceMessage, Is.True);
+                Assert.That(shouldDelete, Is.True, "Default config should delete all service messages");
+            }
         }
     }
 

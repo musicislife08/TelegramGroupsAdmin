@@ -65,7 +65,7 @@ public class DashboardTests : AuthenticatedTestBase
         var imagesCount = await _homePage.GetImagesCountAsync();
         var dataRange = await _homePage.GetDataRangeAsync();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(totalMessages, Is.Not.Null.And.Not.Empty,
                 "Total Messages stat should have a value");
@@ -75,7 +75,7 @@ public class DashboardTests : AuthenticatedTestBase
                 "Images stat should have a value");
             Assert.That(dataRange, Is.Not.Null.And.Not.Empty,
                 "Data Range stat should have a value");
-        });
+        }
     }
 
     [Test]
@@ -119,13 +119,16 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        // Assert - quick action buttons are visible
-        // Note: Using sequential assertions instead of Assert.Multiple because
-        // async lambdas don't work correctly with Assert.Multiple (NUnit doesn't await them)
-        Assert.That(await _homePage.IsViewMessagesButtonVisibleAsync(), Is.True,
-            "View Messages button should be visible");
-        Assert.That(await _homePage.IsRefreshButtonVisibleAsync(), Is.True,
-            "Refresh button should be visible");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - quick action buttons are visible
+            // Note: Using sequential assertions instead of Assert.Multiple because
+            // async lambdas don't work correctly with Assert.Multiple (NUnit doesn't await them)
+            Assert.That(await _homePage.IsViewMessagesButtonVisibleAsync(), Is.True,
+                "View Messages button should be visible");
+            Assert.That(await _homePage.IsRefreshButtonVisibleAsync(), Is.True,
+                "Refresh button should be visible");
+        }
     }
 
     [Test]
@@ -220,14 +223,17 @@ public class DashboardTests : AuthenticatedTestBase
         var trustedUsers = await _homePage.GetTrustedUsersAsync();
         var pendingReports = await _homePage.GetPendingReportsCountAsync();
 
-        Assert.That(spamToday, Is.Not.Null.And.Not.Empty,
-            "Spam Today stat should have a value");
-        Assert.That(activeBans, Is.Not.Null.And.Not.Empty,
-            "Active Bans stat should have a value");
-        Assert.That(trustedUsers, Is.Not.Null.And.Not.Empty,
-            "Trusted Users stat should have a value");
-        Assert.That(pendingReports, Is.Not.Null.And.Not.Empty,
-            "Pending Reports stat should have a value");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(spamToday, Is.Not.Null.And.Not.Empty,
+                      "Spam Today stat should have a value");
+            Assert.That(activeBans, Is.Not.Null.And.Not.Empty,
+                "Active Bans stat should have a value");
+            Assert.That(trustedUsers, Is.Not.Null.And.Not.Empty,
+                "Trusted Users stat should have a value");
+            Assert.That(pendingReports, Is.Not.Null.And.Not.Empty,
+                "Pending Reports stat should have a value");
+        }
     }
 
     [Test]

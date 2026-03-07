@@ -5,7 +5,6 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Core.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Extensions;
@@ -61,9 +60,6 @@ public static class ServiceCollectionExtensions
             // Register prompt version repository (Phase 4.X: AI-powered prompt builder)
             services.AddScoped<IPromptVersionRepository, PromptVersionRepository>();
 
-            // Register threshold recommendations repository (ML.NET threshold optimization)
-            services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>();
-
             // Register unified reports repository (handles Reports, ImpersonationAlerts, ExamFailures)
             services.AddScoped<IReportsRepository, ReportsRepository>();
 
@@ -83,13 +79,14 @@ public static class ServiceCollectionExtensions
             // Register file scanning utilities
             services.AddScoped<IFileScanningTestService, FileScanningTestService>();  // UI testing service
 
-            // Register ML.NET threshold optimization services
-            services.AddSingleton<FeatureExtractionService>();
-            services.AddScoped<IThresholdRecommendationService, ThresholdRecommendationService>();
+            // Register ML.NET recommendation services
             services.AddScoped<IStopWordRecommendationService, StopWordRecommendationService>(); // ML-6: Stop word recommendations
 
             // Register ML.NET text classifier (Singleton: thread-safe model loading/retraining)
             services.AddSingleton<IMLTextClassifierService, MLTextClassifierService>();
+
+            // Register Bayes classifier (Singleton: thread-safe with atomic model swapping)
+            services.AddSingleton<IBayesClassifierService, BayesClassifierService>();
 
             // Register stop words repository
             services.AddScoped<IStopWordsRepository, StopWordsRepository>();
@@ -117,6 +114,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IContentCheckV2, Checks.ImageContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.VideoContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.FileScanningCheckV2>();  // Phase 4.17: File scanning (always_run=true)
+            services.AddScoped<IContentCheckV2, Checks.ChannelReplyContentCheckV2>();
 
             // Register HTTP client for external API calls
             services.AddHttpClient();

@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -14,7 +14,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramBotService(
     IMessageProcessingService messageProcessingService,
-    IChatManagementService chatManagementService,
+    IChatHealthCache chatHealthCache,
     ILogger<TelegramBotService> logger) : ITelegramBotService
 {
     private User? _botUserInfo;
@@ -32,7 +32,7 @@ public class TelegramBotService(
         remove => messageProcessingService.OnMessageEdited -= value;
     }
 
-    public event Action<long, MediaType>? OnMediaUpdated
+    public event Action<int, MediaType>? OnMediaUpdated
     {
         add => messageProcessingService.OnMediaUpdated += value;
         remove => messageProcessingService.OnMediaUpdated -= value;
@@ -40,8 +40,8 @@ public class TelegramBotService(
 
     public event Action<ChatHealthStatus>? OnHealthUpdate
     {
-        add => chatManagementService.OnHealthUpdate += value;
-        remove => chatManagementService.OnHealthUpdate -= value;
+        add => chatHealthCache.OnHealthUpdate += value;
+        remove => chatHealthCache.OnHealthUpdate -= value;
     }
 
     /// <summary>
@@ -67,7 +67,7 @@ public class TelegramBotService(
         {
             logger.LogInformation(
                 "Bot identity set: {BotDisplayName}",
-                LogDisplayName.UserInfo(user.FirstName, user.LastName, user.Username, user.Id));
+                user.ToLogInfo());
         }
         else
         {

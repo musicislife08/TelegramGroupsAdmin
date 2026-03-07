@@ -4,7 +4,8 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.Settings;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -68,7 +69,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
         bool showLibraryHint = true)
     {
         return Render<BanCelebrationChatSettings>(parameters => parameters
-            .Add(p => p.ChatId, chatId)
+            .Add(p => p.Chat, ChatIdentity.FromId(chatId))
             .Add(p => p.ShowLibraryHint, showLibraryHint));
     }
 
@@ -122,7 +123,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
     }
 
     [Test]
-    public async Task EnableToggle_DefaultsToDisabled()
+    public void EnableToggle_DefaultsToDisabled()
     {
         // Arrange
         ConfigService.GetAsync<BanCelebrationConfig>(
@@ -131,10 +132,7 @@ public class BanCelebrationChatSettingsTests : BanCelebrationChatSettingsTestCon
 
         // Act
         var cut = RenderComponent();
-
-        // Wait for async load
-        await Task.Delay(50);
-        cut.Render();
+        cut.WaitForState(() => cut.Markup.Contains("mud-switch"));
 
         // Assert - Trigger options should not be visible when disabled
         Assert.That(cut.Markup, Does.Not.Contain("Trigger on auto-ban"));

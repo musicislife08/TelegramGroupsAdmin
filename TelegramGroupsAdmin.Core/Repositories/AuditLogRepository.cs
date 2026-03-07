@@ -48,12 +48,8 @@ public class AuditLogRepository : IAuditLogRepository
         context.AuditLogs.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
-        // Format actor for logging
-        var actorDisplay = actor.SystemIdentifier ?? actor.WebUserId ?? actor.TelegramUserId?.ToString() ?? "UNKNOWN";
-        var targetDisplay = target?.SystemIdentifier ?? target?.WebUserId ?? target?.TelegramUserId?.ToString() ?? "N/A";
-
         _logger.LogInformation("Audit log: {EventType} by {Actor} on {Target}",
-            eventType, actorDisplay, targetDisplay);
+            eventType, actor.GetDisplayText(), target?.GetDisplayText() ?? "N/A");
     }
 
     public async Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)

@@ -4,9 +4,8 @@
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Constants
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
 @inject NavigationManager Navigation
-@inject IBlazorAuthHelper AuthHelper
 @implements IDisposable
 
 <PageTitle>Settings</PageTitle>
@@ -47,6 +46,7 @@
                     @if (_canEditInfrastructure)
                     {
                         <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.BotConfig)" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.BotConfigTitle</MudNavLink>
+                        <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.UserApi)" Icon="@Icons.Material.Filled.Api" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.UserApiTitle</MudNavLink>
                     }
                     <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.ServiceMessages)" Icon="@Icons.Material.Filled.CleaningServices" Match="NavLinkMatch.All">@SettingsRoutes.Telegram.ServiceMessagesTitle</MudNavLink>
                 </MudNavGroup>
@@ -67,7 +67,6 @@
                 <!-- Content Detection Group -->
                 <MudNavGroup Title="Content Detection" Icon="@Icons.Material.Filled.Shield" Expanded="@_contentDetectionExpanded" ExpandedChanged="@((bool expanded) => _contentDetectionExpanded = expanded)">
                     <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Algorithms)" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.AlgorithmsTitle</MudNavLink>
-                    <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Tuning)" Icon="@Icons.Material.Filled.Insights" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.TuningTitle</MudNavLink>
                     <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.AiIntegration)" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.AiIntegrationTitle</MudNavLink>
                     <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.UrlFilters)" Icon="@Icons.Material.Filled.Link" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.UrlFiltersTitle</MudNavLink>
                     <MudNavLink Href="@SettingsRoutes.BuildPath(SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.FileScanning)" Icon="@Icons.Material.Filled.Scanner" Match="NavLinkMatch.All">@SettingsRoutes.ContentDetection.FileScanningTitle</MudNavLink>
@@ -207,6 +206,16 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
+                        case SettingsRoutes.Telegram.UserApi:
+                            @if (_canEditInfrastructure)
+                            {
+                                <UserApiSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
                         case SettingsRoutes.Telegram.ServiceMessages:
                             <ServiceMessageDeletionSettings />
                             break;
@@ -270,9 +279,6 @@
                         case SettingsRoutes.ContentDetection.Algorithms:
                             <DetectionOverview />
                             break;
-                        case SettingsRoutes.ContentDetection.Tuning:
-                            <AlgorithmTuning />
-                            break;
                         case SettingsRoutes.ContentDetection.AiIntegration:
                             <AIIntegrationSettings />
                             break;
@@ -312,6 +318,8 @@
 </MudGrid>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     [Parameter]
     public string? Section { get; set; }
 
@@ -334,12 +342,14 @@
     private bool _canEditInfrastructure;
     private bool _canEditContent;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        // Load permission flags
-        _canManageAdminAccounts = await AuthHelper.CanManageAdminAccountsAsync();
-        _canEditInfrastructure = await AuthHelper.CanEditInfrastructureAsync();
-        _canEditContent = await AuthHelper.CanEditContentSettingsAsync();
+        if (WebUser is null) return;
+
+        // Load permission flags from cascading WebUser
+        _canManageAdminAccounts = WebUser.IsGlobalAdminOrHigher;
+        _canEditInfrastructure = WebUser.IsOwner;
+        _canEditContent = WebUser.IsGlobalAdminOrHigher;
 
         UpdateCurrentSection();
         Navigation.LocationChanged += OnLocationChanged;
@@ -380,6 +390,7 @@
 
             // Telegram
             (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.BotConfig) => SettingsRoutes.Telegram.BotConfigTitle,
+            (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.UserApi) => SettingsRoutes.Telegram.UserApiTitle,
             (SettingsRoutes.Telegram.Section, SettingsRoutes.Telegram.ServiceMessages) => SettingsRoutes.Telegram.ServiceMessagesTitle,
 
             // Notifications
@@ -390,7 +401,6 @@
 
             // Content Detection
             (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Algorithms) => SettingsRoutes.ContentDetection.AlgorithmsTitle,
-            (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.Tuning) => SettingsRoutes.ContentDetection.TuningTitle,
             (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.AiIntegration) => SettingsRoutes.ContentDetection.AiIntegrationTitle,
             (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.UrlFilters) => SettingsRoutes.ContentDetection.UrlFiltersTitle,
             (SettingsRoutes.ContentDetection.Section, SettingsRoutes.ContentDetection.FileScanning) => SettingsRoutes.ContentDetection.FileScanningTitle,

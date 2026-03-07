@@ -45,7 +45,7 @@ public interface IManagedChatsRepository
     /// Mark chat as inactive (bot was removed/kicked)
     /// Soft delete - preserves settings for if bot rejoins
     /// </summary>
-    Task MarkInactiveAsync(long chatId, CancellationToken cancellationToken = default);
+    Task MarkInactiveAsync(ChatIdentity chat, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update last_seen_at timestamp for a chat

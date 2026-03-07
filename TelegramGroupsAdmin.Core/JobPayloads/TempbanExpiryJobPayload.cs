@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
@@ -6,6 +8,6 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// Allows user to use invite links to rejoin chats
 /// </summary>
 public record TempbanExpiryJobPayload(
-    long UserId,
+    UserIdentity User,
     string Reason,
     DateTimeOffset ExpiresAt);

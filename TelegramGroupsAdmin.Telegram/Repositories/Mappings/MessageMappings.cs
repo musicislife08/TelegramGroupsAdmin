@@ -23,11 +23,8 @@ public static class MessageMappings
             string? replyToText,
             MessageTranslation? translation = null) => new(
             MessageId: data.MessageId,
-            UserId: data.UserId,
-            UserName: userName,
-            FirstName: firstName,
-            LastName: lastName,
-            ChatId: data.ChatId,
+            User: new UserIdentity(data.UserId, firstName, lastName, userName),
+            Chat: new ChatIdentity(data.ChatId, chatName),
             Timestamp: data.Timestamp,
             MessageText: data.MessageText,
             PhotoFileId: data.PhotoFileId,
@@ -35,7 +32,6 @@ public static class MessageMappings
             Urls: data.Urls,
             EditDate: data.EditDate,
             ContentHash: data.ContentHash,
-            ChatName: chatName,
             PhotoLocalPath: data.PhotoLocalPath,
             PhotoThumbnailPath: data.PhotoThumbnailPath,
             ChatIconPath: chatIconPath,
@@ -65,8 +61,8 @@ public static class MessageMappings
         public DataModels.MessageRecordDto ToDto() => new()
         {
             MessageId = ui.MessageId,
-            UserId = ui.UserId,
-            ChatId = ui.ChatId,
+            UserId = ui.User.Id,
+            ChatId = ui.Chat.Id,
             Timestamp = ui.Timestamp,
             MessageText = ui.MessageText,
             PhotoFileId = ui.PhotoFileId,

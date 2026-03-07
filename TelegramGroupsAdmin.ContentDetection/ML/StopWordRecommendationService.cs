@@ -2,9 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Data;
@@ -14,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// <summary>
 /// ML-powered service for generating stop word recommendations
 /// Analyzes spam/ham corpus to suggest additions, removals, and performance cleanup
-/// Follows ThresholdRecommendationService pattern
+/// Analyzes detection results to produce actionable stop word changes
 /// </summary>
 public class StopWordRecommendationService : IStopWordRecommendationService
 {
@@ -128,7 +126,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         var legitMessageCount = await dbContext.Messages
             .AsNoTracking()
             .Where(m => m.Timestamp >= since)
-            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.IsSpam))
+            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.ChatId == m.ChatId && d.IsSpam))
             .CountAsync(cancellationToken);
 
         // Count total detection results (for precision analysis)
@@ -210,7 +208,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         var legitMessages = await dbContext.Messages
             .AsNoTracking()
             .Where(m => m.Timestamp >= since)
-            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.IsSpam))
+            .Where(m => !dbContext.DetectionResults.Any(d => d.MessageId == m.MessageId && d.ChatId == m.ChatId && d.IsSpam))
             .Select(m => new
             {
                 MessageId = m.MessageId,
@@ -242,10 +240,9 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         }
 
         // Step 4: Get existing stop words to filter them out
+        var allStopWords = await _stopWordsRepository.GetAllStopWordsAsync(cancellationToken);
         var existingStopWords = new HashSet<string>(
-            await _stopWordsRepository.GetAllStopWordsAsync(cancellationToken).ContinueWith(
-                t => t.Result.Select(sw => sw.Word),
-                cancellationToken),
+            allStopWords.Select(sw => sw.Word),
             StringComparer.OrdinalIgnoreCase);
 
         // Step 5: Calculate frequencies and filter candidates
@@ -340,7 +337,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
                     continue;
 
                 // Check if this stop word triggered (appears in the Reason field)
-                var triggered = stopWordsCheck.Reason?.Contains(wordLower, StringComparison.OrdinalIgnoreCase) ?? false;
+                var triggered = stopWordsCheck.Details?.Contains(wordLower, StringComparison.OrdinalIgnoreCase) ?? false;
 
                 if (!triggered)
                     continue;

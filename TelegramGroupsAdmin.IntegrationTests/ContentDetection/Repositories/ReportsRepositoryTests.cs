@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Data;
@@ -79,7 +77,7 @@ public class ReportsRepositoryTests
         return new Report(
             Id: id,
             MessageId: messageId,
-            ChatId: chatId,
+            Chat: new ChatIdentity(chatId, "TestChat"),
             ReportCommandMessageId: 99999,
             ReportedByUserId: reportedByUserId,
             ReportedByUserName: "TestUser",
@@ -116,10 +114,13 @@ public class ReportsRepositoryTests
 
         var updated = await _repository.GetByIdAsync(reportId);
         Assert.That(updated, Is.Not.Null);
-        Assert.That(updated!.Status, Is.EqualTo(ReportStatus.Reviewed));
-        Assert.That(updated.ReviewedBy, Is.EqualTo("admin@test.com"));
-        Assert.That(updated.ActionTaken, Is.EqualTo("Spam"));
-        Assert.That(updated.AdminNotes, Is.EqualTo("Marked as spam"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated!.Status, Is.EqualTo(ReportStatus.Reviewed));
+            Assert.That(updated.ReviewedBy, Is.EqualTo("admin@test.com"));
+            Assert.That(updated.ActionTaken, Is.EqualTo("Spam"));
+            Assert.That(updated.AdminNotes, Is.EqualTo("Marked as spam"));
+        }
     }
 
     [Test]
@@ -148,8 +149,11 @@ public class ReportsRepositoryTests
 
         // Verify original values preserved
         var finalReport = await _repository.GetByIdAsync(reportId);
-        Assert.That(finalReport!.ReviewedBy, Is.EqualTo("first-admin@test.com"));
-        Assert.That(finalReport.ActionTaken, Is.EqualTo("Spam"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(finalReport!.ReviewedBy, Is.EqualTo("first-admin@test.com"));
+            Assert.That(finalReport.ActionTaken, Is.EqualTo("Spam"));
+        }
     }
 
     [Test]
@@ -182,17 +186,20 @@ public class ReportsRepositoryTests
             reportId,
             ReportStatus.Dismissed,
             reviewedBy: "moderator@example.com",
-            actionTaken: "FalsePositive",
+            actionTaken: "Dismiss",
             notes: "Not spam, legitimate message");
 
         // Assert
         var updated = await _repository.GetByIdAsync(reportId);
         Assert.That(updated, Is.Not.Null);
-        Assert.That(updated!.Status, Is.EqualTo(ReportStatus.Dismissed));
-        Assert.That(updated.ReviewedBy, Is.EqualTo("moderator@example.com"));
-        Assert.That(updated.ActionTaken, Is.EqualTo("FalsePositive"));
-        Assert.That(updated.AdminNotes, Is.EqualTo("Not spam, legitimate message"));
-        Assert.That(updated.ReviewedAt, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updated!.Status, Is.EqualTo(ReportStatus.Dismissed));
+            Assert.That(updated.ReviewedBy, Is.EqualTo("moderator@example.com"));
+            Assert.That(updated.ActionTaken, Is.EqualTo("Dismiss"));
+            Assert.That(updated.AdminNotes, Is.EqualTo("Not spam, legitimate message"));
+            Assert.That(updated.ReviewedAt, Is.Not.Null);
+        }
         Assert.That(updated.ReviewedAt!.Value, Is.GreaterThanOrEqualTo(beforeUpdate));
     }
 
@@ -298,11 +305,14 @@ public class ReportsRepositoryTests
 
         // Assert
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.Id, Is.EqualTo(reportId));
-        Assert.That(retrieved.MessageId, Is.EqualTo(54321));
-        Assert.That(retrieved.ChatId, Is.EqualTo(-1009876543210));
-        Assert.That(retrieved.ReportedByUserId, Is.EqualTo(111222333));
-        Assert.That(retrieved.Status, Is.EqualTo(ReportStatus.Pending));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.Id, Is.EqualTo(reportId));
+            Assert.That(retrieved.MessageId, Is.EqualTo(54321));
+            Assert.That(retrieved.Chat.Id, Is.EqualTo(-1009876543210));
+            Assert.That(retrieved.ReportedByUserId, Is.EqualTo(111222333));
+            Assert.That(retrieved.Status, Is.EqualTo(ReportStatus.Pending));
+        }
     }
 
     [Test]
@@ -382,8 +392,8 @@ public class ReportsRepositoryTests
     {
         return new ExamFailureRecord
         {
-            ChatId = chatId,
-            UserId = userId,
+            User = new UserIdentity(userId, "Test", "User", null),
+            Chat = new ChatIdentity(chatId, "Test Chat"),
             McAnswers = mcAnswers ?? new Dictionary<int, string>
             {
                 { 0, "A" },
@@ -434,12 +444,15 @@ public class ReportsRepositoryTests
 
         // Assert
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.Id, Is.EqualTo(id));
-        Assert.That(retrieved.ChatId, Is.EqualTo(-1009876543210));
-        Assert.That(retrieved.UserId, Is.EqualTo(111222333));
-        Assert.That(retrieved.Score, Is.EqualTo(60));
-        Assert.That(retrieved.PassingThreshold, Is.EqualTo(80));
-        Assert.That(retrieved.OpenEndedAnswer, Is.EqualTo("I want to learn about crypto trading"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.Id, Is.EqualTo(id));
+            Assert.That(retrieved.Chat.Id, Is.EqualTo(-1009876543210));
+            Assert.That(retrieved.User.Id, Is.EqualTo(111222333));
+            Assert.That(retrieved.Score, Is.EqualTo(60));
+            Assert.That(retrieved.PassingThreshold, Is.EqualTo(80));
+            Assert.That(retrieved.OpenEndedAnswer, Is.EqualTo("I want to learn about crypto trading"));
+        }
     }
 
     [Test]
@@ -472,15 +485,21 @@ public class ReportsRepositoryTests
 
         // Assert - JSONB should roundtrip correctly
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.McAnswers, Is.Not.Null);
-        Assert.That(retrieved.McAnswers!.Count, Is.EqualTo(4));
-        Assert.That(retrieved.McAnswers[0], Is.EqualTo("A"));
-        Assert.That(retrieved.McAnswers[3], Is.EqualTo("C"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.McAnswers, Is.Not.Null);
+            Assert.That(retrieved.McAnswers!.Count, Is.EqualTo(4));
+            Assert.That(retrieved.McAnswers[0], Is.EqualTo("A"));
+            Assert.That(retrieved.McAnswers[3], Is.EqualTo("C"));
 
-        Assert.That(retrieved.ShuffleState, Is.Not.Null);
-        Assert.That(retrieved.ShuffleState!.Count, Is.EqualTo(4));
-        Assert.That(retrieved.ShuffleState[0], Is.EqualTo(new[] { 3, 2, 1, 0 }));
-        Assert.That(retrieved.ShuffleState[2], Is.EqualTo(new[] { 1, 0, 3, 2 }));
+            Assert.That(retrieved.ShuffleState, Is.Not.Null);
+        }
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved.ShuffleState!.Count, Is.EqualTo(4));
+            Assert.That(retrieved.ShuffleState[0], Is.EqualTo(new[] { 3, 2, 1, 0 }));
+            Assert.That(retrieved.ShuffleState[2], Is.EqualTo(new[] { 1, 0, 3, 2 }));
+        }
     }
 
     [Test]
@@ -505,7 +524,7 @@ public class ReportsRepositoryTests
 
         // Assert - only the unreviewed one
         Assert.That(pending, Has.Count.EqualTo(1));
-        Assert.That(pending[0].UserId, Is.EqualTo(2));
+        Assert.That(pending[0].User.Id, Is.EqualTo(2));
     }
 
     [Test]
@@ -547,7 +566,7 @@ public class ReportsRepositoryTests
 
         // Assert
         Assert.That(pending, Has.Count.EqualTo(2));
-        Assert.That(pending.All(p => p.ChatId == targetChatId), Is.True);
+        Assert.That(pending.All(p => p.Chat.Id == targetChatId), Is.True);
     }
 
     #endregion
@@ -567,9 +586,9 @@ public class ReportsRepositoryTests
     {
         return new ImpersonationAlertRecord
         {
-            SuspectedUserId = suspectedUserId,
-            TargetUserId = targetUserId,
-            ChatId = chatId,
+            SuspectedUser = new UserIdentity(suspectedUserId, "Suspected", "User", null),
+            TargetUser = new UserIdentity(targetUserId, "Target", "Admin", null),
+            Chat = new ChatIdentity(chatId, "Test Chat"),
             TotalScore = totalScore,
             RiskLevel = riskLevel,
             NameMatch = nameMatch,
@@ -609,11 +628,14 @@ public class ReportsRepositoryTests
 
         // Assert
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.Id, Is.EqualTo((int)id));
-        Assert.That(retrieved.SuspectedUserId, Is.EqualTo(333333333));
-        Assert.That(retrieved.TargetUserId, Is.EqualTo(444444444));
-        Assert.That(retrieved.TotalScore, Is.EqualTo(75));
-        Assert.That(retrieved.RiskLevel, Is.EqualTo(ImpersonationRiskLevel.Medium));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.Id, Is.EqualTo((int)id));
+            Assert.That(retrieved.SuspectedUser.Id, Is.EqualTo(333333333));
+            Assert.That(retrieved.TargetUser.Id, Is.EqualTo(444444444));
+            Assert.That(retrieved.TotalScore, Is.EqualTo(75));
+            Assert.That(retrieved.RiskLevel, Is.EqualTo(ImpersonationRiskLevel.Medium));
+        }
     }
 
     [Test]
@@ -658,7 +680,7 @@ public class ReportsRepositoryTests
             id,
             ReportStatus.Reviewed,
             reviewedBy: "admin@test.com",
-            actionTaken: "ConfirmScam");
+            actionTaken: "Confirm");
 
         // Act
         var hasPending = await _repository.HasPendingImpersonationAlertAsync(suspectedUserId);
@@ -686,7 +708,7 @@ public class ReportsRepositoryTests
 
         // Assert
         Assert.That(history, Has.Count.EqualTo(2));
-        Assert.That(history.All(h => h.SuspectedUserId == suspectedUserId), Is.True);
+        Assert.That(history.All(h => h.SuspectedUser.Id == suspectedUserId), Is.True);
     }
 
     [Test]

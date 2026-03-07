@@ -14,7 +14,7 @@ public class DetectionResultRecordDto
     public long Id { get; set; }
 
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     [Column("detected_at")]
     public DateTimeOffset DetectedAt { get; set; }
@@ -32,8 +32,8 @@ public class DetectionResultRecordDto
     [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
     public bool IsSpam { get; set; }
 
-    [Column("confidence")]
-    public int Confidence { get; set; }
+    [Column("score")]
+    public double Score { get; set; }
 
     [Column("reason")]
     public string? Reason { get; set; }
@@ -53,9 +53,9 @@ public class DetectionResultRecordDto
     [Column("used_for_training")]
     public bool UsedForTraining { get; set; } = true;
 
-    [Column("net_confidence")]
+    [Column("net_score")]
     [Required]
-    public int NetConfidence { get; set; }
+    public double NetScore { get; set; }
 
     [Column("check_results_json", TypeName = "jsonb")]
     public string? CheckResultsJson { get; set; }
@@ -63,7 +63,9 @@ public class DetectionResultRecordDto
     [Column("edit_version")]
     public int EditVersion { get; set; }
 
+    [Column("chat_id")]
+    public long ChatId { get; set; }
+
     // Navigation property
-    [ForeignKey(nameof(MessageId))]
     public virtual MessageRecordDto? Message { get; set; }
 }

@@ -48,6 +48,12 @@ public static class BackgroundJobNames
     /// </summary>
     public const string TextClassifierRetraining = "TextClassifierRetrainingJob";
 
+    /// <summary>
+    /// Bayes classifier retraining (retrains Naive Bayes spam model with latest data)
+    /// Quartz Job: BayesClassifierRetrainingJob
+    /// </summary>
+    public const string BayesClassifierRetraining = "BayesClassifierRetrainingJob";
+
     // ============================================
     // Ad-Hoc Jobs (one-time delayed execution)
     // ============================================
@@ -95,8 +101,18 @@ public static class BackgroundJobNames
     public const string WelcomeTimeout = "WelcomeTimeout";
 
     /// <summary>
-    /// Send notification to a Telegram chat (admin alerts, system messages)
-    /// Quartz Job: SendChatNotificationJob
+    /// On-demand profile scan triggered by profile diff detection or manual re-scan.
+    /// Quartz Job: ProfileScanJob
     /// </summary>
-    public const string SendChatNotification = "SendChatNotification";
+    public const string ProfileScan = "ProfileScan";
+
+    // ============================================
+    // Scheduled Jobs (cron-based, UI-configurable)
+    // ============================================
+
+    /// <summary>
+    /// Periodic re-scan of user profiles to detect changes (bio, channel, stories).
+    /// Quartz Job: ProfileRescanJob
+    /// </summary>
+    public const string ProfileRescan = "ProfileRescanJob";
 }

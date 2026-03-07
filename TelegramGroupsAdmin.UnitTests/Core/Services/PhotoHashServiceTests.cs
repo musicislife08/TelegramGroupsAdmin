@@ -248,8 +248,11 @@ public class PhotoHashServiceTests
         var hash32 = await _service.ComputePhotoHashAsync(_splitPattern32);
         var hash64 = await _service.ComputePhotoHashAsync(_splitPattern64);
 
-        Assert.That(hash32, Is.Not.Null);
-        Assert.That(hash64, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hash32, Is.Not.Null);
+            Assert.That(hash64, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hash32!, hash64!);
         Assert.That(similarity, Is.EqualTo(1.0), "32x32 and 64x64 should produce identical hashes");
@@ -261,8 +264,11 @@ public class PhotoHashServiceTests
         var hash64 = await _service.ComputePhotoHashAsync(_splitPattern64);
         var hash128 = await _service.ComputePhotoHashAsync(_splitPattern128);
 
-        Assert.That(hash64, Is.Not.Null);
-        Assert.That(hash128, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hash64, Is.Not.Null);
+            Assert.That(hash128, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hash64!, hash128!);
         Assert.That(similarity, Is.EqualTo(1.0), "64x64 and 128x128 should produce identical hashes");
@@ -274,8 +280,11 @@ public class PhotoHashServiceTests
         var hash32 = await _service.ComputePhotoHashAsync(_splitPattern32);
         var hash128 = await _service.ComputePhotoHashAsync(_splitPattern128);
 
-        Assert.That(hash32, Is.Not.Null);
-        Assert.That(hash128, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hash32, Is.Not.Null);
+            Assert.That(hash128, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hash32!, hash128!);
         Assert.That(similarity, Is.EqualTo(1.0), "32x32 and 128x128 should produce identical hashes");
@@ -291,8 +300,11 @@ public class PhotoHashServiceTests
         var hashPng = await _service.ComputePhotoHashAsync(_patternPng);
         var hashJpeg = await _service.ComputePhotoHashAsync(_patternJpeg90);
 
-        Assert.That(hashPng, Is.Not.Null);
-        Assert.That(hashJpeg, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashPng, Is.Not.Null);
+            Assert.That(hashJpeg, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hashPng!, hashJpeg!);
         Assert.That(similarity, Is.GreaterThanOrEqualTo(0.95),
@@ -305,8 +317,11 @@ public class PhotoHashServiceTests
         var hashPng = await _service.ComputePhotoHashAsync(_patternPng);
         var hashJpeg = await _service.ComputePhotoHashAsync(_patternJpeg50);
 
-        Assert.That(hashPng, Is.Not.Null);
-        Assert.That(hashJpeg, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashPng, Is.Not.Null);
+            Assert.That(hashJpeg, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hashPng!, hashJpeg!);
         Assert.That(similarity, Is.GreaterThanOrEqualTo(0.90),
@@ -319,8 +334,11 @@ public class PhotoHashServiceTests
         var hashPng = await _service.ComputePhotoHashAsync(_patternPng);
         var hashJpeg = await _service.ComputePhotoHashAsync(_patternJpeg10);
 
-        Assert.That(hashPng, Is.Not.Null);
-        Assert.That(hashJpeg, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashPng, Is.Not.Null);
+            Assert.That(hashJpeg, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hashPng!, hashJpeg!);
         // Heavy compression may introduce more artifacts, but should still match
@@ -335,8 +353,11 @@ public class PhotoHashServiceTests
         var hashOriginal = await _service.ComputePhotoHashAsync(_patternPng);
         var hashReEncoded = await _service.ComputePhotoHashAsync(_patternJpeg90);
 
-        Assert.That(hashOriginal, Is.Not.Null);
-        Assert.That(hashReEncoded, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashOriginal, Is.Not.Null);
+            Assert.That(hashReEncoded, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hashOriginal!, hashReEncoded!);
         Assert.That(similarity, Is.GreaterThanOrEqualTo(0.95),
@@ -353,8 +374,11 @@ public class PhotoHashServiceTests
         var hashNormal = await _service.ComputePhotoHashAsync(_normalBrightness);
         var hashBrighter = await _service.ComputePhotoHashAsync(_brighterVersion);
 
-        Assert.That(hashNormal, Is.Not.Null);
-        Assert.That(hashBrighter, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashNormal, Is.Not.Null);
+            Assert.That(hashBrighter, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hashNormal!, hashBrighter!);
         Assert.That(similarity, Is.GreaterThanOrEqualTo(0.90),
@@ -367,8 +391,11 @@ public class PhotoHashServiceTests
         var hashNormal = await _service.ComputePhotoHashAsync(_normalBrightness);
         var hashDarker = await _service.ComputePhotoHashAsync(_darkerVersion);
 
-        Assert.That(hashNormal, Is.Not.Null);
-        Assert.That(hashDarker, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashNormal, Is.Not.Null);
+            Assert.That(hashDarker, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hashNormal!, hashDarker!);
         Assert.That(similarity, Is.GreaterThanOrEqualTo(0.90),
@@ -385,8 +412,11 @@ public class PhotoHashServiceTests
         var hashVertical = await _service.ComputePhotoHashAsync(_splitPattern64);
         var hashHorizontal = await _service.ComputePhotoHashAsync(_horizontalSplit);
 
-        Assert.That(hashVertical, Is.Not.Null);
-        Assert.That(hashHorizontal, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashVertical, Is.Not.Null);
+            Assert.That(hashHorizontal, Is.Not.Null);
+        }
 
         var similarity = _service.CompareHashes(hashVertical!, hashHorizontal!);
         // Different patterns should have low similarity (but not necessarily zero)
@@ -400,8 +430,11 @@ public class PhotoHashServiceTests
         var hashBlack = await _service.ComputePhotoHashAsync(_blackImagePath);
         var hashWhite = await _service.ComputePhotoHashAsync(_whiteImagePath);
 
-        Assert.That(hashBlack, Is.Not.Null);
-        Assert.That(hashWhite, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(hashBlack, Is.Not.Null);
+            Assert.That(hashWhite, Is.Not.Null);
+        }
 
         // Note: Solid color images may produce similar hashes (all pixels = average)
         // This test validates the hashes are computed, not necessarily different

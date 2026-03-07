@@ -98,10 +98,13 @@ public class LinkedChannelsRepositoryTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.ManagedChatId, Is.EqualTo(chatId));
-        Assert.That(result.ChannelId, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_ChannelId));
-        Assert.That(result.ChannelName, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_Name));
-        Assert.That(result.PhotoHash, Is.Not.Null, "Channel1 has photo hash in golden dataset");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.ManagedChatId, Is.EqualTo(chatId));
+            Assert.That(result.ChannelId, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_ChannelId));
+            Assert.That(result.ChannelName, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_Name));
+            Assert.That(result.PhotoHash, Is.Not.Null, "Channel1 has photo hash in golden dataset");
+        }
     }
 
     [Test]
@@ -132,8 +135,11 @@ public class LinkedChannelsRepositoryTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.ChannelId, Is.EqualTo(channelId));
-        Assert.That(result.ManagedChatId, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_ManagedChatId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.ChannelId, Is.EqualTo(channelId));
+            Assert.That(result.ManagedChatId, Is.EqualTo(GoldenDataset.LinkedChannels.Channel1_ManagedChatId));
+        }
     }
 
     [Test]
@@ -180,9 +186,12 @@ public class LinkedChannelsRepositoryTests
         // Assert - Verify it was inserted
         var retrieved = await _repository.GetByChatIdAsync(TestChatId);
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.ChannelId, Is.EqualTo(TestChannelId));
-        Assert.That(retrieved.ChannelName, Is.EqualTo(TestChannelName));
-        Assert.That(retrieved.PhotoHash, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.ChannelId, Is.EqualTo(TestChannelId));
+            Assert.That(retrieved.ChannelName, Is.EqualTo(TestChannelName));
+            Assert.That(retrieved.PhotoHash, Is.Not.Null);
+        }
     }
 
     [Test]
@@ -205,8 +214,11 @@ public class LinkedChannelsRepositoryTests
         // Assert - Verify it was updated
         var retrieved = await _repository.GetByChatIdAsync(GoldenDataset.LinkedChannels.Channel1_ManagedChatId);
         Assert.That(retrieved, Is.Not.Null);
-        Assert.That(retrieved!.ChannelName, Is.EqualTo("Updated Channel Name"));
-        Assert.That(retrieved.ChannelId, Is.EqualTo(existingRecord.ChannelId), "Channel ID should remain unchanged");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retrieved!.ChannelName, Is.EqualTo("Updated Channel Name"));
+            Assert.That(retrieved.ChannelId, Is.EqualTo(existingRecord.ChannelId), "Channel ID should remain unchanged");
+        }
     }
 
     #endregion
@@ -251,13 +263,16 @@ public class LinkedChannelsRepositoryTests
 
         // Assert - Golden dataset has 2 linked channels
         Assert.That(results, Is.Not.Null);
-        Assert.That(results.Count, Is.EqualTo(2), "Golden dataset should have 2 linked channels");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Count, Is.EqualTo(2), "Golden dataset should have 2 linked channels");
 
-        // Verify records are ordered by channel name
-        Assert.That(
-            string.Compare(results[0].ChannelName, results[1].ChannelName, StringComparison.Ordinal),
-            Is.LessThanOrEqualTo(0),
-            "Results should be ordered by channel name");
+            // Verify records are ordered by channel name
+            Assert.That(
+                string.Compare(results[0].ChannelName, results[1].ChannelName, StringComparison.Ordinal),
+                Is.LessThanOrEqualTo(0),
+                "Results should be ordered by channel name");
+        }
     }
 
     [Test]
@@ -271,9 +286,12 @@ public class LinkedChannelsRepositoryTests
         var channel2 = results.FirstOrDefault(r => r.ChannelId == GoldenDataset.LinkedChannels.Channel2_ChannelId);
 
         Assert.That(channel1, Is.Not.Null);
-        Assert.That(channel1!.PhotoHash, Is.Not.Null, "Channel1 should have photo hash");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(channel1!.PhotoHash, Is.Not.Null, "Channel1 should have photo hash");
 
-        Assert.That(channel2, Is.Not.Null);
+            Assert.That(channel2, Is.Not.Null);
+        }
         Assert.That(channel2!.PhotoHash, Is.Null, "Channel2 should not have photo hash");
     }
 

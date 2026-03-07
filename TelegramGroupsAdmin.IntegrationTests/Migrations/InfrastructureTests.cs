@@ -27,9 +27,12 @@ public class InfrastructureTests
             AND table_type = 'BASE TABLE'
         ");
 
-        Assert.That(tableCount, Is.Not.Null);
-        Assert.That(Convert.ToInt32(tableCount), Is.GreaterThan(0),
-            "Expected at least one table after applying migrations");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(tableCount, Is.Not.Null);
+            Assert.That(Convert.ToInt32(tableCount), Is.GreaterThan(0),
+                "Expected at least one table after applying migrations");
+        }
 
         // Verify specific critical tables exist
         var usersTableExists = await helper.ExecuteScalarAsync(@"
@@ -77,12 +80,15 @@ public class InfrastructureTests
 
         // Assert - Second database should have no users
         var count2 = await helper2.ExecuteScalarAsync("SELECT COUNT(*) FROM users");
-        Assert.That(Convert.ToInt32(count2), Is.EqualTo(0),
-            "Second database should be isolated from first database");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Convert.ToInt32(count2), Is.EqualTo(0),
+                      "Second database should be isolated from first database");
 
-        // Verify different database names
-        Assert.That(helper1.DatabaseName, Is.Not.EqualTo(helper2.DatabaseName),
-            "Each test should get a unique database name");
+            // Verify different database names
+            Assert.That(helper1.DatabaseName, Is.Not.EqualTo(helper2.DatabaseName),
+                "Each test should get a unique database name");
+        }
     }
 
     [Test]

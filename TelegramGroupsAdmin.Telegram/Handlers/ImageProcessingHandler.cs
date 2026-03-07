@@ -4,7 +4,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -14,17 +14,19 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class ImageProcessingHandler
 {
-    private readonly ITelegramBotClientFactory _botFactory;
-    private readonly MessageHistoryOptions _historyOptions;
+    private const int ThumbnailSize = 200;
+
+    private readonly IBotMediaService _mediaService;
+    private readonly string _dataPath;
     private readonly ILogger<ImageProcessingHandler> _logger;
 
     public ImageProcessingHandler(
-        ITelegramBotClientFactory botFactory,
-        IOptions<MessageHistoryOptions> historyOptions,
+        IBotMediaService mediaService,
+        IOptions<AppOptions> appOptions,
         ILogger<ImageProcessingHandler> logger)
     {
-        _botFactory = botFactory;
-        _historyOptions = historyOptions.Value;
+        _mediaService = mediaService;
+        _dataPath = appOptions.Value.DataPath;
         _logger = logger;
     }
 
@@ -50,12 +52,8 @@ public class ImageProcessingHandler
         var photoFileId = largestPhoto.FileId;
         var photoFileSize = largestPhoto.FileSize.HasValue ? (int)largestPhoto.FileSize.Value : (int?)null;
 
-        // Get operations from factory
-        var operations = await _botFactory.GetOperationsAsync();
-
         // Download and process image
         var (fullPath, thumbPath) = await DownloadAndProcessImageAsync(
-            operations,
             photoFileId,
             chatId,
             messageId,
@@ -79,16 +77,15 @@ public class ImageProcessingHandler
     /// Returns relative paths for database storage, or (null, null) on failure.
     /// </summary>
     private async Task<(string? fullPath, string? thumbPath)> DownloadAndProcessImageAsync(
-        ITelegramOperations operations,
         string photoFileId,
         long chatId,
-        long messageId,
+        int messageId,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            // Create directory structure: {ImageStoragePath}/media/full/{chat_id}/ and media/thumbs/{chat_id}/
-            var basePath = _historyOptions.ImageStoragePath;
+            // Create directory structure: {DataPath}/media/full/{chat_id}/ and media/thumbs/{chat_id}/
+            var basePath = _dataPath;
             var mediaPath = Path.Combine(basePath, "media");
             var fullDir = Path.Combine(mediaPath, "full", chatId.ToString());
             var thumbDir = Path.Combine(mediaPath, "thumbs", chatId.ToString());
@@ -101,7 +98,7 @@ public class ImageProcessingHandler
             var thumbPath = Path.Combine(thumbDir, fileName);
 
             // Download file from Telegram
-            var file = await operations.GetFileAsync(photoFileId, cancellationToken);
+            var file = await _mediaService.GetFileAsync(photoFileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for photo {FileId}", photoFileId);
@@ -114,7 +111,7 @@ public class ImageProcessingHandler
             {
                 await using (var fileStream = File.Create(tempPath))
                 {
-                    await operations.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
+                    await _mediaService.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Copy to full image location
@@ -123,7 +120,7 @@ public class ImageProcessingHandler
                 // Generate thumbnail using ImageSharp
                 using (var image = await Image.LoadAsync(tempPath, cancellationToken))
                 {
-                    var thumbnailSize = _historyOptions.ThumbnailSize;
+                    var thumbnailSize = ThumbnailSize;
                     image.Mutate(x => x.Resize(new ResizeOptions
                     {
                         Size = new Size(thumbnailSize, thumbnailSize),

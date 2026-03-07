@@ -18,14 +18,14 @@ public class ExamCriteriaBuilderServiceTests
         var prompt = ExamCriteriaBuilderService.BuildSystemPrompt();
 
         // Assert - verify key elements are present
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("evaluation criteria"));
             Assert.That(prompt, Does.Contain("ONE-SHOT evaluation"));
             Assert.That(prompt, Does.Contain("PASS"));
             Assert.That(prompt, Does.Contain("FAIL"));
             Assert.That(prompt, Does.Contain("human review queue"));
-        });
+        }
     }
 
     [Test]
@@ -66,11 +66,11 @@ public class ExamCriteriaBuilderServiceTests
         var prompt = ExamCriteriaBuilderService.BuildUserPrompt(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("Why do you want to join our community?"));
             Assert.That(prompt, Does.Contain("Software Development"));
-        });
+        }
     }
 
     [Test]
@@ -87,12 +87,12 @@ public class ExamCriteriaBuilderServiceTests
         var prompt = ExamCriteriaBuilderService.BuildUserPrompt(request);
 
         // Assert - verify XML structure for AI parsing
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("<group_context>"));
             Assert.That(prompt, Does.Contain("<exam_question>"));
             Assert.That(prompt, Does.Contain("<strictness_level>"));
-        });
+        }
     }
 
     #endregion
@@ -175,11 +175,11 @@ public class ExamCriteriaBuilderServiceTests
         var prompt = ExamCriteriaBuilderService.BuildUserPrompt(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("<admin_hints_for_good_answers>"));
             Assert.That(prompt, Does.Contain("Should mention specific technologies they use"));
-        });
+        }
     }
 
     [Test]
@@ -233,11 +233,11 @@ public class ExamCriteriaBuilderServiceTests
         var prompt = ExamCriteriaBuilderService.BuildUserPrompt(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("<admin_hints_for_failures>"));
             Assert.That(prompt, Does.Contain("Generic answers like 'just interested'"));
-        });
+        }
     }
 
     [Test]
@@ -274,13 +274,13 @@ public class ExamCriteriaBuilderServiceTests
         var prompt = ExamCriteriaBuilderService.BuildUserPrompt(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("<admin_hints_for_good_answers>"));
             Assert.That(prompt, Does.Contain("Mentions specific camera or genre"));
             Assert.That(prompt, Does.Contain("<admin_hints_for_failures>"));
             Assert.That(prompt, Does.Contain("One word answers"));
-        });
+        }
     }
 
     #endregion
@@ -301,12 +301,12 @@ public class ExamCriteriaBuilderServiceTests
         var prompt = ExamCriteriaBuilderService.BuildUserPrompt(request);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("PASS if answer:"));
             Assert.That(prompt, Does.Contain("FAIL if answer:"));
             Assert.That(prompt, Does.Contain("ONLY the criteria in plain text"));
-        });
+        }
     }
 
     #endregion
@@ -330,12 +330,12 @@ public class ExamCriteriaBuilderServiceTests
             currentCriteria, "Make it stricter");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("<current_criteria>"));
             Assert.That(prompt, Does.Contain("Shows genuine interest"));
             Assert.That(prompt, Does.Contain("Is too short"));
-        });
+        }
     }
 
     [Test]
@@ -346,11 +346,11 @@ public class ExamCriteriaBuilderServiceTests
             "Current criteria", "Require minimum 50 words");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(prompt, Does.Contain("<improvement_request>"));
             Assert.That(prompt, Does.Contain("Require minimum 50 words"));
-        });
+        }
     }
 
     [Test]

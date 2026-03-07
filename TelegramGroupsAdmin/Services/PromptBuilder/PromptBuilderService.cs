@@ -3,6 +3,7 @@ using System.Text.Json;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.Services.PromptBuilder;
@@ -92,7 +93,8 @@ public class PromptBuilderService : IPromptBuilderService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating custom prompt for chat {ChatId}", request.ChatId);
+            _logger.LogError(ex, "Error generating custom prompt for {Chat}",
+                request.Chat?.ToLogDebug() ?? $"Chat {request.ChatId}");
             return new PromptBuilderResponse
             {
                 Success = false,

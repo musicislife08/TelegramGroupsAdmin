@@ -90,11 +90,14 @@ public class ExamSessionRepositoryTests
 
         // Assert
         Assert.That(session, Is.Not.Null);
-        Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
-        Assert.That(session.UserId, Is.EqualTo(TestUserId));
-        Assert.That(session.CurrentQuestionIndex, Is.EqualTo(0));
-        Assert.That(session.McAnswers, Is.Null.Or.Empty);
-        Assert.That(session.OpenEndedAnswer, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
+            Assert.That(session.UserId, Is.EqualTo(TestUserId));
+            Assert.That(session.CurrentQuestionIndex, Is.EqualTo(0));
+            Assert.That(session.McAnswers, Is.Null.Or.Empty);
+            Assert.That(session.OpenEndedAnswer, Is.Null);
+        }
     }
 
     #endregion
@@ -113,8 +116,11 @@ public class ExamSessionRepositoryTests
 
         // Assert
         Assert.That(session, Is.Not.Null);
-        Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
-        Assert.That(session.UserId, Is.EqualTo(TestUserId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
+            Assert.That(session.UserId, Is.EqualTo(TestUserId));
+        }
     }
 
     [Test]
@@ -160,10 +166,16 @@ public class ExamSessionRepositoryTests
         // Assert
         var session = await _repository.GetByIdAsync(sessionId);
         Assert.That(session, Is.Not.Null);
-        Assert.That(session!.CurrentQuestionIndex, Is.EqualTo(1));
-        Assert.That(session.McAnswers, Is.Not.Null);
-        Assert.That(session.McAnswers!.ContainsKey(0), Is.True);
-        Assert.That(session.McAnswers[0], Is.EqualTo("A"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.CurrentQuestionIndex, Is.EqualTo(1));
+            Assert.That(session.McAnswers, Is.Not.Null);
+        }
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session.McAnswers!.ContainsKey(0), Is.True);
+            Assert.That(session.McAnswers[0], Is.EqualTo("A"));
+        }
     }
 
     [Test]
@@ -179,9 +191,12 @@ public class ExamSessionRepositoryTests
 
         // Assert
         var session = await _repository.GetByIdAsync(sessionId);
-        Assert.That(session!.ShuffleState, Is.Not.Null);
-        Assert.That(session.ShuffleState!.ContainsKey(0), Is.True);
-        Assert.That(session.ShuffleState[0], Is.EqualTo(shuffle));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.ShuffleState, Is.Not.Null);
+            Assert.That(session.ShuffleState!.ContainsKey(0), Is.True);
+            Assert.That(session.ShuffleState[0], Is.EqualTo(shuffle));
+        }
     }
 
     [Test]
@@ -198,11 +213,14 @@ public class ExamSessionRepositoryTests
 
         // Assert
         var session = await _repository.GetByIdAsync(sessionId);
-        Assert.That(session!.CurrentQuestionIndex, Is.EqualTo(3));
-        Assert.That(session.McAnswers!.Count, Is.EqualTo(3));
-        Assert.That(session.McAnswers[0], Is.EqualTo("A"));
-        Assert.That(session.McAnswers[1], Is.EqualTo("C"));
-        Assert.That(session.McAnswers[2], Is.EqualTo("B"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.CurrentQuestionIndex, Is.EqualTo(3));
+            Assert.That(session.McAnswers!.Count, Is.EqualTo(3));
+            Assert.That(session.McAnswers[0], Is.EqualTo("A"));
+            Assert.That(session.McAnswers[1], Is.EqualTo("C"));
+            Assert.That(session.McAnswers[2], Is.EqualTo("B"));
+        }
     }
 
     #endregion
@@ -297,8 +315,11 @@ public class ExamSessionRepositoryTests
         var expiredSession = await _repository.GetByIdAsync(expiredId);
         var activeSession = await _repository.GetByIdAsync(activeId);
 
-        Assert.That(expiredSession, Is.Null, "Expired session should be deleted");
-        Assert.That(activeSession, Is.Not.Null, "Active session should remain");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(expiredSession, Is.Null, "Expired session should be deleted");
+            Assert.That(activeSession, Is.Not.Null, "Active session should remain");
+        }
     }
 
     #endregion
@@ -359,8 +380,11 @@ public class ExamSessionRepositoryTests
 
         // Assert
         Assert.That(session, Is.Not.Null);
-        Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
-        Assert.That(session.UserId, Is.EqualTo(TestUserId));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(session!.ChatId, Is.EqualTo(TestChatId));
+            Assert.That(session.UserId, Is.EqualTo(TestUserId));
+        }
     }
 
     [Test]

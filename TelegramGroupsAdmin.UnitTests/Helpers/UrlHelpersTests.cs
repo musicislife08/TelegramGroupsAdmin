@@ -18,81 +18,111 @@ public class UrlHelpersTests
     [Test]
     public void IsLocalUrl_ValidLocalPath_ReturnsTrue()
     {
-        Assert.That(UrlHelpers.IsLocalUrl("/dashboard"), Is.True);
-        Assert.That(UrlHelpers.IsLocalUrl("/login"), Is.True);
-        Assert.That(UrlHelpers.IsLocalUrl("/"), Is.True);
-        Assert.That(UrlHelpers.IsLocalUrl("/path/to/page"), Is.True);
-        Assert.That(UrlHelpers.IsLocalUrl("/path?query=value"), Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(UrlHelpers.IsLocalUrl("/dashboard"), Is.True);
+            Assert.That(UrlHelpers.IsLocalUrl("/login"), Is.True);
+            Assert.That(UrlHelpers.IsLocalUrl("/"), Is.True);
+            Assert.That(UrlHelpers.IsLocalUrl("/path/to/page"), Is.True);
+            Assert.That(UrlHelpers.IsLocalUrl("/path?query=value"), Is.True);
+        }
     }
 
     [Test]
     public void IsLocalUrl_HttpUrl_ReturnsFalse()
     {
-        Assert.That(UrlHelpers.IsLocalUrl("http://evil.com"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("http://localhost/page"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(UrlHelpers.IsLocalUrl("http://evil.com"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("http://localhost/page"), Is.False);
+        }
     }
 
     [Test]
     public void IsLocalUrl_HttpsUrl_ReturnsFalse()
     {
-        Assert.That(UrlHelpers.IsLocalUrl("https://evil.com"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("https://localhost/page"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(UrlHelpers.IsLocalUrl("https://evil.com"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("https://localhost/page"), Is.False);
+        }
     }
 
     [Test]
     public void IsLocalUrl_ProtocolRelativeUrl_ReturnsFalse()
     {
-        Assert.That(UrlHelpers.IsLocalUrl("//evil.com"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("//evil.com/path"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(UrlHelpers.IsLocalUrl("//evil.com"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("//evil.com/path"), Is.False);
+        }
     }
 
     [Test]
     public void IsLocalUrl_NullOrEmpty_ReturnsFalse()
     {
-        Assert.That(UrlHelpers.IsLocalUrl(null), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl(""), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("   "), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(UrlHelpers.IsLocalUrl(null), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl(""), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("   "), Is.False);
+        }
     }
 
     [Test]
     public void IsLocalUrl_RelativeWithoutSlash_ReturnsFalse()
     {
-        Assert.That(UrlHelpers.IsLocalUrl("dashboard"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("path/to/page"), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(UrlHelpers.IsLocalUrl("dashboard"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("path/to/page"), Is.False);
+        }
     }
 
     [Test]
     public void IsLocalUrl_JavascriptProtocol_ReturnsFalse()
     {
-        // Security: XSS protection - javascript: URLs must be blocked
-        Assert.That(UrlHelpers.IsLocalUrl("javascript:alert(1)"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("javascript:void(0)"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("JAVASCRIPT:alert(1)"), Is.False); // Case insensitive
+        using (Assert.EnterMultipleScope())
+        {
+            // Security: XSS protection - javascript: URLs must be blocked
+            Assert.That(UrlHelpers.IsLocalUrl("javascript:alert(1)"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("javascript:void(0)"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("JAVASCRIPT:alert(1)"), Is.False); // Case insensitive
+        }
     }
 
     [Test]
     public void IsLocalUrl_DataProtocol_ReturnsFalse()
     {
-        // Security: XSS protection - data: URLs must be blocked
-        Assert.That(UrlHelpers.IsLocalUrl("data:text/html,<script>alert(1)</script>"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("DATA:text/html,test"), Is.False); // Case insensitive
+        using (Assert.EnterMultipleScope())
+        {
+            // Security: XSS protection - data: URLs must be blocked
+            Assert.That(UrlHelpers.IsLocalUrl("data:text/html,<script>alert(1)</script>"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=="), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("DATA:text/html,test"), Is.False); // Case insensitive
+        }
     }
 
     [Test]
     public void IsLocalUrl_VbscriptProtocol_ReturnsFalse()
     {
-        // Security: XSS protection - vbscript: URLs must be blocked (IE legacy)
-        Assert.That(UrlHelpers.IsLocalUrl("vbscript:msgbox(1)"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("VBSCRIPT:msgbox(1)"), Is.False); // Case insensitive
+        using (Assert.EnterMultipleScope())
+        {
+            // Security: XSS protection - vbscript: URLs must be blocked (IE legacy)
+            Assert.That(UrlHelpers.IsLocalUrl("vbscript:msgbox(1)"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("VBSCRIPT:msgbox(1)"), Is.False); // Case insensitive
+        }
     }
 
     [Test]
     public void IsLocalUrl_FileProtocol_ReturnsFalse()
     {
-        // Security: Block file: protocol to prevent local file access
-        Assert.That(UrlHelpers.IsLocalUrl("file:///etc/passwd"), Is.False);
-        Assert.That(UrlHelpers.IsLocalUrl("FILE:///C:/Windows/System32"), Is.False); // Case insensitive
+        using (Assert.EnterMultipleScope())
+        {
+            // Security: Block file: protocol to prevent local file access
+            Assert.That(UrlHelpers.IsLocalUrl("file:///etc/passwd"), Is.False);
+            Assert.That(UrlHelpers.IsLocalUrl("FILE:///C:/Windows/System32"), Is.False); // Case insensitive
+        }
     }
 
     #endregion

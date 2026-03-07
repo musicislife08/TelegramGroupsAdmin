@@ -3,7 +3,6 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
@@ -226,12 +225,10 @@ public class TestUserBuilder
         var now = DateTimeOffset.UtcNow;
 
         var userRecord = new UserRecord(
-            Id: userId,
-            Email: email,
+            WebUser: new WebUserIdentity(userId, email, _permissionLevel),
             NormalizedEmail: email.ToUpperInvariant(),
             PasswordHash: hash,
             SecurityStamp: Guid.NewGuid().ToString(),
-            PermissionLevel: _permissionLevel,
             InvitedBy: null,
             IsActive: _status == UserStatus.Active,
             TotpSecret: encryptedTotpSecret,
@@ -318,7 +315,7 @@ public record TestUser(
     string? TotpSecret
 )
 {
-    public string Id => Record.Id;
-    public string Email => Record.Email;
-    public TelegramGroupsAdmin.Core.Models.PermissionLevel PermissionLevel => Record.PermissionLevel;
+    public string Id => Record.WebUser.Id;
+    public string Email => Record.WebUser.Email!;
+    public TelegramGroupsAdmin.Core.Models.PermissionLevel PermissionLevel => Record.WebUser.PermissionLevel;
 }

@@ -23,7 +23,7 @@ public class EditTrainingSampleDialogTests : DialogTestContext
         string messageText = "Test message",
         bool isSpam = true,
         string detectionSource = "manual",
-        int confidence = 95,
+        double score = 4.75,
         DateTimeOffset? detectedAt = null,
         string addedByEmail = "admin@test.com")
     {
@@ -35,11 +35,11 @@ public class EditTrainingSampleDialogTests : DialogTestContext
             DetectionSource = detectionSource,
             DetectionMethod = "BayesClassifier",
             IsSpam = isSpam,
-            Confidence = confidence,
+            Score = score,
             AddedBy = Actor.FromWebUser("user-123", addedByEmail),
             UserId = 67890,
             MessageText = messageText,
-            NetConfidence = isSpam ? confidence : -confidence,
+            NetScore = isSpam ? score : -score,
             UsedForTraining = true
         };
     }
@@ -250,10 +250,10 @@ public class EditTrainingSampleDialogTests : DialogTestContext
 
     #endregion
 
-    #region Confidence Field Tests
+    #region Score Field Tests
 
     [Test]
-    public void HasConfidenceField()
+    public void HasScoreField()
     {
         // Arrange
         var provider = RenderDialogProvider();
@@ -265,12 +265,12 @@ public class EditTrainingSampleDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("Confidence"));
+            Assert.That(provider.Markup, Does.Contain("Score"));
         });
     }
 
     [Test]
-    public void DisplaysConfidenceHelperText()
+    public void DisplaysScoreHelperText()
     {
         // Arrange
         var provider = RenderDialogProvider();
@@ -282,7 +282,7 @@ public class EditTrainingSampleDialogTests : DialogTestContext
         // Assert
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("Confidence level when this sample was added"));
+            Assert.That(provider.Markup, Does.Contain("Detection score when this sample was added"));
         });
     }
 

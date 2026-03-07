@@ -9,9 +9,8 @@ namespace TelegramGroupsAdmin.Data.Models;
 [Table("messages")]
 public class MessageRecordDto
 {
-    [Key]
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     [Column("user_id")]
     public long UserId { get; set; }
@@ -54,7 +53,7 @@ public class MessageRecordDto
     public string? DeletionSource { get; set; }
 
     [Column("reply_to_message_id")]
-    public long? ReplyToMessageId { get; set; }
+    public int? ReplyToMessageId { get; set; }
 
     // Media attachment fields (Phase 4.X: Media support for GIF, Video, Audio, Voice, Sticker, VideoNote, Document)
     [Column("media_type")]

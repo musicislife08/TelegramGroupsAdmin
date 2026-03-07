@@ -1,6 +1,5 @@
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -52,14 +51,14 @@ public interface IExamFlowService
     /// <summary>
     /// Start an exam session in user's DM (triggered via deep link)
     /// </summary>
-    /// <param name="groupChatId">The group chat where user joined</param>
+    /// <param name="chat">The group chat where user joined</param>
     /// <param name="user">The user taking the exam</param>
     /// <param name="dmChatId">User's private chat with bot (where questions are sent)</param>
     /// <param name="config">Welcome config with exam settings</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result with first question message ID</returns>
     Task<ExamStartResult> StartExamInDmAsync(
-        long groupChatId,
+        ChatIdentity chat,
         User user,
         long dmChatId,
         WelcomeConfig config,
@@ -100,21 +99,21 @@ public interface IExamFlowService
     /// <summary>
     /// Check if a user has an active exam session in a chat
     /// </summary>
-    Task<bool> HasActiveSessionAsync(long chatId, long userId, CancellationToken cancellationToken = default);
+    Task<bool> HasActiveSessionAsync(ChatIdentity chat, UserIdentity user, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get an active exam session for a user (across any group chat).
     /// Used to find session when user sends a DM with open-ended answer.
     /// </summary>
-    /// <param name="userId">The Telegram user ID</param>
+    /// <param name="user">The Telegram user</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Active session with exam config context, or null if none</returns>
-    Task<ActiveExamContext?> GetActiveExamContextAsync(long userId, CancellationToken cancellationToken = default);
+    Task<ActiveExamContext?> GetActiveExamContextAsync(UserIdentity user, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Cancel an exam session (e.g., user left chat)
     /// </summary>
-    Task CancelSessionAsync(long chatId, long userId, CancellationToken cancellationToken = default);
+    Task CancelSessionAsync(ChatIdentity chat, UserIdentity user, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Check if callback data is an exam callback
@@ -131,15 +130,15 @@ public interface IExamFlowService
     /// Approve an exam failure after admin review.
     /// Restores user permissions, deletes teaser message, updates welcome response.
     /// </summary>
-    /// <param name="userId">Telegram user ID</param>
-    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="user">Identity of the user being approved</param>
+    /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="examFailureId">ID of the exam failure record</param>
     /// <param name="executor">Actor performing the approval</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> ApproveExamFailureAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         long examFailureId,
         Actor executor,
         CancellationToken cancellationToken = default);
@@ -148,14 +147,14 @@ public interface IExamFlowService
     /// Deny an exam failure after admin review (kick user, allow rejoin).
     /// Kicks user from chat, deletes teaser message, updates welcome response, sends notification.
     /// </summary>
-    /// <param name="userId">Telegram user ID</param>
-    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="user">Identity of the user being denied</param>
+    /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="executor">Actor performing the denial</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> DenyExamFailureAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         CancellationToken cancellationToken = default);
 
@@ -163,14 +162,14 @@ public interface IExamFlowService
     /// Deny an exam failure after admin review and ban the user globally.
     /// Bans user from all managed chats, deletes teaser message, updates welcome response, sends notification.
     /// </summary>
-    /// <param name="userId">Telegram user ID</param>
-    /// <param name="chatId">Chat ID where user failed exam</param>
+    /// <param name="user">Identity of the user being denied and banned</param>
+    /// <param name="chat">Identity of the chat where the exam was taken</param>
     /// <param name="executor">Actor performing the denial</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success or failure</returns>
     Task<ModerationResult> DenyAndBanExamFailureAsync(
-        long userId,
-        long chatId,
+        UserIdentity user,
+        ChatIdentity chat,
         Actor executor,
         CancellationToken cancellationToken = default);
 }

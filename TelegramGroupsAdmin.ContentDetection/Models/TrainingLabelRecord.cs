@@ -8,7 +8,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 /// </summary>
 public record TrainingLabelRecord
 {
-    public required long MessageId { get; init; }
+    public required int MessageId { get; init; }
+    public required long ChatId { get; init; }
     public required TrainingLabel Label { get; init; }
     public long? LabeledByUserId { get; init; }
     public required DateTimeOffset LabeledAt { get; init; }

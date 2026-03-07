@@ -5,11 +5,11 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Reports;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -127,8 +127,6 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         return new ExamFailureRecord
         {
             Id = id,
-            ChatId = chatId,
-            UserId = userId,
             McAnswers = mcAnswers ?? new Dictionary<int, string> { { 0, "A" }, { 1, "B" } },
             ShuffleState = shuffleState ?? new Dictionary<int, int[]>
             {
@@ -143,10 +141,8 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
             ReviewedBy = reviewedBy,
             ReviewedAt = reviewedAt,
             ActionTaken = actionTaken,
-            UserName = userName,
-            UserFirstName = userFirstName,
-            UserLastName = userLastName,
-            ChatName = chatName
+            User = new UserIdentity(userId, userFirstName, userLastName, userName),
+            Chat = new ChatIdentity(chatId, chatName)
         };
     }
 
@@ -426,8 +422,11 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert - Action buttons hidden when already reviewed
         var buttons = cut.FindAll("button");
-        Assert.That(buttons.Any(b => b.TextContent.Contains("Approve")), Is.False);
-        Assert.That(buttons.Any(b => b.TextContent.Contains("Deny")), Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(buttons.Any(b => b.TextContent.Contains("Approve")), Is.False);
+            Assert.That(buttons.Any(b => b.TextContent.Contains("Deny")), Is.False);
+        }
     }
 
     [Test]
@@ -466,12 +465,12 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
     public async Task InvokesOnAction_WhenApproveClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, string action)? receivedAction = null;
+        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
         var failure = CreateExamFailure(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -480,20 +479,23 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("approve"));
-        Assert.That(receivedAction!.Value.failure.Id, Is.EqualTo(failure.Id));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Approve));
+            Assert.That(receivedAction!.Value.failure.Id, Is.EqualTo(failure.Id));
+        }
     }
 
     [Test]
     public async Task InvokesOnAction_WhenDenyClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, string action)? receivedAction = null;
+        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
         var failure = CreateExamFailure(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -503,19 +505,19 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("deny"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.Deny));
     }
 
     [Test]
     public async Task InvokesOnAction_WhenDenyAndBanClicked()
     {
         // Arrange
-        (ExamFailureRecord failure, string action)? receivedAction = null;
+        (ExamFailureRecord failure, ExamAction action)? receivedAction = null;
         var failure = CreateExamFailure(reviewedAt: null);
 
         var cut = Render<ExamReviewCard>(p => p
             .Add(x => x.ExamFailure, failure)
-            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, string)>(
+            .Add(x => x.OnAction, EventCallback.Factory.Create<(ExamFailureRecord, ExamAction)>(
                 this, args => receivedAction = args)));
 
         // Act
@@ -524,7 +526,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
 
         // Assert
         Assert.That(receivedAction, Is.Not.Null);
-        Assert.That(receivedAction!.Value.action, Is.EqualTo("deny_ban"));
+        Assert.That(receivedAction!.Value.action, Is.EqualTo(ExamAction.DenyAndBan));
     }
 
     #endregion
@@ -601,8 +603,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
         var managedChats = new List<ManagedChatRecord>
         {
             new(
-                ChatId: -1001111111111,
-                ChatName: "Other Group",
+                Identity: new ChatIdentity(-1001111111111, "Other Group"),
                 ChatType: Telegram.Models.ManagedChatType.Group,
                 BotStatus: Telegram.Models.BotChatStatus.Administrator,
                 IsAdmin: true,

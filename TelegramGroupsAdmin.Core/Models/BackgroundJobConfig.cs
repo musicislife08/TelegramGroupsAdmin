@@ -72,4 +72,9 @@ public class BackgroundJobConfig
     /// Settings for User Photo Refresh job
     /// </summary>
     public UserPhotoRefreshSettings? UserPhotoRefresh { get; set; }
+
+    /// <summary>
+    /// Settings for Profile Rescan job (batch re-scanning of user profiles)
+    /// </summary>
+    public ProfileRescanSettings? ProfileRescan { get; set; }
 }

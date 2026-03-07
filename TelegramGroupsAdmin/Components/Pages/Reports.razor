@@ -3,18 +3,19 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Data.Models
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
+@using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
-@using TelegramGroupsAdmin.Telegram.Services.Moderation
+@using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Reports
+@using TelegramGroupsAdmin.Telegram.Constants
 @using TelegramGroupsAdmin.Core.Repositories
 @inject IReportsRepository ReportsRepository
 @inject IReportActionsService ReportActionsService
 @inject IManagedChatsRepository ManagedChatsRepository
-@inject IModerationOrchestrator ModerationOrchestrator
-@inject IBlazorAuthHelper AuthHelper
+@inject IBotModerationService ModerationOrchestrator
 @inject ISnackbar Snackbar
 @inject ILogger<Reports> Logger
 @inject IExamFlowService ExamFlowService
@@ -39,6 +40,7 @@
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Spam">Moderation Reports</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Impersonation">Impersonation Alerts</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ExamFailure">Exam Reviews</MudSelectItem>
+                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.ProfileScan">Profile Scan Alerts</MudSelectItem>
             </MudSelect>
 
             <MudSelect T="StatusFilter"
@@ -81,6 +83,12 @@
                         @_pendingExamCount Exam
                     </MudChip>
                 }
+                @if (_pendingProfileScanCount > 0)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.PersonSearch">
+                        @_pendingProfileScanCount Profile
+                    </MudChip>
+                }
             </MudStack>
         </MudStack>
     </MudPaper>
@@ -112,6 +120,11 @@
                     <ExamReviewCard ExamFailure="@item.ExamFailure"
                                     OnAction="@HandleExamAction" />
                 }
+                else if (item.ProfileScanAlert != null)
+                {
+                    <ProfileScanAlertCard Alert="@item.ProfileScanAlert"
+                                          OnAction="@HandleProfileScanAction" />
+                }
             }
         </MudStack>
     }
@@ -139,26 +152,25 @@
 @implements IDisposable
 
 @code {
-    private enum ReportTypeFilter { All, Spam, Impersonation, ExamFailure }
+    private enum ReportTypeFilter { All, Spam, Impersonation, ExamFailure, ProfileScan }
     private enum StatusFilter { Pending, All }
 
     private List<ReportQueueItem> _allReports = [];
     private List<ReportQueueItem> _filteredReports = [];
     private ReportTypeFilter _selectedTypeFilter = ReportTypeFilter.All;
     private StatusFilter _selectedStatusFilter = StatusFilter.Pending;
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private bool _loading = true;
     private int _pendingSpamCount;
     private int _pendingImpersonationCount;
     private int _pendingExamCount;
-    private string _currentUserId = string.Empty;
-    private string _currentUserDisplayName = string.Empty;
+    private int _pendingProfileScanCount;
     private readonly CancellationTokenSource _cts = new();
 
     protected override async Task OnInitializedAsync()
     {
-        // Get current user ID and display name using auth helper
-        _currentUserId = await AuthHelper.GetCurrentUserIdAsync() ?? string.Empty;
-        _currentUserDisplayName = await AuthHelper.GetCurrentUserEmailAsync() ?? _currentUserId;
+        if (WebUser is null) return;
 
         await LoadReportsAsync();
     }
@@ -176,20 +188,14 @@
         try
         {
             // Get accessible chats for current user (Admin users only see their chats)
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                Snackbar.Add("Unable to identify current user", Severity.Error);
-                return;
-            }
-
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel,
+                WebUser!.Id,
+                WebUser.PermissionLevel,
                 cancellationToken: _cts.Token);
-            var accessibleChatIds = accessibleChats.Select(c => c.ChatId).ToHashSet();
+            var accessibleChatIds = accessibleChats.Select(c => c.Identity.Id).ToHashSet();
+
+            // GlobalAdmin/Owner can see reports with sentinel chat_id=0 (e.g., background profile scan alerts)
+            var isElevated = WebUser.PermissionLevel >= Core.Models.PermissionLevel.GlobalAdmin;
 
             var unifiedQueue = new List<ReportQueueItem>();
 
@@ -203,7 +209,7 @@
                 limit: 100,
                 cancellationToken: _cts.Token);
 
-            foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.ChatId)))
+            foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.Chat.Id) || (isElevated && r.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -223,7 +229,7 @@
             // Load all impersonation alerts (filter by status is done client-side in ApplyFilters)
             var alerts = await ReportsRepository.GetImpersonationAlertsAsync(
                 pendingOnly: false, cancellationToken: _cts.Token);
-            foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.ChatId)))
+            foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -235,15 +241,15 @@
                     ImpersonationAlert = alert,
                     ExamFailure = null,
                     DisplayTitle = "Impersonation Alert",
-                    UserId = alert.SuspectedUserId,
-                    UserName = alert.SuspectedUserName
+                    UserId = alert.SuspectedUser.Id,
+                    UserName = alert.SuspectedUser.Username
                 });
             }
 
             // Load all exam failures (filter by status is done client-side in ApplyFilters)
             var examFailures = await ReportsRepository.GetExamFailuresAsync(
                 pendingOnly: false, cancellationToken: _cts.Token);
-            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.ChatId)))
+            foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.Chat.Id) || (isElevated && e.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -255,8 +261,26 @@
                     ImpersonationAlert = null,
                     ExamFailure = examFailure,
                     DisplayTitle = "Exam Review",
-                    UserId = examFailure.UserId,
-                    UserName = examFailure.UserName
+                    UserId = examFailure.User.Id,
+                    UserName = examFailure.User.Username
+                });
+            }
+
+            // Load all profile scan alerts
+            var profileScanAlerts = await ReportsRepository.GetProfileScanAlertsAsync(
+                pendingOnly: false, cancellationToken: _cts.Token);
+            foreach (var alert in profileScanAlerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
+            {
+                unifiedQueue.Add(new ReportQueueItem
+                {
+                    Type = ReportType.ProfileScanAlert,
+                    Timestamp = alert.DetectedAt,
+                    Priority = CalculateProfileScanPriority(alert),
+                    IsPending = !alert.ReviewedAt.HasValue,
+                    DisplayTitle = "Profile Scan Alert",
+                    UserId = alert.User.Id,
+                    UserName = alert.User.Username,
+                    ProfileScanAlert = alert
                 });
             }
 
@@ -270,6 +294,7 @@
             _pendingSpamCount = unifiedQueue.Count(x => x.Type == ReportType.ContentReport && x.IsPending);
             _pendingImpersonationCount = unifiedQueue.Count(x => x.Type == ReportType.ImpersonationAlert && x.IsPending);
             _pendingExamCount = unifiedQueue.Count(x => x.Type == ReportType.ExamFailure && x.IsPending);
+            _pendingProfileScanCount = unifiedQueue.Count(x => x.Type == ReportType.ProfileScanAlert && x.IsPending);
 
             ApplyFilters();
         }
@@ -297,6 +322,7 @@
                 ReportTypeFilter.Spam => ReportType.ContentReport,
                 ReportTypeFilter.Impersonation => ReportType.ImpersonationAlert,
                 ReportTypeFilter.ExamFailure => ReportType.ExamFailure,
+                ReportTypeFilter.ProfileScan => ReportType.ProfileScanAlert,
                 _ => ReportType.ContentReport
             };
             filtered = filtered.Where(x => x.Type == targetType);
@@ -354,35 +380,109 @@
         return (int)(200 - age); // Higher base priority than reports
     }
 
-    private async Task HandleSpamAction((Report Report, string Action) args)
+    private int CalculateProfileScanPriority(ProfileScanAlertRecord alert)
+    {
+        if (alert.ReviewedAt.HasValue) return 0;
+
+        // Banned outcome (auto-ban happened) = lower priority since action already taken
+        // HeldForReview = higher priority since admin decision needed
+        var basePriority = alert.Outcome == ProfileScanOutcome.HeldForReview ? 300 : 100;
+        return basePriority + (int)(alert.Score * 100);
+    }
+
+    private async Task HandleProfileScanAction((ProfileScanAlertRecord Alert, ProfileScanAction Action) args)
     {
         try
         {
+            var executor = WebUser!.ToActor();
+
             switch (args.Action)
             {
-                case "spam":
-                    await ReportActionsService.HandleSpamActionAsync(args.Report.Id, _currentUserId);
+                case ProfileScanAction.Allow:
+                    await ReportsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Dismissed,
+                        WebUser!.DisplayName,
+                        "allow",
+                        "User allowed after profile scan review");
+                    Snackbar.Add("User allowed", Severity.Success);
+                    break;
+
+                case ProfileScanAction.Ban:
+                    await ModerationOrchestrator.BanUserAsync(
+                        new BanIntent
+                        {
+                            User = args.Alert.User,
+                            Executor = executor,
+                            Reason = $"Profile scan alert #{args.Alert.Id} confirmed — score {args.Alert.Score:F1}"
+                        });
+                    await ReportsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Reviewed,
+                        WebUser!.DisplayName,
+                        "ban",
+                        "Banned after profile scan review");
+                    Snackbar.Add("User banned globally", Severity.Success);
+                    break;
+
+                case ProfileScanAction.Kick:
+                    if (args.Alert.Chat.Id != 0)
+                    {
+                        await ModerationOrchestrator.KickUserFromChatAsync(
+                            new KickIntent
+                            {
+                                User = args.Alert.User,
+                                Chat = args.Alert.Chat,
+                                Executor = executor,
+                                Reason = $"Profile scan alert #{args.Alert.Id} — kicked after review"
+                            });
+                    }
+                    await ReportsRepository.UpdateStatusAsync(
+                        args.Alert.Id,
+                        ReportStatus.Reviewed,
+                        WebUser!.DisplayName,
+                        "kick",
+                        args.Alert.Chat.Id == 0 ? "Kick not applicable (global alert)" : "Kicked from chat after review");
+                    Snackbar.Add(args.Alert.Chat.Id == 0 ? "Alert resolved (no chat to kick from)" : "User kicked from chat", Severity.Warning);
+                    break;
+            }
+
+            await LoadReportsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error handling profile scan action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
+        }
+    }
+
+    private async Task HandleSpamAction((Report Report, ReportAction Action) args)
+    {
+        try
+        {
+            var executor = WebUser!.ToActor();
+
+            switch (args.Action)
+            {
+                case ReportAction.Spam:
+                    await ReportActionsService.HandleSpamActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} processed: Message deleted as spam", Severity.Success);
                     break;
 
-                case "ban":
-                    await ReportActionsService.HandleBanActionAsync(args.Report.Id, _currentUserId);
+                case ReportAction.Ban:
+                    await ReportActionsService.HandleBanActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} processed: User banned", Severity.Success);
                     break;
 
-                case "warn":
-                    await ReportActionsService.HandleWarnActionAsync(args.Report.Id, _currentUserId);
+                case ReportAction.Warn:
+                    await ReportActionsService.HandleWarnActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} processed: Warning issued", Severity.Success);
                     break;
 
-                case "dismiss":
-                    await ReportActionsService.HandleDismissActionAsync(args.Report.Id, _currentUserId);
+                case ReportAction.Dismiss:
+                    await ReportActionsService.HandleDismissActionAsync(args.Report.Id, executor);
                     Snackbar.Add($"Report #{args.Report.Id} dismissed", Severity.Info);
                     break;
-
-                default:
-                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
-                    return;
             }
 
             await LoadReportsAsync();
@@ -390,68 +490,69 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling spam action {Action} for report {ReportId}", args.Action, args.Report.Id);
-            Snackbar.Add($"Failed to process report: {ex.Message}", Severity.Error);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
         }
     }
 
-    private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, string Action) args)
+    private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, ImpersonationAction Action) args)
     {
         try
         {
-            var executor = Actor.FromWebUser(_currentUserId);
+            var executor = WebUser!.ToActor();
 
             switch (args.Action)
             {
-                case "confirm":
+                case ImpersonationAction.Confirm:
                     // Ban the suspected impersonator globally
                     var banResult = await ModerationOrchestrator.BanUserAsync(
-                        userId: args.Alert.SuspectedUserId,
-                        messageId: null,
-                        executor: executor,
-                        reason: $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetDisplayName}");
+                        new BanIntent
+                        {
+                            User = args.Alert.SuspectedUser,
+                            Executor = executor,
+                            Reason = $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetUser.DisplayName}"
+                        });
 
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
-                        "confirm_scam",
+                        WebUser!.DisplayName,
+                        "confirm",
                         $"Confirmed impersonation, banned from {banResult.ChatsAffected} chats");
 
                     Snackbar.Add($"Impersonation confirmed: User banned from {banResult.ChatsAffected} chats", Severity.Success);
                     break;
 
-                case "dismiss":
+                case ImpersonationAction.Dismiss:
                     // Mark as false positive
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
-                        _currentUserId,
-                        "false_positive",
-                        "Marked as false positive");
+                        WebUser!.DisplayName,
+                        "dismiss",
+                        "Dismissed as false positive");
 
-                    Snackbar.Add("Alert dismissed as false positive", Severity.Info);
+                    Snackbar.Add("Alert dismissed", Severity.Info);
                     break;
 
-                case "trust":
+                case ImpersonationAction.Trust:
                     // Trust the suspected user (they're legitimate)
                     await ModerationOrchestrator.TrustUserAsync(
-                        args.Alert.SuspectedUserId,
-                        executor,
-                        $"Trusted after impersonation review #{args.Alert.Id}");
+                        new TrustIntent
+                        {
+                            User = args.Alert.SuspectedUser,
+                            Executor = executor,
+                            Reason = $"Trusted after impersonation review #{args.Alert.Id}"
+                        });
 
                     await ReportsRepository.UpdateStatusAsync(
                         args.Alert.Id,
                         ReportStatus.Dismissed,
-                        _currentUserId,
+                        WebUser!.DisplayName,
                         "trust",
                         "User trusted - not impersonation");
 
                     Snackbar.Add("User marked as trusted", Severity.Success);
                     break;
-
-                default:
-                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
-                    return;
             }
 
             await LoadReportsAsync();
@@ -459,28 +560,28 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling impersonation action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
-            Snackbar.Add($"Failed to process alert: {ex.Message}", Severity.Error);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
         }
     }
 
-    private async Task HandleExamAction((ExamFailureRecord ExamFailure, string Action) args)
+    private async Task HandleExamAction((ExamFailureRecord ExamFailure, ExamAction Action) args)
     {
         Logger.LogInformation("HandleExamAction called: Action={Action}, ExamFailureId={Id}, UserId={UserId}",
-            args.Action, args.ExamFailure.Id, args.ExamFailure.UserId);
+            args.Action, args.ExamFailure.Id, args.ExamFailure.User.Id);
 
         try
         {
-            var executor = Actor.FromWebUser(_currentUserId);
+            var executor = WebUser!.ToActor();
 
             switch (args.Action)
             {
-                case "approve":
+                case ExamAction.Approve:
                     // Approve via service (restores permissions, deletes teaser, updates welcome response)
                     var approveResult = await ExamFlowService.ApproveExamFailureAsync(
-                        userId: args.ExamFailure.UserId,
-                        chatId: args.ExamFailure.ChatId,
-                        examFailureId: args.ExamFailure.Id,
-                        executor: executor);
+                        args.ExamFailure.User,
+                        args.ExamFailure.Chat,
+                        args.ExamFailure.Id,
+                        executor);
 
                     if (!approveResult.Success)
                     {
@@ -491,19 +592,19 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "approve",
                         "Manually approved after exam failure");
 
                     Snackbar.Add("User approved - permissions restored", Severity.Success);
                     break;
 
-                case "deny":
+                case ExamAction.Deny:
                     // Deny via service (deletes teaser, updates welcome response, kicks user, sends DM)
                     var denyResult = await ExamFlowService.DenyExamFailureAsync(
-                        userId: args.ExamFailure.UserId,
-                        chatId: args.ExamFailure.ChatId,
-                        executor: executor);
+                        args.ExamFailure.User,
+                        args.ExamFailure.Chat,
+                        executor);
 
                     if (!denyResult.Success)
                     {
@@ -514,19 +615,19 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "deny",
                         "Denied entry after exam review");
 
                     Snackbar.Add("User denied - they can re-join to try again", Severity.Warning);
                     break;
 
-                case "deny_ban":
+                case ExamAction.DenyAndBan:
                     // Deny and ban via service (deletes teaser, updates welcome response, bans globally, sends DM)
                     var denyBanResult = await ExamFlowService.DenyAndBanExamFailureAsync(
-                        userId: args.ExamFailure.UserId,
-                        chatId: args.ExamFailure.ChatId,
-                        executor: executor);
+                        args.ExamFailure.User,
+                        args.ExamFailure.Chat,
+                        executor);
 
                     if (!denyBanResult.Success)
                     {
@@ -537,16 +638,12 @@
                     await ReportsRepository.UpdateStatusAsync(
                         args.ExamFailure.Id,
                         ReportStatus.Reviewed,
-                        _currentUserDisplayName,
+                        WebUser!.DisplayName,
                         "deny_ban",
                         "Denied and banned after exam review");
 
                     Snackbar.Add("User denied and banned globally", Severity.Error);
                     break;
-
-                default:
-                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
-                    return;
             }
 
             await LoadReportsAsync();
@@ -554,7 +651,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error handling exam action {Action} for exam failure {ExamId}", args.Action, args.ExamFailure.Id);
-            Snackbar.Add($"Failed to process exam review: {ex.Message}", Severity.Error);
+            Snackbar.Add("An error occurred processing this action", Severity.Error);
         }
     }
 

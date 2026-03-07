@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-using NSubstitute;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Handlers;
 using TelegramBotDocument = Telegram.Bot.Types.Document;
@@ -50,10 +48,13 @@ public class FileScanningHandlerTests
 
         // Assert: Returns document metadata for scanning
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.FileId, Is.EqualTo("doc_id"));
-        Assert.That(result.FileSize, Is.EqualTo(2048000L));
-        Assert.That(result.FileName, Is.EqualTo("report.pdf"));
-        Assert.That(result.ContentType, Is.EqualTo("application/pdf"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FileId, Is.EqualTo("doc_id"));
+            Assert.That(result.FileSize, Is.EqualTo(2048000L));
+            Assert.That(result.FileName, Is.EqualTo("report.pdf"));
+            Assert.That(result.ContentType, Is.EqualTo("application/pdf"));
+        }
     }
 
     /// <summary>

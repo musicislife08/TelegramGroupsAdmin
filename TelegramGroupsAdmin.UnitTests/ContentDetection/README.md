@@ -221,10 +221,10 @@ MockOpenAISuccessResponse(@"{""custom"": ""json""}");
 
 ## Dependencies
 
-- **NUnit 4.2.2**: Testing framework
-- **WireMock.Net 1.15.0**: HTTP mocking server
+- **NUnit 4.5.0**: Testing framework
+- **WireMock.Net 1.25.0**: HTTP mocking server
 - **NSubstitute 5.3.0**: Mocking framework for logger and history service
-- **Microsoft.Extensions.Caching.Memory 9.0.0**: Real MemoryCache implementation
+- **Microsoft.Extensions.Caching.Memory 10.0.3**: Real MemoryCache implementation
 
 ## Performance Considerations
 

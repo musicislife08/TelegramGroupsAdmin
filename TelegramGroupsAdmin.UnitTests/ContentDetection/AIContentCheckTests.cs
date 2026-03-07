@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.ContentDetection.Checks;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
@@ -41,7 +42,7 @@ public class AIContentCheckTests
 
         // Setup message context provider to return empty list by default
         _mockMessageContextProvider
-            .GetRecentMessagesAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .GetRecentMessagesAsync(Arg.Any<ChatIdentity>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IEnumerable<HistoryMessage>>(new List<HistoryMessage>()));
 
         _check = new AIContentCheckV2(
@@ -67,8 +68,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = false
         };
@@ -87,8 +88,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "   \n\t  ",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = false
         };
@@ -107,8 +108,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "Test message",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = true,
             IsUserAdmin = false
         };
@@ -127,8 +128,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "Test message",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = true
         };
@@ -147,8 +148,8 @@ public class AIContentCheckTests
         var request = new ContentCheckRequest
         {
             Message = "Test message",
-            UserId = 123,
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             IsUserTrusted = false,
             IsUserAdmin = false
         };
@@ -171,9 +172,8 @@ public class AIContentCheckTests
         var request = new AIVetoCheckRequest
         {
             Message = "Hi",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = false,
             MinMessageLength = 10,
@@ -187,24 +187,26 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("too short"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("too short"));
+        }
     }
 
     [Test]
     public async Task CheckAsync_MessageTooShort_ButCheckShortMessagesEnabled_CallsAPI()
     {
         // Arrange
-        SetupChatService(CreateSpamResponse("Suspicious short message", 0.8));
+        SetupChatService(CreateSpamResponse("Suspicious short message", 4.0));
 
         var request = new AIVetoCheckRequest
         {
             Message = "Hi",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,  // AI veto requires spam flags from other checks
             MinMessageLength = 10,
@@ -218,9 +220,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(4.0).Within(0.01)); // 0.8 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(4.0).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     #endregion
@@ -235,9 +240,8 @@ public class AIContentCheckTests
         var request = new AIVetoCheckRequest
         {
             Message = "This is a test message",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = false,
             MinMessageLength = 10,
@@ -251,24 +255,26 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("No spam flags"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("No spam flags"));
+        }
     }
 
     [Test]
     public async Task CheckAsync_HasSpamFlags_CallsAPI()
     {
         // Arrange
-        SetupChatService(CreateCleanResponse("Looks fine to me", 0.9));
+        SetupChatService(CreateCleanResponse("Looks fine to me", 0.5));
 
         var request = new AIVetoCheckRequest
         {
             Message = "This is a test message",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,
             MinMessageLength = 10,
@@ -282,10 +288,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.False); // Veto returns clean verdict, not abstention
-        Assert.That(response.Details, Does.Contain("Clean"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.False); // Veto returns clean verdict, not abstention
+            Assert.That(response.Details, Does.Contain("Clean"));
+        }
     }
 
     #endregion
@@ -310,9 +319,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+        }
     }
 
     #endregion
@@ -323,18 +335,21 @@ public class AIContentCheckTests
     public async Task CheckAsync_SpamDetected_HighConfidence_ReturnsHighScore()
     {
         // Arrange
-        SetupChatService(CreateSpamResponse("This contains prohibited content", 0.95));
+        SetupChatService(CreateSpamResponse("This contains prohibited content", 4.75));
 
         var request = CreateValidRequest();
 
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(4.75).Within(0.01)); // 0.95 * 5.0
-        Assert.That(response.Abstained, Is.False);
-        Assert.That(response.CheckName, Is.EqualTo(CheckName.OpenAI));
-        Assert.That(response.Details, Does.Contain("Spam"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(4.75).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+            Assert.That(response.CheckName, Is.EqualTo(CheckName.OpenAI));
+            Assert.That(response.Details, Does.Contain("Spam"));
+        }
         Assert.That(response.Details, Does.Contain("prohibited content"));
     }
 
@@ -342,32 +357,38 @@ public class AIContentCheckTests
     public async Task CheckAsync_SpamDetected_MediumConfidence_ReturnsMediumScore()
     {
         // Arrange
-        SetupChatService(CreateSpamResponse("Possibly spam", 0.6));
+        SetupChatService(CreateSpamResponse("Possibly spam", 3.0));
 
         var request = CreateValidRequest();
 
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(3.0).Within(0.01)); // 0.6 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(3.0).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     [Test]
     public async Task CheckAsync_SpamDetected_LowConfidence_ReturnsLowScore()
     {
         // Arrange
-        SetupChatService(CreateSpamResponse("Slightly suspicious", 0.3));
+        SetupChatService(CreateSpamResponse("Slightly suspicious", 1.5));
 
         var request = CreateValidRequest();
 
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(1.5).Within(0.01)); // 0.3 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(1.5).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     #endregion
@@ -375,37 +396,42 @@ public class AIContentCheckTests
     #region CheckAsync - Review Detection Tests
 
     [Test]
-    public async Task CheckAsync_ReviewResult_HighConfidence_CappedAt3Points()
+    public async Task CheckAsync_ReviewResult_HighConfidence_ScoreFlowsThrough()
     {
-        // Arrange
-        SetupChatService(CreateReviewResponse("Needs human review", 0.9));
+        // Arrange - AI returns review with 4.5, no cap applied (downstream engine determines action)
+        SetupChatService(CreateReviewResponse("Needs human review", 4.5));
 
         var request = CreateValidRequest();
 
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        // Review is capped at ContentDetectionConstants.ReviewThreshold even though 0.9 * 5.0 = 4.5
-        Assert.That(response.Score, Is.EqualTo(ContentDetectionConstants.ReviewThreshold).Within(0.01));
-        Assert.That(response.Abstained, Is.False);
-        Assert.That(response.Details, Does.Contain("Review"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - score flows through uncapped (safety clamp at MaxScore=5.0 only)
+            Assert.That(response.Score, Is.EqualTo(4.5).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+            Assert.That(response.Details, Does.Contain("Review"));
+        }
     }
 
     [Test]
     public async Task CheckAsync_ReviewResult_MediumConfidence_ReturnsScore()
     {
         // Arrange
-        SetupChatService(CreateReviewResponse("Uncertain", 0.5));
+        SetupChatService(CreateReviewResponse("Uncertain", 2.5));
 
         var request = CreateValidRequest();
 
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(2.5).Within(0.01)); // 0.5 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(2.5).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     #endregion
@@ -416,17 +442,20 @@ public class AIContentCheckTests
     public async Task CheckAsync_CleanResult_ReturnsCleanVerdict()
     {
         // Arrange
-        SetupChatService(CreateCleanResponse("This is a legitimate message", 0.85));
+        SetupChatService(CreateCleanResponse("This is a legitimate message", 0.5));
 
         var request = CreateValidRequest();
 
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.False); // Clean is a verdict, not an abstention
-        Assert.That(response.Details, Does.Contain("Clean"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.False); // Clean is a verdict, not an abstention
+            Assert.That(response.Details, Does.Contain("Clean"));
+        }
         Assert.That(response.Details, Does.Contain("legitimate message"));
     }
 
@@ -438,7 +467,7 @@ public class AIContentCheckTests
     public async Task CheckAsync_SecondCall_UsesCachedResult()
     {
         // Arrange
-        SetupChatService(CreateSpamResponse("Spam detected", 0.8));
+        SetupChatService(CreateSpamResponse("Spam detected", 4.0));
 
         var request = CreateValidRequest();
 
@@ -447,17 +476,20 @@ public class AIContentCheckTests
         // Act - Second call with same message
         var response2 = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response1.Score, Is.EqualTo(response2.Score));
-        Assert.That(response2.Details, Does.Contain("cached"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response1.Score, Is.EqualTo(response2.Score));
+            Assert.That(response2.Details, Does.Contain("cached"));
+        }
 
         // Verify chat service was only called once (cached on second call)
         await _mockChatService.Received(1).GetCompletionAsync(
-            Arg.Any<AIFeatureType>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<ChatCompletionOptions?>(),
-            Arg.Any<CancellationToken>());
+                Arg.Any<AIFeatureType>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -477,9 +509,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+        }
     }
 
     [Test]
@@ -495,10 +530,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Error, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Error, Is.Not.Null);
+        }
     }
 
     [Test]
@@ -515,10 +553,13 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("Failed to parse"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("Failed to parse"));
+        }
     }
 
     [Test]
@@ -535,9 +576,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True);
+        }
     }
 
     #endregion
@@ -545,14 +589,14 @@ public class AIContentCheckTests
     #region CheckAsync - Edge Cases
 
     [Test]
-    public async Task CheckAsync_MissingConfidence_UsesDefault()
+    public async Task CheckAsync_MissingScore_UsesDefault()
     {
-        // Arrange - JSON response with missing confidence field
+        // Arrange - JSON response with missing score field
         var jsonResponse = JsonSerializer.Serialize(new
         {
             result = "spam",
             reason = "Test spam"
-            // No confidence field
+            // No score field
         });
         var result = new ChatCompletionResult { Content = jsonResponse, TotalTokens = 20 };
         _mockChatService
@@ -564,10 +608,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        // Default confidence is 0.8, so score should be 0.8 * 5.0 = 4.0
-        Assert.That(response.Score, Is.EqualTo(4.0).Within(0.01));
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert — Default score is 2.5 when AI omits the score field
+            Assert.That(response.Score, Is.EqualTo(2.5).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     [Test]
@@ -578,7 +624,7 @@ public class AIContentCheckTests
         {
             result = "unknown_value",
             reason = "Test",
-            confidence = 0.5
+            score = 2.5
         });
         var result = new ChatCompletionResult { Content = jsonResponse, TotalTokens = 20 };
         _mockChatService
@@ -590,9 +636,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True); // Unknown result should abstain
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.True); // Unknown result should abstain
+        }
     }
 
     #endregion
@@ -603,7 +652,7 @@ public class AIContentCheckTests
     public async Task CheckAsync_OcrOnlyMessage_AnalyzesOcrText()
     {
         // Arrange - Image with no caption but OCR extracted text
-        SetupChatService(CreateSpamResponse("Spam in image text", 0.9));
+        SetupChatService(CreateSpamResponse("Spam in image text", 4.5));
 
         var request = CreateRequestWithOcr(
             message: "",
@@ -612,24 +661,27 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(4.5).Within(0.01)); // 0.9 * 5.0
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(response.Score, Is.EqualTo(4.5).Within(0.01));
+            Assert.That(response.Abstained, Is.False);
+        }
 
         // Verify AI service was called (OCR text should be analyzed)
         await _mockChatService.Received(1).GetCompletionAsync(
-            Arg.Any<AIFeatureType>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<ChatCompletionOptions?>(),
-            Arg.Any<CancellationToken>());
+                Arg.Any<AIFeatureType>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task CheckAsync_CaptionPlusOcr_CombinesTextWithSeparator()
     {
         // Arrange - Message with both caption and OCR text
-        SetupChatService(CreateCleanResponse("Legitimate content", 0.85));
+        SetupChatService(CreateCleanResponse("Legitimate content", 0.5));
 
         var request = CreateRequestWithOcr(
             message: "Check out this screenshot",
@@ -638,16 +690,19 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert - Clean verdict
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Clean verdict
+            Assert.That(response.Score, Is.EqualTo(0.0));
+            Assert.That(response.Abstained, Is.False);
+        }
     }
 
     [Test]
     public async Task CheckAsync_ShortCaptionWithLongOcr_PassesMinLengthCheck()
     {
         // Arrange - Short caption (< 10 chars) but long OCR text
-        SetupChatService(CreateSpamResponse("Spam detected", 0.75));
+        SetupChatService(CreateSpamResponse("Spam detected", 3.75));
 
         var request = CreateRequestWithOcr(
             message: "Hi",  // Only 2 chars - would normally be too short
@@ -656,9 +711,12 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert - Should NOT abstain because combined length > 10
-        Assert.That(response.Abstained, Is.False);
-        Assert.That(response.Score, Is.EqualTo(3.75).Within(0.01)); // 0.75 * 5.0
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Should NOT abstain because combined length > 10
+            Assert.That(response.Abstained, Is.False);
+            Assert.That(response.Score, Is.EqualTo(3.75).Within(0.01));
+        }
     }
 
     [Test]
@@ -672,16 +730,19 @@ public class AIContentCheckTests
         // Act
         var response = await _check.CheckAsync(request);
 
-        // Assert - Should abstain because combined text too short
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("too short"));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Should abstain because combined text too short
+            Assert.That(response.Abstained, Is.True);
+            Assert.That(response.Details, Does.Contain("too short"));
+        }
     }
 
     [Test]
     public async Task CheckAsync_DifferentOcrSameCaption_SeparateCacheEntries()
     {
         // Arrange - Same caption but different OCR text should use different cache keys
-        SetupChatService(CreateSpamResponse("Spam detected", 0.8));
+        SetupChatService(CreateSpamResponse("Spam detected", 4.0));
 
         var request1 = CreateRequestWithOcr(
             message: "Check this out",
@@ -708,7 +769,7 @@ public class AIContentCheckTests
     public async Task CheckAsync_SameOcrSameCaption_UsesCachedResult()
     {
         // Arrange - Identical requests should use cache
-        SetupChatService(CreateSpamResponse("Spam detected", 0.8));
+        SetupChatService(CreateSpamResponse("Spam detected", 4.0));
 
         var request1 = CreateRequestWithOcr(
             message: "Check this out",
@@ -742,9 +803,8 @@ public class AIContentCheckTests
         return new AIVetoCheckRequest
         {
             Message = message,
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,
             MinMessageLength = 10,
@@ -763,9 +823,8 @@ public class AIContentCheckTests
         return new AIVetoCheckRequest
         {
             Message = "This is a test message that is long enough to be checked",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
+            User = UserIdentity.FromId(123),
+            Chat = ChatIdentity.FromId(456),
             SystemPrompt = null,
             HasSpamFlags = true,  // AI veto requires spam flags from other checks
             MinMessageLength = 10,
@@ -777,35 +836,35 @@ public class AIContentCheckTests
         };
     }
 
-    private static ChatCompletionResult CreateSpamResponse(string reason, double confidence)
+    private static ChatCompletionResult CreateSpamResponse(string reason, double score)
     {
         var jsonResponse = JsonSerializer.Serialize(new
         {
             result = "spam",
             reason,
-            confidence
+            score
         });
         return new ChatCompletionResult { Content = jsonResponse, TotalTokens = 50 };
     }
 
-    private static ChatCompletionResult CreateCleanResponse(string reason, double confidence)
+    private static ChatCompletionResult CreateCleanResponse(string reason, double score)
     {
         var jsonResponse = JsonSerializer.Serialize(new
         {
             result = "clean",
             reason,
-            confidence
+            score
         });
         return new ChatCompletionResult { Content = jsonResponse, TotalTokens = 50 };
     }
 
-    private static ChatCompletionResult CreateReviewResponse(string reason, double confidence)
+    private static ChatCompletionResult CreateReviewResponse(string reason, double score)
     {
         var jsonResponse = JsonSerializer.Serialize(new
         {
             result = "review",
             reason,
-            confidence
+            score
         });
         return new ChatCompletionResult { Content = jsonResponse, TotalTokens = 50 };
     }

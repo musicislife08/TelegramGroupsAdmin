@@ -1,8 +1,6 @@
-using Microsoft.Playwright;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
-using TelegramGroupsAdmin.Telegram.Models;
 using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Audit;
@@ -40,12 +38,15 @@ public class AuditLogTests : SharedAuthenticatedTestBase
             "Audit Log page title should be visible for GlobalAdmin");
 
         var pageTitle = await _auditLogPage.GetPageTitleAsync();
-        Assert.That(pageTitle, Is.EqualTo("Audit Log"),
-            "Page title should be 'Audit Log'");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pageTitle, Is.EqualTo("Audit Log"),
+                      "Page title should be 'Audit Log'");
 
-        // Verify tabs are visible
-        Assert.That(await _auditLogPage.IsTabsVisibleAsync(), Is.True,
-            "Tab container should be visible");
+            // Verify tabs are visible
+            Assert.That(await _auditLogPage.IsTabsVisibleAsync(), Is.True,
+                "Tab container should be visible");
+        }
     }
 
     [Test]
@@ -100,17 +101,20 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         // Act - navigate to audit page
         await _auditLogPage.NavigateAsync();
 
-        // Assert - Web Admin Log tab is active by default
-        Assert.That(await _auditLogPage.IsWebAdminLogTabActiveAsync(), Is.True,
-            "Web Admin Log tab should be active by default");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Web Admin Log tab is active by default
+            Assert.That(await _auditLogPage.IsWebAdminLogTabActiveAsync(), Is.True,
+                "Web Admin Log tab should be active by default");
 
-        // Verify filters are visible
-        Assert.That(await _auditLogPage.IsEventTypeFilterVisibleAsync(), Is.True,
-            "Event Type filter should be visible");
-        Assert.That(await _auditLogPage.IsActorFilterVisibleAsync(), Is.True,
-            "Actor filter should be visible");
-        Assert.That(await _auditLogPage.IsTargetUserFilterVisibleAsync(), Is.True,
-            "Target User filter should be visible");
+            // Verify filters are visible
+            Assert.That(await _auditLogPage.IsEventTypeFilterVisibleAsync(), Is.True,
+                "Event Type filter should be visible");
+            Assert.That(await _auditLogPage.IsActorFilterVisibleAsync(), Is.True,
+                "Actor filter should be visible");
+            Assert.That(await _auditLogPage.IsTargetUserFilterVisibleAsync(), Is.True,
+                "Target User filter should be visible");
+        }
 
         // Verify table headers - the Web Admin Log shows these columns
         var headers = await _auditLogPage.GetTableHeadersAsync();
@@ -145,12 +149,15 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await Expect(tableRowOrEmpty.First).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         var initialRowCount = await _auditLogPage.GetTableRowCountAsync();
-        Assert.That(initialRowCount, Is.EqualTo(2),
-            "Should have exactly 2 audit log entries (one Login, one UserRegistered)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(initialRowCount, Is.EqualTo(2),
+                      "Should have exactly 2 audit log entries (one Login, one UserRegistered)");
 
-        // Verify the Event Type filter dropdown exists
-        Assert.That(await _auditLogPage.IsEventTypeFilterVisibleAsync(), Is.True,
-            "Event Type filter should be visible");
+            // Verify the Event Type filter dropdown exists
+            Assert.That(await _auditLogPage.IsEventTypeFilterVisibleAsync(), Is.True,
+                "Event Type filter should be visible");
+        }
 
         // Filter by Login event type
         await _auditLogPage.SelectEventTypeFilterAsync("Login");
@@ -195,12 +202,15 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await Expect(tableRowOrEmpty.First).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         var initialRowCount = await _auditLogPage.GetTableRowCountAsync();
-        Assert.That(initialRowCount, Is.EqualTo(2),
-            "Should have exactly 2 audit log entries (one per actor)");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(initialRowCount, Is.EqualTo(2),
+                      "Should have exactly 2 audit log entries (one per actor)");
 
-        // Verify the Actor filter dropdown exists
-        Assert.That(await _auditLogPage.IsActorFilterVisibleAsync(), Is.True,
-            "Actor filter should be visible");
+            // Verify the Actor filter dropdown exists
+            Assert.That(await _auditLogPage.IsActorFilterVisibleAsync(), Is.True,
+                "Actor filter should be visible");
+        }
 
         // Open the Actor filter dropdown
         var actorSelect = Page.Locator(".mud-select").Filter(new() { HasText = "Actor (Who)" }).First;
@@ -259,17 +269,20 @@ public class AuditLogTests : SharedAuthenticatedTestBase
         await _auditLogPage.NavigateAsync();
         await _auditLogPage.SelectTabAsync("Telegram Moderation Log");
 
-        // Assert - Telegram Moderation Log tab is now active
-        Assert.That(await _auditLogPage.IsModerationLogTabActiveAsync(), Is.True,
-            "Telegram Moderation Log tab should be active after clicking");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Telegram Moderation Log tab is now active
+            Assert.That(await _auditLogPage.IsModerationLogTabActiveAsync(), Is.True,
+                "Telegram Moderation Log tab should be active after clicking");
 
-        // Verify moderation log filters are visible
-        Assert.That(await _auditLogPage.IsActionTypeFilterVisibleAsync(), Is.True,
-            "Action Type filter should be visible");
-        Assert.That(await _auditLogPage.IsTelegramUserIdFilterVisibleAsync(), Is.True,
-            "Telegram User ID filter should be visible");
-        Assert.That(await _auditLogPage.IsIssuedByFilterVisibleAsync(), Is.True,
-            "Issued By filter should be visible");
+            // Verify moderation log filters are visible
+            Assert.That(await _auditLogPage.IsActionTypeFilterVisibleAsync(), Is.True,
+                "Action Type filter should be visible");
+            Assert.That(await _auditLogPage.IsTelegramUserIdFilterVisibleAsync(), Is.True,
+                "Telegram User ID filter should be visible");
+            Assert.That(await _auditLogPage.IsIssuedByFilterVisibleAsync(), Is.True,
+                "Issued By filter should be visible");
+        }
 
         // Wait for the Moderation Log table to be fully loaded (6 columns: Timestamp, Action Type, Telegram User, Issued By, Reason, Expires At)
         // Using exact count prevents flaky behavior from tab transition where both panels might briefly match

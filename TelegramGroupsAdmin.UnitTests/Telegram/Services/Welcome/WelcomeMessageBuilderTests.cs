@@ -1,4 +1,4 @@
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Welcome;
@@ -443,6 +443,20 @@ public class WelcomeMessageBuilderTests
 
         // Assert: Should still have the footer even with empty base message
         Assert.That(result, Does.Contain("You're all set"));
+    }
+
+    #endregion
+
+    #region FormatVerifyingMessage Tests
+
+    [Test]
+    public void FormatVerifyingMessage_WithUsername_ReturnsFormattedVerifyingMessage()
+    {
+        // Act
+        var result = WelcomeMessageBuilder.FormatVerifyingMessage("@testuser");
+
+        // Assert
+        Assert.That(result, Is.EqualTo("@testuser ⏳ Verifying..."));
     }
 
     #endregion

@@ -43,21 +43,14 @@ public class ContentDetectionConfig
     public int MinMessageLength { get; set; } = 10;
 
     /// <summary>
-    /// Auto-ban threshold (confidence >= this value)
+    /// Auto-ban threshold on V2 additive scoring scale (0.0-5.0)
     /// </summary>
-    public int AutoBanThreshold { get; set; } = 80;
+    public double AutoBanThreshold { get; set; } = 4.0;
 
     /// <summary>
-    /// Review queue threshold (confidence >= this value but < auto-ban)
+    /// Review queue threshold on V2 additive scoring scale (0.0-5.0)
     /// </summary>
-    public int ReviewQueueThreshold { get; set; } = 50;
-
-    /// <summary>
-    /// Maximum individual check confidence to trigger OpenAI veto (0-100)
-    /// Veto runs if: (NetConfidence > ReviewQueueThreshold) OR (MaxConfidence > this value)
-    /// Default: 85 (catches high-confidence outliers that might be outvoted)
-    /// </summary>
-    public int MaxConfidenceVetoThreshold { get; set; } = 85;
+    public double ReviewQueueThreshold { get; set; } = 2.5;
 
     /// <summary>
     /// Training mode - forces all spam detections into review queue instead of auto-banning
@@ -74,11 +67,6 @@ public class ContentDetectionConfig
     /// Similarity check configuration
     /// </summary>
     public SimilarityConfig Similarity { get; set; } = new();
-
-    /// <summary>
-    /// CAS (Combot Anti-Spam) configuration
-    /// </summary>
-    public CasConfig Cas { get; set; } = new();
 
     /// <summary>
     /// Naive Bayes classifier configuration
@@ -137,4 +125,10 @@ public class ContentDetectionConfig
     /// Infrastructure settings (ClamAV, VirusTotal connection) remain in FileScanningConfig.
     /// </summary>
     public FileScanningDetectionConfig FileScanning { get; set; } = new();
+
+    /// <summary>
+    /// Channel reply spam signal configuration.
+    /// Adds confidence boost when message replies to a channel post.
+    /// </summary>
+    public ChannelReplyConfig ChannelReply { get; set; } = new();
 }

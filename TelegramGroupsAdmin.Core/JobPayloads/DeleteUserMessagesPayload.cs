@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
@@ -6,5 +8,5 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// </summary>
 public record DeleteUserMessagesPayload
 {
-    public long TelegramUserId { get; init; }
+    public required UserIdentity User { get; init; }
 }

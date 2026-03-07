@@ -73,21 +73,21 @@
 
                 @* Row 2: Thresholds *@
                 <MudItem xs="12" md="4">
-                    <FieldWithHelp HelpText="Messages with confidence ≥ this value will be automatically deleted and the user banned.">
+                    <FieldWithHelp HelpText="Messages with score ≥ this value will be automatically deleted and the user banned.">
                         <MudNumericField @bind-Value="_config.AutoBanThreshold"
                                         Label="Auto-Ban Threshold"
-                                        Min="50" Max="100"
+                                        Min="2.5" Max="5.0" Step="0.25"
                                         Disabled="@_config.TrainingMode"
-                                        HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= triggers ban")" />
+                                        HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Score >= triggers ban")" />
                     </FieldWithHelp>
                 </MudItem>
 
                 <MudItem xs="12" md="4">
-                    <FieldWithHelp HelpText="Messages with confidence ≥ this value but below auto-ban go to review queue.">
+                    <FieldWithHelp HelpText="Messages with score ≥ this value but below auto-ban go to review queue.">
                         <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
                                         Label="Review Queue Threshold"
-                                        Min="20" Max="80"
-                                        HelperText="Confidence >= goes to review" />
+                                        Min="1.0" Max="4.0" Step="0.25"
+                                        HelperText="Score >= goes to review" />
                     </FieldWithHelp>
                 </MudItem>
 
@@ -146,11 +146,11 @@
     </MudText>
 
     <ConceptualAlert Title="How Algorithm Orchestration Works" Severity="Severity.Info" Class="mb-3">
-        All enabled algorithms run in parallel and each returns a confidence score (0-100). Scores are aggregated to produce a final confidence level:
+        All enabled algorithms run in parallel and each returns a score (0.0-5.0). Scores are added to produce a final score:
         <ul class="mt-2 mb-0">
-            <li><strong>≥ @_config.AutoBanThreshold%</strong> (Auto-Ban): Message deleted, user banned across all chats</li>
-            <li><strong>@_config.ReviewQueueThreshold%-@(_config.AutoBanThreshold-1)%</strong> (Review Queue): Message sent to moderator review</li>
-            <li><strong>&lt; @_config.ReviewQueueThreshold%</strong> (Pass): Message allowed</li>
+            <li><strong>≥ @_config.AutoBanThreshold</strong> (Auto-Ban): Message deleted, user banned across all chats</li>
+            <li><strong>@_config.ReviewQueueThreshold-@_config.AutoBanThreshold</strong> (Review Queue): Message sent to moderator review</li>
+            <li><strong>&lt; @_config.ReviewQueueThreshold</strong> (Pass): Message allowed</li>
         </ul>
         <div class="mt-2">
             OpenAI in <strong>Veto Mode</strong> can override high-confidence detections to reduce false positives. Enable algorithms incrementally and use Training Mode when testing new configurations.
@@ -180,40 +180,8 @@
         @if (_config.StopWords.Enabled)
         {
             <MudCardContent>
-                <MudNumericField @bind-Value="_config.StopWords.ConfidenceThreshold"
-                                Label="Confidence Threshold"
-                                Min="1" Max="100"
-                                Variant="Variant.Outlined"
-                                helperText="Confidence level when stop words are detected (0-100%)" />
-            </MudCardContent>
-        }
-    </MudCard>
-
-    <!-- CAS (Combot Anti-Spam) -->
-    <MudCard Elevation="1">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudSwitch T="bool" @bind-Value="_config.Cas.Enabled" Color="Color.Primary" />
-                    <MudText Typo="Typo.h6">CAS (Combot Anti-Spam)</MudText>
-                    <HelpTooltip Text="Checks users against the CAS public database of known Telegram spammers. External API lookup (~12ms average). High precision for serial spammers. No configuration needed - automatically detects banned users." />
-                    <MudChip T="string" Size="Size.Small" Color="@(_config.Cas.Enabled ? Color.Success : Color.Default)">
-                        @(_config.Cas.Enabled ? "Enabled" : "Disabled")
-                    </MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
-                </MudStack>
-            </CardHeaderContent>
-            <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionCAS>("CAS Configuration"))">
-                    Configure
-                </MudButton>
-            </CardHeaderActions>
-        </MudCardHeader>
-        @if (_config.Cas.Enabled)
-        {
-            <MudCardContent>
                 <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    External lookup for known spammers. Click "Configure" for API settings.
+                    Matches messages against a customizable list of spam keywords. Click "Configure" for settings.
                 </MudText>
             </MudCardContent>
         }
@@ -272,11 +240,9 @@
         @if (_config.Bayes.Enabled)
         {
             <MudCardContent>
-                <MudNumericField @bind-Value="_config.Bayes.MinSpamProbability"
-                                Label="Minimum Spam Probability"
-                                Min="1.0" Max="99.0" Step="0.1"
-                                Variant="Variant.Outlined"
-                                helperText="Minimum probability (%) to classify as spam" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Statistical classifier that learns spam patterns from word frequency in training samples. Click "Configure" for settings.
+                </MudText>
             </MudCardContent>
         }
     </MudCard>
@@ -411,6 +377,100 @@
         }
     </MudCard>
 
+    <!-- Channel Reply Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.ChannelReply.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Channel Reply Detection</MudText>
+                    <HelpTooltip Text="Adds a confidence boost when a message replies to a channel post (linked channel system post or anonymous admin posting as the group). Weak signal on its own but strengthens other detections. Very fast, no API calls." />
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.ChannelReply.Enabled ? Color.Success : Color.Default)">
+                        @(_config.ChannelReply.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
+                </MudStack>
+            </CardHeaderContent>
+        </MudCardHeader>
+        @if (_config.ChannelReply.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Boosts spam confidence when message replies to a channel post. Works as a supporting signal alongside other algorithms.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Media Content Detection Header -->
+    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
+        <MudIcon Icon="@Icons.Material.Filled.PermMedia" Class="mr-2" />
+        Media Content Detection
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Analyze images and videos for spam content using OCR, hash similarity, and AI Vision.
+    </MudText>
+
+    <!-- Image Spam Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.ImageSpam.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Image Spam Detection</MudText>
+                    <HelpTooltip Text="3-layer image analysis: (1) Hash similarity against known spam samples (fast), (2) OCR text extraction + text spam checks (medium), (3) AI Vision fallback for comprehensive analysis (slow). Uses OpenAI Vision API (costs apply)." />
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.ImageSpam.Enabled ? Color.Success : Color.Default)">
+                        @(_config.ImageSpam.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Schedule">Slow</MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionImage>("Image Spam Configuration"))">
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.ImageSpam.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Analyzes images using hash matching, OCR text extraction, and AI Vision. Click "Configure" for layer settings and thresholds.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Video Spam Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.VideoSpam.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Video Spam Detection</MudText>
+                    <HelpTooltip Text="3-layer video analysis: (1) Keyframe hash similarity against known spam (fast), (2) OCR on extracted frames + text checks (medium), (3) AI Vision on frames fallback (slow). Requires FFmpeg for frame extraction. Uses OpenAI Vision API (costs apply)." />
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.VideoSpam.Enabled ? Color.Success : Color.Default)">
+                        @(_config.VideoSpam.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Schedule">Slow</MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionVideo>("Video Spam Configuration"))">
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.VideoSpam.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Analyzes video keyframes using hash matching, OCR text extraction, and AI Vision. Click "Configure" for layer settings and thresholds.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
     <!-- URL Content Detection Header -->
     <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
         <MudIcon Icon="@Icons.Material.Filled.Link" Class="mr-2" />
@@ -506,7 +566,7 @@
 
 @code {
     [Parameter]
-    public long? ChatId { get; set; }
+    public ChatIdentity? Chat { get; set; }
 
     private ContentDetectionConfig _config = new();
     private bool _isSaving;
@@ -520,7 +580,7 @@
     {
         try
         {
-            var chatId = ChatId ?? 0;
+            var chatId = Chat?.Id ?? 0;
             _config = await ConfigService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.ContentDetection, chatId)
                       ?? new ContentDetectionConfig();
         }
@@ -539,9 +599,9 @@
         {
             _isSaving = true;
 
-            var chatId = ChatId ?? 0;
-            await ConfigService.SaveAsync(ConfigType.ContentDetection, chatId, _config);
-            Snackbar.Add(chatId == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
+            var chat = Chat ?? ChatIdentity.FromId(0);
+            await ConfigService.SaveAsync(ConfigType.ContentDetection, chat, _config);
+            Snackbar.Add(chat.Id == 0 ? "Global configuration saved successfully" : "Chat configuration saved successfully", Severity.Success);
         }
         catch (Exception ex)
         {
@@ -557,7 +617,7 @@
     {
         var parameters = new DialogParameters<ConfigDialogWrapper>
         {
-            { x => x.ChatId, ChatId },
+            { x => x.Chat, Chat },
             { x => x.ComponentType, typeof(T) }
         };
 

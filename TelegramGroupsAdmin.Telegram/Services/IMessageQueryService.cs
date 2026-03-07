@@ -44,7 +44,8 @@ public interface IMessageQueryService
     /// Used by orchestrator to build rich notifications after spam ban.
     /// </summary>
     Task<UiModels.MessageWithDetectionHistory?> GetMessageWithDetectionHistoryAsync(
-        long messageId,
+        int messageId,
+        long chatId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -59,8 +60,9 @@ public interface IMessageQueryService
     /// <summary>
     /// Get content checks for multiple messages (latest detection per message)
     /// </summary>
-    Task<Dictionary<long, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(
-        IEnumerable<long> messageIds,
+    Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(
+        long chatId,
+        IEnumerable<int> messageIds,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -90,5 +92,16 @@ public interface IMessageQueryService
     /// <returns>Enriched message with UserPhotoPath, ReplyToUser, ReplyToText populated</returns>
     Task<UiModels.MessageRecord?> GetMessageByIdAsync(
         UiModels.MessageRecord message,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get paginated messages for a specific user across accessible chats.
+    /// Used by the per-user messages dialog for cross-chat message history.
+    /// </summary>
+    Task<List<UiModels.MessageRecord>> GetUserMessagesPaginatedAsync(
+        long telegramUserId,
+        IReadOnlyCollection<long> accessibleChatIds,
+        int limit = 50,
+        DateTimeOffset? beforeTimestamp = null,
         CancellationToken cancellationToken = default);
 }

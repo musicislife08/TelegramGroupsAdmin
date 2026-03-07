@@ -171,13 +171,11 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
                 MinMessageLength = chatConfig.MinMessageLength,
                 AutoBanThreshold = chatConfig.AutoBanThreshold,
                 ReviewQueueThreshold = chatConfig.ReviewQueueThreshold,
-                MaxConfidenceVetoThreshold = chatConfig.MaxConfidenceVetoThreshold,
                 TrainingMode = chatConfig.TrainingMode,
 
                 // Section-by-section merge based on UseGlobal flags
                 StopWords = chatConfig.StopWords.UseGlobal ? globalConfig.StopWords : chatConfig.StopWords,
                 Similarity = chatConfig.Similarity.UseGlobal ? globalConfig.Similarity : chatConfig.Similarity,
-                Cas = chatConfig.Cas.UseGlobal ? globalConfig.Cas : chatConfig.Cas,
                 Bayes = chatConfig.Bayes.UseGlobal ? globalConfig.Bayes : chatConfig.Bayes,
                 InvisibleChars = chatConfig.InvisibleChars.UseGlobal ? globalConfig.InvisibleChars : chatConfig.InvisibleChars,
                 Translation = chatConfig.Translation.UseGlobal ? globalConfig.Translation : chatConfig.Translation,
@@ -235,7 +233,7 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
 
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Updated content detection configuration for chat {ChatId}", chatId);
+            _logger.LogDebug("Updated content detection configuration for chat {ChatId}", chatId);
             return true;
         }
         catch (Exception ex)
@@ -292,7 +290,7 @@ public class ContentDetectionConfigRepository : IContentDetectionConfigRepositor
             context.ContentDetectionConfigs.Remove(entity);
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Deleted content detection configuration for chat {ChatId}", chatId);
+            _logger.LogDebug("Deleted content detection configuration for chat {ChatId}", chatId);
             return true;
         }
         catch (Exception ex)

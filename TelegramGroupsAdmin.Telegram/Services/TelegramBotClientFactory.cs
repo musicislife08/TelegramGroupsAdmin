@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -10,28 +11,24 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Uses a "refresh on change" pattern - tracks single active client, disposes old
 /// client when token changes. This keeps resource usage low for homelab deployment.
 ///
-/// Two usage patterns:
-/// - GetBotClientAsync(): Returns raw client for polling (TelegramBotPollingHost only)
-/// - GetOperationsAsync(): Returns ITelegramOperations wrapper (all other services)
+/// Only used by Bot Handlers layer - services and application code should use IBot*Service interfaces.
 /// </summary>
 public class TelegramBotClientFactory : ITelegramBotClientFactory
 {
     private readonly ITelegramConfigLoader _configLoader;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TelegramBotClientFactory> _logger;
     private readonly Lock _lock = new();
 
     // Single client/token pair (not dictionary) - replaced when token changes
     private string? _currentToken;
     private ITelegramBotClient? _currentClient;
-    private TelegramOperations? _currentOperations;
+    private ITelegramApiClient? _currentApiClient;
 
     public TelegramBotClientFactory(
         ITelegramConfigLoader configLoader,
         ILoggerFactory loggerFactory)
     {
         _configLoader = configLoader;
-        _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<TelegramBotClientFactory>();
     }
 
@@ -39,29 +36,25 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
     public async Task<ITelegramBotClient> GetBotClientAsync()
     {
         var botToken = await _configLoader.LoadConfigAsync();
-        return GetOrRefresh(botToken);
+        GetOrRefresh(botToken);
+        return _currentClient!;
     }
 
     /// <inheritdoc />
-    public async Task<ITelegramOperations> GetOperationsAsync()
+    public async Task<ITelegramApiClient> GetApiClientAsync()
     {
         var botToken = await _configLoader.LoadConfigAsync();
-        GetOrRefresh(botToken); // Ensure client is current
-
-        lock (_lock)
-        {
-            return _currentOperations
-                ?? throw new InvalidOperationException("Operations not initialized - GetOrRefresh failed to create instance");
-        }
+        GetOrRefresh(botToken);
+        return _currentApiClient!;
     }
 
-    private ITelegramBotClient GetOrRefresh(string botToken)
+    private void GetOrRefresh(string botToken)
     {
         lock (_lock)
         {
             // Fast path: token unchanged, return cached client
             if (_currentToken == botToken && _currentClient != null)
-                return _currentClient;
+                return;
 
             // Token changed or first call - replace old client
             if (_currentClient != null)
@@ -72,12 +65,9 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
             // Create new client and wrapper
             _currentToken = botToken;
             _currentClient = new TelegramBotClient(botToken);
-            _currentOperations = new TelegramOperations(
-                _currentClient,
-                _loggerFactory.CreateLogger<TelegramOperations>());
+            _currentApiClient = new TelegramApiClient(_currentClient);
 
             _logger.LogDebug("Created new Telegram client");
-            return _currentClient;
         }
     }
 
@@ -86,7 +76,7 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
         lock (_lock)
         {
             _currentClient = null;
-            _currentOperations = null;
+            _currentApiClient = null;
             _currentToken = null;
         }
     }

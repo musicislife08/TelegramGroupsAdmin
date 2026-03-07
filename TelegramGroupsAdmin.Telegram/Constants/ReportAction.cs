@@ -9,11 +9,11 @@ public enum ReportAction
     /// <summary>Mark as spam, delete message, ban user</summary>
     Spam = 0,
 
-    /// <summary>Send warning to user, mark report reviewed</summary>
-    Warn = 1,
+    /// <summary>Delete message and ban user (not spam-classified)</summary>
+    Ban = 1,
 
-    /// <summary>Temporarily ban user, mark report reviewed</summary>
-    TempBan = 2,
+    /// <summary>Send warning to user</summary>
+    Warn = 2,
 
     /// <summary>Dismiss report without action</summary>
     Dismiss = 3

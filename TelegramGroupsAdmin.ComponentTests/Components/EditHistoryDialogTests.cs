@@ -5,7 +5,6 @@ using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -30,7 +29,7 @@ public class EditHistoryDialogTestContext : BunitContext
         var logger = Substitute.For<ILogger<EditHistoryDialog>>();
 
         // Default: return empty edit list
-        MessageEditService.GetEditsForMessageAsync(Arg.Any<long>()).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>(), Arg.Any<long>()).Returns([]);
         MessageTranslationService.GetTranslationForEditAsync(Arg.Any<long>()).Returns((MessageTranslation?)null);
 
         // Register mocks
@@ -73,24 +72,21 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
     {
         MessageEditService.ClearReceivedCalls();
         MessageTranslationService.ClearReceivedCalls();
-        MessageEditService.GetEditsForMessageAsync(Arg.Any<long>()).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(Arg.Any<int>(), Arg.Any<long>()).Returns([]);
     }
 
     #region Helper Methods
 
     private static MessageRecord CreateTestMessage(
-        long messageId = 83973,
+        int messageId = 83973,
         long userId = 1234567890,
         string userName = "johndoe42",
         string messageText = "This is a test message for the edit history dialog.")
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: userName,
-            FirstName: "John",
-            LastName: "Doe",
-            ChatId: -1001234567890,
+            User: new UserIdentity(userId, "John", "Doe", userName),
+            Chat: new ChatIdentity(-1001234567890, "Test Community Group"),
             Timestamp: DateTimeOffset.UtcNow.AddHours(-1),
             MessageText: messageText,
             PhotoFileId: null,
@@ -98,7 +94,6 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
             Urls: null,
             EditDate: null,
             ContentHash: "CCF638619BB83D56E788526C226A2C529318570431F2D285840E4DE1AE300D58",
-            ChatName: "Test Community Group",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: "chat_icons/1001234567890.jpg",
@@ -122,13 +117,14 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
 
     private static MessageEditRecord CreateTestEdit(
         long id = 355,
-        long messageId = 83973,
+        int messageId = 83973,
         string oldText = "Aww,,, my starlink speeds are back to normal today",
         string newText = "Aww... my starlink speeds are back to normal today")
     {
         return new MessageEditRecord(
             Id: id,
             MessageId: messageId,
+            ChatId: -100,
             OldText: oldText,
             NewText: newText,
             EditDate: DateTimeOffset.UtcNow.AddMinutes(-30),
@@ -211,7 +207,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         // Arrange
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns([]);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns([]);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -234,15 +230,15 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage(userName: "testuser");
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
 
-        // Assert
+        // Assert - DisplayName prioritizes FirstName+LastName over Username (matches Telegram UI behavior)
         provider.WaitForAssertion(() =>
         {
-            Assert.That(provider.Markup, Does.Contain("testuser"));
+            Assert.That(provider.Markup, Does.Contain("John Doe"));
         });
     }
 
@@ -253,7 +249,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage(messageId: 12345);
         List<MessageEditRecord> edits = [CreateTestEdit(messageId: 12345)];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -276,7 +272,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -300,7 +296,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
             CreateTestEdit(id: 2),
             CreateTestEdit(id: 3)
         ];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -323,7 +319,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);
@@ -342,7 +338,7 @@ public class EditHistoryDialogTests : EditHistoryDialogTestContext
         var provider = RenderDialogProvider();
         var message = CreateTestMessage();
         List<MessageEditRecord> edits = [CreateTestEdit()];
-        MessageEditService.GetEditsForMessageAsync(message.MessageId).Returns(edits);
+        MessageEditService.GetEditsForMessageAsync(message.MessageId, Arg.Any<long>()).Returns(edits);
 
         // Act
         _ = OpenDialogAsync(message);

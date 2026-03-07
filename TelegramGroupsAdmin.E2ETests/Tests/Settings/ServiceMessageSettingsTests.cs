@@ -147,19 +147,22 @@ public class ServiceMessageSettingsTests : AuthenticatedTestBase
         // Act - reset to defaults
         await Page.GetByRole(AriaRole.Button, new() { Name = "Reset to Defaults" }).ClickAsync();
 
-        // Assert - all toggles should be enabled (default is true for all)
-        Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Join Messages"), Is.True,
-            "Delete Join Messages should be enabled by default");
-        Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Leave Messages"), Is.True,
-            "Delete Leave Messages should be enabled by default");
-        Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Photo Changes"), Is.True,
-            "Delete Photo Changes should be enabled by default");
-        Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Title Changes"), Is.True,
-            "Delete Title Changes should be enabled by default");
-        Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Pin Notifications"), Is.True,
-            "Delete Pin Notifications should be enabled by default");
-        Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Chat Creation Messages"), Is.True,
-            "Delete Chat Creation Messages should be enabled by default");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - all toggles should be enabled (default is true for all)
+            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Join Messages"), Is.True,
+                "Delete Join Messages should be enabled by default");
+            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Leave Messages"), Is.True,
+                "Delete Leave Messages should be enabled by default");
+            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Photo Changes"), Is.True,
+                "Delete Photo Changes should be enabled by default");
+            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Title Changes"), Is.True,
+                "Delete Title Changes should be enabled by default");
+            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Pin Notifications"), Is.True,
+                "Delete Pin Notifications should be enabled by default");
+            Assert.That(await _settingsPage.IsServiceMessageDeletionEnabledAsync("Delete Chat Creation Messages"), Is.True,
+                "Delete Chat Creation Messages should be enabled by default");
+        }
     }
 
     #endregion

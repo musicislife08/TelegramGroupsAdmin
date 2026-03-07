@@ -1,14 +1,14 @@
 @page "/chats"
-@using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
+@using TelegramGroupsAdmin.Telegram.Services.Bot
+@using TelegramGroupsAdmin.Core.Models
 @inject ITelegramBotService BotService
-@inject IChatManagementService ChatManagementService
+@inject IChatHealthCache ChatHealthCache
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IContentDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
-@inject IBlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @attribute [Authorize]
 @implements IDisposable
@@ -65,11 +65,11 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Chat Name">
-                    <ChatInfoCell Chat="@context.Chat" />
+                    <ChatInfoCell Chat="@context.Record" />
                 </MudTd>
-                <MudTd DataLabel="Type">@context.Chat.ChatType.ToString()</MudTd>
+                <MudTd DataLabel="Type">@context.Record.ChatType.ToString()</MudTd>
                 <MudTd DataLabel="Bot Status">
-                    <ChatStatusChip BotStatus="@context.Chat.BotStatus" />
+                    <ChatStatusChip BotStatus="@context.Record.BotStatus" />
                 </MudTd>
                 <MudTd DataLabel="Health">
                     <ChatStatusChip HealthStatus="@context.HealthStatus.Status"
@@ -86,9 +86,9 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Last Seen">
-                    @if (context.Chat.LastSeenAt.HasValue)
+                    @if (context.Record.LastSeenAt.HasValue)
                     {
-                        @context.Chat.LastSeenAt.Value.ToString("g")
+                        @context.Record.LastSeenAt.Value.ToString("g")
                     }
                     else
                     {
@@ -110,6 +110,8 @@
 </MudContainer>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private List<ManagedChatInfo> _chats = [];
     private bool _loading = true;
     private string _searchString = "";
@@ -117,6 +119,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (WebUser is null) return;
+
         // Subscribe to health updates
         BotService.OnHealthUpdate += HandleHealthUpdate;
 
@@ -128,21 +132,11 @@
         _loading = true;
         try
         {
-            // Get current user and their permission level
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                Snackbar.Add("Unable to identify current user", Severity.Error);
-                return;
-            }
-
             // Load chats accessible to this user (filtered by permission level)
             // Include deleted chats - UI toggle controls visibility
             var chats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel,
+                WebUser!.Id,
+                WebUser.PermissionLevel,
                 includeDeleted: true);
 
             // Check which chats have custom spam configs
@@ -155,25 +149,25 @@
             _chats = [];
             foreach (var chat in chats)
             {
-                // Get cached health status from chat management service
-                var health = ChatManagementService.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
+                // Get cached health status from health cache
+                var health = ChatHealthCache.GetCachedHealth(chat.Identity.Id) ?? new ChatHealthStatus
                 {
-                    ChatId = chat.ChatId,
+                    Chat = chat.Identity,
                     Status = ChatHealthStatusType.Unknown,
                     IsReachable = true
                 };
 
                 // Check if this chat has custom configs
-                var configRecord = await ConfigRepository.GetAsync(chat.ChatId);
+                var configRecord = await ConfigRepository.GetAsync(chat.Identity.Id);
                 var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
                 var hasServiceMsgConfig = !string.IsNullOrEmpty(configRecord?.ServiceMessageDeletionConfig);
                 var hasBanCelebrationConfig = !string.IsNullOrEmpty(configRecord?.BanCelebrationConfig);
 
                 _chats.Add(new ManagedChatInfo
                 {
-                    Chat = chat,
+                    Record = chat,
                     HealthStatus = health,
-                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId),
+                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.Identity.Id),
                     HasCustomWelcomeConfig = hasWelcomeConfig,
                     HasCustomServiceMsgConfig = hasServiceMsgConfig,
                     HasCustomBanCelebrationConfig = hasBanCelebrationConfig
@@ -193,7 +187,7 @@
     private void HandleHealthUpdate(ChatHealthStatus health)
     {
         // Update health status for the chat in real-time
-        var chat = _chats.FirstOrDefault(c => c.Chat.ChatId == health.ChatId);
+        var chat = _chats.FirstOrDefault(c => c.Record.Identity.Id == health.Chat.Id);
         if (chat != null)
         {
             chat.HealthStatus = health;
@@ -218,17 +212,17 @@
     private bool FilterFunc(ManagedChatInfo chat)
     {
         // Filter by deleted status first
-        if (!_showDeletedChats && chat.Chat.IsDeleted)
+        if (!_showDeletedChats && chat.Record.IsDeleted)
             return false;
 
         if (string.IsNullOrWhiteSpace(_searchString))
             return true;
 
-        if (!string.IsNullOrEmpty(chat.Chat.ChatName) &&
-            chat.Chat.ChatName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(chat.Record.Identity.ChatName) &&
+            chat.Record.Identity.ChatName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (chat.Chat.ChatId.ToString().Contains(_searchString))
+        if (chat.Record.Identity.Id.ToString().Contains(_searchString))
             return true;
 
         return false;

@@ -16,6 +16,7 @@ public static class TrainingLabelMappings
             return new UiModels.TrainingLabelRecord
             {
                 MessageId = data.MessageId,
+                ChatId = data.ChatId,
                 Label = (TrainingLabel)data.Label, // Cast short → enum
                 LabeledByUserId = data.LabeledByUserId,
                 LabeledAt = data.LabeledAt,
@@ -32,6 +33,7 @@ public static class TrainingLabelMappings
             return new DataModels.TrainingLabelDto
             {
                 MessageId = ui.MessageId,
+                ChatId = ui.ChatId,
                 Label = (short)ui.Label, // Cast enum → short
                 LabeledByUserId = ui.LabeledByUserId,
                 LabeledAt = ui.LabeledAt,

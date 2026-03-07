@@ -5,11 +5,9 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Services;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Extensions;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
@@ -69,8 +67,8 @@ public class FileScanningCheckV2 : IContentCheckV2
             if (req.FileSize > _config.General.MaxFileSizeBytes)
             {
                 _logger.LogWarning("File exceeds size limit for {User}: {Size} > {Limit} bytes",
-                    LogDisplayName.UserDebug(req.UserName, req.UserId), req.FileSize, _config.General.MaxFileSizeBytes);
-                
+                    req.User.ToLogDebug(), req.FileSize, _config.General.MaxFileSizeBytes);
+
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -100,7 +98,7 @@ public class FileScanningCheckV2 : IContentCheckV2
                         .Where(r => r.Result == "Infected")
                         .Select(r => $"{r.Scanner}:{r.ThreatName}")
                         .ToList();
-                    
+
                     return new ContentCheckResponseV2
                     {
                         CheckName = CheckName,
@@ -158,10 +156,10 @@ public class FileScanningCheckV2 : IContentCheckV2
                 var detectedBy = tier1Result.DetectedBy ?? [];
 
                 _logger.LogWarning("File scanning THREAT for {User}: {Threats} detected by {Scanners} (Tier 1)",
-                    LogDisplayName.UserDebug(req.UserName, req.UserId),
+                    req.User.ToLogDebug(),
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
-                
+
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -174,7 +172,7 @@ public class FileScanningCheckV2 : IContentCheckV2
 
             // Tier 1 reported clean - proceed to Tier 2 cloud queue
             _logger.LogInformation("Tier 1 scan CLEAN for {User}, proceeding to Tier 2 cloud queue",
-                req.UserName ?? $"User {req.UserId}");
+                req.User.ToLogInfo());
 
             var tier2Result = await _tier2Coordinator.ScanFileAsync(
                 req.FilePath,
@@ -228,7 +226,7 @@ public class FileScanningCheckV2 : IContentCheckV2
                 var detectedBy = tier2Result.DetectedBy ?? [];
 
                 _logger.LogWarning("File scanning THREAT for {User}: {Threats} detected by {Scanners} (Tier 2)",
-                    LogDisplayName.UserDebug(req.UserName, req.UserId),
+                    req.User.ToLogDebug(),
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
 
@@ -245,7 +243,7 @@ public class FileScanningCheckV2 : IContentCheckV2
             // File is clean (both Tier 1 and Tier 2)
             int totalDuration = tier1Result.TotalDurationMs + tier2Result.TotalDurationMs;
             _logger.LogInformation("File scanning CLEAN for {User} (Tier 1 + Tier 2, total: {Duration}ms)",
-                req.UserName ?? $"User {req.UserId}", totalDuration);
+                req.User.ToLogInfo(), totalDuration);
 
             return new ContentCheckResponseV2
             {
@@ -258,7 +256,7 @@ public class FileScanningCheckV2 : IContentCheckV2
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception during file scanning for {User}", LogDisplayName.UserDebug(req.UserName, req.UserId));
+            _logger.LogError(ex, "Exception during file scanning for {User}", req.User.ToLogDebug());
 
             // Fail-open: abstain on infrastructure errors
             return new ContentCheckResponseV2

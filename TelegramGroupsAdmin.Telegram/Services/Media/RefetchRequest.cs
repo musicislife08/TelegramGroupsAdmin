@@ -9,7 +9,10 @@ namespace TelegramGroupsAdmin.Telegram.Services.Media;
 public record RefetchRequest
 {
     /// <summary>Message ID (for media refetch)</summary>
-    public long MessageId { get; init; }
+    public int MessageId { get; init; }
+
+    /// <summary>Chat ID where the message originated (composite key with MessageId)</summary>
+    public long ChatId { get; init; }
 
     /// <summary>Type of media to refetch (null for user photos)</summary>
     public MediaType? MediaType { get; init; }
@@ -24,6 +27,6 @@ public record RefetchRequest
     /// Generate unique key for deduplication
     /// </summary>
     public string GetKey() => Type == RefetchType.Media
-        ? $"{MessageId}:{MediaType}"
+        ? $"{MessageId}:{ChatId}:{MediaType}"
         : $"{UserId}:photo";
 }

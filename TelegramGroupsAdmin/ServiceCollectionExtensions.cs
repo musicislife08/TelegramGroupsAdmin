@@ -6,10 +6,8 @@ using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
 
 namespace TelegramGroupsAdmin;
@@ -132,11 +130,9 @@ public static class ServiceCollectionExtensions
             // Core services
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<IInviteService, InviteService>();
-            services.AddScoped<IMessageExportService, MessageExportService>();
             services.AddScoped<IUserManagementService, UserManagementService>();
             services.AddScoped<IAuditService, AuditService>();
             services.AddScoped<IFeatureAvailabilityService, FeatureAvailabilityService>(); // FEATURE-5.3: Check external service configuration status
-            services.AddScoped<IBlazorAuthHelper, BlazorAuthHelper>(); // Authentication context extraction helper for UI components
 
             // Prompt builder service (Phase 4.X: AI-powered prompt generation)
             services.AddScoped<Services.PromptBuilder.IPromptBuilderService, Services.PromptBuilder.PromptBuilderService>();
@@ -172,9 +168,6 @@ public static class ServiceCollectionExtensions
 
             // Runtime logging configuration service (Phase 4.7)
             services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
-
-            // API key migration service (one-time migration from env vars to encrypted database storage)
-            services.AddScoped<ApiKeyMigrationService>();
 
             // Similarity hash backfill service (one-time migration for SimHash deduplication)
             services.AddScoped<SimilarityHashBackfillService>();
@@ -249,7 +242,6 @@ public static class ServiceCollectionExtensions
                 })
                 .AddHttpMessageHandler(sp => new ApiKeyDelegatingHandler(
                     sp,
-                    configuration,
                     serviceName: "VirusTotal",
                     headerName: "x-apikey"))
                 .AddResilienceHandler("virustotal", resiliencePipelineBuilder =>

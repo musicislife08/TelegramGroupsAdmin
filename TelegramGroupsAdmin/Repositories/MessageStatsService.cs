@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models.Analytics;
@@ -53,13 +52,13 @@ public class MessageStatsService : IMessageStatsService
         // Overall stats from detection_results
         var allDetections = await context.DetectionResults
             .AsNoTracking()
-            .Select(dr => new { dr.IsSpam, dr.Confidence })
+            .Select(dr => new { dr.IsSpam, dr.Score })
             .ToListAsync(cancellationToken);
 
         var total = allDetections.Count;
         var spam = allDetections.Count(d => d.IsSpam);
-        var avgConfidence = allDetections.Any()
-            ? allDetections.Average(d => (double)d.Confidence)
+        var avgScore = allDetections.Any()
+            ? allDetections.Average(d => d.Score)
             : 0.0;
 
         // Last 24h stats
@@ -78,7 +77,7 @@ public class MessageStatsService : IMessageStatsService
             TotalDetections = total,
             SpamDetected = spam,
             SpamPercentage = total > 0 ? (double)spam / total * 100 : 0,
-            AverageConfidence = avgConfidence,
+            AverageScore = avgScore,
             Last24hDetections = recentTotal,
             Last24hSpam = recentSpam,
             Last24hSpamPercentage = recentTotal > 0 ? (double)recentSpam / recentTotal * 100 : 0

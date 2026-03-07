@@ -2,21 +2,20 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 
 /// <summary>
-/// Unit tests for MessageHandler.
+/// Unit tests for BotModerationMessageHandler.
 /// Tests domain logic for message operations (backfill and deletion).
 /// </summary>
 [TestFixture]
@@ -26,10 +25,9 @@ public class MessageHandlerTests
     private IMessageQueryService _mockMessageQueryService = null!;
     private IMessageBackfillService _mockMessageBackfillService = null!;
     private IBotMessageService _mockBotMessageService = null!;
-    private IManagedChatsRepository _mockChatsRepository = null!;
     private IJobScheduler _mockJobScheduler = null!;
-    private ILogger<MessageHandler> _mockLogger = null!;
-    private MessageHandler _handler = null!;
+    private ILogger<BotModerationMessageHandler> _mockLogger = null!;
+    private BotModerationMessageHandler _handler = null!;
 
     [SetUp]
     public void SetUp()
@@ -38,16 +36,14 @@ public class MessageHandlerTests
         _mockMessageQueryService = Substitute.For<IMessageQueryService>();
         _mockMessageBackfillService = Substitute.For<IMessageBackfillService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
-        _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
         _mockJobScheduler = Substitute.For<IJobScheduler>();
-        _mockLogger = Substitute.For<ILogger<MessageHandler>>();
+        _mockLogger = Substitute.For<ILogger<BotModerationMessageHandler>>();
 
-        _handler = new MessageHandler(
+        _handler = new BotModerationMessageHandler(
             _mockMessageHistoryRepository,
             _mockMessageQueryService,
             _mockMessageBackfillService,
             _mockBotMessageService,
-            _mockChatsRepository,
             _mockJobScheduler,
             _mockLogger);
     }
@@ -58,25 +54,25 @@ public class MessageHandlerTests
     public async Task EnsureExistsAsync_MessageAlreadyExists_ReturnsAlreadyExists()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(CreateTestMessageRecord(messageId, chatId));
 
         // Act
-        var result = await _handler.EnsureExistsAsync(messageId, chatId);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId));
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WasBackfilled, Is.False, "Should not be backfilled since it already exists");
-        });
+        }
 
         // Verify backfill was NOT called
         await _mockMessageBackfillService.DidNotReceive().BackfillIfMissingAsync(
-            Arg.Any<long>(),
+            Arg.Any<int>(),
             Arg.Any<long>(),
             Arg.Any<Message>(),
             Arg.Any<CancellationToken>());
@@ -86,11 +82,11 @@ public class MessageHandlerTests
     public async Task EnsureExistsAsync_MessageMissingWithTelegramMessage_BackfillsSuccessfully()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
         var telegramMessage = CreateTestMessage(messageId, chatId);
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         _mockMessageBackfillService.BackfillIfMissingAsync(
@@ -98,14 +94,14 @@ public class MessageHandlerTests
             .Returns(true);
 
         // Act
-        var result = await _handler.EnsureExistsAsync(messageId, chatId, telegramMessage);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.WasBackfilled, Is.True);
-        });
+        }
 
         // Verify backfill was called
         await _mockMessageBackfillService.Received(1).BackfillIfMissingAsync(
@@ -116,33 +112,33 @@ public class MessageHandlerTests
     public async Task EnsureExistsAsync_MessageMissingNoTelegramMessage_ReturnsNotFound()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         // Act - No telegramMessage provided
-        var result = await _handler.EnsureExistsAsync(messageId, chatId, telegramMessage: null);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage: null);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.WasBackfilled, Is.False);
             Assert.That(result.ErrorMessage, Is.Not.Null);
-        });
+        }
     }
 
     [Test]
     public async Task EnsureExistsAsync_BackfillFails_ReturnsNotFound()
     {
         // Arrange
-        const long messageId = 42L;
+        const int messageId = 42;
         const long chatId = -100123456789L;
         var telegramMessage = CreateTestMessage(messageId, chatId);
 
-        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<CancellationToken>())
+        _mockMessageHistoryRepository.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         _mockMessageBackfillService.BackfillIfMissingAsync(
@@ -150,14 +146,14 @@ public class MessageHandlerTests
             .Returns(false); // Backfill failed
 
         // Act
-        var result = await _handler.EnsureExistsAsync(messageId, chatId, telegramMessage);
+        var result = await _handler.EnsureExistsAsync(messageId, ChatIdentity.FromId(chatId), telegramMessage);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.WasBackfilled, Is.False);
-        });
+        }
     }
 
     #endregion
@@ -169,23 +165,23 @@ public class MessageHandlerTests
     {
         // Arrange
         const long chatId = -100123456789L;
-        const long messageId = 42L;
+        const int messageId = 42;
         var executor = Actor.FromSystem("SpamDetection");
 
         // Act
-        var result = await _handler.DeleteAsync(chatId, messageId, executor);
+        var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.MessageDeleted, Is.True);
-        });
+        }
 
         // Verify deletion was called with correct parameters
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
             chatId,
-            (int)messageId,
+            messageId,
             "moderation_action",
             Arg.Any<CancellationToken>());
     }
@@ -195,23 +191,23 @@ public class MessageHandlerTests
     {
         // Arrange - Message deletion fails (let boss decide what to do)
         const long chatId = -100123456789L;
-        const long messageId = 42L;
+        const int messageId = 42;
         var executor = Actor.FromTelegramUser(999, "Admin");
 
         _mockBotMessageService.DeleteAndMarkMessageAsync(
-                chatId, (int)messageId, Arg.Any<string>(), Arg.Any<CancellationToken>())
+                chatId, messageId, Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Message not found"));
 
         // Act
-        var result = await _handler.DeleteAsync(chatId, messageId, executor);
+        var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
 
         // Assert - Worker reports failure, boss decides what to do
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.MessageDeleted, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Message not found"));
-        });
+        }
     }
 
     [Test]
@@ -219,7 +215,7 @@ public class MessageHandlerTests
     {
         // Arrange
         const long chatId = -100123456789L;
-        const long messageId = 42L;
+        const int messageId = 42;
         var executors = new[]
         {
             Actor.FromSystem("AutoMod"),
@@ -230,7 +226,7 @@ public class MessageHandlerTests
         // Act & Assert
         foreach (var executor in executors)
         {
-            var result = await _handler.DeleteAsync(chatId, messageId, executor);
+            var result = await _handler.DeleteAsync(ChatIdentity.FromId(chatId), messageId, executor);
             Assert.That(result.Success, Is.True, $"Delete should succeed for {executor.Type}");
         }
     }
@@ -243,7 +239,7 @@ public class MessageHandlerTests
     /// Creates a test Telegram Message using JSON deserialization.
     /// Telegram.Bot.Types.Message uses init-only properties, so we use JSON to construct valid instances.
     /// </summary>
-    private static Message CreateTestMessage(long messageId, long chatId)
+    private static Message CreateTestMessage(int messageId, long chatId)
     {
         var json = $$"""
         {
@@ -270,15 +266,12 @@ public class MessageHandlerTests
     /// <summary>
     /// Creates a test MessageRecord with all required parameters.
     /// </summary>
-    private static MessageRecord CreateTestMessageRecord(long messageId, long chatId)
+    private static MessageRecord CreateTestMessageRecord(int messageId, long chatId)
     {
         return new MessageRecord(
             MessageId: messageId,
-            UserId: 12345L,
-            UserName: "testuser",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: chatId,
+            User: new UserIdentity(12345L, "Test", "User", "testuser"),
+            Chat: new ChatIdentity(chatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: "Test message",
             PhotoFileId: null,
@@ -286,7 +279,6 @@ public class MessageHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

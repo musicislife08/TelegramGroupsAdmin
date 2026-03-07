@@ -45,6 +45,18 @@ public interface IChatService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get a vision-based chat completion with multiple images for a specific feature.
+    /// Used by profile scanning to send profile photo, story frames, and channel photo in one call.
+    /// </summary>
+    Task<ChatCompletionResult?> GetVisionCompletionAsync(
+        AIFeatureType feature,
+        string systemPrompt,
+        string userPrompt,
+        IReadOnlyList<ImageInput> images,
+        ChatCompletionOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Check if a feature is configured and ready to use
     /// </summary>
     /// <param name="feature">The AI feature type</param>
@@ -104,3 +116,8 @@ public interface IChatService
         ChatCompletionOptions? options = null,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Represents an image to include in a multi-image vision completion request.
+/// </summary>
+public record ImageInput(byte[] Data, string MimeType);

@@ -1,6 +1,7 @@
 using Bunit;
 using MudBlazor;
 using TelegramGroupsAdmin.Components.Shared;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -21,8 +22,8 @@ public class TempBanDialogTests : DialogTestContext
         string? username = null)
     {
         var parameters = new DialogParameters<TempBanDialog>();
-        if (userId != null) parameters.Add(x => x.UserId, userId.Value);
-        if (username != null) parameters.Add(x => x.Username, username);
+        if (userId != null || username != null)
+            parameters.Add(x => x.User, new UserIdentity(userId ?? 0, username, null, username));
 
         return await DialogService.ShowAsync<TempBanDialog>("Temp Ban", parameters);
     }

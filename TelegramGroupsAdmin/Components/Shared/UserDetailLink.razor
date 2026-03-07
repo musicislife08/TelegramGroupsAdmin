@@ -1,0 +1,55 @@
+@inject IDialogService DialogService
+
+@if (Chip)
+{
+    <MudChip T="string" Size="@ChipSize" Icon="@ChipIcon" Color="@ChipColor" OnClick="@OpenDialog">
+        @ChildContent
+    </MudChip>
+}
+else
+{
+    <MudLink Typo="@Typo" OnClick="@OpenDialog">
+        @ChildContent
+    </MudLink>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public long UserId { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    // Link mode (default)
+    [Parameter]
+    public Typo Typo { get; set; } = Typo.body2;
+
+    // Chip mode
+    [Parameter]
+    public bool Chip { get; set; }
+
+    [Parameter]
+    public string? ChipIcon { get; set; }
+
+    [Parameter]
+    public Color ChipColor { get; set; } = Color.Default;
+
+    [Parameter]
+    public Size ChipSize { get; set; } = Size.Small;
+
+    private async Task OpenDialog()
+    {
+        var parameters = new DialogParameters<UserDetailDialog>
+        {
+            { x => x.UserId, UserId }
+        };
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+        await DialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
+    }
+}

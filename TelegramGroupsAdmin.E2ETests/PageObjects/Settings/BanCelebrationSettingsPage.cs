@@ -126,6 +126,14 @@ public class BanCelebrationSettingsPage
     }
 
     /// <summary>
+    /// Asserts that the dialog is visible using Playwright's auto-retrying Expect API.
+    /// </summary>
+    public async Task ExpectDialogVisibleAsync()
+    {
+        await Expect(_page.Locator(Dialog)).ToBeVisibleAsync();
+    }
+
+    /// <summary>
     /// Gets the dialog title text.
     /// </summary>
     public async Task<string?> GetDialogTitleAsync()
@@ -135,9 +143,12 @@ public class BanCelebrationSettingsPage
 
     /// <summary>
     /// Closes the dialog by pressing Escape key.
+    /// Clicks the dialog first to ensure it has focus (Escape only works when the dialog is focused).
     /// </summary>
     public async Task CloseDialogByEscapeAsync()
     {
+        // MudBlazor handles Escape on the dialog element — ensure it has focus
+        await _page.Locator(Dialog).ClickAsync();
         await _page.Keyboard.PressAsync("Escape");
 
         // Wait for dialog to close

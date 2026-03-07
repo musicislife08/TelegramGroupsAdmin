@@ -15,12 +15,9 @@ public class JobTriggerService(
     ILogger<JobTriggerService> logger,
     ISchedulerFactory schedulerFactory) : IJobTriggerService
 {
-    private readonly ILogger<JobTriggerService> _logger = logger;
-    private readonly ISchedulerFactory _schedulerFactory = schedulerFactory;
-
     public async Task<string> TriggerNowAsync(string jobName, object payload, CancellationToken cancellationToken = default)
     {
-        var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
+        var scheduler = await schedulerFactory.GetScheduler(cancellationToken);
         var jobKey = new JobKey(jobName);
 
         // Verify job exists
@@ -52,7 +49,7 @@ public class JobTriggerService(
 
         await scheduler.ScheduleJob(trigger, cancellationToken);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Triggered job {JobName} immediately with trigger {TriggerId}",
             jobName,
             triggerId);
@@ -66,7 +63,7 @@ public class JobTriggerService(
         DateTimeOffset runAt,
         CancellationToken cancellationToken = default)
     {
-        var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
+        var scheduler = await schedulerFactory.GetScheduler(cancellationToken);
         var jobKey = new JobKey(jobName);
 
         // Verify job exists
@@ -104,7 +101,7 @@ public class JobTriggerService(
 
         await scheduler.ScheduleJob(trigger, cancellationToken);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Scheduled job {JobName} to run once at {RunAt} with trigger {TriggerId}",
             jobName,
             runAt.ToString("yyyy-MM-dd HH:mm:ss UTC"),
@@ -115,7 +112,7 @@ public class JobTriggerService(
 
     public async Task<bool> CancelScheduledJobAsync(string triggerId, CancellationToken cancellationToken = default)
     {
-        var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
+        var scheduler = await schedulerFactory.GetScheduler(cancellationToken);
 
         // Try both trigger groups (manual and scheduled once)
         var triggerKey1 = new TriggerKey(triggerId, "ManualTriggers");
@@ -128,11 +125,11 @@ public class JobTriggerService(
 
         if (cancelled)
         {
-            _logger.LogInformation("Cancelled trigger {TriggerId}", triggerId);
+            logger.LogInformation("Cancelled trigger {TriggerId}", triggerId);
         }
         else
         {
-            _logger.LogWarning("Trigger {TriggerId} not found or already completed", triggerId);
+            logger.LogWarning("Trigger {TriggerId} not found or already completed", triggerId);
         }
 
         return cancelled;

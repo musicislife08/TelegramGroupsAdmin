@@ -27,7 +27,12 @@ public record TrainingSample
     /// <summary>
     /// Original message ID (for traceability and debugging).
     /// </summary>
-    public required long MessageId { get; init; }
+    public required int MessageId { get; init; }
+
+    /// <summary>
+    /// Chat ID where the message originated (part of composite key with MessageId).
+    /// </summary>
+    public required long ChatId { get; init; }
 
     /// <summary>
     /// User ID who labeled this sample (null for implicit/auto-detected samples).

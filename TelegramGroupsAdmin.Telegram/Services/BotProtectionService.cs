@@ -1,31 +1,27 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
-public class BotProtectionService : IBotProtectionService
+/// <summary>
+/// Handles bot protection logic including auto-banning unauthorized bots.
+/// Scoped service with direct dependency injection.
+/// </summary>
+public class BotProtectionService(
+    IConfigService configService,
+    IChatAdminsRepository chatAdminsRepository,
+    ITelegramUserRepository telegramUserRepository,
+    IBotModerationService moderationService,
+    ILogger<BotProtectionService> logger) : IBotProtectionService
 {
-    private readonly ILogger<BotProtectionService> _logger;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ITelegramBotClientFactory _botClientFactory;
-
-    public BotProtectionService(
-        ILogger<BotProtectionService> logger,
-        IServiceScopeFactory scopeFactory,
-        ITelegramBotClientFactory botClientFactory)
-    {
-        _logger = logger;
-        _scopeFactory = scopeFactory;
-        _botClientFactory = botClientFactory;
-    }
-
     public async Task<bool> ShouldAllowBotAsync(Chat chat, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default)
     {
         // Not a bot - always allow
@@ -33,10 +29,6 @@ public class BotProtectionService : IBotProtectionService
         {
             return true;
         }
-
-        using var scope = _scopeFactory.CreateScope();
-        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Get effective config for this chat (chat-specific overrides global)
         // Note: IConfigService doesn't support CancellationToken (configuration library)
@@ -46,7 +38,7 @@ public class BotProtectionService : IBotProtectionService
         // Bot protection disabled - allow all bots
         if (!config.Enabled || !config.AutoBanBots)
         {
-            _logger.LogDebug("Bot protection disabled for {Chat}, allowing bot {Bot}",
+            logger.LogDebug("Bot protection disabled for {Chat}, allowing bot {Bot}",
                 chat.ToLogDebug(), user.ToLogDebug());
             return true;
         }
@@ -56,7 +48,7 @@ public class BotProtectionService : IBotProtectionService
         if (!string.IsNullOrEmpty(botUsername) && config.WhitelistedBots.Any(wb =>
             wb.TrimStart('@').Equals(botUsername, StringComparison.OrdinalIgnoreCase)))
         {
-            _logger.LogInformation("Bot {Bot} is whitelisted in {Chat}",
+            logger.LogInformation("Bot {Bot} is whitelisted in {Chat}",
                 user.ToLogInfo(), chat.ToLogInfo());
             return true;
         }
@@ -69,17 +61,17 @@ public class BotProtectionService : IBotProtectionService
             {
                 // Check if inviter is a chat admin
                 var admins = await chatAdminsRepository.GetChatAdminsAsync(chat.Id, cancellationToken);
-                var isInviterAdmin = admins.Any(admin => admin.TelegramId == invitedBy.Id);
+                var isInviterAdmin = admins.Any(admin => admin.User.Id == invitedBy.Id);
 
                 if (isInviterAdmin)
                 {
-                    _logger.LogInformation("Bot {Bot} was invited by admin {Admin} in {Chat}",
+                    logger.LogInformation("Bot {Bot} was invited by admin {Admin} in {Chat}",
                         user.ToLogInfo(), invitedBy.ToLogInfo(), chat.ToLogInfo());
                     return true;
                 }
                 else
                 {
-                    _logger.LogWarning("Bot {Bot} was invited by non-admin {User} in {Chat} - will be banned",
+                    logger.LogWarning("Bot {Bot} was invited by non-admin {User} in {Chat} - will be banned",
                         user.ToLogDebug(), invitedBy.ToLogDebug(), chat.ToLogDebug());
                 }
             }
@@ -93,10 +85,7 @@ public class BotProtectionService : IBotProtectionService
     {
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-
             // First, upsert bot to telegram_users table to capture username/name before banning
-            var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             var now = DateTimeOffset.UtcNow;
             var telegramUser = new TelegramUser(
                 TelegramUserId: bot.Id,
@@ -115,36 +104,33 @@ public class BotProtectionService : IBotProtectionService
                 CreatedAt: now,
                 UpdatedAt: now
             );
-            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
+            await telegramUserRepository.UpsertAsync(telegramUser, cancellationToken);
 
-            // Ban the bot
-            var operations = await _botClientFactory.GetOperationsAsync();
-            await operations.BanChatMemberAsync(chat.Id, bot.Id, cancellationToken: cancellationToken);
+            // Ban the bot via moderation service (handles Telegram API + audit trail)
+            var result = await moderationService.SyncBanToChatAsync(
+                new SyncBanIntent
+                {
+                    User = UserIdentity.From(bot),
+                    Chat = ChatIdentity.From(chat),
+                    Executor = Actor.BotProtection,
+                    Reason = $"Unauthorized bot: {reason}"
+                },
+                cancellationToken);
 
-            _logger.LogWarning("Banned unauthorized bot {Bot} from {Chat}. Reason: {Reason}",
-                bot.ToLogDebug(), chat.ToLogDebug(), reason);
-
-            // Log to user_actions table for audit trail
-            var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-
-            var action = new UserActionRecord(
-                Id: 0,
-                UserId: bot.Id,
-                ActionType: UserActionType.Ban,
-                MessageId: null,
-                IssuedBy: Actor.BotProtection,
-                IssuedAt: DateTimeOffset.UtcNow,
-                ExpiresAt: null, // Permanent ban
-                Reason: $"Unauthorized bot: {reason}"
-            );
-
-            await userActionsRepository.InsertAsync(action, cancellationToken);
-
-            _logger.LogInformation("Logged bot ban to audit trail for {Bot} in {Chat}", bot.ToLogInfo(), chat.ToLogInfo());
+            if (result.Success)
+            {
+                logger.LogWarning("Banned unauthorized bot {Bot} from {Chat}. Reason: {Reason}",
+                    bot.ToLogDebug(), chat.ToLogDebug(), reason);
+            }
+            else
+            {
+                logger.LogError("Failed to ban bot {Bot} from {Chat}: {Error}",
+                    bot.ToLogDebug(), chat.ToLogDebug(), result.ErrorMessage);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to ban bot {Bot} from {Chat}",
+            logger.LogError(ex, "Failed to ban bot {Bot} from {Chat}",
                 bot.ToLogDebug(), chat.ToLogDebug());
             throw;
         }

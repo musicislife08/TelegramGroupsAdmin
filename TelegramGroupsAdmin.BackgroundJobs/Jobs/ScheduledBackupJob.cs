@@ -4,8 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
+using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
 
@@ -31,32 +33,54 @@ public class ScheduledBackupJob : IJob
 
     public async Task Execute(IJobExecutionContext context)
     {
-        // Extract payload from job data map (deserialize from JSON string)
+        // Extract payload from merged job data map (covers both trigger and job-level data)
         // Scheduled triggers don't have payloads, manual triggers do
         ScheduledBackupPayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
+        if (context.MergedJobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
+            var payloadJson = context.MergedJobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<ScheduledBackupPayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize ScheduledBackupPayload");
         }
         else
         {
-            // Scheduled trigger - use default payload (standard retention: 24h/7d/4w/12m/3y)
-            payload = new ScheduledBackupPayload
-            {
-                RetainHourlyBackups = BackupRetentionConstants.DefaultRetainHourlyBackups,
-                RetainDailyBackups = BackupRetentionConstants.DefaultRetainDailyBackups,
-                RetainWeeklyBackups = BackupRetentionConstants.DefaultRetainWeeklyBackups,
-                RetainMonthlyBackups = BackupRetentionConstants.DefaultRetainMonthlyBackups,
-                RetainYearlyBackups = BackupRetentionConstants.DefaultRetainYearlyBackups,
-                BackupDirectory = null // Uses default /data/backups
-            };
+            // Scheduled trigger - read settings from database config
+            payload = await BuildPayloadFromConfigAsync(context.CancellationToken);
         }
 
         await ExecuteAsync(payload, context.CancellationToken);
+    }
+
+    /// <summary>
+    /// Builds a payload from the database job configuration.
+    /// This ensures the scheduled trigger uses the same settings the user configured in the UI.
+    /// </summary>
+    private async Task<ScheduledBackupPayload> BuildPayloadFromConfigAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var configService = scope.ServiceProvider.GetRequiredService<IBackgroundJobConfigService>();
+            var jobConfig = await configService.GetJobConfigAsync(BackgroundJobNames.ScheduledBackup, cancellationToken);
+            var settings = jobConfig?.ScheduledBackup ?? new ScheduledBackupSettings();
+
+            return new ScheduledBackupPayload
+            {
+                RetainHourlyBackups = settings.RetainHourlyBackups,
+                RetainDailyBackups = settings.RetainDailyBackups,
+                RetainWeeklyBackups = settings.RetainWeeklyBackups,
+                RetainMonthlyBackups = settings.RetainMonthlyBackups,
+                RetainYearlyBackups = settings.RetainYearlyBackups,
+                BackupDirectory = settings.BackupDirectory
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read backup settings from database, using defaults");
+            return new ScheduledBackupPayload();
+        }
     }
 
     private async Task ExecuteAsync(ScheduledBackupPayload payload, CancellationToken cancellationToken)
@@ -76,8 +100,8 @@ public class ScheduledBackupJob : IJob
                 using var scope = _scopeFactory.CreateScope();
                 var backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
 
-                // Determine backup directory
-                var backupDir = payload.BackupDirectory ?? Path.Combine("data", "backups");
+                // Determine backup directory (must be absolute path for Docker volume mount)
+                var backupDir = payload.BackupDirectory ?? BackupRetentionConstants.DefaultBackupDirectory;
 
                 // Build retention config
                 var retentionConfig = new RetentionConfig

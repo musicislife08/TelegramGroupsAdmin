@@ -17,8 +17,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("5m", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        }
     }
 
     [TestCase("1m", 1)]
@@ -30,8 +33,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration(input, out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration.TotalMinutes, Is.EqualTo(expectedMinutes));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration.TotalMinutes, Is.EqualTo(expectedMinutes));
+        }
     }
 
     [Test]
@@ -41,11 +47,14 @@ public class TimeSpanUtilitiesTests
         var resultLower = TimeSpanUtilities.TryParseDuration("5m", out var durationLower);
         var resultUpper = TimeSpanUtilities.TryParseDuration("5M", out var durationUpper);
 
-        Assert.That(resultLower, Is.True);
-        Assert.That(durationLower, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resultLower, Is.True);
+            Assert.That(durationLower, Is.EqualTo(TimeSpan.FromMinutes(5)));
 
-        Assert.That(resultUpper, Is.True);
-        Assert.That(durationUpper, Is.EqualTo(TimeSpan.FromDays(150))); // 5 months = 150 days
+            Assert.That(resultUpper, Is.True);
+            Assert.That(durationUpper, Is.EqualTo(TimeSpan.FromDays(150))); // 5 months = 150 days
+        }
     }
 
     #endregion
@@ -57,8 +66,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("1h", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromHours(1)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromHours(1)));
+        }
     }
 
     [TestCase("1h", 1)]
@@ -71,8 +83,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration(input, out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration.TotalHours, Is.EqualTo(expectedHours));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration.TotalHours, Is.EqualTo(expectedHours));
+        }
     }
 
     [Test]
@@ -81,9 +96,12 @@ public class TimeSpanUtilitiesTests
         var resultLower = TimeSpanUtilities.TryParseDuration("5h", out var durationLower);
         var resultUpper = TimeSpanUtilities.TryParseDuration("5H", out var durationUpper);
 
-        Assert.That(resultLower, Is.True);
-        Assert.That(resultUpper, Is.True);
-        Assert.That(durationLower, Is.EqualTo(durationUpper));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resultLower, Is.True);
+            Assert.That(resultUpper, Is.True);
+            Assert.That(durationLower, Is.EqualTo(durationUpper));
+        }
     }
 
     #endregion
@@ -95,8 +113,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("7d", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(7)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(7)));
+        }
     }
 
     [TestCase("1d", 1)]
@@ -109,8 +130,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration(input, out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        }
     }
 
     [Test]
@@ -119,9 +143,12 @@ public class TimeSpanUtilitiesTests
         var resultLower = TimeSpanUtilities.TryParseDuration("7d", out var durationLower);
         var resultUpper = TimeSpanUtilities.TryParseDuration("7D", out var durationUpper);
 
-        Assert.That(resultLower, Is.True);
-        Assert.That(resultUpper, Is.True);
-        Assert.That(durationLower, Is.EqualTo(durationUpper));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resultLower, Is.True);
+            Assert.That(resultUpper, Is.True);
+            Assert.That(durationLower, Is.EqualTo(durationUpper));
+        }
     }
 
     #endregion
@@ -133,8 +160,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("2w", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(14)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(14)));
+        }
     }
 
     [TestCase("1w", 7)]
@@ -145,8 +175,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration(input, out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        }
     }
 
     [Test]
@@ -155,9 +188,12 @@ public class TimeSpanUtilitiesTests
         var resultLower = TimeSpanUtilities.TryParseDuration("2w", out var durationLower);
         var resultUpper = TimeSpanUtilities.TryParseDuration("2W", out var durationUpper);
 
-        Assert.That(resultLower, Is.True);
-        Assert.That(resultUpper, Is.True);
-        Assert.That(durationLower, Is.EqualTo(durationUpper));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resultLower, Is.True);
+            Assert.That(resultUpper, Is.True);
+            Assert.That(durationLower, Is.EqualTo(durationUpper));
+        }
     }
 
     #endregion
@@ -170,8 +206,11 @@ public class TimeSpanUtilitiesTests
         // Uppercase 'M' = months (case-sensitive!)
         var result = TimeSpanUtilities.TryParseDuration("1M", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(30)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(30)));
+        }
     }
 
     [Test]
@@ -180,8 +219,11 @@ public class TimeSpanUtilitiesTests
         // Lowercase 'm' = minutes (case-sensitive!)
         var result = TimeSpanUtilities.TryParseDuration("1m", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(1)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(1)));
+        }
     }
 
     [TestCase("1M", 30)]
@@ -193,8 +235,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration(input, out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        }
     }
 
     #endregion
@@ -206,8 +251,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("1y", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(365)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromDays(365)));
+        }
     }
 
     [TestCase("1y", 365)]
@@ -218,8 +266,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration(input, out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration.TotalDays, Is.EqualTo(expectedDays));
+        }
     }
 
     [Test]
@@ -228,9 +279,12 @@ public class TimeSpanUtilitiesTests
         var resultLower = TimeSpanUtilities.TryParseDuration("2y", out var durationLower);
         var resultUpper = TimeSpanUtilities.TryParseDuration("2Y", out var durationUpper);
 
-        Assert.That(resultLower, Is.True);
-        Assert.That(resultUpper, Is.True);
-        Assert.That(durationLower, Is.EqualTo(durationUpper));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resultLower, Is.True);
+            Assert.That(resultUpper, Is.True);
+            Assert.That(durationLower, Is.EqualTo(durationUpper));
+        }
     }
 
     #endregion
@@ -242,8 +296,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("  5m", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        }
     }
 
     [Test]
@@ -251,8 +308,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("5m  ", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        }
     }
 
     [Test]
@@ -260,8 +320,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("  5m  ", out var duration);
 
-        Assert.That(result, Is.True);
-        Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.True);
+            Assert.That(duration, Is.EqualTo(TimeSpan.FromMinutes(5)));
+        }
     }
 
     #endregion
@@ -273,8 +336,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("5", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -282,8 +348,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("m", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -291,8 +360,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("5x", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -300,8 +372,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -309,8 +384,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("   ", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -319,8 +397,11 @@ public class TimeSpanUtilitiesTests
         // int.TryParse won't parse decimals
         var result = TimeSpanUtilities.TryParseDuration("5.5h", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -328,8 +409,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("5 m", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -338,8 +422,11 @@ public class TimeSpanUtilitiesTests
         // Word formats are not supported
         var result = TimeSpanUtilities.TryParseDuration("1day", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -347,8 +434,11 @@ public class TimeSpanUtilitiesTests
     {
         var result = TimeSpanUtilities.TryParseDuration("-5m", out var duration);
 
-        Assert.That(result, Is.False);
-        Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.False);
+            Assert.That(duration, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     #endregion

@@ -2,9 +2,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Constants;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -18,9 +21,9 @@ public class BanCommand : IBotCommand
 {
     private readonly ILogger<BanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IModerationOrchestrator _moderationService;
+    private readonly IBotModerationService _moderationService;
     private readonly IUserMessagingService _messagingService;
-    private readonly ITelegramBotClientFactory _botClientFactory;
+    private readonly IBotMessageService _messageService;
 
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
@@ -33,15 +36,15 @@ public class BanCommand : IBotCommand
     public BanCommand(
         ILogger<BanCommand> logger,
         IServiceProvider serviceProvider,
-        IModerationOrchestrator moderationService,
+        IBotModerationService moderationService,
         IUserMessagingService messagingService,
-        ITelegramBotClientFactory botClientFactory)
+        IBotMessageService messageService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
         _messagingService = messagingService;
-        _botClientFactory = botClientFactory;
+        _messageService = messageService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -50,8 +53,8 @@ public class BanCommand : IBotCommand
         int userPermissionLevel,
         CancellationToken cancellationToken = default)
     {
-        User? targetUser = null;
-        long? triggerMessageId = null;
+        UserIdentity? targetIdentity = null;
+        int? triggerMessageId = null;
 
         using var scope = _serviceProvider.CreateScope();
         var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -60,13 +63,13 @@ public class BanCommand : IBotCommand
         // Option 1: Reply to message (existing behavior)
         if (message.ReplyToMessage != null)
         {
-            targetUser = message.ReplyToMessage.From;
-            triggerMessageId = message.ReplyToMessage.MessageId;
-
-            if (targetUser == null)
+            if (message.ReplyToMessage.From == null)
             {
                 return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
+
+            targetIdentity = UserIdentity.From(message.ReplyToMessage.From);
+            triggerMessageId = message.ReplyToMessage.MessageId;
         }
         // Option 2: Arguments provided
         else if (args.Length > 0)
@@ -81,7 +84,7 @@ public class BanCommand : IBotCommand
                 {
                     return new CommandResult($"❌ User ID {userId} not found.", DeleteCommandMessage, DeleteResponseAfterSeconds);
                 }
-                targetUser = CreateSyntheticUser(user);
+                targetIdentity = UserIdentity.From(user);
             }
             // Check if @username (e.g., /ban @johndoe)
             else if (firstArg.StartsWith('@'))
@@ -92,7 +95,7 @@ public class BanCommand : IBotCommand
                 {
                     return new CommandResult($"❌ User @{username} not found.", DeleteCommandMessage, DeleteResponseAfterSeconds);
                 }
-                targetUser = CreateSyntheticUser(user);
+                targetIdentity = UserIdentity.From(user);
             }
             // Otherwise: fuzzy name search (e.g., /ban john smith)
             else
@@ -108,7 +111,7 @@ public class BanCommand : IBotCommand
                 if (matches.Count == 1)
                 {
                     // Single match - proceed with ban directly
-                    targetUser = CreateSyntheticUser(matches[0]);
+                    targetIdentity = UserIdentity.From(matches[0]);
                 }
                 else
                 {
@@ -126,14 +129,14 @@ public class BanCommand : IBotCommand
         }
 
         // Check if target is admin (can't ban admins)
-        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser!.Id, cancellationToken);
+        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetIdentity!.Id, cancellationToken);
         if (isAdmin)
         {
             return new CommandResult("❌ Cannot ban chat admins.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Execute ban
-        return await ExecuteBanAsync(message, targetUser, triggerMessageId, cancellationToken);
+        return await ExecuteBanAsync(message, targetIdentity, triggerMessageId, cancellationToken);
     }
 
     /// <summary>
@@ -157,8 +160,7 @@ public class BanCommand : IBotCommand
 
         var keyboard = new InlineKeyboardMarkup(buttons);
 
-        var operations = await _botClientFactory.GetOperationsAsync();
-        await operations.SendMessageAsync(
+        await _messageService.SendAndSaveMessageAsync(
             commandMessage.Chat.Id,
             "Multiple users found. Select one to ban:",
             replyMarkup: keyboard,
@@ -174,8 +176,8 @@ public class BanCommand : IBotCommand
     /// </summary>
     private async Task<CommandResult> ExecuteBanAsync(
         Message message,
-        User targetUser,
-        long? triggerMessageId,
+        UserIdentity targetIdentity,
+        int? triggerMessageId,
         CancellationToken cancellationToken)
     {
         try
@@ -187,13 +189,17 @@ public class BanCommand : IBotCommand
                 message.From.FirstName,
                 message.From.LastName);
 
-            // Execute ban via ModerationOrchestrator
+            // Execute ban via BotModerationService
             var result = await _moderationService.BanUserAsync(
-                userId: targetUser.Id,
-                messageId: triggerMessageId,
-                executor: executor,
-                reason: ModerationConstants.DefaultBanReason,
-                cancellationToken: cancellationToken);
+                new BanIntent
+                {
+                    User = targetIdentity,
+                    Executor = executor,
+                    Reason = ModerationConstants.DefaultBanReason,
+                    MessageId = triggerMessageId,
+                    Chat = ChatIdentity.From(message.Chat)
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
@@ -209,7 +215,7 @@ public class BanCommand : IBotCommand
                                  $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
 
             var messageResult = await _messagingService.SendToUserAsync(
-                userId: targetUser.Id,
+                userId: targetIdentity.Id,
                 chat: message.Chat,
                 messageText: banNotification,
                 replyToMessageId: null, // Don't reply to trigger message for bans
@@ -222,8 +228,8 @@ public class BanCommand : IBotCommand
             _logger.LogInformation(
                 "{TargetUser} banned by {Executor} from {ChatsAffected} chats. " +
                 "Reason: {Reason}. User notified via {DeliveryMethod}. Trust removed: {TrustRemoved}",
-                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                targetIdentity.ToLogInfo(),
+                message.From.ToLogInfo(),
                 result.ChatsAffected, ModerationConstants.DefaultBanReason, deliveryMethod, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears
@@ -231,23 +237,10 @@ public class BanCommand : IBotCommand
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to ban {User}",
-                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
+            _logger.LogError(ex, "Failed to ban {User}", targetIdentity.ToLogDebug());
             return new CommandResult($"❌ Failed to ban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
-
-    /// <summary>
-    /// Creates a Telegram.Bot.Types.User from our domain model.
-    /// </summary>
-    private static User CreateSyntheticUser(Models.TelegramUser user) => new()
-    {
-        Id = user.TelegramUserId,
-        Username = user.Username,
-        FirstName = user.FirstName ?? "Unknown",
-        LastName = user.LastName,
-        IsBot = user.IsBot
-    };
 
     /// <summary>
     /// Formats user info for inline keyboard button text.

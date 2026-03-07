@@ -111,12 +111,15 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Assert - empty state message visible
-        Assert.That(await _reportsPage.IsEmptyStateVisibleAsync(), Is.True,
-            "Empty state should be visible when no reports exist");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - empty state message visible
+            Assert.That(await _reportsPage.IsEmptyStateVisibleAsync(), Is.True,
+                "Empty state should be visible when no reports exist");
 
-        Assert.That(await _reportsPage.IsAllReviewedMessageVisibleAsync(), Is.True,
-            "Should show 'All reports have been reviewed!' message for pending filter");
+            Assert.That(await _reportsPage.IsAllReviewedMessageVisibleAsync(), Is.True,
+                "Should show 'All reports have been reviewed!' message for pending filter");
+        }
     }
 
     [Test]
@@ -145,15 +148,18 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Assert
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "Should display reports when pending reports exist");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
+                "Should display reports when pending reports exist");
 
-        Assert.That(await _reportsPage.IsPendingModerationChipVisibleAsync(), Is.True,
-            "Pending moderation chip should be visible");
+            Assert.That(await _reportsPage.IsPendingModerationChipVisibleAsync(), Is.True,
+                "Pending moderation chip should be visible");
 
-        Assert.That(await _reportsPage.GetPendingModerationCountAsync(), Is.GreaterThanOrEqualTo(1),
-            "Should show at least 1 pending moderation report");
+            Assert.That(await _reportsPage.GetPendingModerationCountAsync(), Is.GreaterThanOrEqualTo(1),
+                "Should show at least 1 pending moderation report");
+        }
     }
 
     [Test]
@@ -190,15 +196,18 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Assert
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "Should display alerts when pending impersonation alerts exist");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
+                "Should display alerts when pending impersonation alerts exist");
 
-        Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
-            "Pending impersonation chip should be visible");
+            Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
+                "Pending impersonation chip should be visible");
 
-        Assert.That(await _reportsPage.GetPendingImpersonationCountAsync(), Is.GreaterThanOrEqualTo(1),
-            "Should show at least 1 pending impersonation alert");
+            Assert.That(await _reportsPage.GetPendingImpersonationCountAsync(), Is.GreaterThanOrEqualTo(1),
+                "Should show at least 1 pending impersonation alert");
+        }
     }
 
     [Test]
@@ -258,10 +267,13 @@ public class ReportsTests : SharedAuthenticatedTestBase
         var moderationCount = await _reportsPage.GetModerationReportCountAsync();
         var impersonationCount = await _reportsPage.GetImpersonationAlertCountAsync();
 
-        Assert.That(moderationCount, Is.GreaterThanOrEqualTo(1),
-            "Should show moderation reports when filtered");
-        Assert.That(impersonationCount, Is.EqualTo(0),
-            "Should not show impersonation alerts when filtered to moderation");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(moderationCount, Is.GreaterThanOrEqualTo(1),
+                      "Should show moderation reports when filtered");
+            Assert.That(impersonationCount, Is.EqualTo(0),
+                "Should not show impersonation alerts when filtered to moderation");
+        }
     }
 
     [Test]
@@ -321,10 +333,13 @@ public class ReportsTests : SharedAuthenticatedTestBase
         var moderationCount = await _reportsPage.GetModerationReportCountAsync();
         var impersonationCount = await _reportsPage.GetImpersonationAlertCountAsync();
 
-        Assert.That(impersonationCount, Is.GreaterThanOrEqualTo(1),
-            "Should show impersonation alerts when filtered");
-        Assert.That(moderationCount, Is.EqualTo(0),
-            "Should not show moderation reports when filtered to impersonation");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(impersonationCount, Is.GreaterThanOrEqualTo(1),
+                      "Should show impersonation alerts when filtered");
+            Assert.That(moderationCount, Is.EqualTo(0),
+                "Should not show moderation reports when filtered to impersonation");
+        }
     }
 
     [Test]
@@ -358,7 +373,7 @@ public class ReportsTests : SharedAuthenticatedTestBase
             .BuildAsync();
 
         await new TestReportBuilder(SharedFactory.Services)
-            .ForMessageId((int)message2.MessageId)
+            .ForMessageId(message2.MessageId)
             .InChat(chat)
             .ReportedBy(100004, "reporter2")
             .AsReviewed("admin", "Dismissed")
@@ -439,12 +454,15 @@ public class ReportsTests : SharedAuthenticatedTestBase
         await _reportsPage.NavigateAsync();
         await _reportsPage.WaitForLoadAsync();
 
-        // Assert - critical alert should be displayed
-        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
-            "Critical alert should be displayed");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - critical alert should be displayed
+            Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
+                "Critical alert should be displayed");
 
-        Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
-            "Pending impersonation chip should be visible for critical alert");
+            Assert.That(await _reportsPage.IsPendingImpersonationChipVisibleAsync(), Is.True,
+                "Pending impersonation chip should be visible for critical alert");
+        }
     }
 
     [Test]
@@ -723,8 +741,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         // Verify alert exists
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Click Confirm Scam - NO CONFIRMATION DIALOG
-        await _reportsPage.ClickConfirmScamAsync();
+        // Click Confirm - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickConfirmAsync();
 
         // Assert - snackbar confirms action
         var snackbarText = await _reportsPage.WaitForSnackbarAsync();
@@ -786,10 +804,10 @@ public class ReportsTests : SharedAuthenticatedTestBase
     }
 
     /// <summary>
-    /// Tests that the False Positive action on an impersonation alert executes immediately.
+    /// Tests that the Dismiss action on an impersonation alert executes immediately.
     /// </summary>
     [Test]
-    public async Task ImpersonationAlert_FalsePositive_ProcessesImmediately()
+    public async Task ImpersonationAlert_Dismiss_ProcessesImmediately()
     {
         // Arrange
         await LoginAsOwnerAsync();
@@ -827,8 +845,8 @@ public class ReportsTests : SharedAuthenticatedTestBase
         // Verify alert exists
         await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Click False Positive - NO CONFIRMATION DIALOG
-        await _reportsPage.ClickFalsePositiveAsync();
+        // Click Dismiss - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickDismissAsync();
 
         // Assert - snackbar confirms action
         var snackbarText = await _reportsPage.WaitForSnackbarAsync();

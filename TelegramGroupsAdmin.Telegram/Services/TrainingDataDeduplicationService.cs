@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -57,7 +56,7 @@ public class TrainingDataDeduplicationService(
                 MessageText = s.MessageText ?? string.Empty,
                 ContentHash = s.ContentHash,
                 IsSpam = s.IsSpam,
-                Confidence = s.Confidence,
+                Score = s.Score,
                 DetectionSource = s.DetectionSource,
                 DetectedAt = s.DetectedAt,
                 AddedBy = s.AddedBy
@@ -106,7 +105,7 @@ public class TrainingDataDeduplicationService(
             {
                 GroupKey = g.Key,
                 MessageText = g.First().MessageText,
-                Samples = g.OrderByDescending(s => s.Confidence)
+                Samples = g.OrderByDescending(s => s.Score)
                           .ThenByDescending(s => s.DetectedAt)
                           .ToList(),
                 SimilarityScore = 1.0,
@@ -167,7 +166,7 @@ public class TrainingDataDeduplicationService(
                 {
                     GroupKey = $"similar_{samples[i].Id}",
                     MessageText = samples[i].MessageText,
-                    Samples = similarSamples.OrderByDescending(s => s.Confidence)
+                    Samples = similarSamples.OrderByDescending(s => s.Score)
                                            .ThenByDescending(s => s.DetectedAt)
                                            .ToList(),
                     SimilarityScore = maxScore,
@@ -192,7 +191,7 @@ public class TrainingDataDeduplicationService(
     private static TrainingSampleDto SelectRecommendedSample(List<TrainingSampleDto> samples)
     {
         return samples
-            .OrderByDescending(s => s.Confidence)
+            .OrderByDescending(s => s.Score)
             .ThenByDescending(s => s.DetectedAt)
             .First();
     }

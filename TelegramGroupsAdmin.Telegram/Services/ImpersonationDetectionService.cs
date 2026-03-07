@@ -2,19 +2,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -35,7 +33,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
     private readonly IReportsRepository _reportsRepository;
-    private readonly IModerationOrchestrator _moderationActionService;
+    private readonly IBotModerationService _moderationActionService;
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
@@ -54,7 +52,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
         IReportsRepository reportsRepository,
-        IModerationOrchestrator moderationActionService,
+        IBotModerationService moderationActionService,
         ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
@@ -103,7 +101,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         {
             _logger.LogDebug(
                 "{User} has {MessageCount} messages in {Chat}, threshold {Threshold}, skipping check",
-                user.ToLogDebug(), messageCount, chat.ToLogDebug(), threshold);
+                user.ToLogDebug(), messageCount, (chat?.Identity ?? ChatIdentity.FromId(chatId)).ToLogDebug(), threshold);
             return false;
         }
 
@@ -136,6 +134,20 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         ImpersonationCheckResult? bestMatch = null;
         int highestScore = 0;
 
+        // Pre-compute user's photo hash ONCE before the loop to avoid N+1
+        byte[]? userPhotoHash = null;
+        if (!string.IsNullOrWhiteSpace(photoPath) && allAdmins.Any(a => !string.IsNullOrWhiteSpace(a.UserPhotoPath)))
+        {
+            try
+            {
+                userPhotoHash = await _photoHashService.ComputePhotoHashAsync(photoPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to compute photo hash for {User}", user.ToLogDebug());
+            }
+        }
+
         foreach (var admin in allAdmins)
         {
             // Skip self-match (user can't impersonate themselves)
@@ -165,7 +177,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             }
 
             // Check photo similarity (50 points)
-            var (isPhotoMatch, photoSim) = await ComparePhotosAsync(photoPath, admin.UserPhotoPath);
+            var (isPhotoMatch, photoSim) = await ComparePhotosAsync(photoPath, admin.UserPhotoPath, userPhotoHash);
             photoSimilarity = photoSim;
 
             if (isPhotoMatch)
@@ -227,9 +239,9 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             // 1. Create alert record
             var alert = new ImpersonationAlertRecord
             {
-                SuspectedUserId = result.SuspectedUser.Id,
-                TargetUserId = result.TargetUserId,
-                ChatId = result.DetectionChat.Id,
+                SuspectedUser = UserIdentity.From(result.SuspectedUser),
+                TargetUser = UserIdentity.FromId(result.TargetUserId),
+                Chat = ChatIdentity.From(result.DetectionChat),
                 TotalScore = result.TotalScore,
                 RiskLevel = result.RiskLevel,
                 NameMatch = result.NameMatch,
@@ -252,10 +264,13 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
                 var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
-                    userId: result.SuspectedUser.Id,
-                    messageId: null,
-                    executor: executor,
-                    reason: reason);
+                    new BanIntent
+                    {
+                        User = UserIdentity.From(result.SuspectedUser),
+                        Executor = executor,
+                        Reason = reason,
+                        Chat = ChatIdentity.From(result.DetectionChat) // Enables ban celebration
+                    });
 
                 if (banResult.Success)
                 {

@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Core.Mappings;
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -25,14 +26,12 @@ public static class ChatAdminMappings
             {
                 Id = data.Id,
                 ChatId = data.ChatId,
-                TelegramId = data.TelegramId,
-                Username = data.TelegramUser?.Username,
-                FirstName = data.TelegramUser?.FirstName,
-                LastName = data.TelegramUser?.LastName,
+                User = new UserIdentity(data.TelegramId, data.TelegramUser?.FirstName, data.TelegramUser?.LastName, data.TelegramUser?.Username),
                 IsCreator = data.IsCreator,
                 PromotedAt = data.PromotedAt,
                 LastVerifiedAt = data.LastVerifiedAt,
                 IsActive = data.IsActive,
+                BotDmEnabled = data.TelegramUser?.BotDmEnabled ?? false,
                 LinkedWebUser = linkedWebUser
             };
         }
@@ -44,10 +43,7 @@ public static class ChatAdminMappings
         {
             Id = data.Id,
             ChatId = data.ChatId,
-            TelegramId = data.TelegramId,
-            Username = username,
-            FirstName = firstName,
-            LastName = lastName,
+            User = new UserIdentity(data.TelegramId, firstName, lastName, username),
             IsCreator = data.IsCreator,
             PromotedAt = data.PromotedAt,
             LastVerifiedAt = data.LastVerifiedAt,
@@ -61,7 +57,7 @@ public static class ChatAdminMappings
         {
             Id = ui.Id,
             ChatId = ui.ChatId,
-            TelegramId = ui.TelegramId,
+            TelegramId = ui.User.Id,
             IsCreator = ui.IsCreator,
             PromotedAt = ui.PromotedAt,
             LastVerifiedAt = ui.LastVerifiedAt,

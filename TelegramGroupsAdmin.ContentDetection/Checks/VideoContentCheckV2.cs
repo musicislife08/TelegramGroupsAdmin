@@ -8,10 +8,11 @@ using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Constants;
-using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 
@@ -36,6 +37,8 @@ public class VideoContentCheckV2(
 {
     // Lazy resolve to break circular dependency
 
+    private static readonly JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     public CheckName CheckName => CheckName.VideoSpam;
 
     /// <summary>
@@ -43,6 +46,15 @@ public class VideoContentCheckV2(
     /// </summary>
     public bool ShouldExecute(ContentCheckRequest request)
     {
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping VideoSpam check for {User}: User is {UserType}",
+                request.User.ToLogDebug(),
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
         // Run if video local path is provided
         var shouldRun = !string.IsNullOrEmpty(request.VideoLocalPath);
         logger.LogDebug("VideoSpamCheck.ShouldExecute: VideoLocalPath={VideoPath}, ShouldRun={ShouldRun}",
@@ -91,7 +103,7 @@ public class VideoContentCheckV2(
             }
 
             // Load config
-            var config = await configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
+            var config = await configRepository.GetEffectiveConfigAsync(req.Chat.Id, req.CancellationToken);
             var videoConfig = config.VideoSpam;
 
             // Extract keyframes from video
@@ -161,7 +173,7 @@ public class VideoContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in VideoSpamCheckV2 for user {UserId}", req.UserId);
+            logger.LogError(ex, "Error in VideoSpamCheckV2 for {User}", req.User.ToLogDebug());
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -256,8 +268,8 @@ public class VideoContentCheckV2(
                 bool abstained;
                 if (matchedSpamLabel == true)
                 {
-                    // Spam: map confidence (0-100) to score (0-5.0)
-                    score = (config.HashMatchConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                    // Use configured score directly, clamped to safety boundaries
+                    score = Math.Clamp(config.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
                     abstained = false;
                 }
                 else
@@ -338,9 +350,8 @@ public class VideoContentCheckV2(
             var ocrRequest = new ContentCheckRequest
             {
                 Message = allText,
-                UserId = req.UserId,
-                UserName = req.UserName,
-                ChatId = req.ChatId,
+                User = req.User,
+                Chat = req.Chat,
                 // Use defaults for properties not on VideoCheckRequest
                 Metadata = new ContentCheckMetadata(),
                 CheckOnly = false,
@@ -361,24 +372,23 @@ public class VideoContentCheckV2(
             var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, cancellationToken);
 
             // Check if result is confident enough to skip expensive Vision API
-            if (ocrResult.MaxConfidence >= config.OcrConfidenceThreshold)
+            if (ocrResult.TotalScore >= config.OcrConfidenceThreshold)
             {
                 var flaggedChecks = ocrResult.CheckResults
-                    .Where(c => c.Result == CheckResultType.Spam)
+                    .Where(c => !c.Abstained && c.Score > 0)
                     .Select(c => c.CheckName)
                     .ToList();
 
                 logger.LogInformation(
-                    "VideoSpam Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning early with {Result}",
-                    ocrResult.MaxConfidence, config.OcrConfidenceThreshold, ocrResult.IsSpam ? "SPAM" : "CLEAN");
+                    "VideoSpam Layer 2: OCR text checks confident (score {Score:F2} >= {Threshold:F2}), returning early with {Result}",
+                    ocrResult.TotalScore, config.OcrConfidenceThreshold, ocrResult.IsSpam ? "SPAM" : "CLEAN");
 
-                // Convert confidence to score: spam gets full score, clean abstains
+                // V2: Use total score directly
                 double score;
                 bool abstained;
                 if (ocrResult.IsSpam)
                 {
-                    // Spam: map confidence (0-100) to score (0-5.0)
-                    score = (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                    score = ocrResult.TotalScore;
                     abstained = false;
                 }
                 else
@@ -400,8 +410,8 @@ public class VideoContentCheckV2(
 
             // OCR checks uncertain - proceed to Vision (Layer 3)
             logger.LogDebug(
-                "VideoSpam Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
-                ocrResult.MaxConfidence, config.OcrConfidenceThreshold);
+                "VideoSpam Layer 2: OCR text checks uncertain (score {Score:F2} < {Threshold:F2}), proceeding to Vision",
+                ocrResult.TotalScore, config.OcrConfidenceThreshold);
 
             return null; // Proceed to next layer
         }
@@ -449,14 +459,14 @@ public class VideoContentCheckV2(
             // Load frame image data
             var imageData = await File.ReadAllBytesAsync(representativeFrame.FramePath, cancellationToken);
 
-            var prompt = BuildVideoPrompt(req.CustomPrompt);
+            var prompt = BuildVideoPrompt();
 
-            logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for user {UserId}", req.UserId);
+            logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for {User}", req.User.ToLogDebug());
 
             // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
                 AIFeatureType.VideoAnalysis,
-                GetDefaultVideoPrompt(),
+                req.CustomPrompt ?? GetDefaultVideoPrompt(),
                 prompt,
                 imageData,
                 "image/jpeg",
@@ -468,7 +478,7 @@ public class VideoContentCheckV2(
 
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
-                logger.LogWarning("Empty response from AI Vision for user {UserId}", req.UserId);
+                logger.LogWarning("Empty response from AI Vision for {User}", req.User.ToLogDebug());
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -480,7 +490,7 @@ public class VideoContentCheckV2(
                 };
             }
 
-            return ParseSpamResponse(result.Content, req.UserId, startTimestamp);
+            return ParseSpamResponse(result.Content, req.User, startTimestamp);
         }
         catch (Exception ex)
         {
@@ -500,7 +510,7 @@ public class VideoContentCheckV2(
     /// <summary>
     /// Build prompt for AI Vision analysis of video frame
     /// </summary>
-    private static string BuildVideoPrompt(string? customPrompt)
+    private static string BuildVideoPrompt()
     {
         return """
             Note: This is a keyframe extracted from a video message. Analyze the visual content.
@@ -508,7 +518,7 @@ public class VideoContentCheckV2(
             Respond ONLY with valid JSON (no markdown, no code blocks):
             {
               "spam": true or false,
-              "confidence": 1-100,
+              "score": 0.0-5.0 (continuous scale: 0.0 = clearly not spam, 5.0 = unmistakably spam. Use the full range — e.g., 1.2 for mildly suspicious, 3.7 for likely spam),
               "reason": "specific explanation",
               "patterns_detected": ["list", "of", "patterns"]
             }
@@ -538,7 +548,7 @@ public class VideoContentCheckV2(
     /// <summary>
     /// Parse AI Vision response and create spam check result
     /// </summary>
-    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
+    private ContentCheckResponseV2 ParseSpamResponse(string content, UserIdentity user, long startTimestamp)
     {
         try
         {
@@ -550,14 +560,14 @@ public class VideoContentCheckV2(
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<VideoSpamResponse>(
+            var response = JsonSerializer.Deserialize<MediaSpamResponse>(
                 content,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                CaseInsensitiveJsonOptions);
 
             if (response == null)
             {
-                logger.LogWarning("Failed to deserialize AI Vision response for user {UserId}: {Content}",
-                    userId, content);
+                logger.LogWarning("Failed to deserialize AI Vision response for {User}: {Content}",
+                    user.ToLogDebug(), content);
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -569,8 +579,8 @@ public class VideoContentCheckV2(
                 };
             }
 
-            logger.LogDebug("AI Vision analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
-                userId, response.Spam, response.Confidence, response.Reason);
+            logger.LogDebug("AI Vision analysis for {User}: Spam={Spam}, Score={Score}, Reason={Reason}",
+                user.ToLogDebug(), response.Spam, response.Score, response.Reason);
 
             var details = response.Reason ?? "No reason provided";
             if (response.PatternsDetected?.Length > 0)
@@ -583,8 +593,8 @@ public class VideoContentCheckV2(
             bool abstained;
             if (response.Spam)
             {
-                // Spam: map confidence (0-100) to score (0-5.0)
-                score = (response.Confidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                // Use AI-provided score directly, clamped to safety boundaries
+                score = Math.Clamp(response.Score, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
                 abstained = false;
             }
             else
@@ -605,8 +615,8 @@ public class VideoContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error parsing AI Vision response for user {UserId}: {Content}",
-                userId, content);
+            logger.LogError(ex, "Error parsing AI Vision response for {User}: {Content}",
+                user.ToLogDebug(), content);
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -649,13 +659,3 @@ internal record KeyframeHashJson(
     [property: JsonPropertyName("hash")] string Hash
 );
 
-/// <summary>
-/// Expected JSON response structure from AI Vision for video spam detection.
-/// This is the format we request in our prompts.
-/// </summary>
-internal record VideoSpamResponse(
-    [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("confidence")] int Confidence,
-    [property: JsonPropertyName("reason")] string? Reason,
-    [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
-);

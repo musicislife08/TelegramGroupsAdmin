@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -10,6 +11,14 @@ public interface ITelegramUserRepository
 {
     Task<UiModels.TelegramUser?> GetByTelegramIdAsync(long telegramUserId, CancellationToken cancellationToken = default);
     Task<UiModels.TelegramUser?> GetByIdAsync(long telegramUserId, CancellationToken cancellationToken = default); // Alias for GetByTelegramIdAsync
+
+    /// <summary>
+    /// Returns the existing user if found, or creates a minimal inactive record.
+    /// The returned object reflects current DB state (including IsBanned, IsTrusted, etc.).
+    /// </summary>
+    Task<UiModels.TelegramUser> GetOrCreateAsync(
+        long telegramUserId, string? username, string? firstName, string? lastName, bool isBot,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets multiple Telegram users by their Telegram IDs in a single query.
@@ -93,4 +102,56 @@ public interface ITelegramUserRepository
     /// Used by the Inactive Users UI tab.
     /// </summary>
     Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
+
+    // ============================================================================
+    // Profile Scan Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Get the most recently active chat for a user (by message activity).
+    /// Returns null if the user has no message history in any managed chat.
+    /// Used by the profile rescan job to associate alerts with a real chat.
+    /// </summary>
+    Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Set whether a user is excluded from automatic profile re-scans.
+    /// Set when the user cannot be resolved via Telegram API (likely deleted account).
+    /// Cleared when a manual rescan successfully resolves the user.
+    /// </summary>
+    Task SetProfileScanExcludedAsync(long telegramUserId, bool excluded, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get user IDs eligible for periodic profile re-scanning.
+    /// Filters out banned/bot/trusted/excluded users and returns those with stale or missing scans.
+    /// Ordered by ProfileScannedAt ASC (NULLS FIRST = never-scanned users prioritized).
+    /// </summary>
+    Task<List<long>> GetEligibleUsersForRescanAsync(int batchSize, DateTimeOffset rescanCutoff, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically update all profile scan columns for a user.
+    /// Called after a User API profile scan completes.
+    /// </summary>
+    Task UpdateProfileScanDataAsync(
+        long telegramUserId,
+        string? bio,
+        long? personalChannelId,
+        string? personalChannelTitle,
+        string? personalChannelAbout,
+        bool hasPinnedStories,
+        string? pinnedStoryCaptions,
+        bool isScam,
+        bool isFake,
+        bool isVerified,
+        decimal profileScanScore,
+        long? profilePhotoId,
+        long? personalChannelPhotoId,
+        string? pinnedStoryIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bump ProfileScannedAt + UpdatedAt without changing any other fields.
+    /// Used when diff detection finds no profile changes — marks the user as freshly scanned.
+    /// </summary>
+    Task UpdateProfileScannedAtAsync(long telegramUserId, CancellationToken cancellationToken = default);
 }

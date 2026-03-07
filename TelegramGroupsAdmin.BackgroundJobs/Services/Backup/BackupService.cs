@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Reflection;
-using System.Text;
 using System.Text.Json;
 using Dapper;
 using Microsoft.AspNetCore.DataProtection;
@@ -54,7 +53,7 @@ public class BackupService : IBackupService
         DependencyResolutionService dependencyResolutionService,
         IBackupRetentionService retentionService,
         IThumbnailService thumbnailService,
-        IOptions<MessageHistoryOptions> historyOptions)
+        IOptions<AppOptions> appOptions)
     {
         _dataSource = dataSource;
         _logger = logger;
@@ -70,7 +69,7 @@ public class BackupService : IBackupService
         _dependencyResolutionService = dependencyResolutionService;
         _retentionService = retentionService;
         _thumbnailService = thumbnailService;
-        _mediaBasePath = historyOptions.Value.ImageStoragePath;
+        _mediaBasePath = appOptions.Value.DataPath;
     }
 
     public async Task<byte[]> ExportAsync()
@@ -138,13 +137,10 @@ public class BackupService : IBackupService
                 _logger.LogError(ex, "Failed to export table {TableName}", tableName);
 
                 // Notify Owners about backup failure (Phase 5.1)
-                _ = _notificationService.SendSystemNotificationAsync(
-                    eventType: NotificationEventType.BackupFailed,
-                    subject: "Database Backup Failed",
-                    message: $"Critical: Database backup failed while exporting table '{tableName}'.\n\n" +
-                             $"Error: {ex.Message}\n\n" +
-                             $"Please investigate the database connection and ensure all tables are accessible.",
-                    cancellationToken: CancellationToken.None);
+                _ = _notificationService.SendBackupFailedAsync(
+                    tableName: tableName,
+                    error: ex.Message,
+                    ct: CancellationToken.None);
 
                 throw;
             }
@@ -1039,6 +1035,11 @@ public class BackupService : IBackupService
             .ToList();
 
         var toDelete = _retentionService.GetBackupsToDelete(backupFiles, retentionConfig);
+
+        _logger.LogInformation(
+            "Backup retention: {TotalBackups} total, deleting {DeleteCount}",
+            backupFiles.Count, toDelete.Count);
+
         var deletedCount = 0;
 
         foreach (var backup in toDelete)

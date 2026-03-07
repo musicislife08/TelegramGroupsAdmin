@@ -1,5 +1,4 @@
 using TelegramGroupsAdmin.Core.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -12,7 +11,7 @@ public interface IMessageTranslationService
     /// <summary>
     /// Get translation for a message
     /// </summary>
-    Task<MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<MessageTranslation?> GetTranslationForMessageAsync(int messageId, long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get translation for a message edit

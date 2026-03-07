@@ -10,7 +10,6 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -54,11 +53,10 @@ public class ContentDetectionOrchestrator
         try
         {
             _logger.LogDebug(
-                "Starting content detection for message {MessageId} from user {UserId} (@{Username}) in chat {ChatId} (hasText: {HasText}, hasPhoto: {HasPhoto}, edit: {EditVersion})",
+                "Starting content detection for message {MessageId} from {User} in {Chat} (hasText: {HasText}, hasPhoto: {HasPhoto}, edit: {EditVersion})",
                 message.MessageId,
-                message.From?.Id,
-                message.From?.Username ?? "none",
-                message.Chat.Id,
+                message.From.ToLogDebug(),
+                message.Chat.ToLogDebug(),
                 !string.IsNullOrWhiteSpace(text),
                 !string.IsNullOrEmpty(photoLocalPath),
                 editVersion);
@@ -66,7 +64,7 @@ public class ContentDetectionOrchestrator
             using var scope = _serviceProvider.CreateScope();
             var coordinator = scope.ServiceProvider.GetRequiredService<IContentCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-            var historyOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Configuration.MessageHistoryOptions>>();
+            var appOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Configuration.AppOptions>>();
 
             // Build spam detection request with photo local path if available
             // Note: ImageSpamCheck uses PhotoLocalPath for all 3 layers (hash, OCR, Vision)
@@ -74,7 +72,7 @@ public class ContentDetectionOrchestrator
             string? photoFullPath = null;
             if (!string.IsNullOrEmpty(photoLocalPath))
             {
-                photoFullPath = Path.Combine(historyOptions.Value.ImageStoragePath, "media", photoLocalPath);
+                photoFullPath = Path.Combine(appOptions.Value.DataPath, "media", photoLocalPath);
                 if (!File.Exists(photoFullPath))
                 {
                     _logger.LogWarning("Photo file not found for spam detection: {PhotoPath}", photoFullPath);
@@ -85,12 +83,13 @@ public class ContentDetectionOrchestrator
             var request = new ContentCheckRequest
             {
                 Message = text ?? "", // Empty string for image-only messages
-                UserId = message.From?.Id ?? 0,
-                // Pass pre-formatted display names for logging
-                UserName = message.From.ToLogDebug(),
-                ChatId = message.Chat.Id,
-                ChatName = message.Chat.ToLogDebug(),
-                PhotoLocalPath = photoFullPath // Pass full for ImageSpamCheck layers
+                User = UserIdentity.From(message.From!),
+                Chat = ChatIdentity.From(message.Chat),
+                PhotoLocalPath = photoFullPath, // Pass full for ImageSpamCheck layers
+                Metadata = new ContentCheckMetadata
+                {
+                    IsReplyToChannelPost = message.ReplyToMessage?.SenderChat is not null
+                }
             };
 
             var result = await coordinator.CheckAsync(request, cancellationToken);
@@ -100,9 +99,9 @@ public class ContentDetectionOrchestrator
             if (result.HasCriticalViolations)
             {
                 _logger.LogWarning(
-                    "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
+                    "Critical check violations detected for message {MessageId} from {User}: {Violations}",
                     message.MessageId,
-                    message.From?.Id,
+                    message.From.ToLogDebug(),
                     string.Join("; ", result.CriticalCheckViolations));
 
                 // Use DetectionActionService to handle critical violations
@@ -203,17 +202,18 @@ public class ContentDetectionOrchestrator
         var detectionResult = new DetectionResultRecord
         {
             MessageId = message.MessageId,
+            ChatId = message.Chat.Id,
             DetectedAt = DateTimeOffset.UtcNow,
             DetectionSource = "auto",
             DetectionMethod = spamResult.CheckResults.Count > 0
                 ? string.Join(", ", spamResult.CheckResults.Select(c => c.CheckName))
                 : "Unknown",
-            // IsSpam is computed from net_confidence (don't set it here)
-            Confidence = spamResult.MaxConfidence,
+            // IsSpam is computed from net_score (don't set it here)
+            Score = spamResult.TotalScore,
             Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
             AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
             UsedForTraining = isTrainingWorthy,
-            NetConfidence = spamResult.NetConfidence,
+            NetScore = spamResult.TotalScore,
             CheckResultsJson = CheckResultsSerializer.Serialize(spamResult.CheckResults),
             EditVersion = editVersion
         };
@@ -222,11 +222,11 @@ public class ContentDetectionOrchestrator
 
         var editInfo = editVersion > 0 ? $" (edit #{editVersion})" : "";
         _logger.LogDebug(
-            "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetConfidence}, training: {UsedForTraining})",
+            "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetScore}, training: {UsedForTraining})",
             message.MessageId,
             editInfo,
             spamResult.IsSpam ? "spam" : "ham",
-            spamResult.NetConfidence,
+            spamResult.TotalScore,
             detectionResult.UsedForTraining);
 
         return detectionResult;
@@ -234,7 +234,7 @@ public class ContentDetectionOrchestrator
 
     /// <summary>
     /// Determine if detection result should be used for training.
-    /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions.
+    /// High-quality samples only: Confident OpenAI results (score >= 4.25) or manual admin decisions.
     /// Low-confidence auto-detections are NOT training-worthy.
     /// </summary>
     private static bool DetermineIfTrainingWorthy(ContentDetectionResult result)
@@ -242,17 +242,17 @@ public class ContentDetectionOrchestrator
         // Manual admin decisions are always training-worthy (will be set when admin uses Mark as Spam/Ham)
         // For auto-detections, only confident results are training-worthy
 
-        // Check if OpenAI was involved and was confident (85%+ confidence)
+        // Check if OpenAI was involved and was confident (score >= 4.25)
         var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
         if (openAIResult != null)
         {
-            // OpenAI confident (85%+) = training-worthy
-            return openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
+            // OpenAI confident (score >= 4.25) = training-worthy
+            return openAIResult.Score >= SpamDetectionConstants.OpenAIConfidentThreshold;
         }
 
         // No OpenAI veto = borderline/uncertain detection
-        // Only use for training if net confidence is very high (>80)
+        // Only use for training if total score is very high (> 4.0)
         // This prevents low-quality auto-detections from polluting training data
-        return result.NetConfidence > SpamDetectionConstants.TrainingConfidenceThreshold;
+        return result.TotalScore > SpamDetectionConstants.TrainingConfidenceThreshold;
     }
 }

@@ -120,8 +120,11 @@ public class WelcomeDeepLinkBuilderTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.ChatId, Is.EqualTo(-1001234567890));
-        Assert.That(result.UserId, Is.EqualTo(12345));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.ChatId, Is.EqualTo(-1001234567890));
+            Assert.That(result.UserId, Is.EqualTo(12345));
+        }
     }
 
     [Test]

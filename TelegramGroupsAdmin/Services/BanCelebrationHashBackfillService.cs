@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
-using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
 

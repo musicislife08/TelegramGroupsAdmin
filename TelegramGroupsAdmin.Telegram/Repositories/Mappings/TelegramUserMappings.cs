@@ -26,7 +26,22 @@ public static class TelegramUserMappings
             LastSeenAt: data.LastSeenAt,
             CreatedAt: data.CreatedAt,
             UpdatedAt: data.UpdatedAt,
-            IsActive: data.IsActive
+            IsActive: data.IsActive,
+            Bio: data.Bio,
+            PersonalChannelId: data.PersonalChannelId,
+            PersonalChannelTitle: data.PersonalChannelTitle,
+            PersonalChannelAbout: data.PersonalChannelAbout,
+            HasPinnedStories: data.HasPinnedStories,
+            PinnedStoryCaptions: data.PinnedStoryCaptions,
+            IsScam: data.IsScam,
+            IsFake: data.IsFake,
+            IsVerified: data.IsVerified,
+            ProfileScanExcluded: data.ProfileScanExcluded,
+            ProfileScannedAt: data.ProfileScannedAt,
+            ProfileScanScore: data.ProfileScanScore,
+            ProfilePhotoId: data.ProfilePhotoId,
+            PersonalChannelPhotoId: data.PersonalChannelPhotoId,
+            PinnedStoryIds: data.PinnedStoryIds
         );
     }
 
@@ -49,7 +64,22 @@ public static class TelegramUserMappings
             FirstSeenAt = ui.FirstSeenAt,
             LastSeenAt = ui.LastSeenAt,
             CreatedAt = ui.CreatedAt,
-            UpdatedAt = ui.UpdatedAt
+            UpdatedAt = ui.UpdatedAt,
+            Bio = ui.Bio,
+            PersonalChannelId = ui.PersonalChannelId,
+            PersonalChannelTitle = ui.PersonalChannelTitle,
+            PersonalChannelAbout = ui.PersonalChannelAbout,
+            HasPinnedStories = ui.HasPinnedStories,
+            PinnedStoryCaptions = ui.PinnedStoryCaptions,
+            IsScam = ui.IsScam,
+            IsFake = ui.IsFake,
+            IsVerified = ui.IsVerified,
+            ProfileScanExcluded = ui.ProfileScanExcluded,
+            ProfileScannedAt = ui.ProfileScannedAt,
+            ProfileScanScore = ui.ProfileScanScore,
+            ProfilePhotoId = ui.ProfilePhotoId,
+            PersonalChannelPhotoId = ui.PersonalChannelPhotoId,
+            PinnedStoryIds = ui.PinnedStoryIds
         };
     }
 }

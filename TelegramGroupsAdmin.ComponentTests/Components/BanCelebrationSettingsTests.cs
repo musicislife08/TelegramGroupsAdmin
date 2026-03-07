@@ -4,7 +4,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared.Settings;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -298,15 +298,14 @@ public class BanCelebrationSettingsTests : BanCelebrationSettingsTestContext
     }
 
     [Test]
-    public async Task GifLibrarySection_DisplaysGifs_WhenAvailable()
+    public void GifLibrarySection_DisplaysGifs_WhenAvailable()
     {
         // Arrange
         GifRepository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(CreateTestGifs());
 
         // Act
         var cut = RenderComponent();
-        await Task.Delay(50);
-        cut.Render();
+        cut.WaitForState(() => cut.Markup.Contains("Celebration 1"));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Celebration 1"));

@@ -5,6 +5,6 @@ namespace TelegramGroupsAdmin.Core.JobPayloads;
 /// Downloads and caches user profile photo, then updates message record
 /// </summary>
 public record FetchUserPhotoPayload(
-    long MessageId,
+    int MessageId,
     long UserId
 );

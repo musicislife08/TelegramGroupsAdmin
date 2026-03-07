@@ -260,8 +260,11 @@ public class UrlUtilitiesTests
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result, Has.Count.EqualTo(2));
-        Assert.That(result![0], Is.EqualTo("https://example.com"));
-        Assert.That(result[1], Is.EqualTo("https://example.com"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result![0], Is.EqualTo("https://example.com"));
+            Assert.That(result[1], Is.EqualTo("https://example.com"));
+        }
     }
 
     #endregion

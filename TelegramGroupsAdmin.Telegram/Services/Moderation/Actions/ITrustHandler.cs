@@ -15,7 +15,7 @@ public interface ITrustHandler
     /// Sets is_trusted = true.
     /// </summary>
     Task<TrustResult> TrustAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default);
@@ -25,7 +25,7 @@ public interface ITrustHandler
     /// Sets is_trusted = false.
     /// </summary>
     Task<UntrustResult> UntrustAsync(
-        long userId,
+        UserIdentity user,
         Actor executor,
         string? reason,
         CancellationToken cancellationToken = default);

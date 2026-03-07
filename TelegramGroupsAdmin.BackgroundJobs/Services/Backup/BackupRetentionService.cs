@@ -75,7 +75,7 @@ public class BackupRetentionService : IBackupRetentionService
         // Backups not in "toKeep" set should be deleted
         var toDelete = sortedBackups.Where(b => !toKeep.Contains(b.FilePath)).ToList();
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Retention analysis: {TotalBackups} total, keeping {KeepCount} ({Hourly}h/{Daily}d/{Weekly}w/{Monthly}m/{Yearly}y), deleting {DeleteCount}",
             backupFiles.Count,
             toKeep.Count,

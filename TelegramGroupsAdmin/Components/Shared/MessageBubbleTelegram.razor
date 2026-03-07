@@ -4,11 +4,12 @@
 @using TelegramGroupsAdmin.ContentDetection.Constants
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Extensions
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
     @* User profile photo (clickable to view user details) *@
-    <div class="tg-avatar-container" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" style="cursor: pointer;" title="View user details">
+    <div class="tg-avatar-container" @onclick="() => OnViewUserDetail.InvokeAsync(Message.User.Id)" @onclick:stopPropagation="true" style="cursor: pointer;" title="View user details">
         @if (!string.IsNullOrEmpty(Message.UserPhotoPath))
         {
             <img src="@GetImagePath(Message.UserPhotoPath)" alt="@GetUserDisplayName()" class="tg-avatar" loading="lazy" />
@@ -28,7 +29,7 @@
         <div class="tg-bubble-inner">
             @* Telegram-style Header: User name + timestamp + badges *@
             <div class="tg-header">
-                <span class="tg-user-name" @onclick="() => OnViewUserDetail.InvokeAsync(Message.UserId)" @onclick:stopPropagation="true" title="View user details">
+                <span class="tg-user-name" @onclick="() => OnViewUserDetail.InvokeAsync(Message.User.Id)" @onclick:stopPropagation="true" title="View user details">
                     @GetUserDisplayName()
                 </span>
                 <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
@@ -73,7 +74,7 @@
                 @if (ContentCheck != null)
                 {
                     <span class="tg-badge tg-badge-@(ContentCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
-                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Confidence%
+                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Score.ToString("F1")
                         @if (!string.IsNullOrEmpty(_cachedContributingFactors))
                         {
                             <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>
@@ -200,7 +201,7 @@
                                 }
                             </div>
                             <div class="tg-media-placeholder-text">
-                                @GetMediaTypeName(Message.MediaType.Value) downloading...
+                                @Message.MediaType.Value.ToDisplayName() downloading...
                             </div>
                         </div>
                     }
@@ -325,7 +326,7 @@
 
                             @if (ContentCheck?.IsSpam != true && !IsCurrentUser)
                             {
-                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsSpam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; StateHasChanged(); try { await OnMarkAsSpam.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-danger">
                                         <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
                                         <span>Mark as Spam</span>
@@ -335,7 +336,7 @@
 
                             @if (!IsManuallyMarkedAsHam())
                             {
-                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsHam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; StateHasChanged(); try { await OnMarkAsHam.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-success">
                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
                                         <span>Mark as Ham</span>
@@ -343,21 +344,21 @@
                                 </MudMenuItem>
                             }
 
-                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnDeleteMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; StateHasChanged(); try { await OnDeleteMessage.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-danger">
                                     <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" />
                                     <span>Delete Message</span>
                                 </div>
                             </MudMenuItem>
 
-                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTempBan.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; StateHasChanged(); try { await OnTempBan.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-warning">
                                     <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" />
                                     <span>Temp Ban User</span>
                                 </div>
                             </MudMenuItem>
 
-                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnWarn.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; StateHasChanged(); try { await OnWarn.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-warning">
                                     <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
                                     <span>Warn User</span>
@@ -367,7 +368,7 @@
                             @* Phase 4.20: Manual translation button (for messages that didn't auto-translate) *@
                             @if (Message.Translation == null && !string.IsNullOrWhiteSpace(Message.MessageText))
                             {
-                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTranslateMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; _actionInProgress = true; StateHasChanged(); try { await OnTranslateMessage.InvokeAsync(Message); } finally { _actionInProgress = false; } })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item">
                                         <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" />
                                         <span>Translate Message</span>
@@ -425,9 +426,6 @@
     public EventCallback<long> OnViewUserDetail { get; set; }
 
     [Parameter]
-    public EventCallback<long> OnFilterByChat { get; set; }
-
-    [Parameter]
     public EventCallback<MessageRecord> OnDeleteMessage { get; set; }
 
     [Parameter]
@@ -440,19 +438,19 @@
     public bool IsCurrentUser { get; set; }
 
     [Parameter]
-    public EventCallback<long> OnReplyClick { get; set; }
+    public EventCallback<int> OnReplyClick { get; set; }
 
     /// <summary>
     /// Phase 1: Send & Edit Messages as Bot - Reply button callback
     /// </summary>
     [Parameter]
-    public EventCallback<long> OnReplyToClick { get; set; }
+    public EventCallback<int> OnReplyToClick { get; set; }
 
     /// <summary>
     /// Phase 1: Send & Edit Messages as Bot - Edit button callback (messageId, messageText)
     /// </summary>
     [Parameter]
-    public EventCallback<(long MessageId, string MessageText)> OnEditClick { get; set; }
+    public EventCallback<(int MessageId, string MessageText)> OnEditClick { get; set; }
 
     /// <summary>
     /// Phase 1: Send & Edit Messages as Bot - Is this message from the bot?
@@ -481,7 +479,7 @@
     [Inject]
     private IDialogService DialogService { get; set; } = null!;
 
-    private readonly bool _actionInProgress = false;
+    private bool _actionInProgress;
     private bool _popoverOpen;
     private bool _showTranslation = true; // Phase 4.20: Show translation by default when available
 
@@ -501,7 +499,7 @@
         var parameters = new DialogParameters
         {
             { nameof(UserNotesDialog.Notes), UserNotes },
-            { nameof(UserNotesDialog.UserName), Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}" }
+            { nameof(UserNotesDialog.UserName), Message.User.DisplayName }
         };
 
         var options = new DialogOptions
@@ -600,25 +598,6 @@
     }
 
     /// <summary>
-    /// Get friendly name for media type
-    /// Phase 4.X: Used for media placeholder display
-    /// </summary>
-    private string GetMediaTypeName(MediaType mediaType)
-    {
-        return mediaType switch
-        {
-            MediaType.Animation => "GIF",
-            MediaType.Video => "Video",
-            MediaType.Audio => "Audio",
-            MediaType.Voice => "Voice message",
-            MediaType.Sticker => "Sticker",
-            MediaType.VideoNote => "Video message",
-            MediaType.Document => "Document",
-            _ => "Media"
-        };
-    }
-
-    /// <summary>
     /// Toggle between original and translated text
     /// Phase 4.20: User can switch between viewing original foreign language text or English translation
     /// </summary>
@@ -640,7 +619,7 @@
             return (messageText, null);
         }
 
-        var parts = messageText.Split(new[] { delimiter }, 2, StringSplitOptions.None);
+        var parts = messageText.Split([delimiter], 2, StringSplitOptions.None);
         var content = parts[0];
         var previewSection = parts.Length > 1 ? parts[1] : null;
 
@@ -650,7 +629,7 @@
         }
 
         // Parse each URL preview block (separated by double newline)
-        var previewBlocks = previewSection.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var previewBlocks = previewSection.Split(["\n\n"], StringSplitOptions.RemoveEmptyEntries);
         var previews = new List<UrlPreview>();
 
         foreach (var block in previewBlocks)
@@ -734,10 +713,10 @@
 
         // Get top 3 contributing algorithms (highest confidence spam or ham checks)
         var topContributors = checkResults
-            .Where(c => c.Confidence > 0)  // Only show checks that had confidence
-            .OrderByDescending(c => c.Confidence)
+            .Where(c => c.Score > 0)  // Only show checks that had a score
+            .OrderByDescending(c => c.Score)
             .Take(3)
-            .Select(c => $"{GetFriendlyCheckName(c.CheckName)} {c.Confidence}%")
+            .Select(c => $"{GetFriendlyCheckName(c.CheckName)} {c.Score:F1}")
             .ToList();
 
         return topContributors.Any() ? topContributors : null;
@@ -753,7 +732,7 @@
         if (latest == null)
             return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
 
-        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetConfidence}% confidence\n";
+        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetScore:F2} score\n";
         tooltip += $"Detection: {latest.DetectionMethod}\n";
         tooltip += $"Source: {latest.DetectionSource}\n";
 
@@ -777,11 +756,11 @@
     private string GetUserDisplayName()
     {
         return TelegramDisplayName.Format(
-            Message.FirstName,
-            Message.LastName,
-            Message.UserName,
-            Message.UserId,
-            Message.ChatName);
+            Message.User.FirstName,
+            Message.User.LastName,
+            Message.User.Username,
+            Message.User.Id,
+            Message.Chat.ChatName);
     }
 
     /// <summary>

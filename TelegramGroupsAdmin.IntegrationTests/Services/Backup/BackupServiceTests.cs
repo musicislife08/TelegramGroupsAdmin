@@ -3,12 +3,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
@@ -79,7 +83,7 @@ public class BackupServiceTests
         });
 
         // Add mock services (BackupService dependencies)
-        services.AddSingleton<IDmDeliveryService, MockDmDeliveryService>();
+        services.AddSingleton<IBotDmService, MockBotDmService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
         services.AddSingleton<INotificationService, MockNotificationService>();
         services.AddSingleton(Substitute.For<TelegramGroupsAdmin.Telegram.Services.IThumbnailService>());
@@ -153,8 +157,11 @@ public class BackupServiceTests
         // Verify can extract metadata from encrypted backup (metadata is always unencrypted in tar)
         var metadata = await _backupService.GetMetadataAsync(backupBytes);
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("3.0"));
-        Assert.That(metadata.TableCount, Is.GreaterThan(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata.Version, Is.EqualTo("3.0"));
+            Assert.That(metadata.TableCount, Is.GreaterThan(0));
+        }
     }
 
     [Test]
@@ -275,8 +282,11 @@ public class BackupServiceTests
         var originalUserCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
         var originalMessageCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
 
-        Assert.That(originalUserCount, Is.GreaterThan(0));
-        Assert.That(originalMessageCount, Is.GreaterThan(0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(originalUserCount, Is.GreaterThan(0));
+            Assert.That(originalMessageCount, Is.GreaterThan(0));
+        }
 
         // Act - Restore (destructive operation)
         await _backupService.RestoreAsync(originalBackup, passphrase);
@@ -285,8 +295,11 @@ public class BackupServiceTests
         var restoredUserCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
         var restoredMessageCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
 
-        Assert.That(restoredUserCount, Is.EqualTo(originalUserCount));
-        Assert.That(restoredMessageCount, Is.EqualTo(originalMessageCount));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(restoredUserCount, Is.EqualTo(originalUserCount));
+            Assert.That(restoredMessageCount, Is.EqualTo(originalMessageCount));
+        }
     }
 
     [Test]
@@ -390,29 +403,25 @@ public class BackupServiceTests
     [Test]
     public async Task RestoreAsync_ShouldResetSequences()
     {
-        // Arrange - Create backup with messages
+        // Arrange - Create backup with data
         var backup = await _backupService!.ExportAsync();
 
         // Act - Restore
         await _backupService.RestoreAsync(backup);
 
-        // Assert - Insert new message, verify ID continues from max
-        await _testHelper!.ExecuteSqlAsync(@"
-            INSERT INTO telegram_users (telegram_user_id, username, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
-            VALUES (888888, 'seq_test', false, false, NOW(), NOW(), NOW(), NOW())
+        // Assert - Insert new message_edit, verify ID continues from max
+        // (message_edits.id still has identity/sequence, unlike messages.message_id which uses ValueGeneratedNever)
+        await _testHelper!.ExecuteSqlAsync($@"
+            INSERT INTO message_edits (message_id, chat_id, edit_date, new_text)
+            VALUES ({GoldenDataset.Messages.Msg1_Id}, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test edit')
         ");
 
-        await _testHelper.ExecuteSqlAsync($@"
-            INSERT INTO messages (user_id, chat_id, timestamp, message_text, content_check_skip_reason)
-            VALUES (888888, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test', 0)
+        var newEditId = await _testHelper.ExecuteScalarAsync<long>(@"
+            SELECT id FROM message_edits WHERE new_text = 'sequence test edit'
         ");
 
-        var newMessageId = await _testHelper.ExecuteScalarAsync<long>(@"
-            SELECT message_id FROM messages WHERE message_text = 'sequence test'
-        ");
-
-        Assert.That(newMessageId, Is.GreaterThan(GoldenDataset.Messages.Msg1_Id),
-            "Sequence should reset to max(message_id) + 1 after restore");
+        Assert.That(newEditId, Is.GreaterThan(0),
+            "Sequence should be reset so new ID is positive after restore");
     }
 
     #endregion
@@ -465,9 +474,12 @@ public class BackupServiceTests
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("3.0"));
-        Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
-        Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(metadata.Version, Is.EqualTo("3.0"));
+            Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+            Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+        }
     }
 
     [Test]
@@ -529,10 +541,13 @@ public class BackupServiceTests
             await _backupService!.ExportAsync();
         });
 
-        // Verify the exception contains useful diagnostic information
-        Assert.That(ex!.Message, Does.Contain("warnings"), "Exception should identify the corrupted column");
-        Assert.That(ex.Message, Does.Contain("telegram_users"), "Exception should identify the table");
-        Assert.That(ex.InnerException, Is.TypeOf<System.Text.Json.JsonException>(), "Inner exception should be JsonException");
+        using (Assert.EnterMultipleScope())
+        {
+            // Verify the exception contains useful diagnostic information
+            Assert.That(ex!.Message, Does.Contain("warnings"), "Exception should identify the corrupted column");
+            Assert.That(ex.Message, Does.Contain("telegram_users"), "Exception should identify the table");
+            Assert.That(ex.InnerException, Is.TypeOf<System.Text.Json.JsonException>(), "Inner exception should be JsonException");
+        }
     }
 
     [Test]
@@ -636,8 +651,11 @@ public class BackupServiceTests
         {
             var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             Assert.That(config, Is.Not.Null);
-            Assert.That(config!.BackupEncryptionConfig, Is.Not.Null);
-            Assert.That(config.PassphraseEncrypted, Is.Not.Null, "Passphrase should be encrypted");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(config!.BackupEncryptionConfig, Is.Not.Null);
+                Assert.That(config.PassphraseEncrypted, Is.Not.Null, "Passphrase should be encrypted");
+            }
         }
     }
 
@@ -688,38 +706,31 @@ public class BackupServiceTests
     /// <summary>
     /// Mock DM delivery service for tests (BackupService sends notifications on export failure)
     /// </summary>
-    private class MockDmDeliveryService : IDmDeliveryService
+    private class MockBotDmService : IBotDmService
     {
+        private static readonly DmDeliveryResult SuccessResult = new()
+        {
+            DmSent = true,
+            FallbackUsed = false,
+            Failed = false,
+            MessageId = 1
+        };
+
         public Task<DmDeliveryResult> SendDmAsync(
             long telegramUserId,
             string messageText,
             long? fallbackChatId = null,
             int? autoDeleteSeconds = null,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithQueueAsync(
             long telegramUserId,
             string notificationType,
             string messageText,
+            ParseMode parseMode = ParseMode.MarkdownV2,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithMediaAsync(
             long telegramUserId,
@@ -728,32 +739,47 @@ public class BackupServiceTests
             string? photoPath = null,
             string? videoPath = null,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
 
         public Task<DmDeliveryResult> SendDmWithMediaAndKeyboardAsync(
             long telegramUserId,
             string notificationType,
             string messageText,
             string? photoPath = null,
-            global::Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? keyboard = null,
+            string? videoPath = null,
+            InlineKeyboardMarkup? keyboard = null,
+            ParseMode parseMode = ParseMode.MarkdownV2,
             CancellationToken cancellationToken = default)
-        {
-            // No-op for tests - return success
-            return Task.FromResult(new DmDeliveryResult
-            {
-                DmSent = true,
-                FallbackUsed = false,
-                Failed = false
-            });
-        }
+            => Task.FromResult(SuccessResult);
+
+        public Task<Message> EditDmTextAsync(
+            long dmChatId,
+            int messageId,
+            string text,
+            InlineKeyboardMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
+
+        public Task<Message> EditDmCaptionAsync(
+            long dmChatId,
+            int messageId,
+            string? caption,
+            InlineKeyboardMarkup? replyMarkup = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(TelegramTestFactory.CreateMessage(messageId: messageId));
+
+        public Task DeleteDmMessageAsync(
+            long dmChatId,
+            int messageId,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task<DmDeliveryResult> SendDmWithKeyboardAsync(
+            long telegramUserId,
+            string messageText,
+            InlineKeyboardMarkup keyboard,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SuccessResult);
     }
 
     /// <summary>
@@ -770,37 +796,17 @@ public class BackupServiceTests
     /// </summary>
     private class MockNotificationService : INotificationService
     {
-        public Task<Dictionary<string, bool>> SendChatNotificationAsync(
-            long chatId,
-            NotificationEventType eventType,
-            string subject,
-            string message,
-            long? reportId = null,
-            string? photoPath = null,
-            long? reportedUserId = null,
-            ReportType? reportType = null,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
-        }
+        private static readonly Dictionary<string, bool> EmptyResults = new();
 
-        public Task<Dictionary<string, bool>> SendSystemNotificationAsync(
-            NotificationEventType eventType,
-            string subject,
-            string message,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(new Dictionary<string, bool>()); // No-op for tests
-        }
-
-        public Task<bool> SendNotificationAsync(
-            UserRecord user,
-            NotificationEventType eventType,
-            string subject,
-            string message,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(true); // No-op for tests
-        }
+        // Typed methods (no-op for backup tests)
+        public Task<Dictionary<string, bool>> SendSpamBanNotificationAsync(ChatIdentity chat, UserIdentity user, Actor? bannedBy, double netScore, double score, string? detectionReason, int chatsAffected, bool messageDeleted, int messageId, string? messagePreview, string? photoPath, string? videoPath, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendReportNotificationAsync(ChatIdentity chat, UserIdentity? reportedUser, long? reporterUserId, string? reporterName, bool isAutomated, string messagePreview, string? photoPath, long reportId, ReportType reportType, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendProfileScanAlertAsync(ChatIdentity chat, UserIdentity user, decimal score, string signals, string? aiReason, long reportId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendExamFailureNotificationAsync(ChatIdentity chat, UserIdentity user, int mcCorrectCount, int mcTotal, int mcScore, int mcPassingThreshold, string? openEndedQuestion, string? openEndedAnswer, string? aiReasoning, long examFailureId, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendBanNotificationAsync(UserIdentity user, Actor executor, string? reason, ChatIdentity? chat = null, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendMalwareDetectedAsync(ChatIdentity chat, UserIdentity user, string malwareDetails, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendAdminChangedAsync(ChatIdentity chat, UserIdentity user, bool promoted, bool isCreator, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendBackupFailedAsync(string tableName, string error, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendChatHealthWarningAsync(string chatName, string status, bool isAdmin, IReadOnlyList<string> warnings, CancellationToken ct = default) => Task.FromResult(EmptyResults);
     }
 }

@@ -30,11 +30,12 @@
                 <MudSelectItem Value="@("correction")">False Positive Correction</MudSelectItem>
             </MudSelect>
 
-            <MudNumericField @bind-Value="_confidence"
-                            Label="Confidence (optional)"
-                            Min="0" Max="100"
-                            Placeholder="0-100"
-                            HelperText="Confidence level when this sample was added (0-100%)" />
+            <MudNumericField @bind-Value="_score"
+                            Label="Score (optional)"
+                            Min="0.0" Max="5.0"
+                            Step="0.1"
+                            Placeholder="0.0-5.0"
+                            HelperText="Detection score when this sample was added (0.0-5.0)" />
 
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.body2"><strong>Added:</strong> @Sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
@@ -69,7 +70,7 @@
     private string _messageText = string.Empty;
     private bool _isSpam;
     private string _source = string.Empty;
-    private int? _confidence;
+    private double? _score;
     private bool _isSubmitting;
 
     protected override void OnInitialized()
@@ -77,7 +78,7 @@
         _messageText = Sample.MessageText ?? string.Empty;
         _isSpam = Sample.IsSpam;
         _source = Sample.DetectionSource;
-        _confidence = Sample.Confidence;
+        _score = Sample.Score;
     }
 
     private void Cancel() => MudDialog.Cancel();
@@ -96,7 +97,7 @@
                 MessageText = _messageText.Trim(),
                 IsSpam = _isSpam,
                 Source = _source,
-                Confidence = _confidence
+                Score = _score
             };
 
             MudDialog.Close(DialogResult.Ok(data));

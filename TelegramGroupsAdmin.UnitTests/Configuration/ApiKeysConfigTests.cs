@@ -39,13 +39,13 @@ public class ApiKeysConfigTests
         var migrated = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(migrated, Is.True);
             Assert.That(config.AIConnectionKeys.ContainsKey("openai"), Is.True);
             Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-test-openai-key"));
             Assert.That(config.OpenAI, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -61,13 +61,13 @@ public class ApiKeysConfigTests
         var migrated = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(migrated, Is.True);
             Assert.That(config.AIConnectionKeys.ContainsKey("azure-openai"), Is.True);
             Assert.That(config.AIConnectionKeys["azure-openai"], Is.EqualTo("azure-test-key"));
             Assert.That(config.AzureOpenAI, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -83,13 +83,13 @@ public class ApiKeysConfigTests
         var migrated = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(migrated, Is.True);
             Assert.That(config.AIConnectionKeys.ContainsKey("local-ai"), Is.True);
             Assert.That(config.AIConnectionKeys["local-ai"], Is.EqualTo("local-test-key"));
             Assert.That(config.LocalAI, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -107,7 +107,7 @@ public class ApiKeysConfigTests
         var migrated = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(migrated, Is.True);
             Assert.That(config.AIConnectionKeys.Count, Is.EqualTo(3));
@@ -117,7 +117,7 @@ public class ApiKeysConfigTests
             Assert.That(config.OpenAI, Is.Null);
             Assert.That(config.AzureOpenAI, Is.Null);
             Assert.That(config.LocalAI, Is.Null);
-        });
+        }
     }
 
     [Test]
@@ -129,9 +129,12 @@ public class ApiKeysConfigTests
         // Act
         var migrated = config.MigrateLegacyKeys();
 
-        // Assert
-        Assert.That(migrated, Is.False);
-        Assert.That(config.AIConnectionKeys, Is.Empty);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(migrated, Is.False);
+            Assert.That(config.AIConnectionKeys, Is.Empty);
+        }
     }
 
     [Test]
@@ -151,12 +154,12 @@ public class ApiKeysConfigTests
         var migrated = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(migrated, Is.False, "Should not migrate when key already exists");
             Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-new-key"), "Should preserve existing key");
             Assert.That(config.OpenAI, Is.EqualTo("sk-old-key"), "Should not clear legacy key if not migrated");
-        });
+        }
     }
 
     [Test]
@@ -173,13 +176,13 @@ public class ApiKeysConfigTests
         var secondMigration = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(firstMigration, Is.True, "First migration should return true");
             Assert.That(secondMigration, Is.False, "Second migration should return false");
             Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-test-key"));
             Assert.That(config.AIConnectionKeys.Count, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -195,11 +198,11 @@ public class ApiKeysConfigTests
         var migrated = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(migrated, Is.False);
             Assert.That(config.AIConnectionKeys.ContainsKey("openai"), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -217,11 +220,11 @@ public class ApiKeysConfigTests
         var migrated = config.MigrateLegacyKeys();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(migrated, Is.False);
             Assert.That(config.AIConnectionKeys, Is.Empty);
-        });
+        }
     }
 
     #endregion
@@ -293,11 +296,11 @@ public class ApiKeysConfigTests
         config.SetAIConnectionKey("openai", "sk-new-key");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(config.AIConnectionKeys.ContainsKey("openai"), Is.True);
             Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-new-key"));
-        });
+        }
     }
 
     [Test]

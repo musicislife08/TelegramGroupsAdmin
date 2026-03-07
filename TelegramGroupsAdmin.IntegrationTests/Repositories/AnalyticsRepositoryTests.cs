@@ -36,7 +36,7 @@ public class AnalyticsRepositoryTests
     private IServiceScope _scope = null!;
     private IAnalyticsRepository _analyticsRepository = null!;
 
-    private const string DefaultTimeZoneId = "America/New_York";
+    private const string DefaultTimeZoneId = "UTC";
 
     [SetUp]
     public async Task SetUp()
@@ -102,12 +102,15 @@ public class AnalyticsRepositoryTests
 
         // Assert
         Assert.That(summary, Is.Not.Null);
-        // Today's spam includes: base data (82581) + analytics automated spam + manual corrections
-        Assert.That(summary.TodaySpamCount, Is.GreaterThanOrEqualTo(GoldenDataset.AnalyticsData.TodaySpamCount),
-            "Should have at least the analytics spam detections today");
-        Assert.That(summary.HasYesterdayData, Is.True, "Should have yesterday data");
-        Assert.That(summary.YesterdaySpamCount, Is.GreaterThanOrEqualTo(GoldenDataset.AnalyticsData.YesterdaySpamCount),
-            "Should have at least the analytics spam detections yesterday");
+        using (Assert.EnterMultipleScope())
+        {
+            // Today's spam includes: base data (82581) + analytics automated spam + manual corrections
+            Assert.That(summary.TodaySpamCount, Is.GreaterThanOrEqualTo(GoldenDataset.AnalyticsData.TodaySpamCount),
+                "Should have at least the analytics spam detections today");
+            Assert.That(summary.HasYesterdayData, Is.True, "Should have yesterday data");
+            Assert.That(summary.YesterdaySpamCount, Is.GreaterThanOrEqualTo(GoldenDataset.AnalyticsData.YesterdaySpamCount),
+                "Should have at least the analytics spam detections yesterday");
+        }
     }
 
     [Test]
@@ -116,11 +119,14 @@ public class AnalyticsRepositoryTests
         // Act
         var summary = await _analyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
 
-        // Assert - Today has 3 spam, yesterday has 2, so it's worsening
-        Assert.That(summary.HasYesterdayData, Is.True);
-        Assert.That(summary.TodaySpamCount, Is.GreaterThan(summary.YesterdaySpamCount!.Value));
-        Assert.That(summary.IsWorsening, Is.True, "Should be worsening when today > yesterday");
-        Assert.That(summary.IsImproving, Is.False, "Should not be improving when today > yesterday");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - Today has 3 spam, yesterday has 2, so it's worsening
+            Assert.That(summary.HasYesterdayData, Is.True);
+            Assert.That(summary.TodaySpamCount, Is.GreaterThan(summary.YesterdaySpamCount!.Value));
+            Assert.That(summary.IsWorsening, Is.True, "Should be worsening when today > yesterday");
+            Assert.That(summary.IsImproving, Is.False, "Should not be improving when today > yesterday");
+        }
     }
 
     [Test]
@@ -129,12 +135,15 @@ public class AnalyticsRepositoryTests
         // Act
         var summary = await _analyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
 
-        // Assert
-        Assert.That(summary.HasYesterdayData, Is.True);
-        Assert.That(summary.SpamCountChange, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(summary.HasYesterdayData, Is.True);
+            Assert.That(summary.SpamCountChange, Is.Not.Null);
+        }
         Assert.That(summary.SpamCountChange!.Value,
-            Is.EqualTo(summary.TodaySpamCount - summary.YesterdaySpamCount!.Value),
-            "SpamCountChange should equal TodaySpamCount - YesterdaySpamCount");
+                Is.EqualTo(summary.TodaySpamCount - summary.YesterdaySpamCount!.Value),
+                "SpamCountChange should equal TodaySpamCount - YesterdaySpamCount");
     }
 
     [Test]
@@ -156,15 +165,18 @@ public class AnalyticsRepositoryTests
         // Act
         var summary = await _analyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
 
-        // Assert - verify we have data to test against
-        Assert.That(summary.TodayTotalDetections, Is.GreaterThan(0),
-            "Test data should provide detections for rate calculation");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - verify we have data to test against
+            Assert.That(summary.TodayTotalDetections, Is.GreaterThan(0),
+                "Test data should provide detections for rate calculation");
 
-        // Spam rate should be between 0-100 and proportional to spam count
-        Assert.That(summary.TodaySpamRate, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(100),
-            "Spam rate should be a valid percentage");
+            // Spam rate should be between 0-100 and proportional to spam count
+            Assert.That(summary.TodaySpamRate, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(100),
+                "Spam rate should be a valid percentage");
+        }
         Assert.That(summary.TodaySpamRate, Is.GreaterThan(0),
-            "With spam in test data, rate should be positive");
+                "With spam in test data, rate should be positive");
     }
 
     [Test]
@@ -208,11 +220,14 @@ public class AnalyticsRepositoryTests
         // Act
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
-        // Assert
-        Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDataset.AnalyticsData.LastWeekSpamCount),
-            "Last week should have 2 spam detections from analytics test data");
-        Assert.That(trends.CanShowWeekPercent, Is.True,
-            "Should be able to show percentage since last week has data");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert
+            Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDataset.AnalyticsData.LastWeekSpamCount),
+                "Last week should have 2 spam detections from analytics test data");
+            Assert.That(trends.CanShowWeekPercent, Is.True,
+                "Should be able to show percentage since last week has data");
+        }
     }
 
     [Test]
@@ -221,16 +236,19 @@ public class AnalyticsRepositoryTests
         // Act
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
-        // Assert - test data guarantees last week data exists
-        Assert.That(trends.CanShowWeekPercent, Is.True,
-            "Test data should provide last week spam for comparison");
-        Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDataset.AnalyticsData.LastWeekSpamCount),
-            "Last week should have exactly 2 spam from test data");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - test data guarantees last week data exists
+            Assert.That(trends.CanShowWeekPercent, Is.True,
+                "Test data should provide last week spam for comparison");
+            Assert.That(trends.LastWeekSpamCount, Is.EqualTo(GoldenDataset.AnalyticsData.LastWeekSpamCount),
+                "Last week should have exactly 2 spam from test data");
 
-        // With 2 spam last week and 5+ this week, change should be positive (more spam)
-        Assert.That(trends.WeekOverWeekChange, Is.Not.Null);
+            // With 2 spam last week and 5+ this week, change should be positive (more spam)
+            Assert.That(trends.WeekOverWeekChange, Is.Not.Null);
+        }
         Assert.That(trends.WeekOverWeekChange!.Value, Is.GreaterThan(0),
-            "Week-over-week change should be positive (more spam this week)");
+                "Week-over-week change should be positive (more spam this week)");
     }
 
     [Test]
@@ -239,17 +257,20 @@ public class AnalyticsRepositoryTests
         // Act
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
-        // Assert - test data has more spam this week (5+) than last week (2)
-        Assert.That(trends.CanShowWeekPercent, Is.True, "Test data should provide last week data");
-        Assert.That(trends.WeekOverWeekChange, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - test data has more spam this week (5+) than last week (2)
+            Assert.That(trends.CanShowWeekPercent, Is.True, "Test data should provide last week data");
+            Assert.That(trends.WeekOverWeekChange, Is.Not.Null);
 
-        // With more spam this week, IsWeekImproving should be false (worsening)
-        Assert.That(trends.ThisWeekSpamCount, Is.GreaterThan(trends.LastWeekSpamCount),
-            "Test data should have more spam this week than last week");
-        Assert.That(trends.IsWeekImproving, Is.False,
-            "Should not be improving when spam increased week-over-week");
-        Assert.That(trends.IsWeekWorsening, Is.True,
-            "Should be worsening when spam increased week-over-week");
+            // With more spam this week, IsWeekImproving should be false (worsening)
+            Assert.That(trends.ThisWeekSpamCount, Is.GreaterThan(trends.LastWeekSpamCount),
+                "Test data should have more spam this week than last week");
+            Assert.That(trends.IsWeekImproving, Is.False,
+                "Should not be improving when spam increased week-over-week");
+            Assert.That(trends.IsWeekWorsening, Is.True,
+                "Should be worsening when spam increased week-over-week");
+        }
     }
 
     [Test]
@@ -284,17 +305,20 @@ public class AnalyticsRepositoryTests
         // Act
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
-        // Assert - test data doesn't include last year data (0 instead of null now)
-        Assert.That(trends.LastYearSpamCount, Is.EqualTo(0),
-            "LastYearSpamCount should be 0 when no data exists (not null)");
-        Assert.That(trends.CanShowYearPercent, Is.False,
-            "CanShowYearPercent should be false when last year count is 0");
-        Assert.That(trends.YearOverYearChange, Is.Null,
-            "YearOverYearChange should be null when can't divide by zero");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - test data doesn't include last year data (0 instead of null now)
+            Assert.That(trends.LastYearSpamCount, Is.EqualTo(0),
+                "LastYearSpamCount should be 0 when no data exists (not null)");
+            Assert.That(trends.CanShowYearPercent, Is.False,
+                "CanShowYearPercent should be false when last year count is 0");
+            Assert.That(trends.YearOverYearChange, Is.Null,
+                "YearOverYearChange should be null when can't divide by zero");
 
-        // But difference should still be calculable
-        Assert.That(trends.YearDifference, Is.EqualTo(trends.ThisYearSpamCount),
-            "YearDifference should equal this year count when last year is 0");
+            // But difference should still be calculable
+            Assert.That(trends.YearDifference, Is.EqualTo(trends.ThisYearSpamCount),
+                "YearDifference should equal this year count when last year is 0");
+        }
     }
 
     [Test]
@@ -303,19 +327,22 @@ public class AnalyticsRepositoryTests
         // Act
         var trends = await _analyticsRepository.GetSpamTrendComparisonAsync(DefaultTimeZoneId);
 
-        // Assert - DaysInX properties should be populated
-        Assert.That(trends.DaysInThisWeek, Is.GreaterThan(0).And.LessThanOrEqualTo(7),
-            "DaysInThisWeek should be between 1 and 7");
-        Assert.That(trends.DaysInLastWeek, Is.EqualTo(7),
-            "DaysInLastWeek should always be 7");
-        Assert.That(trends.DaysInThisMonth, Is.GreaterThan(0).And.LessThanOrEqualTo(31),
-            "DaysInThisMonth should be between 1 and 31");
-        Assert.That(trends.DaysInLastMonth, Is.GreaterThan(27).And.LessThanOrEqualTo(31),
-            "DaysInLastMonth should be between 28 and 31");
-        Assert.That(trends.DaysInThisYear, Is.GreaterThan(0).And.LessThanOrEqualTo(366),
-            "DaysInThisYear should be between 1 and 366");
-        Assert.That(trends.DaysInLastYear, Is.GreaterThan(0).And.LessThanOrEqualTo(366),
-            "DaysInLastYear should be positive (same period comparison)");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - DaysInX properties should be populated
+            Assert.That(trends.DaysInThisWeek, Is.GreaterThan(0).And.LessThanOrEqualTo(7),
+                "DaysInThisWeek should be between 1 and 7");
+            Assert.That(trends.DaysInLastWeek, Is.EqualTo(7),
+                "DaysInLastWeek should always be 7");
+            Assert.That(trends.DaysInThisMonth, Is.GreaterThan(0).And.LessThanOrEqualTo(31),
+                "DaysInThisMonth should be between 1 and 31");
+            Assert.That(trends.DaysInLastMonth, Is.GreaterThan(27).And.LessThanOrEqualTo(31),
+                "DaysInLastMonth should be between 28 and 31");
+            Assert.That(trends.DaysInThisYear, Is.GreaterThan(0).And.LessThanOrEqualTo(366),
+                "DaysInThisYear should be between 1 and 366");
+            Assert.That(trends.DaysInLastYear, Is.GreaterThan(0).And.LessThanOrEqualTo(366),
+                "DaysInLastYear should be positive (same period comparison)");
+        }
     }
 
     [Test]
@@ -438,19 +465,22 @@ public class AnalyticsRepositoryTests
         var stats = await _analyticsRepository.GetDetectionAccuracyStatsAsync(
             startDate, endDate, DefaultTimeZoneId);
 
-        // Assert - test data guarantees we have detections with 1 FP and 1 FN
-        Assert.That(stats.TotalDetections, Is.GreaterThan(0),
-            "Test data should provide detections");
-        Assert.That(stats.TotalFalsePositives, Is.EqualTo(1),
-            "Test data has exactly 1 false positive (82617 corrected to ham)");
-        Assert.That(stats.TotalFalseNegatives, Is.EqualTo(1),
-            "Test data has exactly 1 false negative (82594 corrected to spam)");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - test data guarantees we have detections with 1 FP and 1 FN
+            Assert.That(stats.TotalDetections, Is.GreaterThan(0),
+                "Test data should provide detections");
+            Assert.That(stats.TotalFalsePositives, Is.EqualTo(1),
+                "Test data has exactly 1 false positive (82617 corrected to ham)");
+            Assert.That(stats.TotalFalseNegatives, Is.EqualTo(1),
+                "Test data has exactly 1 false negative (82594 corrected to spam)");
 
-        // Percentages should be valid and non-zero
-        Assert.That(stats.FalsePositivePercentage, Is.GreaterThan(0).And.LessThan(100),
-            "FP percentage should be positive but less than 100%");
-        Assert.That(stats.FalseNegativePercentage, Is.GreaterThan(0).And.LessThan(100),
-            "FN percentage should be positive but less than 100%");
+            // Percentages should be valid and non-zero
+            Assert.That(stats.FalsePositivePercentage, Is.GreaterThan(0).And.LessThan(100),
+                "FP percentage should be positive but less than 100%");
+            Assert.That(stats.FalseNegativePercentage, Is.GreaterThan(0).And.LessThan(100),
+                "FN percentage should be positive but less than 100%");
+        }
     }
 
     [Test]
@@ -500,8 +530,11 @@ public class AnalyticsRepositoryTests
         // Each algorithm should have positive timing data
         foreach (var algo in stats)
         {
-            Assert.That(algo.TotalExecutions, Is.GreaterThan(0), $"{algo.CheckName} should have executions");
-            Assert.That(algo.AverageMs, Is.GreaterThan(0), $"{algo.CheckName} should have positive average time");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(algo.TotalExecutions, Is.GreaterThan(0), $"{algo.CheckName} should have executions");
+                Assert.That(algo.AverageMs, Is.GreaterThan(0), $"{algo.CheckName} should have positive average time");
+            }
         }
     }
 
@@ -599,14 +632,17 @@ public class AnalyticsRepositoryTests
         // Each method should have valid percentage calculations
         foreach (var method in stats)
         {
-            Assert.That(method.TotalChecks, Is.GreaterThan(0),
-                $"{method.MethodName} should have checks from test data");
-            Assert.That(method.SpamPercentage, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(100),
-                $"{method.MethodName} spam percentage should be valid 0-100");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(method.TotalChecks, Is.GreaterThan(0),
+                              $"{method.MethodName} should have checks from test data");
+                Assert.That(method.SpamPercentage, Is.GreaterThanOrEqualTo(0).And.LessThanOrEqualTo(100),
+                    $"{method.MethodName} spam percentage should be valid 0-100");
 
-            // SpamDetected should not exceed TotalChecks
-            Assert.That(method.SpamDetected, Is.LessThanOrEqualTo(method.TotalChecks),
-                $"{method.MethodName} spam detected should not exceed total checks");
+                // SpamDetected should not exceed TotalChecks
+                Assert.That(method.SpamDetected, Is.LessThanOrEqualTo(method.TotalChecks),
+                    $"{method.MethodName} spam detected should not exceed total checks");
+            }
         }
     }
 
@@ -647,11 +683,14 @@ public class AnalyticsRepositoryTests
 
         // Assert
         Assert.That(summary, Is.Not.Null);
-        Assert.That(summary.TotalJoins, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses),
-            "Total joins should match test data");
-        Assert.That(summary.TotalAccepted, Is.EqualTo(
-            GoldenDataset.AnalyticsData.TodayAcceptedCount + GoldenDataset.AnalyticsData.LastWeekAcceptedCount),
-            "Total accepted should match test data");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.TotalJoins, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses),
+                      "Total joins should match test data");
+            Assert.That(summary.TotalAccepted, Is.EqualTo(
+                GoldenDataset.AnalyticsData.TodayAcceptedCount + GoldenDataset.AnalyticsData.LastWeekAcceptedCount),
+                "Total accepted should match test data");
+        }
     }
 
     [Test]
@@ -665,11 +704,14 @@ public class AnalyticsRepositoryTests
         var summary = await _analyticsRepository.GetWelcomeStatsSummaryAsync(
             startDate, endDate, DefaultTimeZoneId);
 
-        // Assert - use precalculated expected value from test data
-        // 3 accepted out of 6 total = 50%
-        Assert.That(summary.TotalJoins, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses));
-        Assert.That(summary.AcceptanceRate, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedAcceptedPercentage),
-            "Acceptance rate should be 50% (3 accepted / 6 total)");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - use precalculated expected value from test data
+            // 3 accepted out of 6 total = 50%
+            Assert.That(summary.TotalJoins, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses));
+            Assert.That(summary.AcceptanceRate, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedAcceptedPercentage),
+                "Acceptance rate should be 50% (3 accepted / 6 total)");
+        }
     }
 
     [Test]
@@ -704,10 +746,13 @@ public class AnalyticsRepositoryTests
 
         // Assert
         Assert.That(distribution, Is.Not.Null);
-        Assert.That(distribution.TotalResponses, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses));
-        Assert.That(distribution.DeniedCount, Is.EqualTo(GoldenDataset.AnalyticsData.TodayDeniedCount));
-        Assert.That(distribution.TimeoutCount, Is.EqualTo(GoldenDataset.AnalyticsData.YesterdayTimeoutCount));
-        Assert.That(distribution.LeftCount, Is.EqualTo(GoldenDataset.AnalyticsData.YesterdayLeftCount));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(distribution.TotalResponses, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses));
+            Assert.That(distribution.DeniedCount, Is.EqualTo(GoldenDataset.AnalyticsData.TodayDeniedCount));
+            Assert.That(distribution.TimeoutCount, Is.EqualTo(GoldenDataset.AnalyticsData.YesterdayTimeoutCount));
+            Assert.That(distribution.LeftCount, Is.EqualTo(GoldenDataset.AnalyticsData.YesterdayLeftCount));
+        }
     }
 
     [Test]
@@ -721,24 +766,27 @@ public class AnalyticsRepositoryTests
         var distribution = await _analyticsRepository.GetWelcomeResponseDistributionAsync(
             startDate, endDate, DefaultTimeZoneId);
 
-        // Assert - use precalculated expected percentages
-        Assert.That(distribution.TotalResponses, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses));
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - use precalculated expected percentages
+            Assert.That(distribution.TotalResponses, Is.EqualTo(GoldenDataset.AnalyticsData.TotalWelcomeResponses));
 
-        // Verify each percentage against precalculated values
-        Assert.That(distribution.AcceptedPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedAcceptedPercentage),
-            "Accepted percentage should be 50% (3/6)");
-        Assert.That(distribution.DeniedPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedDeniedPercentage).Within(0.001),
-            "Denied percentage should be ~16.67% (1/6)");
-        Assert.That(distribution.TimeoutPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedTimeoutPercentage).Within(0.001),
-            "Timeout percentage should be ~16.67% (1/6)");
-        Assert.That(distribution.LeftPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedLeftPercentage).Within(0.001),
-            "Left percentage should be ~16.67% (1/6)");
+            // Verify each percentage against precalculated values
+            Assert.That(distribution.AcceptedPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedAcceptedPercentage),
+                "Accepted percentage should be 50% (3/6)");
+            Assert.That(distribution.DeniedPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedDeniedPercentage).Within(0.001),
+                "Denied percentage should be ~16.67% (1/6)");
+            Assert.That(distribution.TimeoutPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedTimeoutPercentage).Within(0.001),
+                "Timeout percentage should be ~16.67% (1/6)");
+            Assert.That(distribution.LeftPercentage, Is.EqualTo(GoldenDataset.AnalyticsData.ExpectedLeftPercentage).Within(0.001),
+                "Left percentage should be ~16.67% (1/6)");
+        }
 
         // Verify they sum to 100%
         var totalPercentage = distribution.AcceptedPercentage +
-                              distribution.DeniedPercentage +
-                              distribution.TimeoutPercentage +
-                              distribution.LeftPercentage;
+                                  distribution.DeniedPercentage +
+                                  distribution.TimeoutPercentage +
+                                  distribution.LeftPercentage;
         Assert.That(totalPercentage, Is.EqualTo(100.0).Within(0.001),
             "Percentages should sum to exactly 100%");
     }
@@ -832,8 +880,11 @@ public class AnalyticsRepositoryTests
         // Verify each day has spam and ham counts
         foreach (var day in trends)
         {
-            Assert.That(day.SpamCount, Is.GreaterThanOrEqualTo(0));
-            Assert.That(day.HamCount, Is.GreaterThanOrEqualTo(0));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(day.SpamCount, Is.GreaterThanOrEqualTo(0));
+                Assert.That(day.HamCount, Is.GreaterThanOrEqualTo(0));
+            }
         }
     }
 
@@ -874,9 +925,12 @@ public class AnalyticsRepositoryTests
 
         // Assert
         Assert.That(stats, Is.Not.Null);
-        Assert.That(stats.TotalActions, Is.EqualTo(0),
-            "No user actions in test data, so should be 0");
-        Assert.That(stats.DailyAverages, Is.Empty);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stats.TotalActions, Is.EqualTo(0),
+                      "No user actions in test data, so should be 0");
+            Assert.That(stats.DailyAverages, Is.Empty);
+        }
     }
 
     #endregion

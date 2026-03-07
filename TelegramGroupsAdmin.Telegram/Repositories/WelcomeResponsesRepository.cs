@@ -28,7 +28,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
         context.WelcomeResponses.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Recorded welcome response: User {UserId} (@{Username}) in chat {ChatId} - {Response} (DM: {DmSent}, Fallback: {DmFallback}, JobId: {JobId})",
             response.UserId,
             response.Username,
@@ -72,7 +72,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
 
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Updated welcome response {Id}: {Response} (DM: {DmSent}, Fallback: {DmFallback})",
             id,
             responseType,

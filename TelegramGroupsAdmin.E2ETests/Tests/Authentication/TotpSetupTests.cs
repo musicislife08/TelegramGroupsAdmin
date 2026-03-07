@@ -175,11 +175,14 @@ public class TotpSetupTests : SharedE2ETestBase
         await _setupPage.VerifyAsync(totpCode);
         await _setupPage.WaitForRecoveryCodesAsync();
 
-        // Assert - confirmation checkbox should be visible and unchecked by default
-        Assert.That(await _setupPage.IsConfirmCheckboxVisibleAsync(), Is.True,
-            "Confirmation checkbox should be visible");
-        Assert.That(await _setupPage.IsConfirmationCheckedAsync(), Is.False,
-            "Confirmation checkbox should be unchecked by default");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - confirmation checkbox should be visible and unchecked by default
+            Assert.That(await _setupPage.IsConfirmCheckboxVisibleAsync(), Is.True,
+                "Confirmation checkbox should be visible");
+            Assert.That(await _setupPage.IsConfirmationCheckedAsync(), Is.False,
+                "Confirmation checkbox should be unchecked by default");
+        }
     }
 
     [Test]

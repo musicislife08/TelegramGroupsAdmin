@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Configuration.Repositories;
-using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Configuration;
 
@@ -21,28 +20,11 @@ public static class ConfigurationExtensions
             // NOTE: OpenAIOptions and SendGridOptions removed - now using database config
             // See AIProviderConfig and SendGridConfig in database (configs table)
 
-            // MessageHistoryOptions: Set ImageStoragePath from App:DataPath if not explicitly configured
-            services.Configure<MessageHistoryOptions>(options =>
-            {
-                configuration.GetSection("MessageHistory").Bind(options);
-
-                // If ImageStoragePath is still the default "/data", use App:DataPath as base
-                var dataPath = configuration["App:DataPath"] ?? "/data";
-                if (options.ImageStoragePath == "/data")
-                {
-                    options.ImageStoragePath = dataPath;
-                }
-            });
-
-            // Unified configuration service (database-driven config with global/chat-specific merging)
+            // Configuration repositories (database-driven config storage)
             services.AddScoped<IConfigRepository, ConfigRepository>();
-            services.AddScoped<IConfigService, ConfigService>();
 
             // System configuration repository (API keys, service settings, per-chat config overrides)
             services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
-
-            // Startup migration services (one-time data migrations on first startup)
-            services.AddHostedService<TelegramConfigMigrationService>();
 
             return services;
         }

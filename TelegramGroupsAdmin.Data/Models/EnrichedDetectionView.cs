@@ -31,11 +31,12 @@ public class EnrichedDetectionView
             dr.detection_source,
             dr.detection_method,
             dr.is_spam,
-            dr.confidence,
-            dr.net_confidence,
+            dr.score,
+            dr.net_score,
             dr.reason,
             dr.check_results_json,
             dr.edit_version,
+            dr.chat_id,
 
             -- Actor columns (raw - app computes Actor via ActorMappings)
             dr.web_user_id,
@@ -57,7 +58,7 @@ public class EnrichedDetectionView
             msg_tu.last_name AS message_author_last_name
 
         FROM detection_results dr
-        INNER JOIN messages m ON dr.message_id = m.message_id
+        INNER JOIN messages m ON dr.message_id = m.message_id AND dr.chat_id = m.chat_id
         LEFT JOIN users wu ON dr.web_user_id = wu.id
         LEFT JOIN telegram_users actor_tu ON dr.telegram_user_id = actor_tu.telegram_user_id
         LEFT JOIN telegram_users msg_tu ON m.user_id = msg_tu.telegram_user_id;
@@ -76,7 +77,7 @@ public class EnrichedDetectionView
     public long Id { get; set; }
 
     [Column("message_id")]
-    public long MessageId { get; set; }
+    public int MessageId { get; set; }
 
     [Column("detected_at")]
     public DateTimeOffset DetectedAt { get; set; }
@@ -90,11 +91,11 @@ public class EnrichedDetectionView
     [Column("is_spam")]
     public bool IsSpam { get; set; }
 
-    [Column("confidence")]
-    public int Confidence { get; set; }
+    [Column("score")]
+    public double Score { get; set; }
 
-    [Column("net_confidence")]
-    public int NetConfidence { get; set; }
+    [Column("net_score")]
+    public double NetScore { get; set; }
 
     [Column("reason")]
     public string? Reason { get; set; }
@@ -104,6 +105,9 @@ public class EnrichedDetectionView
 
     [Column("edit_version")]
     public int EditVersion { get; set; }
+
+    [Column("chat_id")]
+    public long ChatId { get; set; }
 
     #endregion
 

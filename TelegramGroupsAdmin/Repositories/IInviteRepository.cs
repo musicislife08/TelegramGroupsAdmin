@@ -1,4 +1,3 @@
-using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;

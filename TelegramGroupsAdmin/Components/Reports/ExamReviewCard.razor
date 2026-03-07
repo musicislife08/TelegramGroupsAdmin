@@ -1,16 +1,16 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.Configuration
-@using TelegramGroupsAdmin.Configuration.Services
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Core
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Constants
 
 @inject IConfigService ConfigService
 @inject ITelegramUserRepository TelegramUserRepository
 @inject IMessageHistoryRepository MessageRepository
 @inject IManagedChatsRepository ManagedChatsRepository
-
 <MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
     <MudCardHeader>
         <CardHeaderContent>
@@ -51,9 +51,9 @@
                     </MudAvatar>
                 }
                 <MudStack Spacing="1">
-                    <MudText Typo="Typo.h6">@GetUserDisplayName()</MudText>
+                    <UserDetailLink UserId="@ExamFailure.User.Id" Typo="Typo.h6">@ExamFailure.User.DisplayName</UserDetailLink>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @(ExamFailure.UserName != null ? $"@{ExamFailure.UserName}" : "No username") · ID: @ExamFailure.UserId
+                        @(ExamFailure.User.Username != null ? $"@{ExamFailure.User.Username}" : "No username") · ID: @ExamFailure.User.Id
                     </MudText>
                     @if (_user != null)
                     {
@@ -105,7 +105,7 @@
                     @* Chat *@
                     <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                         <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Color="Color.Secondary" />
-                        <MudText Typo="Typo.body2">Chat: @(ExamFailure.ChatName ?? "Unknown")</MudText>
+                        <MudText Typo="Typo.body2">Chat: @ExamFailure.Chat.DisplayName</MudText>
                     </MudStack>
                 </MudStack>
             </MudPaper>
@@ -278,7 +278,7 @@
     public required ExamFailureRecord ExamFailure { get; set; }
 
     [Parameter]
-    public EventCallback<(ExamFailureRecord ExamFailure, string Action)> OnAction { get; set; }
+    public EventCallback<(ExamFailureRecord ExamFailure, ExamAction Action)> OnAction { get; set; }
 
     private bool _actionInProgress;
     private TelegramUser? _user;
@@ -291,10 +291,10 @@
     protected override async Task OnParametersSetAsync()
     {
         // Load user details
-        _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamFailure.UserId);
+        _user = await TelegramUserRepository.GetByTelegramIdAsync(ExamFailure.User.Id);
 
         // Load exam config for question details
-        var welcomeConfig = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ExamFailure.ChatId);
+        var welcomeConfig = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ExamFailure.Chat.Id);
         _examConfig = welcomeConfig?.ExamConfig;
 
         // Calculate correct answers
@@ -355,10 +355,10 @@
     {
         try
         {
-            var userMessages = await MessageRepository.GetUserMessagesAsync(ExamFailure.UserId);
+            var userMessages = await MessageRepository.GetUserMessagesAsync(ExamFailure.User.Id);
             var distinctChatIds = userMessages
                 .Select(m => m.ChatId)
-                .Where(chatId => chatId != ExamFailure.ChatId)
+                .Where(chatId => chatId != ExamFailure.Chat.Id)
                 .Distinct()
                 .ToList();
 
@@ -366,8 +366,8 @@
             {
                 var allManagedChats = await ManagedChatsRepository.GetActiveChatsAsync();
                 _otherManagedChats = allManagedChats
-                    .Where(c => distinctChatIds.Contains(c.ChatId))
-                    .Select(c => c.ChatName ?? $"Chat {c.ChatId}")
+                    .Where(c => distinctChatIds.Contains(c.Identity.Id))
+                    .Select(c => c.Identity.ChatName ?? $"Chat {c.Identity.Id}")
                     .ToList();
             }
         }
@@ -406,15 +406,6 @@
         return (isCorrect, answerLetter, selectedText, correctLetter, correctText);
     }
 
-    private string GetUserDisplayName()
-    {
-        return TelegramDisplayName.Format(
-            ExamFailure.UserFirstName,
-            ExamFailure.UserLastName,
-            ExamFailure.UserName,
-            ExamFailure.UserId);
-    }
-
     private string GetCardStyle()
     {
         if (!ExamFailure.ReviewedAt.HasValue)
@@ -429,30 +420,47 @@
                Color.Error;
     }
 
-    private string GetPhotoUrl(string photoPath)
+    private string? GetPhotoUrl(string photoPath)
     {
-        var fileName = Path.GetFileName(photoPath);
-        return $"/api/photos/{fileName}";
+        return MediaPathUtilities.GetPhotoWebPath(photoPath);
     }
 
     private async Task OnApprove()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, "approve"));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((ExamFailure, ExamAction.Approve));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnDeny()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, "deny"));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((ExamFailure, ExamAction.Deny));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 
     private async Task OnDenyAndBan()
     {
         _actionInProgress = true;
-        await OnAction.InvokeAsync((ExamFailure, "deny_ban"));
-        _actionInProgress = false;
+        try
+        {
+            await OnAction.InvokeAsync((ExamFailure, ExamAction.DenyAndBan));
+        }
+        finally
+        {
+            _actionInProgress = false;
+        }
     }
 }

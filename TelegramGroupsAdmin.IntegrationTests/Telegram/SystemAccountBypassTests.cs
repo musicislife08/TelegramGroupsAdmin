@@ -1,14 +1,13 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Configuration.Repositories;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -105,8 +104,8 @@ public class SystemAccountBypassTests
         // Arrange: Create a content check request from a system account
         var request = new ContentCheckRequest
         {
-            UserId = systemUserId,
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(systemUserId),
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "This message should never be checked for spam"
         };
 
@@ -114,7 +113,7 @@ public class SystemAccountBypassTests
         var result = await _coordinator!.CheckAsync(request);
 
         // Assert: System account is trusted and all checks are skipped
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True,
                 $"System account {systemUserId} should be marked as trusted");
@@ -126,7 +125,7 @@ public class SystemAccountBypassTests
                 "No spam detection should run for system accounts");
             Assert.That(result.CriticalCheckViolations, Is.Empty,
                 "No critical check violations for system accounts");
-        });
+        }
     }
 
     [Test]
@@ -135,8 +134,8 @@ public class SystemAccountBypassTests
         // Arrange: Anonymous admin post with content that would trigger spam detection
         var request = new ContentCheckRequest
         {
-            UserId = TelegramConstants.GroupAnonymousBotUserId, // 1087968824
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(TelegramConstants.GroupAnonymousBotUserId), // 1087968824
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "FREE BITCOIN! Click here: https://scam-site.com BUY NOW!!!"
         };
 
@@ -144,7 +143,7 @@ public class SystemAccountBypassTests
         var result = await _coordinator!.CheckAsync(request);
 
         // Assert: Content is NOT checked because it's from a system account
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.IsUserTrusted, Is.True,
                 "Anonymous admin should be trusted");
@@ -152,7 +151,7 @@ public class SystemAccountBypassTests
                 "Spam checks should be skipped for anonymous admin");
             Assert.That(result.SpamResult, Is.Null,
                 "No spam detection should run - admin content is trusted");
-        });
+        }
 
         // If the detection engine was called, the test would throw
         // (ThrowingContentDetectionEngine throws on any call)
@@ -164,8 +163,8 @@ public class SystemAccountBypassTests
         // Arrange: Regular user (not a system account)
         var request = new ContentCheckRequest
         {
-            UserId = 12345, // Regular user
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(12345), // Regular user
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "Hello world"
         };
 
@@ -189,8 +188,8 @@ public class SystemAccountBypassTests
         // Arrange
         var request = new ContentCheckRequest
         {
-            UserId = systemUserId,
-            ChatId = -1001234567890,
+            User = UserIdentity.FromId(systemUserId),
+            Chat = ChatIdentity.FromId(-1001234567890),
             Message = "System account message"
         };
 
@@ -218,7 +217,7 @@ public class SystemAccountBypassTests
             CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException(
-                $"ContentDetectionEngine.CheckMessageAsync should not be called for system account {request.UserId}. " +
+                $"ContentDetectionEngine.CheckMessageAsync should not be called for system account {request.User.Id}. " +
                 "System accounts should bypass all detection.");
         }
 
@@ -227,7 +226,7 @@ public class SystemAccountBypassTests
             CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException(
-                $"ContentDetectionEngine.RunPipelineChecksAsync should not be called for system account {request.UserId}. " +
+                $"ContentDetectionEngine.RunPipelineChecksAsync should not be called for system account {request.User.Id}. " +
                 "System accounts should bypass all detection.");
         }
     }

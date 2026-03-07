@@ -85,9 +85,12 @@ public class ExamEvaluationServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Passed, Is.False);
-        Assert.That(result.Reasoning, Is.EqualTo("No answer provided"));
-        Assert.That(result.Confidence, Is.EqualTo(1.0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Passed, Is.False);
+            Assert.That(result.Reasoning, Is.EqualTo("No answer provided"));
+            Assert.That(result.Confidence, Is.EqualTo(1.0));
+        }
     }
 
     [Test]
@@ -102,9 +105,12 @@ public class ExamEvaluationServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Passed, Is.False);
-        Assert.That(result.Reasoning, Is.EqualTo("No answer provided"));
-        Assert.That(result.Confidence, Is.EqualTo(1.0));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Passed, Is.False);
+            Assert.That(result.Reasoning, Is.EqualTo("No answer provided"));
+            Assert.That(result.Confidence, Is.EqualTo(1.0));
+        }
     }
 
     [Test]
@@ -163,9 +169,12 @@ public class ExamEvaluationServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Passed, Is.True);
-        Assert.That(result.Reasoning, Is.EqualTo("The answer shows genuine interest in the topic."));
-        Assert.That(result.Confidence, Is.EqualTo(0.95));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Passed, Is.True);
+            Assert.That(result.Reasoning, Is.EqualTo("The answer shows genuine interest in the topic."));
+            Assert.That(result.Confidence, Is.EqualTo(0.95));
+        }
     }
 
     [Test]
@@ -200,9 +209,12 @@ public class ExamEvaluationServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Passed, Is.False);
-        Assert.That(result.Reasoning, Is.EqualTo("Generic response that doesn't address the topic."));
-        Assert.That(result.Confidence, Is.EqualTo(0.85));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Passed, Is.False);
+            Assert.That(result.Reasoning, Is.EqualTo("Generic response that doesn't address the topic."));
+            Assert.That(result.Confidence, Is.EqualTo(0.85));
+        }
     }
 
     #endregion
@@ -243,8 +255,11 @@ public class ExamEvaluationServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Passed, Is.True);
-        Assert.That(result.Reasoning, Is.EqualTo("Good answer."));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Passed, Is.True);
+            Assert.That(result.Reasoning, Is.EqualTo("Good answer."));
+        }
     }
 
     [Test]
@@ -281,8 +296,11 @@ public class ExamEvaluationServiceTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Passed, Is.False);
-        Assert.That(result.Confidence, Is.EqualTo(0.7));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Passed, Is.False);
+            Assert.That(result.Confidence, Is.EqualTo(0.7));
+        }
     }
 
     #endregion
@@ -583,9 +601,12 @@ public class ExamEvaluationServiceTests
 
         // Assert - verify JSON mode for structured parsing; Temperature/MaxTokens come from feature config
         Assert.That(capturedOptions, Is.Not.Null);
-        Assert.That(capturedOptions!.JsonMode, Is.True);
-        Assert.That(capturedOptions.Temperature, Is.Null, "Temperature should come from feature config, not hardcoded");
-        Assert.That(capturedOptions.MaxTokens, Is.Null, "MaxTokens should come from feature config, not hardcoded");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(capturedOptions!.JsonMode, Is.True);
+            Assert.That(capturedOptions.Temperature, Is.Null, "Temperature should come from feature config, not hardcoded");
+            Assert.That(capturedOptions.MaxTokens, Is.Null, "MaxTokens should come from feature config, not hardcoded");
+        }
 
     }
 
@@ -616,9 +637,12 @@ public class ExamEvaluationServiceTests
 
         // Assert - should parse despite case differences
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Passed, Is.True);
-        Assert.That(result.Reasoning, Is.EqualTo("Good job!"));
-        Assert.That(result.Confidence, Is.EqualTo(0.88));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Passed, Is.True);
+            Assert.That(result.Reasoning, Is.EqualTo("Good job!"));
+            Assert.That(result.Confidence, Is.EqualTo(0.88));
+        }
     }
 
     #endregion

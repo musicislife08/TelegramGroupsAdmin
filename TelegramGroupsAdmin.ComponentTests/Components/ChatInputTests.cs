@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using TelegramGroupsAdmin.Components.Shared;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
@@ -206,8 +207,11 @@ public class ChatInputTests : MudBlazorTestContext
 
         // Assert
         var editIndicator = cut.Find(".edit-indicator");
-        Assert.That(editIndicator, Is.Not.Null);
-        Assert.That(cut.Markup, Does.Contain("Edit message"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(editIndicator, Is.Not.Null);
+            Assert.That(cut.Markup, Does.Contain("Edit message"));
+        }
     }
 
     [Test]
@@ -254,7 +258,7 @@ public class ChatInputTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ChatInput>(p => p
-            .Add(x => x.ReplyToMessageId, 12345L)
+            .Add(x => x.ReplyToMessageId, 12345)
             .Add(x => x.ReplyToUser, "TestUser")
             .Add(x => x.ReplyToText, "Original message"));
 
@@ -268,7 +272,7 @@ public class ChatInputTests : MudBlazorTestContext
     {
         // Arrange & Act
         var cut = Render<ChatInput>(p => p
-            .Add(x => x.ReplyToMessageId, 12345L)
+            .Add(x => x.ReplyToMessageId, 12345)
             .Add(x => x.ReplyToUser, "TestUser")
             .Add(x => x.ReplyToText, "Original message"));
 
@@ -327,6 +331,184 @@ public class ChatInputTests : MudBlazorTestContext
         // Assert - Phase 1: Emoji button is disabled
         var emojiButton = cut.Find(".emoji-button");
         Assert.That(emojiButton.HasAttribute("disabled"), Is.True);
+    }
+
+    #endregion
+
+    #region Toggle Display Tests
+
+    [Test]
+    public void ModeButton_ShowsMeLabel_WhenSendAsUserIsTrue()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.SendAsUser, true)
+            .Add(x => x.UserApiAvailableForChat, true)
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var label = cut.Find("span.mode-label");
+        Assert.That(label.TextContent, Is.EqualTo("Me"));
+    }
+
+    [Test]
+    public void ModeButton_HasUserModeClass_WhenSendAsUserIsTrue()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.SendAsUser, true)
+            .Add(x => x.UserApiAvailableForChat, true)
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var button = cut.Find("button.mode-button");
+        Assert.That(button.ClassList, Does.Contain("user-mode"));
+    }
+
+    [Test]
+    public void ModeButton_ShowsBotLabel_WhenSendAsUserIsFalse()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.SendAsUser, false)
+            .Add(x => x.UserApiAvailableForChat, true)
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var label = cut.Find("span.mode-label");
+        Assert.That(label.TextContent, Is.EqualTo("Bot"));
+    }
+
+    [Test]
+    public void ModeButton_HasBotModeClass_WhenSendAsUserIsFalse()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.SendAsUser, false)
+            .Add(x => x.UserApiAvailableForChat, true)
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var button = cut.Find("button.mode-button");
+        Assert.That(button.ClassList, Does.Contain("bot-mode"));
+    }
+
+    [Test]
+    public void ModeButton_IsDisabled_WhenUserApiAvailableForChatIsFalse()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.UserApiAvailableForChat, false)
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var button = cut.Find("button.mode-button");
+        Assert.That(button.HasAttribute("disabled"), Is.True);
+    }
+
+    [Test]
+    public void ModeButton_IsEnabled_WhenUserApiAvailableForChatIsTrue()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.UserApiAvailableForChat, true)
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var button = cut.Find("button.mode-button");
+        Assert.That(button.HasAttribute("disabled"), Is.False);
+    }
+
+    [Test]
+    public void ModeToggle_ShowsSkeleton_WhenCheckingUserApiIsTrue()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.CheckingUserApi, true));
+
+        // Assert
+        var skeletons = cut.FindAll(".mode-skeleton");
+        Assert.That(skeletons.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ModeToggle_HidesModeButton_WhenCheckingUserApiIsTrue()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.CheckingUserApi, true));
+
+        // Assert
+        var buttons = cut.FindAll("button.mode-button");
+        Assert.That(buttons.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void ModeToggle_ShowsModeButton_WhenCheckingUserApiIsFalse()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var buttons = cut.FindAll("button.mode-button");
+        Assert.That(buttons.Count, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ModeToggle_HidesSkeleton_WhenCheckingUserApiIsFalse()
+    {
+        // Arrange & Act
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.CheckingUserApi, false));
+
+        // Assert
+        var skeletons = cut.FindAll(".mode-skeleton");
+        Assert.That(skeletons.Count, Is.EqualTo(0));
+    }
+
+    #endregion
+
+    #region Toggle Interaction Tests
+
+    [Test]
+    public async Task ModeButton_Click_InvokesOnSendAsUserChanged_WithFalse_WhenSendAsUserIsTrue()
+    {
+        // Arrange
+        bool? receivedValue = null;
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.SendAsUser, true)
+            .Add(x => x.UserApiAvailableForChat, true)
+            .Add(x => x.CheckingUserApi, false)
+            .Add(x => x.OnSendAsUserChanged, EventCallback.Factory.Create<bool>(
+                this, value => receivedValue = value)));
+
+        // Act
+        var button = cut.Find("button.mode-button");
+        await button.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        // Assert
+        Assert.That(receivedValue, Is.EqualTo(false));
+    }
+
+    [Test]
+    public async Task ModeButton_Click_InvokesOnSendAsUserChanged_WithTrue_WhenSendAsUserIsFalse()
+    {
+        // Arrange
+        bool? receivedValue = null;
+        var cut = Render<ChatInput>(p => p
+            .Add(x => x.SendAsUser, false)
+            .Add(x => x.UserApiAvailableForChat, true)
+            .Add(x => x.CheckingUserApi, false)
+            .Add(x => x.OnSendAsUserChanged, EventCallback.Factory.Create<bool>(
+                this, value => receivedValue = value)));
+
+        // Act
+        var button = cut.Find("button.mode-button");
+        await button.ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        // Assert
+        Assert.That(receivedValue, Is.EqualTo(true));
     }
 
     #endregion

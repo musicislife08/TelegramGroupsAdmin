@@ -1,18 +1,16 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using Report = TelegramGroupsAdmin.Core.Models.Report;
 using ModerationResult = TelegramGroupsAdmin.Telegram.Services.Moderation.ModerationResult;
@@ -23,20 +21,22 @@ namespace TelegramGroupsAdmin.UnitTests.Services;
 /// <summary>
 /// Unit tests for ReportActionsService.
 /// Tests the web UI report actions (spam, ban, warn, dismiss).
-/// Uses IModerationOrchestrator interface (enabled by Issue #127 interface extraction).
+/// Uses IBotModerationService for moderation workflows.
 /// </summary>
 [TestFixture]
 public class ReportActionsServiceTests
 {
     private const long TestReportId = 123L;
-    private const long TestMessageId = 456L;
+    private const int TestMessageId = 456;
     private const long TestChatId = -100123456789L;
     private const long TestUserId = 789L;
     private const string TestReviewerId = "reviewer-user-id";
+    private const string TestReviewerEmail = "reviewer@test.com";
+    private static readonly Actor TestExecutor = Actor.FromWebUser(TestReviewerId, TestReviewerEmail);
 
     private IReportsRepository _mockReportsRepo = null!;
     private IMessageHistoryRepository _mockMessageRepo = null!;
-    private IModerationOrchestrator _mockModerationService = null!;
+    private IBotModerationService _mockModerationService = null!;
     private IAuditService _mockAuditService = null!;
     private IBotMessageService _mockBotMessageService = null!;
     private IReportCallbackContextRepository _mockCallbackContextRepo = null!;
@@ -49,7 +49,7 @@ public class ReportActionsServiceTests
     {
         _mockReportsRepo = Substitute.For<IReportsRepository>();
         _mockMessageRepo = Substitute.For<IMessageHistoryRepository>();
-        _mockModerationService = Substitute.For<IModerationOrchestrator>();
+        _mockModerationService = Substitute.For<IBotModerationService>();
         _mockAuditService = Substitute.For<IAuditService>();
         _mockBotMessageService = Substitute.For<IBotMessageService>();
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
@@ -76,32 +76,26 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.MarkAsSpamAndBanAsync(
-                TestMessageId,
-                TestUserId,
-                TestChatId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<Message?>(),
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
 
         // Act
-        await _service.HandleSpamActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleSpamActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockModerationService.Received(1).MarkAsSpamAndBanAsync(
-            TestMessageId,
-            TestUserId,
-            TestChatId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains($"Report #{TestReportId}")),
-            Arg.Any<Message?>(),
+            Arg.Is<SpamBanIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.MessageId == TestMessageId &&
+                i.Chat.Id == TestChatId &&
+                i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
-            TestReviewerId,
+            TestReviewerEmail,
             "spam",
             Arg.Is<string>(s => s.Contains("5 chats")),
             Arg.Any<CancellationToken>());
@@ -116,7 +110,7 @@ public class ReportActionsServiceTests
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleSpamActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleSpamActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain($"Report {TestReportId} not found"));
     }
 
@@ -127,12 +121,12 @@ public class ReportActionsServiceTests
         var report = CreateTestReport();
         _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
-        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns((MessageRecord?)null);
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleSpamActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleSpamActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain($"Message {TestMessageId} not found"));
     }
 
@@ -145,18 +139,13 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.MarkAsSpamAndBanAsync(
-                TestMessageId,
-                TestUserId,
-                TestChatId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<Message?>(),
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("User is admin"));
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleSpamActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleSpamActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain("User is admin"));
     }
 
@@ -170,7 +159,7 @@ public class ReportActionsServiceTests
         SetupSuccessfulModeration();
 
         // Act
-        await _service.HandleSpamActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleSpamActionAsync(TestReportId, TestExecutor);
 
         // Assert - human-readable format: "Marked as spam (report #123, affected 5 chats)"
         await _mockAuditService.Received(1).LogEventAsync(
@@ -191,7 +180,7 @@ public class ReportActionsServiceTests
         SetupSuccessfulModeration();
 
         // Act
-        await _service.HandleSpamActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleSpamActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockCallbackContextRepo.Received(1)
@@ -211,27 +200,24 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
         // Act
-        await _service.HandleBanActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleBanActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockModerationService.Received(1).BanUserAsync(
-            TestUserId,
-            TestMessageId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains($"Report #{TestReportId}")),
+            Arg.Is<BanIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.MessageId == TestMessageId &&
+                i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
             TestChatId,
-            Arg.Is<int>(i => i == (int)TestMessageId),
+            Arg.Is<int>(i => i == TestMessageId),
             deletionSource: "ban_action",
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -245,16 +231,13 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("Rate limited"));
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleBanActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleBanActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain("Rate limited"));
     }
 
@@ -267,10 +250,7 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.BanUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
+                Arg.Any<BanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
 
@@ -282,13 +262,13 @@ public class ReportActionsServiceTests
             .ThrowsAsync(new Exception("Message already deleted"));
 
         // Act - should not throw
-        await _service.HandleBanActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleBanActionAsync(TestReportId, TestExecutor);
 
         // Assert - report status still updated
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
-            TestReviewerId,
+            TestReviewerEmail,
             "ban",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -307,30 +287,26 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, WarningCount = 2 });
 
         // Act
-        await _service.HandleWarnActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleWarnActionAsync(TestReportId, TestExecutor);
 
         // Assert
         await _mockModerationService.Received(1).WarnUserAsync(
-            TestUserId,
-            TestMessageId,
-            Arg.Any<Actor>(),
-            Arg.Is<string>(s => s.Contains($"Report #{TestReportId}")),
-            TestChatId,
+            Arg.Is<WarnIntent>(i =>
+                i.User.Id == TestUserId &&
+                i.MessageId == TestMessageId &&
+                i.Chat.Id == TestChatId &&
+                i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
-            TestReviewerId,
+            TestReviewerEmail,
             "warn",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -345,17 +321,13 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(ModerationResult.Failed("User not found"));
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.HandleWarnActionAsync(TestReportId, TestReviewerId));
+            async () => await _service.HandleWarnActionAsync(TestReportId, TestExecutor));
         Assert.That(ex!.Message, Does.Contain("User not found"));
     }
 
@@ -368,16 +340,12 @@ public class ReportActionsServiceTests
         SetupReportAndMessage(report, message);
 
         _mockModerationService.WarnUserAsync(
-                TestUserId,
-                TestMessageId,
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                TestChatId,
+                Arg.Any<WarnIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, WarningCount = 3 });
 
         // Act
-        await _service.HandleWarnActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleWarnActionAsync(TestReportId, TestExecutor);
 
         // Assert - human-readable format: "Warned user (report #123, 3 warnings total)"
         await _mockAuditService.Received(1).LogEventAsync(
@@ -401,21 +369,19 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId, "Not spam");
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor, "Not spam");
 
         // Assert - no moderation action
         await _mockModerationService.DidNotReceive()
-            .BanUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<CancellationToken>());
+            .BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>());
         await _mockModerationService.DidNotReceive()
-            .WarnUserAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<Actor>(),
-                Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
+            .WarnUserAsync(Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>());
 
         // Report updated to dismissed
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
-            TestReviewerId,
+            TestReviewerEmail,
             "dismiss",
             "Not spam",
             Arg.Any<CancellationToken>());
@@ -430,13 +396,13 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId, null);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor, null);
 
         // Assert
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
-            TestReviewerId,
+            TestReviewerEmail,
             "dismiss",
             "No action needed",
             Arg.Any<CancellationToken>());
@@ -451,14 +417,14 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor);
 
         // Assert - reply sent to reported message (not command message)
         await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
             TestChatId,
             Arg.Is<string>(s => s.Contains("reviewed") && s.Contains("no action")),
             parseMode: ParseMode.Markdown,
-            replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == (int)TestMessageId),
+            replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == TestMessageId),
             cancellationToken: Arg.Any<CancellationToken>());
     }
 
@@ -472,7 +438,7 @@ public class ReportActionsServiceTests
             .Returns(report);
 
         // Act
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor);
 
         // Assert - /report command deleted
         await _mockBotMessageService.Received(1).DeleteAndMarkMessageAsync(
@@ -500,13 +466,13 @@ public class ReportActionsServiceTests
             .ThrowsAsync(new Exception("Message deleted"));
 
         // Act - should not throw
-        await _service.HandleDismissActionAsync(TestReportId, TestReviewerId);
+        await _service.HandleDismissActionAsync(TestReportId, TestExecutor);
 
         // Assert - report status still updated
         await _mockReportsRepo.Received(1).UpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
-            TestReviewerId,
+            TestReviewerEmail,
             "dismiss",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -520,8 +486,8 @@ public class ReportActionsServiceTests
     {
         return new Report(
             Id: TestReportId,
-            MessageId: (int)TestMessageId,
-            ChatId: TestChatId,
+            MessageId: TestMessageId,
+            Chat: new ChatIdentity(TestChatId, "TestChat"),
             ReportCommandMessageId: reportCommandMessageId,
             ReportedByUserId: 11111L,
             ReportedByUserName: "reporter",
@@ -537,11 +503,8 @@ public class ReportActionsServiceTests
     {
         return new MessageRecord(
             MessageId: TestMessageId,
-            UserId: TestUserId,
-            UserName: "testuser",
-            FirstName: "Test",
-            LastName: "User",
-            ChatId: TestChatId,
+            User: new UserIdentity(TestUserId, "Test", "User", "testuser"),
+            Chat: new ChatIdentity(TestChatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow.AddMinutes(-15),
             MessageText: "Spam message content",
             PhotoFileId: null,
@@ -549,7 +512,6 @@ public class ReportActionsServiceTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: null,
             PhotoThumbnailPath: null,
             ChatIconPath: null,
@@ -574,19 +536,14 @@ public class ReportActionsServiceTests
     {
         _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
             .Returns(report);
-        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<CancellationToken>())
+        _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
     }
 
     private void SetupSuccessfulModeration()
     {
         _mockModerationService.MarkAsSpamAndBanAsync(
-                Arg.Any<long>(),
-                Arg.Any<long>(),
-                Arg.Any<long>(),
-                Arg.Any<Actor>(),
-                Arg.Any<string>(),
-                Arg.Any<Message?>(),
+                Arg.Any<SpamBanIntent>(),
                 Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true, ChatsAffected = 5 });
     }

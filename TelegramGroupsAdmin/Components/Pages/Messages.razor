@@ -1,14 +1,16 @@
 @page "/messages"
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Media
-@using TelegramGroupsAdmin.Telegram.Services.Moderation
-@using static TelegramGroupsAdmin.Components.Shared.MessageFilters
+@using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Services
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Extensions
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
 @inject IMessageEditService MessageEditService
@@ -17,11 +19,10 @@
 @inject IJSRuntime Js
 @inject IDialogService DialogService
 @inject ITelegramBotService BotService
-@inject IBlazorAuthHelper AuthHelper
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ITrainingLabelsRepository TrainingLabelsRepository
 @inject IJobTriggerService JobTriggerService
-@inject IModerationOrchestrator ModerationService
+@inject IBotModerationService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramUserRepository TelegramUserRepository
 @inject NavigationManager NavigationManager
@@ -30,8 +31,9 @@
 @inject IMediaRefetchQueueService MediaRefetchQueue
 @inject TelegramGroupsAdmin.Core.Services.AI.IAITranslationService TranslationService
 @inject IWebBotMessagingService WebBotMessagingService
+@inject IWebUserMessagingService WebUserMessagingService
 @attribute [Authorize]
-@implements IDisposable
+@implements IAsyncDisposable
 
 <PageTitle>Messages - TelegramGroupsAdmin</PageTitle>
 
@@ -51,7 +53,6 @@
         <ChatList Chats="_filteredChats"
                   SelectedChatId="_selectedChatId"
                   MessageCounts="_chatMessageCounts"
-                  UnreadCounts="_chatUnreadCounts"
                   LastMessagePreviews="_lastMessagePreviews"
                   OnChatSelected="HandleChatSelected" />
     </div>
@@ -60,11 +61,11 @@
     <div class="telegram-main @(_selectedChatId.HasValue ? "active" : "")">
         @if (_selectedChatId.HasValue)
         {
-            var selectedChat = _managedChats.FirstOrDefault(c => c.ChatId == _selectedChatId.Value);
+            var selectedChat = _managedChats.FirstOrDefault(c => c.Identity.Id == _selectedChatId.Value);
             if (selectedChat != null)
             {
                 @* Chat Header *@
-                <ChatHeader ChatName="@selectedChat.ChatName"
+                <ChatHeader ChatName="@selectedChat.Identity.ChatName"
                             ChatIconPath="@selectedChat.ChatIconPath"
                             ChatDescription="@GetChatDescription(selectedChat)"
                             ShowBackButton="true"
@@ -79,25 +80,24 @@
                             <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
                         </div>
                     }
-                    else if (_filteredMessages.Any())
+                    else if (_allMessages.Any())
                     {
-                        <MudVirtualize Items="_filteredMessages" Context="messageWrapper" OverscanCount="10">
+                        <MudVirtualize Items="_allMessages" Context="messageWrapper" OverscanCount="10">
                             <MessageBubbleTelegram Message="messageWrapper.Message"
                                                    ContentCheck="@GetContentCheck(messageWrapper.Message.MessageId)"
                                                    EditCount="@GetEditCount(messageWrapper.Message.MessageId)"
-                                                   ShowSpamActions="@(_userPermissionLevel >= PermissionLevel.GlobalAdmin)"
+                                                   ShowSpamActions="@(WebUser?.PermissionLevel >= PermissionLevel.GlobalAdmin)"
                                                    DetectionHistory="@messageWrapper.DetectionResults"
                                                    UserTags="@messageWrapper.UserTags"
                                                    UserNotes="@messageWrapper.UserNotes"
-                                                   IsCurrentUser="@IsCurrentUserMessage(messageWrapper.Message.UserId)"
-                                                   IsBotMessage="@IsBotMessage(messageWrapper.Message.UserId)"
+                                                   IsCurrentUser="@IsCurrentUserMessage(messageWrapper.Message.User.Id)"
+                                                   IsBotMessage="@IsBotMessage(messageWrapper.Message.User.Id)"
                                                    OnImageClick="HandleImageClick"
                                                    OnViewEdits="HandleViewEdits"
                                                    OnMarkAsSpam="HandleMarkAsSpam"
                                                    OnMarkAsHam="HandleMarkAsHam"
                                                    OnViewDetections="HandleViewDetections"
                                                    OnViewUserDetail="ViewUserDetail"
-                                                   OnFilterByChat="HandleFilterByChat"
                                                    OnDeleteMessage="HandleDeleteMessage"
                                                    OnTempBan="HandleTempBan"
                                                    OnWarn="HandleWarn"
@@ -135,8 +135,7 @@
                     }
                 </div>
 
-                @* Message Input (Phase 1: Bot messages) *@
-                <ChatInput IsEnabled="@_isFeatureAvailable"
+                <ChatInput IsEnabled="@(_isBotAvailable || _userApiAvailableForChat)"
                            PlaceholderText="@GetChatInputPlaceholder()"
                            MaxMessageLength="@GetMaxMessageLength()"
                            CurrentText="@_editingOriginalText"
@@ -144,6 +143,11 @@
                            ReplyToMessageId="@_replyToMessageId"
                            ReplyToUser="@GetReplyToUser()"
                            ReplyToText="@GetReplyToText()"
+                           SendAsUser="@_sendAsUser"
+                           UserApiAvailableForChat="@_userApiAvailableForChat"
+                           CheckingUserApi="@_checkingUserApi"
+                           ToggleDisabledReason="@_toggleDisabledReason"
+                           OnSendAsUserChanged="@HandleSendAsUserChanged"
                            OnSendMessage="@SendMessageAsync"
                            OnEditMessage="@EditMessageAsync"
                            OnCancelEdit="@CancelEdit"
@@ -168,20 +172,20 @@
 </div>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     // Chat state
     private List<ManagedChatRecord> _managedChats = [];
     private List<ManagedChatRecord> _filteredChats = [];
     private string _chatSearchText = "";
     private long? _selectedChatId;
     private readonly Dictionary<long, int> _chatMessageCounts = new();
-    private readonly Dictionary<long, int> _chatUnreadCounts = new();
     private readonly Dictionary<long, string> _lastMessagePreviews = new();
 
     // Message state (per-chat) - PERF-APP-1: Use composite model with detection history included
     private List<MessageWithDetectionHistory> _allMessages = [];
-    private List<MessageWithDetectionHistory> _filteredMessages = [];
-    private Dictionary<long, ContentCheckRecord> _contentChecks = new();
-    private Dictionary<long, int> _editCounts = new();
+    private Dictionary<int, ContentCheckRecord> _contentChecks = new();
+    private Dictionary<int, int> _editCounts = new();
     private bool _loading;
     private bool _loadingMore;
     private bool _hasMore = true;
@@ -189,23 +193,23 @@
     private DateTime _lastUpdate = DateTime.Now;
 
     // User state
-    private string? _currentUserId; // Cached web user ID for service calls
-    private string? _currentUserEmail; // Cached web user email for logging
-    private PermissionLevel _userPermissionLevel = PermissionLevel.Admin; // Default to Admin
     private HashSet<long> _userTelegramIds = []; // Current user's linked Telegram IDs
 
-    // Phase 1: Send & Edit Messages as Bot state
-    private bool _isFeatureAvailable; // Feature enabled (bot enabled + user has linked account)
+    // Send & Edit Messages state
+    private bool _isBotAvailable; // Bot messaging available (bot enabled + user has linked account)
+    private bool _isUserApiAvailable; // User API available (WTelegram session connected)
+    private bool _userApiAvailableForChat; // User API can send to the currently selected chat
+    private bool _checkingUserApi; // True while CheckUserApiForChatAsync is running
+    private bool _sendAsUser; // Current toggle state: true = personal account, false = bot
+    private string? _toggleDisabledReason; // Tooltip text when toggle is disabled
     private long? _botUserId; // Bot's Telegram user ID (for identifying bot messages)
     private string? _linkedUsername; // User's linked Telegram username (for calculating signature length)
     private string? _featureUnavailableReason; // Reason why feature is unavailable (for placeholder text)
-    private long? _isEditingMessageId; // Message currently being edited
-    private long? _replyToMessageId; // Message being replied to
+    private int? _isEditingMessageId; // Message currently being edited
+    private int? _replyToMessageId; // Message being replied to
     private string? _editingOriginalText; // Original text of message being edited
 
-    private readonly MessageFilterState _filterState = new();
-    private long? _highlightMessageId; // Message to scroll to and highlight
-    private long? _filterByUserId; // Track userId from query string for name lookup after load
+    private int? _highlightMessageId; // Message to scroll to and highlight
     private const int PageSize = 50;
 
     // Infinite scroll state
@@ -222,24 +226,18 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Cache user identity for service calls (avoids repeated AuthHelper calls)
-        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
-        _currentUserEmail = await AuthHelper.GetCurrentUserEmailAsync();
-        _userPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
+        if (WebUser is null) return;
 
         // Load current user's linked Telegram accounts for message alignment
-        if (!string.IsNullOrEmpty(_currentUserId))
+        try
         {
-            try
-            {
-                var mappings = await TelegramMappingRepository.GetByUserIdAsync(_currentUserId);
-                _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
-                    LogDisplayName.WebUserDebug(_currentUserEmail, _currentUserId));
-            }
+            var mappings = await TelegramMappingRepository.GetByUserIdAsync(WebUser.Id);
+            _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load linked Telegram accounts for {User}",
+                WebUser.ToLogDebug());
         }
 
         // Subscribe to real-time updates
@@ -250,26 +248,39 @@
         await LoadChatsAsync();
 
         // Parse query string parameters to select chat if specified
-        await ApplyQueryStringFiltersAsync();
+        ApplyQueryStringFilters();
+
+        // Check feature availability (bot + user API)
+        await CheckFeatureAvailabilityAsync();
 
         // If a chat was auto-selected from query string, load its messages
         if (_selectedChatId.HasValue)
         {
             await LoadChatMessagesAsync(_selectedChatId.Value);
+            await CheckUserApiForChatAsync(_selectedChatId.Value);
         }
-
-        // Phase 1: Check feature availability (bot enabled + linked Telegram account)
-        await CheckFeatureAvailabilityAsync();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         // Unsubscribe from events
         BotService.OnNewMessage -= HandleNewMessage;
         BotService.OnMediaUpdated -= HandleMediaUpdated;
 
         // Dispose JavaScript interop resources
-        _infiniteScrollModule?.DisposeAsync();
+        if (_infiniteScrollModule is not null)
+        {
+            try
+            {
+                await _infiniteScrollModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Expected when circuit disconnects before disposal — browser-side resources already released
+                // See: https://learn.microsoft.com/aspnet/core/blazor/javascript-interoperability/?view=aspnetcore-10.0#javascript-interop-calls-without-a-circuit
+                Logger.LogDebug("JS module disposal skipped — circuit already disconnected");
+            }
+        }
         _dotNetObjectRef?.Dispose();
     }
 
@@ -318,12 +329,12 @@
                 _highlightMessageId = null;
 
                 // Find the index of the message in filtered list
-                var messageIndex = _filteredMessages.FindIndex(mw => mw.Message.MessageId == targetMessageId);
+                var messageIndex = _allMessages.FindIndex(mw => mw.Message.MessageId == targetMessageId);
 
                 if (messageIndex >= 0)
                 {
                     // Scroll container to approximate position to trigger MudVirtualize rendering
-                    await Js.InvokeVoidAsync("scrollMessageContainer", messageIndex, _filteredMessages.Count);
+                    await Js.InvokeVoidAsync("scrollMessageContainer", messageIndex, _allMessages.Count);
                     await Task.Delay(200); // Wait for MudVirtualize to render
                     await Js.InvokeVoidAsync("scrollToMessage", targetMessageId);
                     Logger.LogInformation("Successfully scrolled to highlighted message: {MessageId}", targetMessageId);
@@ -354,7 +365,7 @@
     /// Ensures the highlighted message is loaded in the current view (loads from DB if needed)
     /// Does NOT perform scrolling - that happens in OnAfterRenderAsync where JS interop is allowed
     /// </summary>
-    private async Task EnsureHighlightedMessageLoadedAsync(long targetMessageId)
+    private async Task EnsureHighlightedMessageLoadedAsync(int targetMessageId)
     {
         // Prevent duplicate calls (e.g., from Blazor prerendering)
         if (_highlightMessageEnsured)
@@ -363,12 +374,12 @@
         try
         {
             // Check if target message is in the filtered list
-            var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+            var targetMessage = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
 
             if (targetMessage == null)
             {
                 // Message not loaded yet, try to load it
-                var message = await MessageRepository.GetMessageAsync(targetMessageId);
+                var message = await MessageRepository.GetMessageAsync(targetMessageId, _selectedChatId!.Value);
                 if (message == null)
                 {
                     Logger.LogWarning("Highlighted message {MessageId} not found in database", targetMessageId);
@@ -394,9 +405,9 @@
                     }
 
                     // Load metadata for this message
-                    long[] messageIds = [targetMessageId];
-                    var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
-                    var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+                    int[] messageIds = [targetMessageId];
+                    var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
+                    var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
 
                     foreach (var kvp in contentChecks)
                         _contentChecks[kvp.Key] = kvp.Value;
@@ -404,13 +415,11 @@
                         _editCounts[kvp.Key] = kvp.Value;
 
                     // Load detection history for Admin+ users (now included in wrapper)
-                    if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
+                    if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
                     {
-                        var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId);
+                        var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId, _selectedChatId!.Value);
                         messageWrapper.DetectionResults.AddRange(history);
                     }
-
-                    ApplyFilters();
                 }
             }
 
@@ -434,11 +443,17 @@
         {
             try
             {
-                // Only add message if it belongs to the currently selected chat
-                if (!_selectedChatId.HasValue || message.ChatId != _selectedChatId.Value)
+                // Update sidebar preview and message count for this chat
+                var preview = message.MediaType?.ToDisplayName()
+                              ?? message.MessageText
+                              ?? (!string.IsNullOrEmpty(message.PhotoFileId) ? "Photo" : "Message");
+                _lastMessagePreviews[message.Chat.Id] = preview;
+                _chatMessageCounts[message.Chat.Id] = _chatMessageCounts.GetValueOrDefault(message.Chat.Id) + 1;
+
+                // Only add to message list if it belongs to the currently selected chat
+                if (!_selectedChatId.HasValue || message.Chat.Id != _selectedChatId.Value)
                 {
-                    Logger.LogTrace("Ignoring new message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
-                        message.MessageId, message.ChatId, _selectedChatId);
+                    StateHasChanged(); // Still re-render for sidebar update
                     return;
                 }
 
@@ -453,29 +468,28 @@
                 _allMessages.Insert(0, new MessageWithDetectionHistory { Message = enrichedMessage ?? message });
 
                 // Load spam check for this new message if it exists
-                long[] messageIds = [message.MessageId];
-                var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+                int[] messageIds = [message.MessageId];
+                var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
                 foreach (var kvp in newContentChecks)
                 {
                     _contentChecks[kvp.Key] = kvp.Value;
                 }
 
                 // Load edit count for this message
-                var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+                var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
                 foreach (var kvp in newEditCounts)
                 {
                     _editCounts[kvp.Key] = kvp.Value;
                 }
 
-                // Reapply filters and trigger re-render
-                ApplyFilters();
+                // Trigger re-render
                 StateHasChanged();
 
                 // Wait for browser to complete render cycle, then restore scroll
                 await Js.InvokeVoidAsync("restoreScrollStateAfterRender", _messagesContainer, scrollState);
 
                 Logger.LogDebug("Added new real-time message {MessageId} to chat {ChatId} view",
-                    message.MessageId, message.ChatId);
+                    message.MessageId, message.Chat.Id);
             }
             catch (Exception ex)
             {
@@ -485,17 +499,19 @@
     }
 
     // ReSharper disable once AsyncVoidMethod
-    private async void HandleMediaUpdated(long messageId, MediaType mediaType)
+    private async void HandleMediaUpdated(int messageId, MediaType mediaType)
     {
         // CRITICAL: Must use InvokeAsync because worker runs on background thread
         await InvokeAsync(async () =>
         {
             try
             {
-                Logger.LogInformation("🔔 SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
+                Logger.LogDebug("SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
+
+                if (!_selectedChatId.HasValue) return;
 
                 // Reload the message from database to get updated media_local_path
-                var updatedMessage = await MessageRepository.GetMessageAsync(messageId);
+                var updatedMessage = await MessageRepository.GetMessageAsync(messageId, _selectedChatId.Value);
                 if (updatedMessage == null)
                 {
                     Logger.LogWarning("Updated message {MessageId} not found in database", messageId);
@@ -503,10 +519,10 @@
                 }
 
                 // Only update if message belongs to currently selected chat
-                if (!_selectedChatId.HasValue || updatedMessage.ChatId != _selectedChatId.Value)
+                if (updatedMessage.Chat.Id != _selectedChatId.Value)
                 {
                     Logger.LogTrace("Ignoring media update for message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
-                        messageId, updatedMessage.ChatId, _selectedChatId);
+                        messageId, updatedMessage.Chat.Id, _selectedChatId);
                     return;
                 }
 
@@ -521,11 +537,9 @@
                         DetectionResults = detectionResults
                     };
 
-                    // Reapply filters and trigger re-render
-                    ApplyFilters();
                     StateHasChanged();
 
-                    Logger.LogInformation("✅ UI refreshed for message {MessageId} after media download via SignalR", messageId);
+                    Logger.LogDebug("UI refreshed for message {MessageId} after media download via SignalR", messageId);
                 }
                 else
                 {
@@ -543,21 +557,10 @@
     {
         try
         {
-            // Get current user and their permission level
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
-
-            if (string.IsNullOrEmpty(userId))
-            {
-                Logger.LogWarning("Unable to identify current user for chat filtering");
-                _managedChats = [];
-                return;
-            }
-
             // Load chats accessible to this user (filtered by permission level)
             _managedChats = await ChatsRepository.GetUserAccessibleChatsAsync(
-                userId,
-                permissionLevel);
+                WebUser!.Id,
+                WebUser.PermissionLevel);
             ApplyChatFilter();
 
             // Calculate message counts for each chat
@@ -583,9 +586,8 @@
         }
         else
         {
-            var searchLower = _chatSearchText.ToLower();
             _filteredChats = _managedChats
-                .Where(c => c.ChatName?.ToLower().Contains(searchLower) == true)
+                .Where(c => c.Identity.ChatName?.Contains(_chatSearchText, StringComparison.OrdinalIgnoreCase) == true)
                 .ToList();
         }
     }
@@ -597,24 +599,23 @@
             foreach (var chat in _managedChats)
             {
                 // Get total message count for this chat
-                var totalCount = await MessageRepository.GetMessageCountByChatIdAsync(chat.ChatId);
-                _chatMessageCounts[chat.ChatId] = totalCount;
+                var totalCount = await MessageRepository.GetMessageCountByChatIdAsync(chat.Identity.Id);
+                _chatMessageCounts[chat.Identity.Id] = totalCount;
 
                 // Get last message preview (only fetch 1 message for preview)
                 if (totalCount > 0)
                 {
-                    var lastMessages = await MessageQueryService.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
+                    var lastMessages = await MessageQueryService.GetMessagesByChatIdAsync(chat.Identity.Id, limit: 1);
                     if (lastMessages.Any())
                     {
                         var lastMessage = lastMessages.First();
                         var hasPhoto = !string.IsNullOrEmpty(lastMessage.PhotoFileId);
-                        var preview = lastMessage.MessageText ?? (hasPhoto ? "📷 Photo" : "Message");
-                        _lastMessagePreviews[chat.ChatId] = preview;
+                        var preview = lastMessage.MediaType?.ToDisplayName()
+                                      ?? lastMessage.MessageText
+                                      ?? (hasPhoto ? "Photo" : "Message");
+                        _lastMessagePreviews[chat.Identity.Id] = preview;
                     }
                 }
-
-                // TODO: Implement read tracking for unread counts
-                _chatUnreadCounts[chat.ChatId] = 0; // Placeholder
             }
         }
         catch (Exception ex)
@@ -627,13 +628,53 @@
     {
         _selectedChatId = chatId;
         await LoadChatMessagesAsync(chatId);
+        await CheckUserApiForChatAsync(chatId);
+    }
+
+    /// <summary>
+    /// Check if the admin's personal Telegram account can send to this specific chat.
+    /// Updates toggle state accordingly — defaults to user mode when available, falls back to bot.
+    /// </summary>
+    private async Task CheckUserApiForChatAsync(long chatId)
+    {
+        _checkingUserApi = true;
+
+        try
+        {
+            if (!_isUserApiAvailable || WebUser == null)
+            {
+                _userApiAvailableForChat = false;
+                _sendAsUser = false;
+                _toggleDisabledReason = !_isUserApiAvailable
+                    ? "Connect your Telegram account in Settings"
+                    : null;
+                return;
+            }
+
+            var chatResult = await WebUserMessagingService.CanSendToChatAsync(WebUser, chatId);
+            _userApiAvailableForChat = chatResult.CanSend;
+
+            if (!chatResult.CanSend)
+            {
+                _sendAsUser = false;
+                _toggleDisabledReason = chatResult.UnavailableReason ?? "Not available for this chat";
+            }
+            else
+            {
+                _sendAsUser = true; // Default to user mode when available
+                _toggleDisabledReason = null;
+            }
+        }
+        finally
+        {
+            _checkingUserApi = false;
+        }
     }
 
     private void HandleBackToChats()
     {
         _selectedChatId = null;
         _allMessages.Clear();
-        _filteredMessages.Clear();
         StateHasChanged();
     }
 
@@ -649,42 +690,16 @@
 
         try
         {
-            // PERF-APP-1: Load first page with detection history included (single JOIN query)
-            var firstPage = _userPermissionLevel >= PermissionLevel.GlobalAdmin
-                ? await MessageQueryService.GetMessagesWithDetectionHistoryAsync(chatId, limit: PageSize)
-                : (await MessageQueryService.GetMessagesByChatIdAsync(chatId, limit: PageSize))
-                    .Select(m => new MessageWithDetectionHistory { Message = m }).ToList();
+            var firstPage = await LoadMessagesPageAsync(chatId);
 
             _allMessages = firstPage;
-            _hasMore = firstPage.Count >= PageSize; // More pages available if we got a full page
+            _hasMore = firstPage.Count >= PageSize;
 
-            // PERF-APP-3: Load edit counts and spam checks in parallel
             if (_allMessages.Any())
-            {
-                var messageIds = _allMessages.Select(m => m.Message.MessageId).ToList();
-
-                if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
-                {
-                    // Admin: Only load edit counts (detection history already in wrapper)
-                    _editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-                }
-                else
-                {
-                    // Non-admin: Load both edit counts and spam checks in parallel
-                    var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-                    var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
-
-                    await Task.WhenAll(editCountsTask, contentChecksTask);
-
-                    _editCounts = await editCountsTask;
-                    _contentChecks = await contentChecksTask;
-                }
-            }
+                await LoadMetadataForMessagesAsync(_allMessages, replace: true);
 
             _lastUpdate = DateTime.Now;
-            ApplyFilters();
 
-            // Detect and queue missing media for automatic re-download (Phase 4.X: Media refetch system)
             await QueueMissingMediaForRefetchAsync();
 
             // Request observer initialization if there are more pages to load
@@ -741,54 +756,14 @@
                 return;
             }
 
-            // PERF-APP-1: Load older messages with detection history included
-            var olderMessages = _userPermissionLevel >= PermissionLevel.GlobalAdmin
-                ? await MessageQueryService.GetMessagesWithDetectionHistoryAsync(
-                    _selectedChatId.Value,
-                    limit: PageSize,
-                    beforeTimestamp: oldestMessage.Message.Timestamp)
-                : (await MessageQueryService.GetMessagesByChatIdAsync(
-                    _selectedChatId.Value,
-                    limit: PageSize,
-                    beforeTimestamp: oldestMessage.Message.Timestamp))
-                    .Select(m => new MessageWithDetectionHistory { Message = m }).ToList();
+            var olderMessages = await LoadMessagesPageAsync(
+                _selectedChatId.Value, beforeTimestamp: oldestMessage.Message.Timestamp);
 
             if (olderMessages.Any())
             {
-                // Append to existing messages (older messages go at the end of the list)
                 _allMessages.AddRange(olderMessages);
-
-                // PERF-APP-3: Load edit counts and spam checks in parallel
-                var messageIds = olderMessages.Select(m => m.Message.MessageId).ToList();
-
-                if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
-                {
-                    // Admin: Only load edit counts (detection history already in wrapper)
-                    var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-                    foreach (var kvp in newEditCounts)
-                        _editCounts[kvp.Key] = kvp.Value;
-                }
-                else
-                {
-                    // Non-admin: Load both edit counts and spam checks in parallel
-                    var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-                    var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
-
-                    await Task.WhenAll(editCountsTask, contentChecksTask);
-
-                    var newEditCounts = await editCountsTask;
-                    foreach (var kvp in newEditCounts)
-                        _editCounts[kvp.Key] = kvp.Value;
-
-                    var newContentChecks = await contentChecksTask;
-                    foreach (var kvp in newContentChecks)
-                        _contentChecks[kvp.Key] = kvp.Value;
-                }
-
-                // Check if there are more pages
+                await LoadMetadataForMessagesAsync(olderMessages, replace: false);
                 _hasMore = olderMessages.Count >= PageSize;
-
-                ApplyFilters();
 
                 Logger.LogDebug("Loaded {Count} older messages, hasMore: {HasMore}", olderMessages.Count, _hasMore);
             }
@@ -810,29 +785,64 @@
         }
     }
 
-    private void ApplyFilters()
+    /// <summary>
+    /// Loads a page of messages with detection history for admin users, or plain messages for non-admin.
+    /// </summary>
+    private async Task<List<MessageWithDetectionHistory>> LoadMessagesPageAsync(
+        long chatId, DateTimeOffset? beforeTimestamp = null)
     {
-        _filteredMessages = _allMessages
-            .Where(mw => _filterState.Matches(mw.Message, GetContentCheck(mw.Message.MessageId)))
-            .ToList(); // Keep newest-first order from repo, CSS flex-direction: column-reverse displays newest at bottom
-
-        // Additional userId filter from query string (if set and UserName filter is still active)
-        if (_filterByUserId.HasValue && !string.IsNullOrEmpty(_filterState.UserName))
-        {
-            _filteredMessages = _filteredMessages
-                .Where(mw => mw.Message.UserId == _filterByUserId.Value)
-                .ToList();
-        }
-        else if (_filterByUserId.HasValue && string.IsNullOrEmpty(_filterState.UserName))
-        {
-            // User cleared the filter, so clear our userId tracking too
-            _filterByUserId = null;
-        }
-
-        // Note: Callers must call StateHasChanged() after ApplyFilters() to trigger re-render
+        return WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin
+            ? await MessageQueryService.GetMessagesWithDetectionHistoryAsync(chatId, limit: PageSize, beforeTimestamp: beforeTimestamp)
+            : (await MessageQueryService.GetMessagesByChatIdAsync(chatId, limit: PageSize, beforeTimestamp: beforeTimestamp))
+                .Select(m => new MessageWithDetectionHistory { Message = m }).ToList();
     }
 
-    private ContentCheckRecord? GetContentCheck(long messageId)
+    /// <summary>
+    /// Loads edit counts and content checks for a batch of messages.
+    /// When <paramref name="replace"/> is true, replaces the dictionaries; otherwise merges into them.
+    /// </summary>
+    private async Task LoadMetadataForMessagesAsync(List<MessageWithDetectionHistory> messages, bool replace)
+    {
+        var messageIds = messages.Select(m => m.Message.MessageId).ToList();
+
+        if (WebUser!.PermissionLevel >= PermissionLevel.GlobalAdmin)
+        {
+            var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
+            if (replace)
+            {
+                _editCounts = editCounts;
+            }
+            else
+            {
+                foreach (var kvp in editCounts)
+                    _editCounts[kvp.Key] = kvp.Value;
+            }
+        }
+        else
+        {
+            var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(_selectedChatId!.Value, messageIds);
+            var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(_selectedChatId!.Value, messageIds);
+            await Task.WhenAll(editCountsTask, contentChecksTask);
+
+            var editCounts = await editCountsTask;
+            var contentChecks = await contentChecksTask;
+
+            if (replace)
+            {
+                _editCounts = editCounts;
+                _contentChecks = contentChecks;
+            }
+            else
+            {
+                foreach (var kvp in editCounts)
+                    _editCounts[kvp.Key] = kvp.Value;
+                foreach (var kvp in contentChecks)
+                    _contentChecks[kvp.Key] = kvp.Value;
+            }
+        }
+    }
+
+    private ContentCheckRecord? GetContentCheck(int messageId)
     {
         // PERF-APP-1: Use detection results already loaded via Include() instead of separate dictionary
         var wrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == messageId);
@@ -846,19 +856,16 @@
         // Use latest detection result (already ordered DESC by DetectedAt in repository)
         var latest = wrapper.DetectionResults.First();
         return new ContentCheckRecord(
-            Id: latest.Id,
             CheckTimestamp: latest.DetectedAt,
             UserId: latest.UserId,
-            ContentHash: wrapper.Message.ContentHash,
             IsSpam: latest.IsSpam,
-            Confidence: Math.Abs(latest.NetConfidence),
+            Score: Math.Abs(latest.NetScore),
             Reason: latest.Reason,
-            CheckType: latest.DetectionMethod,
             MatchedMessageId: messageId
         );
     }
 
-    private int GetEditCount(long messageId)
+    private int GetEditCount(int messageId)
     {
         _editCounts.TryGetValue(messageId, out var count);
         return count;
@@ -909,28 +916,22 @@
         {
             // Get current user ID for audit trail
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service (deletes message, bans user globally, creates detection result)
             var result = await ModerationService.MarkAsSpamAndBanAsync(
-                message.MessageId,
-                message.UserId,
-                message.ChatId,
-                executor,
-                "Manually marked as spam by admin via UI");
+                new SpamBanIntent
+                {
+                    User = message.User,
+                    MessageId = message.MessageId,
+                    Chat = message.Chat,
+                    Executor = executor,
+                    Reason = "Manually marked as spam by admin via UI"
+                });
 
             if (result.Success)
             {
-                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
+                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
 
                 Logger.LogInformation(
                     "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
@@ -953,16 +954,7 @@
         {
             // Get current user ID for audit trail
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Check if this was previously marked as spam (false positive correction scenario)
             var wasPreviouslySpam = GetContentCheck(message.MessageId)?.IsSpam == true;
@@ -977,16 +969,17 @@
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = message.MessageId,
+                ChatId = message.Chat.Id,
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
-                // IsSpam computed from net_confidence (-100 = strong ham)
-                Confidence = 0, // 0% spam (ham)
+                // IsSpam computed from net_score (negative = ham)
+                Score = 0.0, // No spam score (ham)
                 Reason = reason,
                 AddedBy = executor,
-                UserId = message.UserId,
+                UserId = message.User.Id, // Detection result uses raw ID for DB FK
                 UsedForTraining = false, // History only - training handled by training_labels
-                NetConfidence = -100, // Strong ham signal (manual admin decision)
+                NetScore = -5.0, // Strong ham signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
@@ -996,6 +989,7 @@
             // 2. Create explicit training label for ML
             await TrainingLabelsRepository.UpsertLabelAsync(
                 message.MessageId,
+                message.Chat.Id,
                 label: TrainingLabel.Ham,
                 labeledByUserId: executor.GetTelegramUserId(),
                 reason: reason,
@@ -1010,10 +1004,13 @@
             if (wasPreviouslySpam)
             {
                 var unbanResult = await ModerationService.UnbanUserAsync(
-                    message.UserId,
-                    executor,
-                    "False positive correction - message marked as ham by admin via UI",
-                    restoreTrust: true); // Restore trust to bypass future spam checks
+                    new UnbanIntent
+                    {
+                        User = message.User,
+                        Executor = executor,
+                        Reason = "False positive correction - message marked as ham by admin via UI",
+                        RestoreTrust = true // Restore trust to bypass future spam checks
+                    });
 
                 if (unbanResult.Success)
                 {
@@ -1029,11 +1026,11 @@
             else
             {
                 Logger.LogInformation(
-                    "Message {MessageId} marked as ham (training sample): detection result created with net_confidence = -100",
+                    "Message {MessageId} marked as ham (training sample): detection result created with net_score = -5.0",
                     message.MessageId);
             }
 
-            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
+            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.User.Id);
         }
         catch (Exception ex)
         {
@@ -1045,10 +1042,10 @@
     /// Refreshes detection history display for a message after spam/ham labeling.
     /// Updates both the message wrapper's cached history and the content checks dictionary.
     /// </summary>
-    private async Task RefreshDetectionHistoryDisplayAsync(long messageId, long userId)
+    private async Task RefreshDetectionHistoryDisplayAsync(int messageId, long userId)
     {
         // Refresh detection history for this message in the wrapper
-        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
+        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId, _selectedChatId!.Value);
         var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == messageId);
         if (messageWrapper != null)
         {
@@ -1061,14 +1058,11 @@
         {
             var latest = history.OrderByDescending(h => h.DetectedAt).First();
             _contentChecks[messageId] = new ContentCheckRecord(
-                Id: latest.Id,
                 CheckTimestamp: latest.DetectedAt,
                 UserId: userId,
-                ContentHash: null,
                 IsSpam: latest.IsSpam,
-                Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
+                Score: Math.Abs(latest.NetScore),
                 Reason: latest.Reason,
-                CheckType: latest.DetectionMethod,
                 MatchedMessageId: null
             );
         }
@@ -1080,9 +1074,9 @@
     {
         // Use detection history from wrapper if available (avoids duplicate database query)
         var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
-        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
 
-        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId);
+        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId, message.Chat.Id);
 
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {
@@ -1123,22 +1117,10 @@
         await DialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
     }
 
-    private void HandleFilterByChat(long chatId)
-    {
-        // Set chat filter
-        var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.ChatId == chatId);
-        if (messageWrapper != null && !string.IsNullOrEmpty(messageWrapper.Message.ChatName))
-        {
-            _filterState.ChatName = messageWrapper.Message.ChatName;
-            ApplyFilters();
-            StateHasChanged();
-        }
-    }
-
     private async Task HandleDeleteMessage(MessageRecord message)
     {
         // Confirm deletion
-        bool? confirm = await DialogService.ShowMessageBox(
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
             "Delete Message",
             $"Are you sure you want to delete this message? This will remove it from Telegram (if still present) and mark it as deleted in the database.",
             yesText: "Delete",
@@ -1150,29 +1132,23 @@
         try
         {
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to delete the message (service handles bot client internally)
             var result = await ModerationService.DeleteMessageAsync(
-                messageId: message.MessageId,
-                chatId: message.ChatId,
-                userId: message.UserId,
-                deletedBy: executor,
-                reason: "Manual deletion from Messages UI");
+                new DeleteMessageIntent
+                {
+                    User = message.User,
+                    MessageId = message.MessageId,
+                    Chat = message.Chat,
+                    Executor = executor,
+                    Reason = "Manual deletion from Messages UI"
+                });
 
             if (result.Success)
             {
                 // Update the message in place to show it's deleted (don't remove from UI)
-                var updatedMessage = await MessageRepository.GetMessageAsync(message.MessageId);
+                var updatedMessage = await MessageRepository.GetMessageAsync(message.MessageId, message.Chat.Id);
                 if (updatedMessage != null)
                 {
                     var index = _allMessages.FindIndex(mw => mw.Message.MessageId == message.MessageId);
@@ -1185,7 +1161,6 @@
                             Message = updatedMessage,
                             DetectionResults = existingDetectionResults
                         };
-                        ApplyFilters();
                         StateHasChanged();
                     }
                 }
@@ -1198,7 +1173,7 @@
             {
                 Logger.LogError("Failed to delete message {MessageId}: {Error}", message.MessageId, result.ErrorMessage);
 
-                await DialogService.ShowMessageBox(
+                await DialogService.ShowMessageBoxAsync(
                     "Error",
                     $"Failed to delete message: {result.ErrorMessage}",
                     yesText: "OK");
@@ -1208,7 +1183,7 @@
         {
             Logger.LogError(ex, "Error deleting message {MessageId}", message.MessageId);
 
-            await DialogService.ShowMessageBox(
+            await DialogService.ShowMessageBoxAsync(
                 "Error",
                 $"Failed to delete message: {ex.Message}",
                 yesText: "OK");
@@ -1220,8 +1195,7 @@
         // Show temp ban dialog
         var parameters = new DialogParameters<TempBanDialog>
         {
-            { x => x.UserId, message.UserId },
-            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" }
+            { x => x.User, message.User }
         };
 
         var options = new DialogOptions
@@ -1241,45 +1215,39 @@
         {
             // Get current user ID for audit trail
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
-                message.UserId,
-                message.MessageId,
-                executor,
-                tempBanResult.Reason,
-                tempBanResult.Duration);
+                new TempBanIntent
+                {
+                    User = message.User,
+                    Executor = executor,
+                    Reason = tempBanResult.Reason,
+                    Duration = tempBanResult.Duration,
+                    MessageId = message.MessageId
+                });
 
             if (banResult.Success)
             {
                 var expiryTime = DateTimeOffset.UtcNow.Add(tempBanResult.Duration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
-                await DialogService.ShowMessageBox(
+                await DialogService.ShowMessageBoxAsync(
                     "Success",
                     $"User temporarily banned for {FormatDuration(tempBanResult.Duration)}. They will be automatically unbanned at {expiryTime}.",
                     yesText: "OK");
 
                 Logger.LogInformation(
                     "{User} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
-                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogInfo(),
                     banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
             }
             else
             {
                 Logger.LogError("Failed to temp ban {User}: {Error}",
-                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogDebug(),
                     banResult.ErrorMessage);
 
-                await DialogService.ShowMessageBox(
+                await DialogService.ShowMessageBoxAsync(
                     "Error",
                     $"Failed to temp ban user: {banResult.ErrorMessage}",
                     yesText: "OK");
@@ -1288,9 +1256,9 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error temp banning {User}",
-                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
+                message.User.ToLogDebug());
 
-            await DialogService.ShowMessageBox(
+            await DialogService.ShowMessageBoxAsync(
                 "Error",
                 $"Failed to temp ban user: {ex.Message}",
                 yesText: "OK");
@@ -1300,13 +1268,12 @@
     private async Task HandleWarn(MessageRecord message)
     {
         // Get user's current warning count from database
-        var warningCount = await TelegramUserRepository.GetActiveWarningCountAsync(message.UserId);
+        var warningCount = await TelegramUserRepository.GetActiveWarningCountAsync(message.User.Id);
 
         // Show warn dialog
         var parameters = new DialogParameters<WarnDialog>
         {
-            { x => x.UserId, message.UserId },
-            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" },
+            { x => x.User, message.User },
             { x => x.CurrentWarningCount, warningCount }
         };
 
@@ -1326,38 +1293,32 @@
         try
         {
             // Get executor Actor from authentication state
-            Actor executor;
-            try
-            {
-                executor = await AuthHelper.GetCurrentActorAsync();
-            }
-            catch (InvalidOperationException ex)
-            {
-                Snackbar.Add(ex.Message, Severity.Error);
-                return;
-            }
+            var executor = WebUser!.ToActor();
 
             // Call moderation service to warn the user
             var warnServiceResult = await ModerationService.WarnUserAsync(
-                message.UserId,
-                message.MessageId,
-                executor,
-                warnResult.Reason ?? "Warning issued via UI",
-                message.ChatId);
+                new WarnIntent
+                {
+                    User = message.User,
+                    Executor = executor,
+                    Reason = warnResult.Reason ?? "Warning issued via UI",
+                    Chat = message.Chat,
+                    MessageId = message.MessageId
+                });
 
             if (warnServiceResult.Success)
             {
-                Snackbar.Add($"Warning issued to {message.UserName ?? message.FirstName ?? $"User {message.UserId}"}", Severity.Success);
+                Snackbar.Add($"Warning issued to {message.User.DisplayName}", Severity.Success);
 
                 Logger.LogInformation(
                     "Warning issued to {User} for message {MessageId}",
-                    LogDisplayName.UserInfo(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogInfo(),
                     message.MessageId);
             }
             else
             {
                 Logger.LogError("Failed to warn {User}: {Error}",
-                    LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId),
+                    message.User.ToLogDebug(),
                     warnServiceResult.ErrorMessage);
 
                 Snackbar.Add($"Failed to warn user: {warnServiceResult.ErrorMessage}", Severity.Error);
@@ -1366,7 +1327,7 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error warning {User}",
-                LogDisplayName.UserDebug(message.FirstName, message.LastName, message.UserName, message.UserId));
+                message.User.ToLogDebug());
 
             Snackbar.Add($"Failed to warn user: {ex.Message}", Severity.Error);
         }
@@ -1395,7 +1356,7 @@
         return _userTelegramIds.Contains(telegramUserId);
     }
 
-    private async Task ApplyQueryStringFiltersAsync()
+    private void ApplyQueryStringFilters()
     {
         try
         {
@@ -1410,18 +1371,16 @@
             }
 
             // Store highlight target (from ModerationReportCard or Users: highlight=456 or messageId=456)
-            if (query.TryGetValue("highlight", out var highlightStr) && long.TryParse(highlightStr, out var highlightId))
+            if (query.TryGetValue("highlight", out var highlightStr) && int.TryParse(highlightStr, out var highlightId))
             {
                 _highlightMessageId = highlightId;
                 Logger.LogDebug("Will highlight message: {MessageId}", highlightId);
             }
-            else if (query.TryGetValue("messageId", out var messageIdStr) && long.TryParse(messageIdStr, out var messageId))
+            else if (query.TryGetValue("messageId", out var messageIdStr) && int.TryParse(messageIdStr, out var messageId))
             {
                 _highlightMessageId = messageId;
                 Logger.LogDebug("Will highlight message: {MessageId}", messageId);
             }
-
-            await Task.CompletedTask; // Satisfy async requirement
         }
         catch (Exception ex)
         {
@@ -1429,12 +1388,12 @@
         }
     }
 
-    private async Task HandleReplyClick(long targetMessageId)
+    private async Task HandleReplyClick(int targetMessageId)
     {
         try
         {
             // Check if target message is in the loaded list
-            var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+            var targetMessage = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
 
             if (targetMessage == null)
             {
@@ -1442,7 +1401,7 @@
                 Logger.LogInformation("Target message {MessageId} not in view, loading...", targetMessageId);
 
                 // Load the message from repository
-                var message = await MessageRepository.GetMessageAsync(targetMessageId);
+                var message = await MessageRepository.GetMessageAsync(targetMessageId, _selectedChatId!.Value);
                 if (message == null)
                 {
                     Logger.LogWarning("Target message {MessageId} not found in database", targetMessageId);
@@ -1453,7 +1412,6 @@
                 if (_allMessages.All(mw => mw.Message.MessageId != targetMessageId))
                 {
                     _allMessages.Add(new MessageWithDetectionHistory { Message = message });
-                    ApplyFilters();
                     StateHasChanged();
                 }
             }
@@ -1492,7 +1450,7 @@
                 {
                     // Queue for re-download (deduplication handled by queue service)
                     // Real-time UI updates handled by BotService.OnMediaUpdated event
-                    var wasQueued = await MediaRefetchQueue.EnqueueMediaAsync(msg.MessageId, msg.MediaType.Value);
+                    var wasQueued = await MediaRefetchQueue.EnqueueMediaAsync(msg.MessageId, msg.Chat.Id, msg.MediaType.Value);
                     if (wasQueued)
                     {
                         queuedCount++;
@@ -1504,7 +1462,7 @@
 
             if (queuedCount > 0)
             {
-                Logger.LogInformation("Queued {Count} missing media files for automatic re-download (excluding Documents)", queuedCount);
+                Logger.LogDebug("Queued {Count} missing media files for automatic re-download (excluding Documents)", queuedCount);
             }
         }
         catch (Exception ex)
@@ -1540,10 +1498,11 @@
             var translation = new MessageTranslation(
                 Id: 0, // Will be set by INSERT
                 MessageId: message.MessageId,
+                ChatId: message.Chat.Id,
                 EditId: null,
                 TranslatedText: translationResult.TranslatedText,
                 DetectedLanguage: translationResult.DetectedLanguage,
-                Confidence: null, // OpenAI doesn't return confidence for translation
+                Confidence: translationResult.Confidence,
                 TranslatedAt: DateTimeOffset.UtcNow
             );
 
@@ -1567,8 +1526,7 @@
                         UserTags = messageWrapper.UserTags,
                         UserNotes = messageWrapper.UserNotes
                     };
-                    ApplyFilters(); // Reapply filters to update _filteredMessages
-                    StateHasChanged(); // Trigger re-render after all changes complete
+                    StateHasChanged();
                 }
             }
 
@@ -1594,119 +1552,158 @@
     // ========================================================================
 
     /// <summary>
-    /// Check if feature is available (bot enabled + user has linked Telegram account)
+    /// Check if bot and user API messaging features are available.
     /// </summary>
     private async Task CheckFeatureAvailabilityAsync()
     {
-        if (string.IsNullOrEmpty(_currentUserId))
+        if (WebUser == null)
         {
-            _isFeatureAvailable = false;
             _featureUnavailableReason = "Not authenticated";
             return;
         }
 
-        var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(_currentUserId, _currentUserEmail);
-        _isFeatureAvailable = result.IsAvailable;
-        _botUserId = result.BotUserId;
-        _linkedUsername = result.LinkedUsername;
-        _featureUnavailableReason = result.UnavailableReason;
+        // Check bot availability
+        var botResult = await WebBotMessagingService.CheckFeatureAvailabilityAsync(WebUser);
+        _isBotAvailable = botResult.IsAvailable;
+        _botUserId = botResult.BotUserId;
+        _linkedUsername = botResult.LinkedUsername;
+        _featureUnavailableReason = botResult.UnavailableReason;
+
+        // Check user API availability (WTelegram session connected)
+        var userResult = await WebUserMessagingService.CheckFeatureAvailabilityAsync(WebUser);
+        _isUserApiAvailable = userResult.IsAvailable;
+
+        if (!_isUserApiAvailable)
+        {
+            _toggleDisabledReason = userResult.UnavailableReason ?? "User API not available";
+        }
     }
 
     /// <summary>
-    /// Calculate maximum message length accounting for signature
-    /// Telegram limit: 4096 characters
-    /// Signature format: \n\n—{username} (3 fixed chars + username length)
+    /// Calculate maximum message length accounting for signature in bot mode.
+    /// User mode: full 4096 limit (no signature). Bot mode: reduced by signature length.
     /// </summary>
     private int GetMaxMessageLength()
     {
         const int telegramLimit = 4096;
 
-        if (!_isFeatureAvailable || string.IsNullOrEmpty(_linkedUsername))
+        // User mode — no signature, full limit
+        if (_sendAsUser)
+            return telegramLimit;
+
+        // Bot mode — reduce by signature length
+        if (!string.IsNullOrEmpty(_linkedUsername))
         {
-            return telegramLimit; // No signature, full limit
+            var signatureLength = 3 + _linkedUsername.Length; // "\n\n—" + username
+            return telegramLimit - signatureLength;
         }
 
-        var signatureLength = 3 + _linkedUsername.Length; // "\n\n—" + username
-        return telegramLimit - signatureLength;
+        return telegramLimit;
     }
 
     /// <summary>
-    /// Send new message as bot with signature
+    /// Send message — routes through user API or bot based on toggle state.
     /// </summary>
     private async Task SendMessageAsync(string text)
     {
-        if (!_selectedChatId.HasValue)
-            return;
-
-        if (string.IsNullOrEmpty(_currentUserId))
+        if (!_selectedChatId.HasValue || WebUser == null)
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
-        var result = await WebBotMessagingService.SendMessageAsync(
-            _currentUserId,
-            _currentUserEmail,
-            _selectedChatId.Value,
-            text,
-            _replyToMessageId);
-
-        if (result.Success)
+        if (_sendAsUser)
         {
-            _replyToMessageId = null; // Clear reply state
-            Snackbar.Add("Message sent", Severity.Success);
+            var result = await WebUserMessagingService.SendMessageAsync(
+                WebUser, _selectedChatId.Value, text, _replyToMessageId);
 
-            // Refresh messages to show the bot-sent message
-            // (Bot doesn't receive updates for its own messages, so manual refresh required)
-            await LoadChatMessagesAsync(_selectedChatId.Value);
+            if (result.Success)
+            {
+                _replyToMessageId = null;
+                // Bot sees this as a normal incoming message — UI updates via HandleNewMessage event
+            }
+            else
+            {
+                Snackbar.Add($"Failed to send: {result.ErrorMessage}", Severity.Error);
+            }
         }
         else
         {
-            Snackbar.Add($"Failed to send message: {result.ErrorMessage}", Severity.Error);
+            var result = await WebBotMessagingService.SendMessageAsync(
+                WebUser, _selectedChatId.Value, text, _replyToMessageId);
+
+            if (result.Success)
+            {
+                _replyToMessageId = null;
+                Snackbar.Add("Message sent", Severity.Success);
+
+                // Bot doesn't receive updates for its own messages — manual refresh required
+                await LoadChatMessagesAsync(_selectedChatId.Value);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to send: {result.ErrorMessage}", Severity.Error);
+            }
         }
     }
 
     /// <summary>
-    /// Edit existing bot message (no signature)
+    /// Edit message — routes through user API or bot based on toggle state.
     /// </summary>
     private async Task EditMessageAsync(string text)
     {
-        if (!_isEditingMessageId.HasValue || !_selectedChatId.HasValue)
-            return;
-
-        if (string.IsNullOrEmpty(_currentUserId))
+        if (!_isEditingMessageId.HasValue || !_selectedChatId.HasValue || WebUser == null)
         {
             Snackbar.Add("Not authenticated", Severity.Error);
             return;
         }
 
-        var result = await WebBotMessagingService.EditMessageAsync(
-            _currentUserId,
-            _currentUserEmail,
-            _selectedChatId.Value,
-            (int)_isEditingMessageId.Value,
-            text);
-
-        if (result.Success)
+        if (_sendAsUser)
         {
-            _isEditingMessageId = null;
-            _editingOriginalText = null;
-            Snackbar.Add("Message edited", Severity.Success);
+            var result = await WebUserMessagingService.EditMessageAsync(
+                WebUser, _selectedChatId.Value, _isEditingMessageId.Value, text);
 
-            // Refresh messages to show the bot-edited message
-            // (Bot doesn't receive updates for its own edits, so manual refresh required)
-            await LoadChatMessagesAsync(_selectedChatId.Value);
+            if (result.Success)
+            {
+                _isEditingMessageId = null;
+                _editingOriginalText = null;
+                // Bot sees this edit — UI updates via event
+            }
+            else
+            {
+                Snackbar.Add($"Failed to edit: {result.ErrorMessage}", Severity.Error);
+            }
         }
         else
         {
-            Snackbar.Add($"Failed to edit message: {result.ErrorMessage}", Severity.Error);
+            var result = await WebBotMessagingService.EditMessageAsync(
+                WebUser, _selectedChatId.Value, _isEditingMessageId.Value, text);
+
+            if (result.Success)
+            {
+                _isEditingMessageId = null;
+                _editingOriginalText = null;
+                Snackbar.Add("Message edited", Severity.Success);
+
+                // Bot doesn't receive updates for its own edits — manual refresh
+                await LoadChatMessagesAsync(_selectedChatId.Value);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to edit: {result.ErrorMessage}", Severity.Error);
+            }
         }
+    }
+
+    private void HandleSendAsUserChanged(bool sendAsUser)
+    {
+        _sendAsUser = sendAsUser;
     }
 
     /// <summary>
     /// Handle edit button click from MessageBubbleTelegram
     /// </summary>
-    private void HandleEditClick(long messageId, string messageText)
+    private void HandleEditClick(int messageId, string messageText)
     {
         _isEditingMessageId = messageId;
         _editingOriginalText = messageText;
@@ -1718,7 +1715,7 @@
     /// <summary>
     /// Handle reply button click from MessageBubbleTelegram
     /// </summary>
-    private void HandleReplyToClick(long messageId)
+    private void HandleReplyToClick(int messageId)
     {
         _replyToMessageId = messageId;
         StateHasChanged();
@@ -1750,13 +1747,13 @@
     /// </summary>
     private string GetChatInputPlaceholder()
     {
-        if (!_isFeatureAvailable)
-            return _featureUnavailableReason ?? "Feature unavailable";
+        if (!_isBotAvailable && !_userApiAvailableForChat)
+            return _featureUnavailableReason ?? "Messaging unavailable";
 
         if (_isEditingMessageId.HasValue)
             return "Edit message...";
 
-        return "Type a message...";
+        return _sendAsUser ? "Message as you..." : "Message as bot...";
     }
 
     /// <summary>
@@ -1767,16 +1764,11 @@
         if (!_replyToMessageId.HasValue)
             return null;
 
-        var replyMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == _replyToMessageId.Value);
+        var replyMessage = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == _replyToMessageId.Value);
         if (replyMessage == null)
             return null;
 
-        return TelegramDisplayName.Format(
-            replyMessage.Message.FirstName,
-            replyMessage.Message.LastName,
-            replyMessage.Message.UserName,
-            replyMessage.Message.UserId,
-            replyMessage.Message.ChatName);
+        return replyMessage.Message.User.DisplayName;
     }
 
     /// <summary>
@@ -1787,7 +1779,7 @@
         if (!_replyToMessageId.HasValue)
             return null;
 
-        var replyMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == _replyToMessageId.Value);
+        var replyMessage = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == _replyToMessageId.Value);
         return replyMessage?.Message.MessageText;
     }
 

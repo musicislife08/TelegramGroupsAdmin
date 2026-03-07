@@ -23,9 +23,12 @@ public class WelcomeCallbackParserTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Type, Is.EqualTo(WelcomeCallbackType.Accept));
-        Assert.That(result.UserId, Is.EqualTo(12345));
-        Assert.That(result.ChatId, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Type, Is.EqualTo(WelcomeCallbackType.Accept));
+            Assert.That(result.UserId, Is.EqualTo(12345));
+            Assert.That(result.ChatId, Is.Null);
+        }
     }
 
     [Test]
@@ -54,9 +57,12 @@ public class WelcomeCallbackParserTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Type, Is.EqualTo(WelcomeCallbackType.Deny));
-        Assert.That(result.UserId, Is.EqualTo(99999));
-        Assert.That(result.ChatId, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Type, Is.EqualTo(WelcomeCallbackType.Deny));
+            Assert.That(result.UserId, Is.EqualTo(99999));
+            Assert.That(result.ChatId, Is.Null);
+        }
     }
 
     #endregion
@@ -71,9 +77,12 @@ public class WelcomeCallbackParserTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.Type, Is.EqualTo(WelcomeCallbackType.DmAccept));
-        Assert.That(result.ChatId, Is.EqualTo(-1001234567890));
-        Assert.That(result.UserId, Is.EqualTo(55555));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result!.Type, Is.EqualTo(WelcomeCallbackType.DmAccept));
+            Assert.That(result.ChatId, Is.EqualTo(-1001234567890));
+            Assert.That(result.UserId, Is.EqualTo(55555));
+        }
     }
 
     [Test]

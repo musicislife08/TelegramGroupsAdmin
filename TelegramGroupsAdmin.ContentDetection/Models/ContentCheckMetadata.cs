@@ -41,6 +41,11 @@ public record ContentCheckMetadata
     public bool HasKeyboard { get; init; } = false;
 
     /// <summary>
+    /// Message is a reply to a channel post (linked channel or anonymous admin posting as group)
+    /// </summary>
+    public bool IsReplyToChannelPost { get; init; }
+
+    /// <summary>
     /// Telegram message ID for duplicate tracking
     /// </summary>
     public int MessageId { get; init; } = 0;

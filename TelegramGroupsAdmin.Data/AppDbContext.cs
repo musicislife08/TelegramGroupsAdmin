@@ -41,6 +41,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LinkedChannelRecordDto> LinkedChannels => Set<LinkedChannelRecordDto>();
     public DbSet<ChatAdminRecordDto> ChatAdmins => Set<ChatAdminRecordDto>();
 
+    // WTelegram session tables
+    public DbSet<TelegramSessionDto> TelegramSessions => Set<TelegramSessionDto>();
+
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
     public DbSet<ReportDto> Reports => Set<ReportDto>();
@@ -51,7 +54,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TrainingLabelDto> TrainingLabels => Set<TrainingLabelDto>();
     public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
-    public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
     public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
     public DbSet<VideoTrainingSampleDto> VideoTrainingSamples => Set<VideoTrainingSampleDto>();
 
@@ -80,6 +82,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<FileScanResultRecord> FileScanResults => Set<FileScanResultRecord>();
     public DbSet<FileScanQuotaRecord> FileScanQuotas => Set<FileScanQuotaRecord>();
 
+    // Profile scan results
+    public DbSet<ProfileScanResultDto> ProfileScanResults => Set<ProfileScanResultDto>();
+
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
@@ -91,6 +96,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // Add Quartz.NET schema (11 tables: qrtz_job_details, qrtz_triggers, etc.)
         modelBuilder.AddQuartz(builder => builder.UsePostgreSql());
+
+        // Configure composite primary keys
+        modelBuilder.Entity<MessageRecordDto>().HasKey(m => new { m.MessageId, m.ChatId });
+        modelBuilder.Entity<MessageRecordDto>().Property(m => m.MessageId).ValueGeneratedNever();
+        modelBuilder.Entity<TrainingLabelDto>().HasKey(tl => new { tl.MessageId, tl.ChatId });
 
         // Configure relationships
         ConfigureRelationships(modelBuilder);
@@ -119,26 +129,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasOne(d => d.Message)
             .WithMany(m => m.DetectionResults)
-            .HasForeignKey(d => d.MessageId)
+            .HasForeignKey(d => new { d.MessageId, d.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Configure is_spam as computed column (PostgreSQL: net_confidence > 0)
+        // Configure is_spam as computed column (PostgreSQL: net_score > 0)
         modelBuilder.Entity<DetectionResultRecordDto>()
             .Property(d => d.IsSpam)
-            .HasComputedColumnSql("(net_confidence > 0)", stored: true);
+            .HasComputedColumnSql("(net_score > 0)", stored: true);
 
         // Messages → MessageEdits (one-to-many)
         modelBuilder.Entity<MessageEditRecordDto>()
             .HasOne(e => e.Message)
             .WithMany(m => m.MessageEdits)
-            .HasForeignKey(e => e.MessageId)
+            .HasForeignKey(e => new { e.MessageId, e.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // Messages → UserActions (one-to-many, nullable)
         modelBuilder.Entity<UserActionRecordDto>()
             .HasOne(ua => ua.Message)
             .WithMany(m => m.UserActions)
-            .HasForeignKey(ua => ua.MessageId)
+            .HasForeignKey(ua => new { ua.MessageId, ua.ChatId })
             .OnDelete(DeleteBehavior.SetNull);
 
         // Users → Invites created (one-to-many) - Creator navigation property
@@ -352,6 +362,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_user_actions_exclusive_actor",
                 "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
 
+        // UserActions: message_id and chat_id must be both null or both non-null
+        modelBuilder.Entity<UserActionRecordDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_user_actions_message_chat_null_consistency",
+                "(message_id IS NULL) = (chat_id IS NULL)"));
+
         // DetectionResults: Exactly one actor must be non-null
         modelBuilder.Entity<DetectionResultRecordDto>()
             .ToTable(t => t.HasCheckConstraint(
@@ -396,17 +412,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_image_training_exclusive_actor",
                 "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1"));
 
-        // MessageTranslations: Exactly one of (message_id, edit_id) must be non-null
+        // MessageTranslations: Exactly one of (message_id+chat_id, edit_id) must be non-null
         modelBuilder.Entity<MessageTranslationDto>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_message_translations_exclusive_source",
-                "(message_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1"));
+                "(message_id IS NOT NULL AND chat_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1"));
 
         // MessageTranslations: CASCADE delete when message or edit is deleted
         modelBuilder.Entity<MessageTranslationDto>()
             .HasOne(mt => mt.Message)
             .WithMany()
-            .HasForeignKey(mt => mt.MessageId)
+            .HasForeignKey(mt => new { mt.MessageId, mt.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<MessageTranslationDto>()
@@ -419,7 +435,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ImageTrainingSampleDto>()
             .HasOne(its => its.Message)
             .WithMany()
-            .HasForeignKey(its => its.MessageId)
+            .HasForeignKey(its => new { its.MessageId, its.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // VideoTrainingSamples: Exactly one actor must be non-null
@@ -432,7 +448,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<VideoTrainingSampleDto>()
             .HasOne(vts => vts.Message)
             .WithMany()
-            .HasForeignKey(vts => vts.MessageId)
+            .HasForeignKey(vts => new { vts.MessageId, vts.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // Actor System Foreign Keys (web user, telegram user, system identifier)
@@ -447,6 +463,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(its => its.MarkedByTelegramUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // TelegramSessions → Users (many-to-one)
+        modelBuilder.Entity<TelegramSessionDto>()
+            .HasOne(ts => ts.User)
+            .WithMany()
+            .HasForeignKey(ts => ts.WebUserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // PushSubscriptions → Users (one-to-many)
         modelBuilder.Entity<PushSubscriptionDto>()
@@ -477,7 +500,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TrainingLabelDto>()
             .HasOne(tl => tl.Message)
             .WithMany()
-            .HasForeignKey(tl => tl.MessageId)
+            .HasForeignKey(tl => new { tl.MessageId, tl.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
         // TrainingLabels → TelegramUsers (SET NULL when user is deleted)
@@ -491,9 +514,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
     {
-        // Messages table indexes
-        modelBuilder.Entity<MessageRecordDto>()
-            .HasIndex(m => m.ChatId);
+        // Messages table indexes (ChatId index removed - now part of composite PK)
         modelBuilder.Entity<MessageRecordDto>()
             .HasIndex(m => m.UserId);
         modelBuilder.Entity<MessageRecordDto>()
@@ -508,9 +529,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // MessageTranslations indexes (partial UNIQUE indexes for exclusive arc pattern)
         modelBuilder.Entity<MessageTranslationDto>()
-            .HasIndex(mt => mt.MessageId)
+            .HasIndex(mt => new { mt.MessageId, mt.ChatId })
             .IsUnique()
-            .HasFilter("message_id IS NOT NULL");
+            .HasFilter("message_id IS NOT NULL AND chat_id IS NOT NULL");
         modelBuilder.Entity<MessageTranslationDto>()
             .HasIndex(mt => mt.EditId)
             .IsUnique()
@@ -519,8 +540,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(mt => mt.DetectedLanguage);
 
         // DetectionResults indexes
-        modelBuilder.Entity<DetectionResultRecordDto>()
-            .HasIndex(dr => dr.MessageId);
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.DetectedAt);
         modelBuilder.Entity<DetectionResultRecordDto>()
@@ -573,6 +592,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(tu => tu.IsActive)
             .HasFilter("is_active = false")
             .HasDatabaseName("ix_telegram_users_is_active"); // Partial index for inactive users (UI filtering)
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.ProfileScannedAt)
+            .HasDatabaseName("ix_telegram_users_profile_scanned_at"); // Background re-scan job ordering
 
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()
@@ -668,24 +690,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
 
-        // ThresholdRecommendations indexes
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => tr.Status);  // Filter by status (pending, applied, rejected)
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => tr.CreatedAt);  // Sort by date
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => new { tr.AlgorithmName, tr.Status });  // Filter by algorithm + status
-
         // ImageTrainingSamples indexes
         modelBuilder.Entity<ImageTrainingSampleDto>()
-            .HasIndex(its => its.MessageId)
+            .HasIndex(its => new { its.MessageId, its.ChatId })
             .IsUnique();  // One training sample per message
         modelBuilder.Entity<ImageTrainingSampleDto>()
             .HasIndex(its => new { its.IsSpam, its.MarkedAt });  // Filter spam/ham + sort by date
 
         // VideoTrainingSamples indexes
         modelBuilder.Entity<VideoTrainingSampleDto>()
-            .HasIndex(vts => vts.MessageId)
+            .HasIndex(vts => new { vts.MessageId, vts.ChatId })
             .IsUnique();  // One training sample per message
         modelBuilder.Entity<VideoTrainingSampleDto>()
             .HasIndex(vts => new { vts.IsSpam, vts.MarkedAt });  // Filter spam/ham + sort by date
@@ -723,6 +737,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ReportCallbackContextDto>()
             .HasIndex(rcc => rcc.CreatedAt)
             .HasDatabaseName("ix_report_callback_contexts_created_at");  // Expiry cleanup job
+
+        // TelegramSessions indexes
+        // Unique partial index: one active session per web user
+        modelBuilder.Entity<TelegramSessionDto>()
+            .HasIndex(ts => ts.WebUserId)
+            .HasFilter("is_active = true")
+            .IsUnique()
+            .HasDatabaseName("ix_telegram_sessions_unique_active_per_user");
+
+        // Index on is_active for GetAllActiveSessionsAsync queries
+        modelBuilder.Entity<TelegramSessionDto>()
+            .HasIndex(ts => ts.IsActive)
+            .HasFilter("is_active = true")
+            .HasDatabaseName("ix_telegram_sessions_active");
+
+        // ProfileScanResults indexes
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .HasIndex(psr => new { psr.UserId, psr.ScannedAt })
+            .IsDescending(false, true)
+            .HasDatabaseName("ix_profile_scan_results_user_id_scanned_at");
 
         // BanCelebrationGifs indexes
         modelBuilder.Entity<BanCelebrationGifDto>()
@@ -854,6 +888,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TelegramUserDto>()
             .Property(u => u.IsBanned)
             .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.HasPinnedStories)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsScam)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsFake)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.IsVerified)
+            .HasDefaultValue(false);
+        modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.ProfileScanScore)
+            .HasPrecision(3, 1);
+
+        // ProfileScanResults: decimal precision for scores
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.Score)
+            .HasPrecision(3, 1);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.RuleScore)
+            .HasPrecision(3, 1);
+        modelBuilder.Entity<ProfileScanResultDto>()
+            .Property(p => p.AiScore)
+            .HasPrecision(3, 1);
 
         // Users (web users): Set database defaults for columns added in later migrations
         modelBuilder.Entity<UserRecordDto>()
@@ -960,7 +1020,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 // Map all nested sub-configs
                 config.OwnsOne(x => x.StopWords);
                 config.OwnsOne(x => x.Similarity);
-                config.OwnsOne(x => x.Cas);
                 config.OwnsOne(x => x.Bayes);
                 config.OwnsOne(x => x.InvisibleChars);
                 config.OwnsOne(x => x.Translation);

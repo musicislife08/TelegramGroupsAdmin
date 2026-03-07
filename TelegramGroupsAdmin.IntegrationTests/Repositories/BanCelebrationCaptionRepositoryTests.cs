@@ -85,9 +85,12 @@ public class BanCelebrationCaptionRepositoryTests
 
         // Assert - Should be ordered by CreatedAt descending (newest first)
         Assert.That(result, Has.Count.EqualTo(3));
-        Assert.That(result[0].Id, Is.EqualTo(caption3.Id));
-        Assert.That(result[1].Id, Is.EqualTo(caption2.Id));
-        Assert.That(result[2].Id, Is.EqualTo(caption1.Id));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[0].Id, Is.EqualTo(caption3.Id));
+            Assert.That(result[1].Id, Is.EqualTo(caption2.Id));
+            Assert.That(result[2].Id, Is.EqualTo(caption1.Id));
+        }
     }
 
     #endregion
@@ -151,13 +154,13 @@ public class BanCelebrationCaptionRepositoryTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result!.Id, Is.EqualTo(added.Id));
             Assert.That(result.Text, Is.EqualTo("🔨 **BAN HAMMER!** {username} has been banned!"));
             Assert.That(result.DmText, Is.EqualTo("You have been banned!"));
             Assert.That(result.Name, Is.EqualTo("Ban Hammer"));
-        });
+        }
     }
 
     [Test]
@@ -185,14 +188,14 @@ public class BanCelebrationCaptionRepositoryTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Id, Is.GreaterThan(0));
             Assert.That(result.Text, Does.Contain("{username}"));
             Assert.That(result.DmText, Does.Contain("You"));
             Assert.That(result.Name, Is.EqualTo("Mortal Kombat"));
             Assert.That(result.CreatedAt, Is.GreaterThan(DateTimeOffset.UtcNow.AddMinutes(-1)));
-        });
+        }
     }
 
     [Test]
@@ -215,13 +218,13 @@ public class BanCelebrationCaptionRepositoryTests
             "With Placeholders");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Text, Does.Contain("{bancount}"));
             Assert.That(result.Text, Does.Contain("{chatname}"));
             Assert.That(result.Text, Does.Contain("{username}"));
             Assert.That(result.DmText, Does.Contain("{bancount}"));
-        });
+        }
     }
 
     [Test]
@@ -274,13 +277,13 @@ public class BanCelebrationCaptionRepositoryTests
             "Updated Name");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(updated.Id, Is.EqualTo(original.Id));
             Assert.That(updated.Text, Is.EqualTo("Updated chat text"));
             Assert.That(updated.DmText, Is.EqualTo("Updated DM text"));
             Assert.That(updated.Name, Is.EqualTo("Updated Name"));
-        });
+        }
 
         // Verify persistence
         var fetched = await _repository.GetByIdAsync(original.Id);
@@ -433,12 +436,12 @@ public class BanCelebrationCaptionRepositoryTests
 
         foreach (var caption in captions)
         {
-            Assert.Multiple(() =>
+            using (Assert.EnterMultipleScope())
             {
                 Assert.That(caption.Text, Is.Not.Empty, $"Caption {caption.Id} should have chat text");
                 Assert.That(caption.DmText, Is.Not.Empty, $"Caption {caption.Id} should have DM text");
                 Assert.That(caption.Name, Is.Not.Null, $"Caption {caption.Id} should have a name");
-            });
+            }
         }
     }
 
@@ -456,13 +459,13 @@ public class BanCelebrationCaptionRepositoryTests
         var captionsWithBancountPlaceholder = captions.Count(c =>
             c.Text.Contains("{bancount}", StringComparison.OrdinalIgnoreCase));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(captionsWithUsernamePlaceholder, Is.GreaterThan(0),
                 "Some captions should have {username} placeholder");
             Assert.That(captionsWithBancountPlaceholder, Is.GreaterThan(0),
                 "Some captions should have {bancount} placeholder");
-        });
+        }
     }
 
     [Test]

@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ReturnsExtensions;
-using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -247,7 +246,7 @@ public class TelegramUserManagementServiceTests
     public async Task GetUserDetailAsync_DelegatesToRepository()
     {
         // Arrange
-        var expectedDetail = new TelegramUserDetail { TelegramUserId = TestUserId };
+        var expectedDetail = new TelegramUserDetail { User = UserIdentity.FromId(TestUserId) };
         _mockUserRepo.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(expectedDetail);
 

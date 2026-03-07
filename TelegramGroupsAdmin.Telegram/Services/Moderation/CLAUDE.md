@@ -4,7 +4,7 @@
 
 This folder implements a **Boss/Worker orchestration pattern** for moderation actions.
 
-### The Boss: `ModerationOrchestrator`
+### The Boss: `BotModerationService`
 
 The orchestrator is the "boss" that:
 - **Knows all workers** (handlers) but workers don't know each other
@@ -33,30 +33,31 @@ Handlers are **domain experts** that know how to do one thing well. They:
 
 ```
 Moderation/
-├── ModerationOrchestrator.cs    # The boss - coordinates all handlers
-├── IModerationOrchestrator.cs   # Public interface for external callers
-│
 ├── Actions/                     # Domain action handlers
-│   ├── BanHandler.cs           # Ban/unban users across chats
-│   ├── TrustHandler.cs         # Trust/untrust users
-│   ├── WarnHandler.cs          # Issue/clear warnings
-│   ├── MessageHandler.cs       # Delete messages, schedule cleanup
-│   └── RestrictHandler.cs      # Restrict/unrestrict permissions
+│   ├── Results/                 # Result types for handlers
+│   └── ...Handler.cs           # Domain handlers (Trust, Warn, etc.)
 │
 ├── Handlers/                    # Support handlers
 │   ├── AuditHandler.cs         # Log actions to audit trail
 │   ├── NotificationHandler.cs  # Notify admins of actions
 │   └── TrainingHandler.cs      # Create ML training samples
 │
-├── Events/                      # Event definitions (if needed)
 └── Infrastructure/              # Cross-cutting infrastructure
+
+Bot/
+├── BotModerationService.cs     # The boss - coordinates all handlers
+├── IBotModerationService.cs    # Public interface for external callers
+└── Handlers/                   # Bot API wrappers
+    ├── BotBanHandler.cs        # Ban/unban users across chats
+    ├── BotRestrictHandler.cs   # Restrict/unrestrict permissions
+    └── BotModerationMessageHandler.cs  # Delete messages, backfill, cleanup
 ```
 
 ## Adding New Functionality
 
 ### When to extend an existing handler:
 - The new functionality is within the handler's domain
-- Example: Adding `ScheduleUserMessageCleanupAsync()` to `MessageHandler`
+- Example: Adding `ScheduleUserMessageCleanupAsync()` to `BotModerationMessageHandler`
 
 ### When to create a new handler:
 - The functionality represents a distinct domain
@@ -70,19 +71,19 @@ Moderation/
 ## Example Workflow: BanUserAsync
 
 ```
-Orchestrator.BanUserAsync(userId, executor, reason)
+BotModerationService.BanUserAsync(userId, executor, reason)
     │
     ├─→ Check system account protection
     │
-    ├─→ BanHandler.BanAsync()           # Domain: ban across all chats
+    ├─→ BotBanHandler.BanAsync()         # Domain: ban across all chats
     │
-    ├─→ AuditHandler.LogBanAsync()      # Support: record in audit log
+    ├─→ AuditHandler.LogBanAsync()       # Support: record in audit log
     │
-    ├─→ TrustHandler.UntrustAsync()     # Business rule: bans revoke trust
+    ├─→ TrustHandler.UntrustAsync()      # Business rule: bans revoke trust
     │
     ├─→ NotificationHandler.NotifyAdminsBanAsync()  # Support: notify admins
     │
-    └─→ MessageHandler.ScheduleUserMessageCleanupAsync()  # Domain: cleanup messages
+    └─→ BotModerationMessageHandler.ScheduleUserMessagesCleanupAsync()  # Domain: cleanup
 ```
 
 ## Testing

@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
@@ -19,7 +21,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// - Handles user DM notifications (warnings, temp bans, critical violations)
 /// - Handles admin notifications (bans, spam bans)
 ///
-/// Test Coverage (9 tests):
+/// Test Coverage (8 tests):
 /// - NotifyUserCriticalViolationAsync: User notification for security policy violations
 /// - NotifyAdminsSpamBanAsync: Rich admin notification with message context
 ///
@@ -34,11 +36,7 @@ public class NotificationHandlerTests
     private INotificationOrchestrator _mockNotificationOrchestrator = null!;
     private INotificationService _mockNotificationService = null!;
     private IManagedChatsRepository _mockManagedChatsRepository = null!;
-    private ITelegramUserRepository _mockTelegramUserRepository = null!;
-    private IChatAdminsRepository _mockChatAdminsRepository = null!;
-    private ITelegramUserMappingRepository _mockTelegramUserMappingRepository = null!;
-    private IDmDeliveryService _mockDmDeliveryService = null!;
-    private IChatInviteLinkService _mockChatInviteLinkService = null!;
+    private IBotChatService _mockChatService = null!;
     private IChatCache _mockChatCache = null!;
     private ILogger<NotificationHandler> _mockLogger = null!;
     private NotificationHandler _handler = null!;
@@ -49,11 +47,7 @@ public class NotificationHandlerTests
         _mockNotificationOrchestrator = Substitute.For<INotificationOrchestrator>();
         _mockNotificationService = Substitute.For<INotificationService>();
         _mockManagedChatsRepository = Substitute.For<IManagedChatsRepository>();
-        _mockTelegramUserRepository = Substitute.For<ITelegramUserRepository>();
-        _mockChatAdminsRepository = Substitute.For<IChatAdminsRepository>();
-        _mockTelegramUserMappingRepository = Substitute.For<ITelegramUserMappingRepository>();
-        _mockDmDeliveryService = Substitute.For<IDmDeliveryService>();
-        _mockChatInviteLinkService = Substitute.For<IChatInviteLinkService>();
+        _mockChatService = Substitute.For<IBotChatService>();
         _mockChatCache = Substitute.For<IChatCache>();
         _mockLogger = Substitute.For<ILogger<NotificationHandler>>();
 
@@ -61,38 +55,9 @@ public class NotificationHandlerTests
             _mockNotificationOrchestrator,
             _mockNotificationService,
             _mockManagedChatsRepository,
-            _mockTelegramUserRepository,
-            _mockChatAdminsRepository,
-            _mockTelegramUserMappingRepository,
-            _mockDmDeliveryService,
-            _mockChatInviteLinkService,
+            _mockChatService,
             _mockChatCache,
             _mockLogger);
-    }
-
-    /// <summary>
-    /// Creates a test TelegramUser with specified properties.
-    /// </summary>
-    private static TelegramUser CreateTestUser(long telegramUserId, string? username = null)
-    {
-        return new TelegramUser(
-            TelegramUserId: telegramUserId,
-            Username: username ?? "test_user",
-            FirstName: "Test",
-            LastName: "User",
-            UserPhotoPath: null,
-            PhotoHash: null,
-            PhotoFileUniqueId: null,
-            IsBot: false,
-            IsTrusted: false,
-            IsBanned: false,
-            BotDmEnabled: false,
-            FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-30),
-            LastSeenAt: DateTimeOffset.UtcNow,
-            CreatedAt: DateTimeOffset.UtcNow.AddDays(-30),
-            UpdatedAt: DateTimeOffset.UtcNow,
-            IsActive: true
-        );
     }
 
     /// <summary>
@@ -104,10 +69,7 @@ public class NotificationHandlerTests
         {
             Id = 1,
             ChatId = chatId,
-            TelegramId = telegramId,
-            Username = "test_admin",
-            FirstName = "Admin",
-            LastName = "User",
+            User = new UserIdentity(telegramId, "Admin", "User", "test_admin"),
             IsCreator = false,
             PromotedAt = DateTimeOffset.UtcNow.AddDays(-30),
             LastVerifiedAt = DateTimeOffset.UtcNow,
@@ -118,18 +80,6 @@ public class NotificationHandlerTests
     /// <summary>
     /// Creates a test TelegramUserMappingRecord with specified properties.
     /// </summary>
-    private static TelegramUserMappingRecord CreateTestMapping(long telegramId, int webUserId)
-    {
-        return new TelegramUserMappingRecord(
-            Id: 1,
-            TelegramId: telegramId,
-            TelegramUsername: "test_user",
-            UserId: webUserId.ToString(),
-            LinkedAt: DateTimeOffset.UtcNow.AddDays(-10),
-            IsActive: true
-        );
-    }
-
     #region NotifyUserCriticalViolationAsync Tests
 
     [Test]
@@ -138,10 +88,7 @@ public class NotificationHandlerTests
         // Arrange
         const long userId = 12345;
         var violations = new List<string> { "Blocked URL detected" };
-        var user = CreateTestUser(userId);
 
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(user);
         _mockNotificationOrchestrator.SendTelegramDmAsync(
                 userId,
                 Arg.Any<Notification>(),
@@ -149,7 +96,7 @@ public class NotificationHandlerTests
             .Returns(new DeliveryResult(true));
 
         // Act
-        var result = await _handler.NotifyUserCriticalViolationAsync(userId, violations);
+        var result = await _handler.NotifyUserCriticalViolationAsync(UserIdentity.FromId(userId), violations);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -170,10 +117,7 @@ public class NotificationHandlerTests
             "Malware signature found",
             "Phishing link blocked"
         };
-        var user = CreateTestUser(userId);
 
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(user);
         _mockNotificationOrchestrator.SendTelegramDmAsync(
                 userId,
                 Arg.Any<Notification>(),
@@ -181,7 +125,7 @@ public class NotificationHandlerTests
             .Returns(new DeliveryResult(true));
 
         // Act
-        var result = await _handler.NotifyUserCriticalViolationAsync(userId, violations);
+        var result = await _handler.NotifyUserCriticalViolationAsync(UserIdentity.FromId(userId), violations);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -195,30 +139,12 @@ public class NotificationHandlerTests
     }
 
     [Test]
-    public void NotifyUserCriticalViolationAsync_UserNotFound_ThrowsException()
-    {
-        // Arrange
-        const long userId = 99999;
-        var violations = new List<string> { "Some violation" };
-
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns((TelegramUser?)null);
-
-        // Act & Assert
-        Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _handler.NotifyUserCriticalViolationAsync(userId, violations));
-    }
-
-    [Test]
     public async Task NotifyUserCriticalViolationAsync_DeliveryFails_ReturnsFailedResult()
     {
         // Arrange
         const long userId = 12345;
         var violations = new List<string> { "Blocked URL detected" };
-        var user = CreateTestUser(userId);
 
-        _mockTelegramUserRepository.GetByTelegramIdAsync(userId, Arg.Any<CancellationToken>())
-            .Returns(user);
         _mockNotificationOrchestrator.SendTelegramDmAsync(
                 userId,
                 Arg.Any<Notification>(),
@@ -226,14 +152,14 @@ public class NotificationHandlerTests
             .Returns(new DeliveryResult(false, "User has blocked the bot"));
 
         // Act
-        var result = await _handler.NotifyUserCriticalViolationAsync(userId, violations);
+        var result = await _handler.NotifyUserCriticalViolationAsync(UserIdentity.FromId(userId), violations);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("blocked"));
-        });
+        }
     }
 
     #endregion
@@ -241,37 +167,34 @@ public class NotificationHandlerTests
     #region NotifyAdminsSpamBanAsync Tests
 
     [Test]
-    public async Task NotifyAdminsSpamBanAsync_SendsToAllChatAdmins()
+    public async Task NotifyAdminsSpamBanAsync_DelegatesToNotificationService()
     {
         // Arrange
         var enrichedMessage = CreateTestEnrichedMessage(chatId: 1001, messageId: 2002, userId: 3003);
-        var admin1 = CreateTestChatAdmin(chatId: 1001, telegramId: 5001);
-        var admin2 = CreateTestChatAdmin(chatId: 1001, telegramId: 5002);
-        var admins = new List<ChatAdmin> { admin1, admin2 };
-
-        _mockChatAdminsRepository.GetChatAdminsAsync(1001, Arg.Any<CancellationToken>())
-            .Returns(admins);
-        _mockTelegramUserMappingRepository.GetByTelegramIdAsync(5001, Arg.Any<CancellationToken>())
-            .Returns(CreateTestMapping(5001, 1));
-        _mockTelegramUserMappingRepository.GetByTelegramIdAsync(5002, Arg.Any<CancellationToken>())
-            .Returns(CreateTestMapping(5002, 2));
 
         // Act
         var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 3, messageDeleted: true);
 
-        // Assert
+        // Assert — handler delegates to typed notification service
         Assert.That(result.Success, Is.True);
-        await _mockDmDeliveryService.Received(2).SendDmWithMediaAsync(
-            Arg.Any<long>(),
-            "spam_banned",
-            Arg.Any<string>(),
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Is<ChatIdentity>(c => c.Id == 1001),
+            Arg.Is<UserIdentity>(u => u.Id == 3003),
+            Arg.Any<Actor?>(),
+            Arg.Any<double>(),
+            Arg.Any<double>(),
+            Arg.Any<string?>(),
+            3,
+            true,
+            2002,
+            Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task NotifyAdminsSpamBanAsync_IncludesMessagePreview()
+    public async Task NotifyAdminsSpamBanAsync_PassesMessagePreview()
     {
         // Arrange
         var enrichedMessage = CreateTestEnrichedMessage(
@@ -280,28 +203,29 @@ public class NotificationHandlerTests
             userId: 3003,
             messageText: "This is spam content that should appear in preview");
 
-        var admin = CreateTestChatAdmin(chatId: 1001, telegramId: 5001);
-        _mockChatAdminsRepository.GetChatAdminsAsync(1001, Arg.Any<CancellationToken>())
-            .Returns(new List<ChatAdmin> { admin });
-        _mockTelegramUserMappingRepository.GetByTelegramIdAsync(5001, Arg.Any<CancellationToken>())
-            .Returns(CreateTestMapping(5001, 1));
-
         // Act
         var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 1, messageDeleted: true);
 
-        // Assert
+        // Assert — message preview is passed to notification service
         Assert.That(result.Success, Is.True);
-        await _mockDmDeliveryService.Received(1).SendDmWithMediaAsync(
-            5001,
-            "spam_banned",
-            Arg.Is<string>(msg => msg.Contains("spam content")),
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Any<Actor?>(),
+            Arg.Any<double>(),
+            Arg.Any<double>(),
+            Arg.Any<string?>(),
+            Arg.Any<int>(),
+            Arg.Any<bool>(),
+            Arg.Any<int>(),
+            Arg.Is<string?>(preview => preview != null && preview.Contains("spam content")),
             Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task NotifyAdminsSpamBanAsync_IncludesDetectionDetails()
+    public async Task NotifyAdminsSpamBanAsync_PassesDetectionDetails()
     {
         // Arrange
         var detection = new DetectionResultRecord
@@ -312,8 +236,8 @@ public class NotificationHandlerTests
             DetectionSource = "auto",
             DetectionMethod = "OpenAI",
             IsSpam = true,
-            Confidence = 95,
-            NetConfidence = 85,
+            Score = 4.75,
+            NetScore = 4.25,
             Reason = "High confidence spam detection",
             AddedBy = Actor.AutoDetection
         };
@@ -323,70 +247,29 @@ public class NotificationHandlerTests
             userId: 3003,
             latestDetection: detection);
 
-        var admin = CreateTestChatAdmin(chatId: 1001, telegramId: 5001);
-        _mockChatAdminsRepository.GetChatAdminsAsync(1001, Arg.Any<CancellationToken>())
-            .Returns(new List<ChatAdmin> { admin });
-        _mockTelegramUserMappingRepository.GetByTelegramIdAsync(5001, Arg.Any<CancellationToken>())
-            .Returns(CreateTestMapping(5001, 1));
-
         // Act
         var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 2, messageDeleted: true);
 
-        // Assert
+        // Assert — detection confidence values are passed through
         Assert.That(result.Success, Is.True);
-        await _mockDmDeliveryService.Received(1).SendDmWithMediaAsync(
-            5001,
-            "spam_banned",
-            Arg.Is<string>(msg =>
-                msg.Contains("Net Confidence") &&
-                msg.Contains("85") &&
-                msg.Contains("Confidence") &&
-                msg.Contains("95")),
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Any<Actor?>(),
+            4.25, // netScore = Math.Abs(4.25)
+            4.75, // score
+            Arg.Is<string?>(r => r != null && r.Contains("High confidence")),
+            Arg.Any<int>(),
+            Arg.Any<bool>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
     [Test]
-    public async Task NotifyAdminsSpamBanAsync_SkipsAdminsWithoutMapping()
-    {
-        // Arrange
-        var enrichedMessage = CreateTestEnrichedMessage(chatId: 1001, messageId: 2002, userId: 3003);
-        var admin1 = CreateTestChatAdmin(chatId: 1001, telegramId: 5001);
-        var admin2 = CreateTestChatAdmin(chatId: 1001, telegramId: 5002);
-        var admins = new List<ChatAdmin> { admin1, admin2 };
-
-        _mockChatAdminsRepository.GetChatAdminsAsync(1001, Arg.Any<CancellationToken>())
-            .Returns(admins);
-        _mockTelegramUserMappingRepository.GetByTelegramIdAsync(5001, Arg.Any<CancellationToken>())
-            .Returns(CreateTestMapping(5001, 1));
-        _mockTelegramUserMappingRepository.GetByTelegramIdAsync(5002, Arg.Any<CancellationToken>())
-            .Returns((TelegramUserMappingRecord?)null); // Admin2 has no mapping
-
-        // Act
-        var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 1, messageDeleted: true);
-
-        // Assert
-        Assert.That(result.Success, Is.True);
-        await _mockDmDeliveryService.Received(1).SendDmWithMediaAsync(
-            5001,
-            "spam_banned",
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
-        // Admin2 should NOT receive a DM
-        await _mockDmDeliveryService.DidNotReceive().SendDmWithMediaAsync(
-            5002,
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<string?>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task NotifyAdminsSpamBanAsync_IncludesPhotoPath_WhenAvailable()
+    public async Task NotifyAdminsSpamBanAsync_PassesPhotoPath_WhenAvailable()
     {
         // Arrange
         var enrichedMessage = CreateTestEnrichedMessage(
@@ -395,24 +278,301 @@ public class NotificationHandlerTests
             userId: 3003,
             photoLocalPath: "/data/media/photos/spam_photo.jpg");
 
-        var admin = CreateTestChatAdmin(chatId: 1001, telegramId: 5001);
-        _mockChatAdminsRepository.GetChatAdminsAsync(1001, Arg.Any<CancellationToken>())
-            .Returns(new List<ChatAdmin> { admin });
-        _mockTelegramUserMappingRepository.GetByTelegramIdAsync(5001, Arg.Any<CancellationToken>())
-            .Returns(CreateTestMapping(5001, 1));
-
         // Act
         var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 1, messageDeleted: true);
 
+        // Assert — photo path is passed to notification service
+        Assert.That(result.Success, Is.True);
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Any<Actor?>(),
+            Arg.Any<double>(),
+            Arg.Any<double>(),
+            Arg.Any<string?>(),
+            Arg.Any<int>(),
+            Arg.Any<bool>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            "/data/media/photos/spam_photo.jpg",
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyAdminsSpamBanAsync_SystemActor_PassesSystemActorToService()
+    {
+        // Arrange — detection was by the system (automated pipeline)
+        var detection = new DetectionResultRecord
+        {
+            Id = 1,
+            MessageId = 456,
+            DetectedAt = DateTimeOffset.UtcNow,
+            DetectionSource = "auto",
+            DetectionMethod = "Manual",
+            Score = 5.0,
+            NetScore = 5.0,
+            Reason = "Marked as spam",
+            AddedBy = Actor.FromSystem("automated_pipeline"),
+            UserId = 789L
+        };
+        var enrichedMessage = CreateTestEnrichedMessage(
+            chatId: -100123456789L, messageId: 456, userId: 789L, latestDetection: detection);
+
+        // Act
+        var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 5, messageDeleted: true);
+
+        // Assert — notification service was called with System actor
+        Assert.That(result.Success, Is.True);
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Is<Actor?>(a => a != null && a.Type == ActorType.System),
+            Arg.Any<double>(),
+            Arg.Any<double>(),
+            Arg.Any<string?>(),
+            5,
+            true,
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyAdminsSpamBanAsync_TelegramUser_PassesTelegramUserActorToService()
+    {
+        // Arrange — detection was by a Telegram user (manual spam action)
+        var detection = new DetectionResultRecord
+        {
+            Id = 1,
+            MessageId = 456,
+            DetectedAt = DateTimeOffset.UtcNow,
+            DetectionSource = "manual",
+            DetectionMethod = "Manual",
+            Score = 5.0,
+            NetScore = 5.0,
+            Reason = "Marked as spam",
+            AddedBy = Actor.FromTelegramUser(99999, "ModeratorJohn"),
+            UserId = 789L
+        };
+        var enrichedMessage = CreateTestEnrichedMessage(
+            chatId: -100123456789L, messageId: 456, userId: 789L, latestDetection: detection);
+
+        // Act
+        var result = await _handler.NotifyAdminsSpamBanAsync(enrichedMessage, chatsAffected: 3, messageDeleted: true);
+
+        // Assert — notification service was called with TelegramUser actor
+        Assert.That(result.Success, Is.True);
+        await _mockNotificationService.Received(1).SendSpamBanNotificationAsync(
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<UserIdentity>(),
+            Arg.Is<Actor?>(a => a != null && a.Type == ActorType.TelegramUser),
+            Arg.Any<double>(),
+            Arg.Any<double>(),
+            Arg.Any<string?>(),
+            3,
+            true,
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region NotifyUserWarningAsync Tests
+
+    [Test]
+    public async Task NotifyUserWarningAsync_Success_ReturnsSucceeded()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Any<Notification>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(true));
+
+        // Act
+        var result = await _handler.NotifyUserWarningAsync(user, warningCount: 2, reason: "Spam");
+
         // Assert
         Assert.That(result.Success, Is.True);
-        await _mockDmDeliveryService.Received(1).SendDmWithMediaAsync(
-            5001,
-            "spam_banned",
-            Arg.Any<string>(),
-            "/data/media/photos/spam_photo.jpg", // photoPath
-            Arg.Any<string?>(), // videoPath
+        await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
+            user.Id,
+            Arg.Is<Notification>(n => n.Type == "warning" && n.Message.Contains("Warning Issued")),
             Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyUserWarningAsync_IncludesWarningCountAndReason()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Any<Notification>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(true));
+
+        // Act
+        await _handler.NotifyUserWarningAsync(user, warningCount: 3, reason: "Repeated spam");
+
+        // Assert — message includes count and escaped reason
+        await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
+            user.Id,
+            Arg.Is<Notification>(n =>
+                n.Message.Contains("<b>Total Warnings:</b> 3") &&
+                n.Message.Contains("Repeated spam")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyUserWarningAsync_DeliveryFails_ReturnsFailedResult()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Any<Notification>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(false, "User blocked the bot"));
+
+        // Act
+        var result = await _handler.NotifyUserWarningAsync(user, warningCount: 1, reason: "Test");
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+    }
+
+    [Test]
+    public async Task NotifyUserWarningAsync_Throws_ReturnsFailed()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Any<Notification>(),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Telegram API error"));
+
+        // Act
+        var result = await _handler.NotifyUserWarningAsync(user, warningCount: 1, reason: "Test");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("Telegram API error"));
+        }
+    }
+
+    #endregion
+
+    #region NotifyUserTempBanAsync Tests
+
+    [Test]
+    public async Task NotifyUserTempBanAsync_Success_ReturnsSucceeded()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        var duration = TimeSpan.FromHours(24);
+        var expiresAt = DateTimeOffset.UtcNow.Add(duration);
+
+        _mockManagedChatsRepository.GetAllChatsAsync(cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new List<ManagedChatRecord>());
+
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Any<Notification>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(true));
+
+        // Act
+        var result = await _handler.NotifyUserTempBanAsync(user, duration, expiresAt, reason: "Repeated violations");
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+        await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
+            user.Id,
+            Arg.Is<Notification>(n => n.Type == "tempban" && n.Message.Contains("temporarily banned")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyUserTempBanAsync_IncludesDurationAndReason()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+        var duration = TimeSpan.FromHours(24);
+        var expiresAt = DateTimeOffset.UtcNow.Add(duration);
+
+        _mockManagedChatsRepository.GetAllChatsAsync(cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new List<ManagedChatRecord>());
+
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Any<Notification>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(true));
+
+        // Act
+        await _handler.NotifyUserTempBanAsync(user, duration, expiresAt, reason: "Spamming links");
+
+        // Assert — message includes reason
+        await _mockNotificationOrchestrator.Received(1).SendTelegramDmAsync(
+            user.Id,
+            Arg.Is<Notification>(n =>
+                n.Message.Contains("Spamming links") &&
+                n.Message.Contains("<b>Reason:</b>")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task NotifyUserTempBanAsync_DeliveryFails_ReturnsFailedResult()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+
+        _mockManagedChatsRepository.GetAllChatsAsync(cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new List<ManagedChatRecord>());
+
+        _mockNotificationOrchestrator.SendTelegramDmAsync(
+                user.Id,
+                Arg.Any<Notification>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DeliveryResult(false, "User blocked the bot"));
+
+        // Act
+        var result = await _handler.NotifyUserTempBanAsync(
+            user, TimeSpan.FromHours(1), DateTimeOffset.UtcNow.AddHours(1), reason: "Test");
+
+        // Assert
+        Assert.That(result.Success, Is.False);
+    }
+
+    [Test]
+    public async Task NotifyUserTempBanAsync_Throws_ReturnsFailed()
+    {
+        // Arrange
+        var user = new UserIdentity(12345L, "Test", "User", "test_user");
+
+        _mockManagedChatsRepository.GetAllChatsAsync(cancellationToken: Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("DB connection lost"));
+
+        // Act
+        var result = await _handler.NotifyUserTempBanAsync(
+            user, TimeSpan.FromHours(1), DateTimeOffset.UtcNow.AddHours(1), reason: "Test");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("DB connection lost"));
+        }
     }
 
     #endregion
@@ -422,7 +582,7 @@ public class NotificationHandlerTests
     /// </summary>
     private static MessageWithDetectionHistory CreateTestEnrichedMessage(
         long chatId,
-        long messageId,
+        int messageId,
         long userId,
         string? messageText = "Test spam message",
         string? photoLocalPath = null,
@@ -430,11 +590,8 @@ public class NotificationHandlerTests
     {
         var message = new MessageRecord(
             MessageId: messageId,
-            UserId: userId,
-            UserName: "spam_user",
-            FirstName: "Spam",
-            LastName: "User",
-            ChatId: chatId,
+            User: new UserIdentity(userId, "Spam", "User", "spam_user"),
+            Chat: new ChatIdentity(chatId, "Test Chat"),
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: messageText,
             PhotoFileId: null,
@@ -442,7 +599,6 @@ public class NotificationHandlerTests
             Urls: null,
             EditDate: null,
             ContentHash: null,
-            ChatName: "Test Chat",
             PhotoLocalPath: photoLocalPath,
             PhotoThumbnailPath: null,
             ChatIconPath: null,

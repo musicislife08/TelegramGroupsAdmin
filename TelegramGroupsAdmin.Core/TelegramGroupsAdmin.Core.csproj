@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,15 +15,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Humanizer.Core" Version="3.0.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.68.0" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
-    <PackageReference Include="System.IO.Hashing" Version="10.0.1" />
-    <PackageReference Include="Telegram.Bot" Version="22.8.1" />
+    <PackageReference Include="Humanizer.Core" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.SemanticKernel" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="System.IO.Hashing" />
+    <PackageReference Include="Telegram.Bot" />
   </ItemGroup>
 
   <ItemGroup>

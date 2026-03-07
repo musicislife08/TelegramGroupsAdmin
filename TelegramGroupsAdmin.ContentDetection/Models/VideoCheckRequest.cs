@@ -7,5 +7,4 @@ public sealed class VideoCheckRequest : ContentCheckRequestBase
 {
     public required string VideoLocalPath { get; init; }
     public required string? CustomPrompt { get; init; }
-    public required int ConfidenceThreshold { get; init; }
 }

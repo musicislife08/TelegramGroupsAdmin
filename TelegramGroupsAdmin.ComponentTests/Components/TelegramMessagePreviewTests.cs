@@ -186,8 +186,11 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
 
         // Assert
         var rows = cut.FindAll(".telegram-button-row");
-        Assert.That(rows.Count, Is.EqualTo(2));
-        Assert.That(cut.Markup, Does.Contain("Row1-Btn1"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Count, Is.EqualTo(2));
+            Assert.That(cut.Markup, Does.Contain("Row1-Btn1"));
+        }
         Assert.That(cut.Markup, Does.Contain("Row2-Btn1"));
     }
 

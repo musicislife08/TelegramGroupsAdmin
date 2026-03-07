@@ -2,9 +2,11 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Configuration.Mappings;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Constants;
+using TelegramGroupsAdmin.Data.Models.Configs;
 
 namespace TelegramGroupsAdmin.Configuration.Repositories;
 
@@ -426,6 +428,154 @@ public class SystemConfigRepository : ISystemConfigRepository
         }
 
         return false;
+    }
+
+    public async Task<UserApiConfig> GetUserApiConfigAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord?.UserApiConfig == null)
+        {
+            return UserApiConfig.Default;
+        }
+
+        try
+        {
+            var data = JsonSerializer.Deserialize<UserApiConfigData>(configRecord.UserApiConfig, _jsonOptions);
+            return data?.ToModel() ?? UserApiConfig.Default;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize User API config");
+            return UserApiConfig.Default;
+        }
+    }
+
+    public async Task SaveUserApiConfigAsync(UserApiConfig config, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        _logger.LogInformation("Saving Telegram User API configuration to database");
+
+        var data = config.ToData();
+        var jsonConfig = JsonSerializer.Serialize(data, _jsonOptions);
+
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord == null)
+        {
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = 0,
+                UserApiConfig = jsonConfig,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken);
+        }
+        else
+        {
+            configRecord.UserApiConfig = jsonConfig;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Telegram User API configuration saved successfully");
+    }
+
+    public async Task<string?> GetUserApiHashAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord?.UserApiHashEncrypted == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.UserApiHash);
+            return protector.Unprotect(configRecord.UserApiHashEncrypted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to decrypt Telegram User API Hash");
+            return null;
+        }
+    }
+
+    public async Task SaveUserApiHashAsync(string apiHash, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(apiHash);
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        _logger.LogInformation("Saving Telegram User API Hash to encrypted database storage");
+
+        var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.UserApiHash);
+        var encryptedHash = protector.Protect(apiHash);
+
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord == null)
+        {
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = 0,
+                UserApiHashEncrypted = encryptedHash,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken);
+        }
+        else
+        {
+            configRecord.UserApiHashEncrypted = encryptedHash;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Telegram User API Hash saved successfully to encrypted database storage");
+    }
+
+    public async Task<bool> HasUserApiCredentialsAsync(CancellationToken cancellationToken = default)
+    {
+        var config = await GetUserApiConfigAsync(cancellationToken);
+        if (config.ApiId == 0)
+        {
+            return false;
+        }
+
+        var apiHash = await GetUserApiHashAsync(cancellationToken);
+        return !string.IsNullOrWhiteSpace(apiHash);
+    }
+
+    public async Task ClearUserApiCredentialsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord != null)
+        {
+            configRecord.UserApiConfig = null;
+            configRecord.UserApiHashEncrypted = null;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Telegram User API credentials cleared");
+        }
     }
 
     public async Task<AIProviderConfig?> GetAIProviderConfigAsync(CancellationToken cancellationToken = default)

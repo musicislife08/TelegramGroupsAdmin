@@ -33,7 +33,7 @@ public class PhotoHashService : IPhotoHashService
         {
             if (!File.Exists(photoPath))
             {
-                _logger.LogWarning("Photo file not found: {PhotoPath}", photoPath);
+                _logger.LogTrace("Photo file not found: {PhotoPath}", photoPath);
                 return null;
             }
 

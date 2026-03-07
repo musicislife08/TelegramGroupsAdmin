@@ -1,8 +1,4 @@
-using Microsoft.Extensions.Logging;
-using NSubstitute;
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Handlers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramBotDocument = Telegram.Bot.Types.Document;
@@ -54,12 +50,15 @@ public class MediaProcessingHandlerTests
 
         // Assert: Returns Animation metadata
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.Animation));
-        Assert.That(result.FileId, Is.EqualTo("test_anim_id"));
-        Assert.That(result.FileSize, Is.EqualTo(1024000L));
-        Assert.That(result.FileName, Is.EqualTo("test.gif"));
-        Assert.That(result.MimeType, Is.EqualTo("video/mp4"));
-        Assert.That(result.Duration, Is.EqualTo(5));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.Animation));
+            Assert.That(result.FileId, Is.EqualTo("test_anim_id"));
+            Assert.That(result.FileSize, Is.EqualTo(1024000L));
+            Assert.That(result.FileName, Is.EqualTo("test.gif"));
+            Assert.That(result.MimeType, Is.EqualTo("video/mp4"));
+            Assert.That(result.Duration, Is.EqualTo(5));
+        }
     }
 
     /// <summary>
@@ -87,12 +86,15 @@ public class MediaProcessingHandlerTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.Video));
-        Assert.That(result.FileId, Is.EqualTo("test_video_id"));
-        Assert.That(result.FileSize, Is.EqualTo(5242880L));
-        Assert.That(result.FileName, Is.EqualTo("vacation.mp4"));
-        Assert.That(result.MimeType, Is.EqualTo("video/mp4"));
-        Assert.That(result.Duration, Is.EqualTo(120));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.Video));
+            Assert.That(result.FileId, Is.EqualTo("test_video_id"));
+            Assert.That(result.FileSize, Is.EqualTo(5242880L));
+            Assert.That(result.FileName, Is.EqualTo("vacation.mp4"));
+            Assert.That(result.MimeType, Is.EqualTo("video/mp4"));
+            Assert.That(result.Duration, Is.EqualTo(120));
+        }
     }
 
     /// <summary>
@@ -121,12 +123,15 @@ public class MediaProcessingHandlerTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.Audio));
-        Assert.That(result.FileId, Is.EqualTo("test_audio_id"));
-        Assert.That(result.FileSize, Is.EqualTo(3145728L));
-        Assert.That(result.FileName, Is.EqualTo("song.mp3"));
-        Assert.That(result.MimeType, Is.EqualTo("audio/mpeg"));
-        Assert.That(result.Duration, Is.EqualTo(180));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.Audio));
+            Assert.That(result.FileId, Is.EqualTo("test_audio_id"));
+            Assert.That(result.FileSize, Is.EqualTo(3145728L));
+            Assert.That(result.FileName, Is.EqualTo("song.mp3"));
+            Assert.That(result.MimeType, Is.EqualTo("audio/mpeg"));
+            Assert.That(result.Duration, Is.EqualTo(180));
+        }
     }
 
     /// <summary>
@@ -214,12 +219,15 @@ public class MediaProcessingHandlerTests
 
         // Assert: Voice always generates filename
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.Voice));
-        Assert.That(result.FileId, Is.EqualTo("test_voice_id"));
-        Assert.That(result.FileSize, Is.EqualTo(51200L));
-        Assert.That(result.FileName, Is.EqualTo("voice_voice789.ogg"));
-        Assert.That(result.MimeType, Is.EqualTo("audio/ogg"));
-        Assert.That(result.Duration, Is.EqualTo(10));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.Voice));
+            Assert.That(result.FileId, Is.EqualTo("test_voice_id"));
+            Assert.That(result.FileSize, Is.EqualTo(51200L));
+            Assert.That(result.FileName, Is.EqualTo("voice_voice789.ogg"));
+            Assert.That(result.MimeType, Is.EqualTo("audio/ogg"));
+            Assert.That(result.Duration, Is.EqualTo(10));
+        }
     }
 
     /// <summary>
@@ -248,12 +256,15 @@ public class MediaProcessingHandlerTests
 
         // Assert: Stickers have no duration, always WebP
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.Sticker));
-        Assert.That(result.FileId, Is.EqualTo("test_sticker_id"));
-        Assert.That(result.FileSize, Is.EqualTo(20480L));
-        Assert.That(result.FileName, Is.EqualTo("sticker_sticker999.webp"));
-        Assert.That(result.MimeType, Is.EqualTo("image/webp"));
-        Assert.That(result.Duration, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.Sticker));
+            Assert.That(result.FileId, Is.EqualTo("test_sticker_id"));
+            Assert.That(result.FileSize, Is.EqualTo(20480L));
+            Assert.That(result.FileName, Is.EqualTo("sticker_sticker999.webp"));
+            Assert.That(result.MimeType, Is.EqualTo("image/webp"));
+            Assert.That(result.Duration, Is.Null);
+        }
     }
 
     /// <summary>
@@ -281,12 +292,15 @@ public class MediaProcessingHandlerTests
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.VideoNote));
-        Assert.That(result.FileId, Is.EqualTo("test_videonote_id"));
-        Assert.That(result.FileSize, Is.EqualTo(1048576L));
-        Assert.That(result.FileName, Is.EqualTo("videonote_videonote888.mp4"));
-        Assert.That(result.MimeType, Is.EqualTo("video/mp4"));
-        Assert.That(result.Duration, Is.EqualTo(30));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.VideoNote));
+            Assert.That(result.FileId, Is.EqualTo("test_videonote_id"));
+            Assert.That(result.FileSize, Is.EqualTo(1048576L));
+            Assert.That(result.FileName, Is.EqualTo("videonote_videonote888.mp4"));
+            Assert.That(result.MimeType, Is.EqualTo("video/mp4"));
+            Assert.That(result.Duration, Is.EqualTo(30));
+        }
     }
 
     /// <summary>
@@ -314,12 +328,15 @@ public class MediaProcessingHandlerTests
 
         // Assert: Document has no duration
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.Document));
-        Assert.That(result.FileId, Is.EqualTo("test_doc_id"));
-        Assert.That(result.FileSize, Is.EqualTo(2097152L));
-        Assert.That(result.FileName, Is.EqualTo("report.pdf"));
-        Assert.That(result.MimeType, Is.EqualTo("application/pdf"));
-        Assert.That(result.Duration, Is.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.Document));
+            Assert.That(result.FileId, Is.EqualTo("test_doc_id"));
+            Assert.That(result.FileSize, Is.EqualTo(2097152L));
+            Assert.That(result.FileName, Is.EqualTo("report.pdf"));
+            Assert.That(result.MimeType, Is.EqualTo("application/pdf"));
+            Assert.That(result.Duration, Is.Null);
+        }
     }
 
     /// <summary>
@@ -403,8 +420,11 @@ public class MediaProcessingHandlerTests
 
         // Assert: Should return Animation (priority order)
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.MediaType, Is.EqualTo(MediaType.Animation));
-        Assert.That(result.FileId, Is.EqualTo("anim_id"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MediaType, Is.EqualTo(MediaType.Animation));
+            Assert.That(result.FileId, Is.EqualTo("anim_id"));
+        }
     }
 
     /// <summary>

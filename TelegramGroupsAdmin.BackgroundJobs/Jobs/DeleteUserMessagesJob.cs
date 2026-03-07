@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -16,16 +16,12 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
-    ITelegramBotClientFactory botClientFactory,
+    IBotMessageService messageService,
     IMessageHistoryRepository messageHistoryRepository) : IJob
 {
-    private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
-    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
-
     public async Task Execute(IJobExecutionContext context)
     {
-        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteUserMessagesPayload>(context, _logger);
+        var payload = await JobPayloadHelper.TryGetPayloadAsync<DeleteUserMessagesPayload>(context, logger);
         if (payload == null) return;
 
         await ExecuteAsync(payload, context.CancellationToken);
@@ -40,34 +36,32 @@ public class DeleteUserMessagesJob(
         const string jobName = "DeleteUserMessages";
         var startTimestamp = Stopwatch.GetTimestamp();
         var success = false;
+        var user = payload.User;
 
         try
         {
-            _logger.LogInformation(
-                "Starting cross-chat message cleanup for user {UserId}",
-                payload.TelegramUserId);
-
-            // Get operations from factory
-            var operations = await _botClientFactory.GetOperationsAsync();
+            logger.LogInformation(
+                "Starting cross-chat message cleanup for user {UserDisplay} ({UserId})",
+                user.DisplayName, user.Id);
 
             // Fetch all user messages (non-deleted only)
-            var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(
-                payload.TelegramUserId,
+            var userMessages = await messageHistoryRepository.GetUserMessagesAsync(
+                user.Id,
                 cancellationToken);
 
             if (userMessages.Count == 0)
             {
-                _logger.LogInformation(
-                    "No messages found for user {UserId}, cleanup complete",
-                    payload.TelegramUserId);
+                logger.LogInformation(
+                    "No messages found for user {UserDisplay} ({UserId}), cleanup complete",
+                    user.DisplayName, user.Id);
                 success = true;
                 return;
             }
 
-            _logger.LogInformation(
-                "Found {MessageCount} messages to delete for user {UserId}",
+            logger.LogInformation(
+                "Found {MessageCount} messages to delete for user {UserDisplay} ({UserId})",
                 userMessages.Count,
-                payload.TelegramUserId);
+                user.DisplayName, user.Id);
 
             var deletedCount = 0;
             var failedCount = 0;
@@ -78,27 +72,28 @@ public class DeleteUserMessagesJob(
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    _logger.LogWarning(
-                        "Message cleanup cancelled for user {UserId} after {DeletedCount} deletions",
-                        payload.TelegramUserId,
+                    logger.LogWarning(
+                        "Message cleanup cancelled for user {UserDisplay} ({UserId}) after {DeletedCount} deletions",
+                        user.DisplayName, user.Id,
                         deletedCount);
                     break;
                 }
 
                 try
                 {
-                    await operations.DeleteMessageAsync(
+                    await messageService.DeleteAndMarkMessageAsync(
                         chatId: message.ChatId,
-                        messageId: (int)message.MessageId,
+                        messageId: message.MessageId,
+                        deletionSource: "ban_cleanup",
                         cancellationToken: cancellationToken);
 
                     deletedCount++;
 
-                    _logger.LogDebug(
+                    logger.LogDebug(
                         "Deleted message {MessageId} in chat {ChatId} for user {UserId}",
                         message.MessageId,
                         message.ChatId,
-                        payload.TelegramUserId);
+                        user.Id);
                 }
                 catch (Exception apiEx) when (
                     apiEx.Message.Contains("message to delete not found") ||
@@ -108,29 +103,29 @@ public class DeleteUserMessagesJob(
                 {
                     // Expected errors: message already deleted, too old (>48h), or bot lacks permissions
                     skippedCount++;
-                    _logger.LogDebug(
+                    logger.LogDebug(
                         "Skipped message {MessageId} in chat {ChatId} for user {UserId}: {Reason}",
                         message.MessageId,
                         message.ChatId,
-                        payload.TelegramUserId,
+                        user.Id,
                         apiEx.Message);
                 }
                 catch (Exception ex)
                 {
                     failedCount++;
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         ex,
                         "Failed to delete message {MessageId} in chat {ChatId} for user {UserId}",
                         message.MessageId,
                         message.ChatId,
-                        payload.TelegramUserId);
+                        user.Id);
                     // Continue with other messages, don't throw
                 }
             }
 
-            _logger.LogInformation(
-                "Cross-chat message cleanup complete for user {UserId}: {DeletedCount} deleted, {SkippedCount} skipped, {FailedCount} failed",
-                payload.TelegramUserId,
+            logger.LogInformation(
+                "Cross-chat message cleanup complete for user {UserDisplay} ({UserId}): {DeletedCount} deleted, {SkippedCount} skipped, {FailedCount} failed",
+                user.DisplayName, user.Id,
                 deletedCount,
                 skippedCount,
                 failedCount);
@@ -140,7 +135,7 @@ public class DeleteUserMessagesJob(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error in DeleteUserMessagesJobLogic");
+            logger.LogError(ex, "Unexpected error in DeleteUserMessagesJobLogic");
             throw;
         }
         finally

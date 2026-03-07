@@ -10,13 +10,16 @@ public class BackupFileInfoTests
     {
         var result = BackupFileInfo.ParseTimestampFromFilename("/data/backups/backup_2026-01-27_14-30-45.tar.gz");
 
-        Assert.That(result.Year, Is.EqualTo(2026));
-        Assert.That(result.Month, Is.EqualTo(1));
-        Assert.That(result.Day, Is.EqualTo(27));
-        Assert.That(result.Hour, Is.EqualTo(14));
-        Assert.That(result.Minute, Is.EqualTo(30));
-        Assert.That(result.Second, Is.EqualTo(45));
-        Assert.That(result.Offset, Is.EqualTo(TimeSpan.Zero));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Year, Is.EqualTo(2026));
+            Assert.That(result.Month, Is.EqualTo(1));
+            Assert.That(result.Day, Is.EqualTo(27));
+            Assert.That(result.Hour, Is.EqualTo(14));
+            Assert.That(result.Minute, Is.EqualTo(30));
+            Assert.That(result.Second, Is.EqualTo(45));
+            Assert.That(result.Offset, Is.EqualTo(TimeSpan.Zero));
+        }
     }
 
     [Test]
@@ -31,12 +34,15 @@ public class BackupFileInfoTests
         {
             var result = BackupFileInfo.ParseTimestampFromFilename(renamedPath);
 
-            Assert.That(result.Year, Is.EqualTo(2025));
-            Assert.That(result.Month, Is.EqualTo(12));
-            Assert.That(result.Day, Is.EqualTo(31));
-            Assert.That(result.Hour, Is.EqualTo(23));
-            Assert.That(result.Minute, Is.EqualTo(59));
-            Assert.That(result.Second, Is.EqualTo(59));
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(result.Year, Is.EqualTo(2025));
+                Assert.That(result.Month, Is.EqualTo(12));
+                Assert.That(result.Day, Is.EqualTo(31));
+                Assert.That(result.Hour, Is.EqualTo(23));
+                Assert.That(result.Minute, Is.EqualTo(59));
+                Assert.That(result.Second, Is.EqualTo(59));
+            }
         }
         finally
         {
@@ -49,9 +55,12 @@ public class BackupFileInfoTests
     {
         var result = BackupFileInfo.ParseTimestampFromFilename("/data/backups/backup_2024-02-29_12-00-00.tar.gz");
 
-        Assert.That(result.Year, Is.EqualTo(2024));
-        Assert.That(result.Month, Is.EqualTo(2));
-        Assert.That(result.Day, Is.EqualTo(29));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Year, Is.EqualTo(2024));
+            Assert.That(result.Month, Is.EqualTo(2));
+            Assert.That(result.Day, Is.EqualTo(29));
+        }
     }
 
     [Test]

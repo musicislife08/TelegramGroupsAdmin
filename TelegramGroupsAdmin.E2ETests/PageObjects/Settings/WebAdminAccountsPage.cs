@@ -1,5 +1,4 @@
 using Microsoft.Playwright;
-using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects.Settings;
 

@@ -2,7 +2,7 @@
 
 ## Stack
 
-.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.15.0, PostgreSQL 18, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
+.NET 10.0 (10.0.100), Blazor Server, MudBlazor 9.0.0, PostgreSQL 18, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 ## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
 
@@ -145,6 +145,14 @@ git push origin develop
 
 **AI Agent Guidance**: Evaluate against homelab deployment standards, not enterprise SaaS requirements. Prioritize operational simplicity, feature completeness, and single-maintainer comprehensibility over microservices patterns, distributed systems, or premature optimization for scale.
 
+## Code Navigation
+
+Use CSharperMcp tools for code understanding instead of grep/find:
+- Use `find_symbol` and `find_references` to navigate types, interfaces, and method usages
+- Use `get_diagnostics` to check for compiler errors instead of running `dotnet build`
+- Use DLL introspection to inspect NuGet package internals (ML.NET, Quartz.NET, etc.) when behavior is unclear
+- Always check `find_references` before renaming or modifying an interface or base class
+
 ## Deployment Architecture
 
 **Single Instance Design** (architectural constraint, not limitation):
@@ -212,8 +220,6 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 **Database-First Configuration**:
 - Pattern: Settings stored in database (encrypted when sensitive), not env vars
-- Migration: TelegramConfigMigrationService, ApiKeyMigrationService auto-migrate on first startup
-- Fallback: Env vars used for first-time setup only
 - UI: Settings pages allow live editing without restart
 
 **Background Services**: TelegramBotPollingHost (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans)
@@ -227,12 +233,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - **OpenAI API Key**: Settings → System → OpenAI
 - **SendGrid Settings**: Settings → System → Email
 - **VirusTotal API Key**: Settings → Content Detection → File Scanning
-- **CAS API Key**: Settings → Content Detection → Detection Algorithms
-
-**Migration Services** (optional, one-time only):
-- TelegramConfigMigrationService: Migrates `TELEGRAM__BOTTOKEN` env var to database on first startup
-- ApiKeyMigrationService: Migrates OpenAI/SendGrid env vars to database on first startup
-- After migration, remove env vars - all future changes via Settings UI
+- **CAS Settings**: Settings → Welcome → Security on Join
 
 **Runtime Editing**: Settings UI allows live config changes without restart
 
@@ -258,7 +259,7 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 **Translation Storage**: Exclusive arc pattern (message_id XOR edit_id) in message_translations table. MessageProcessingService translates before save (≥10 chars, <80% Latin script). Reused by spam detection.
 
-**DM Notifications**: IDmDeliveryService (Singleton), pending_notifications table (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup.
+**DM Notifications**: IBotDmService (Scoped), pending_notifications table (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup.
 
 ## Permissions
 
@@ -376,7 +377,15 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 ### UI Frameworks
 
-- MudBlazor v8+: Use `IMudDialogInstance` (interface), not `MudDialogInstance` (concrete class)
+- MudBlazor v9+: Use `IMudDialogInstance` (interface), not `MudDialogInstance` (concrete class)
+- MudBlazor v9+: `ShowMessageBox()` → `ShowMessageBoxAsync()` on `IDialogService`
+- MudBlazor v9+: `MudFileUpload.ActivatorContent` → `CustomContent` with context (call `context.OpenFilePickerAsync` on button click)
+- MudBlazor v9+: `MudTabs.PanelClass` → `TabPanelsClass`
+- MudBlazor v9+: `MudTextField.AutoGrow` → `Sizing="InputSizing.Auto"`
+- MudBlazor v9+: `MudSelect.SelectedValues` uses `IReadOnlyCollection<T>` (not `IEnumerable<T>`)
+- MudBlazor v9+: `MudMenu.ActivatorContent` requires explicit `@context.ToggleAsync` on buttons (no implicit activation)
+- MudBlazor v9+: Buttons inside `MudMenu.ChildContent` no longer auto-close the menu
+- Central Package Management: All NuGet versions managed in `Directory.Packages.props` at repo root
 
 ### Documentation
 

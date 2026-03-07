@@ -31,6 +31,11 @@ public static class BackupRetentionConstants
     public const int DefaultRetainYearlyBackups = 3;
 
     /// <summary>
+    /// Default backup directory (absolute path for Docker volume mount).
+    /// </summary>
+    public const string DefaultBackupDirectory = "/data/backups";
+
+    /// <summary>
     /// Number of days in a week for week calculation.
     /// </summary>
     public const int DaysPerWeek = 7;

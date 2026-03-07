@@ -24,22 +24,23 @@ public class AIProviderConfigTests
     }
 
     [Test]
-    public void Constructor_InitializesAllFiveFeatures()
+    public void Constructor_InitializesAllFeatures()
     {
         // Act
         var config = new AIProviderConfig();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(config.Features, Is.Not.Null);
-            Assert.That(config.Features.Count, Is.EqualTo(5));
+            Assert.That(config.Features.Count, Is.EqualTo(6));
             Assert.That(config.Features.ContainsKey(AIFeatureType.SpamDetection), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.Translation), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.ImageAnalysis), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.VideoAnalysis), Is.True);
             Assert.That(config.Features.ContainsKey(AIFeatureType.PromptBuilder), Is.True);
-        });
+            Assert.That(config.Features.ContainsKey(AIFeatureType.ProfileScan), Is.True);
+        }
     }
 
     #endregion
@@ -113,12 +114,12 @@ public class AIProviderConfigTests
         var config = new AIProviderConfig();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(config.Features[AIFeatureType.SpamDetection].RequiresVision, Is.False);
             Assert.That(config.Features[AIFeatureType.Translation].RequiresVision, Is.False);
             Assert.That(config.Features[AIFeatureType.PromptBuilder].RequiresVision, Is.False);
-        });
+        }
     }
 
     #endregion
@@ -238,7 +239,7 @@ public class AIProviderConfigTests
 
         // Assert
         Assert.That(deserialized, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections.Count, Is.EqualTo(1));
             Assert.That(deserialized.Connections[0].Id, Is.EqualTo("openai-prod"));
@@ -248,7 +249,7 @@ public class AIProviderConfigTests
             Assert.That(deserialized.Connections[0].AvailableModels[0].Id, Is.EqualTo("gpt-4o"));
             Assert.That(deserialized.Features[AIFeatureType.SpamDetection].ConnectionId, Is.EqualTo("openai-prod"));
             Assert.That(deserialized.Features[AIFeatureType.SpamDetection].Model, Is.EqualTo("gpt-4o"));
-        });
+        }
     }
 
     [Test]
@@ -283,11 +284,11 @@ public class AIProviderConfigTests
         var deserialized = JsonSerializer.Deserialize<AIProviderConfig>(json);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections[0].Provider, Is.EqualTo(AIProviderType.AzureOpenAI));
             Assert.That(deserialized.Connections[1].Provider, Is.EqualTo(AIProviderType.LocalOpenAI));
-        });
+        }
     }
 
     [Test]
@@ -314,13 +315,13 @@ public class AIProviderConfigTests
         var deserialized = JsonSerializer.Deserialize<AIProviderConfig>(json);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections[0].AvailableModels[0].Id, Is.EqualTo("gpt-4o"));
             Assert.That(deserialized.Connections[0].AvailableModels[0].SizeBytes, Is.Null);
             Assert.That(deserialized.Connections[0].AvailableModels[1].Id, Is.EqualTo("llama3.2"));
             Assert.That(deserialized.Connections[0].AvailableModels[1].SizeBytes, Is.EqualTo(7365960704));
-        });
+        }
     }
 
     [Test]
@@ -345,11 +346,11 @@ public class AIProviderConfigTests
         var deserialized = JsonSerializer.Deserialize<AIProviderConfig>(json);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections[0].AzureEndpoint, Is.EqualTo("https://my-resource.openai.azure.com"));
             Assert.That(deserialized.Connections[0].AzureApiVersion, Is.EqualTo("2024-10-01"));
-        });
+        }
     }
 
     [Test]
@@ -374,11 +375,11 @@ public class AIProviderConfigTests
         var deserialized = JsonSerializer.Deserialize<AIProviderConfig>(json);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(deserialized!.Connections[0].LocalEndpoint, Is.EqualTo("http://localhost:11434/v1"));
             Assert.That(deserialized.Connections[0].LocalRequiresApiKey, Is.True);
-        });
+        }
     }
 
     [Test]

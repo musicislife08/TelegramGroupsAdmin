@@ -145,7 +145,7 @@ public class ReportsRepository : IReportsRepository
             _logger.LogInformation(
                 "Updated report {ReportId} (type={Type}) to status {Status} by {ReviewedBy} (action: {ActionTaken})",
                 reportId,
-                entity.Type,
+                (ReportType)entity.Type,
                 status,
                 reviewedBy,
                 actionTaken);
@@ -228,11 +228,11 @@ public class ReportsRepository : IReportsRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Inserted content report {ReportId} for message {MessageId} in chat {ChatId} by user {UserId}",
+            "Inserted content report {ReportId} for message {MessageId} in chat {ChatId} by {Reporter}",
             entity.Id,
             report.MessageId,
-            report.ChatId,
-            report.ReportedByUserId);
+            report.Chat.Id,
+            report.ReportedByUserName ?? report.ReportedByUserId?.ToString() ?? "system");
 
         return entity.Id;
     }
@@ -320,8 +320,8 @@ public class ReportsRepository : IReportsRepository
         // Build context JSONB
         var alertContext = new ImpersonationAlertContext
         {
-            SuspectedUserId = alert.SuspectedUserId,
-            TargetUserId = alert.TargetUserId,
+            SuspectedUserId = alert.SuspectedUser.Id,
+            TargetUserId = alert.TargetUser.Id,
             TotalScore = alert.TotalScore,
             RiskLevel = alert.RiskLevel.ToString().ToLowerInvariant(),
             NameMatch = alert.NameMatch,
@@ -334,7 +334,7 @@ public class ReportsRepository : IReportsRepository
         var entity = new ReportDto
         {
             Type = (short)ReportType.ImpersonationAlert,
-            ChatId = alert.ChatId,
+            ChatId = alert.Chat.Id,
             ReportedAt = alert.DetectedAt,
             Status = alert.ReviewedAt.HasValue ? (int)ReportStatus.Reviewed : (int)ReportStatus.Pending,
             ReviewedBy = alert.ReviewedByEmail,
@@ -348,10 +348,10 @@ public class ReportsRepository : IReportsRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Created impersonation alert #{ReportId}: User {SuspectedUserId} → Admin {TargetUserId} (score: {Score}, auto_banned: {AutoBanned})",
+            "Created impersonation alert #{ReportId}: {SuspectedUser} → {TargetUser} (score: {Score}, auto_banned: {AutoBanned})",
             entity.Id,
-            alert.SuspectedUserId,
-            alert.TargetUserId,
+            alert.SuspectedUser.DisplayName,
+            alert.TargetUser.DisplayName,
             alert.TotalScore,
             alert.AutoBanned);
 
@@ -450,6 +450,124 @@ public class ReportsRepository : IReportsRepository
     }
 
     // ============================================================
+    // ProfileScanAlert-specific operations (Type = ProfileScanAlert)
+    // ============================================================
+
+    public async Task<long> InsertProfileScanAlertAsync(
+        ProfileScanAlertRecord alert,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var alertContext = new ProfileScanAlertContext
+        {
+            UserId = alert.User.Id,
+            Score = alert.Score,
+            Outcome = (int)alert.Outcome,
+            AiReason = alert.AiReason,
+            AiSignals = alert.AiSignalsDetected,
+            Bio = alert.Bio,
+            PersonalChannelTitle = alert.PersonalChannelTitle,
+            HasPinnedStories = alert.HasPinnedStories,
+            IsScam = alert.IsScam,
+            IsFake = alert.IsFake
+        };
+
+        var entity = new ReportDto
+        {
+            Type = (short)ReportType.ProfileScanAlert,
+            ChatId = alert.Chat.Id,
+            ReportedAt = alert.DetectedAt,
+            Status = (int)ReportStatus.Pending,
+            Context = JsonSerializer.Serialize(alertContext, JsonOptions)
+        };
+
+        context.Reports.Add(entity);
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Created profile scan alert #{ReportId}: user {UserId} score {Score} ({Outcome})",
+            entity.Id, alert.User.Id, alert.Score, alert.Outcome);
+
+        return entity.Id;
+    }
+
+    public async Task<ProfileScanAlertRecord?> GetProfileScanAlertAsync(
+        long id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var view = await context.EnrichedReports
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id && r.Type == (short)ReportType.ProfileScanAlert, cancellationToken);
+
+        return view?.ToProfileScanAlert();
+    }
+
+    public async Task<bool> HasPendingProfileScanAlertAsync(
+        long userId,
+        long? chatId = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.Reports
+            .AsNoTracking()
+            .Where(r => r.Type == (short)ReportType.ProfileScanAlert
+                        && r.Status == (int)ReportStatus.Pending);
+
+        if (chatId.HasValue)
+            query = query.Where(r => r.ChatId == chatId.Value);
+
+        // Filter by userId from JSONB context using proper containment operator (@>)
+        query = query.Where(r => EF.Functions.JsonContains(r.Context!, $"{{\"userId\":{userId}}}"));
+
+        return await query.AnyAsync(cancellationToken);
+    }
+
+    public async Task<List<ProfileScanAlertRecord>> GetPendingProfileScanAlertsForUserAsync(
+        long userId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var results = await context.EnrichedReports
+            .AsNoTracking()
+            .Where(r => r.Type == (short)ReportType.ProfileScanAlert
+                        && r.Status == (int)ReportStatus.Pending
+                        && r.ProfileUserId == userId)
+            .ToListAsync(cancellationToken);
+
+        return results
+            .Select(r => r.ToProfileScanAlert())
+            .Where(r => r != null)
+            .Cast<ProfileScanAlertRecord>()
+            .ToList();
+    }
+
+    public async Task<List<ProfileScanAlertRecord>> GetProfileScanAlertsAsync(
+        bool pendingOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.EnrichedReports
+            .AsNoTracking()
+            .Where(r => r.Type == (short)ReportType.ProfileScanAlert);
+
+        if (pendingOnly)
+            query = query.Where(r => r.Status == (int)ReportStatus.Pending);
+
+        var results = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .ToListAsync(cancellationToken);
+
+        return results
+            .Select(r => r.ToProfileScanAlert())
+            .Where(r => r != null)
+            .Cast<ProfileScanAlertRecord>()
+            .ToList();
+    }
+
+    // ============================================================
     // ExamFailure-specific operations (Type = ExamFailure)
     // ============================================================
 
@@ -462,7 +580,7 @@ public class ReportsRepository : IReportsRepository
         // Build context JSONB
         var examContext = new ExamFailureContext
         {
-            UserId = examFailure.UserId,
+            UserId = examFailure.User.Id,
             McAnswers = examFailure.McAnswers,
             ShuffleState = examFailure.ShuffleState,
             OpenEndedAnswer = examFailure.OpenEndedAnswer,
@@ -474,7 +592,7 @@ public class ReportsRepository : IReportsRepository
         var entity = new ReportDto
         {
             Type = (short)ReportType.ExamFailure,
-            ChatId = examFailure.ChatId,
+            ChatId = examFailure.Chat.Id,
             ReportedAt = examFailure.FailedAt,
             Status = (int)ReportStatus.Pending,
             Context = JsonSerializer.Serialize(examContext, JsonOptions)
@@ -486,8 +604,8 @@ public class ReportsRepository : IReportsRepository
         _logger.LogInformation(
             "Created exam failure report #{ReportId}: User {UserId} in chat {ChatId} (score: {Score}/{Threshold})",
             entity.Id,
-            examFailure.UserId,
-            examFailure.ChatId,
+            examFailure.User.Id,
+            examFailure.Chat.Id,
             examFailure.Score,
             examFailure.PassingThreshold);
 

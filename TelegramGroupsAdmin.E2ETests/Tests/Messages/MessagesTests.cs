@@ -1,7 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;
@@ -214,12 +210,15 @@ public class MessagesTests : SharedAuthenticatedTestBase
         // Wait for Blazor re-render to apply .active class
         await _messagesPage.WaitForChatViewActiveAsync();
 
-        // Assert - chat view becomes active
-        Assert.That(await _messagesPage.IsChatViewActiveAsync(), Is.True,
-            "Chat view should be active after selecting a chat");
+        using (Assert.EnterMultipleScope())
+        {
+            // Assert - chat view becomes active
+            Assert.That(await _messagesPage.IsChatViewActiveAsync(), Is.True,
+                "Chat view should be active after selecting a chat");
 
-        Assert.That(await _messagesPage.IsMessagesContainerVisibleAsync(), Is.True,
-            "Messages container should be visible");
+            Assert.That(await _messagesPage.IsMessagesContainerVisibleAsync(), Is.True,
+                "Messages container should be visible");
+        }
     }
 
     [Test]

@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -31,7 +30,7 @@ public class AuditHandlerTests
     private const long ValidUserId = 123456789L;
     private const long NonExistentUserId = 999999999L;
     private const long ChatId = -1001234567890L;
-    private const long TestMessageId = 99999L;  // Used in tests expecting FK failures
+    private const int TestMessageId = 99999;  // Used in tests expecting FK failures
 
     [SetUp]
     public async Task SetUp()
@@ -104,7 +103,7 @@ public class AuditHandlerTests
     /// <summary>
     /// Helper method to create a test message directly in the database (satisfies FK constraint for user_actions.message_id).
     /// </summary>
-    private async Task<long> CreateTestMessageAsync(long chatId, long userId)
+    private async Task<int> CreateTestMessageAsync(long chatId, long userId)
     {
         var contextFactory = _serviceProvider!.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using var context = await contextFactory.CreateDbContextAsync();
@@ -145,7 +144,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatId, ValidUserId, executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(ValidUserId), executor);
         }
 
         // Assert - Verify record was inserted with FK intact
@@ -157,10 +156,13 @@ public class AuditHandlerTests
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null, "Audit record should be inserted");
-        Assert.That(record!.UserId, Is.EqualTo(ValidUserId));
-        Assert.That(record.MessageId, Is.EqualTo(messageId));
-        Assert.That(record.ActionType, Is.EqualTo(Data.Models.UserActionType.Delete));
-        Assert.That(record.SystemIdentifier, Is.EqualTo("IntegrationTest"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record!.UserId, Is.EqualTo(ValidUserId));
+            Assert.That(record.MessageId, Is.EqualTo(messageId));
+            Assert.That(record.ActionType, Is.EqualTo(Data.Models.UserActionType.Delete));
+            Assert.That(record.SystemIdentifier, Is.EqualTo("IntegrationTest"));
+        }
     }
 
     [Test]
@@ -174,7 +176,7 @@ public class AuditHandlerTests
         {
             using var scope = _serviceProvider!.CreateScope();
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(TestMessageId, ChatId, NonExistentUserId, executor);
+            await auditHandler.LogDeleteAsync(TestMessageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(NonExistentUserId), executor);
         });
 
         // Verify it's specifically an FK constraint violation
@@ -196,7 +198,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatId, 0L, executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(0L), executor);
         }
 
         // Assert - Verify record was inserted
@@ -227,7 +229,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogBanAsync(ValidUserId, executor, "Test ban reason");
+            await auditHandler.LogBanAsync(UserIdentity.FromId(ValidUserId), executor, "Test ban reason");
         }
 
         // Assert
@@ -253,7 +255,7 @@ public class AuditHandlerTests
         {
             using var scope = _serviceProvider!.CreateScope();
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogBanAsync(NonExistentUserId, executor, "Test ban");
+            await auditHandler.LogBanAsync(UserIdentity.FromId(NonExistentUserId), executor, "Test ban");
         });
 
         Assert.That(ex!.InnerException?.Message, Does.Contain("foreign key").Or.Contain("violates").IgnoreCase);
@@ -275,7 +277,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogWarnAsync(ValidUserId, executor, "Test warning");
+            await auditHandler.LogWarnAsync(UserIdentity.FromId(ValidUserId), executor, "Test warning");
         }
 
         // Assert
@@ -301,7 +303,7 @@ public class AuditHandlerTests
         {
             using var scope = _serviceProvider!.CreateScope();
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogWarnAsync(NonExistentUserId, executor, "Test warning");
+            await auditHandler.LogWarnAsync(UserIdentity.FromId(NonExistentUserId), executor, "Test warning");
         });
     }
 
@@ -322,7 +324,7 @@ public class AuditHandlerTests
         using (var scope = _serviceProvider!.CreateScope())
         {
             var auditHandler = scope.ServiceProvider.GetRequiredService<IAuditHandler>();
-            await auditHandler.LogDeleteAsync(messageId, ChatId, ValidUserId, executor);
+            await auditHandler.LogDeleteAsync(messageId, ChatIdentity.FromId(ChatId), UserIdentity.FromId(ValidUserId), executor);
         }
 
         // Assert - Verify exclusive arc: only system_identifier is set
@@ -334,9 +336,12 @@ public class AuditHandlerTests
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null);
-        Assert.That(record!.SystemIdentifier, Is.EqualTo("AutoModerator"));
-        Assert.That(record.WebUserId, Is.Null, "WebUserId should be null for system actor");
-        Assert.That(record.TelegramUserId, Is.Null, "TelegramUserId should be null for system actor");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(record!.SystemIdentifier, Is.EqualTo("AutoModerator"));
+            Assert.That(record.WebUserId, Is.Null, "WebUserId should be null for system actor");
+            Assert.That(record.TelegramUserId, Is.Null, "TelegramUserId should be null for system actor");
+        }
     }
 
     #endregion

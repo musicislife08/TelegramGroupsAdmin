@@ -1,5 +1,4 @@
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Welcome;
 

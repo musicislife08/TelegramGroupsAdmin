@@ -1,12 +1,11 @@
 using Telegram.Bot.Types;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
 /// Interface for message processing service.
-/// Extracted to enable testing of UpdateProcessor routing logic.
+/// Extracted to enable testing of UpdateRouter routing logic.
 /// </summary>
 public interface IMessageProcessingService
 {
@@ -33,10 +32,10 @@ public interface IMessageProcessingService
     /// <summary>
     /// Event fired when media is updated for a message.
     /// </summary>
-    event Action<long, MediaType>? OnMediaUpdated;
+    event Action<int, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Raises the OnMediaUpdated event (called by MediaRefetchWorkerService).
     /// </summary>
-    void RaiseMediaUpdated(long messageId, MediaType mediaType);
+    void RaiseMediaUpdated(int messageId, MediaType mediaType);
 }

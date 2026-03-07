@@ -1,56 +1,57 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using NUnit.Framework;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Actions;
 
 /// <summary>
-/// Unit tests for RestrictHandler.
+/// Unit tests for BotRestrictHandler.
 /// Tests both single-chat and global restriction modes.
+/// Uses ITelegramApiClient for mockable API calls and Parallel.ForEachAsync for cross-chat operations.
 /// </summary>
 [TestFixture]
 public class RestrictHandlerTests
 {
+    private IBotChatService _mockBotChatService = null!;
     private ITelegramBotClientFactory _mockBotClientFactory = null!;
-    private ICrossChatExecutor _mockCrossChatExecutor = null!;
-    private ITelegramUserRepository _mockUserRepository = null!;
-    private IManagedChatsRepository _mockChatsRepository = null!;
-    private ITelegramOperations _mockOperations = null!;
-    private ILogger<RestrictHandler> _mockLogger = null!;
-    private RestrictHandler _handler = null!;
+    private ITelegramApiClient _mockApiClient = null!;
+    private ILogger<BotRestrictHandler> _mockLogger = null!;
+    private BotRestrictHandler _handler = null!;
+
+    // Test chat identities for cross-chat operations
+    private static readonly IReadOnlyList<ChatIdentity> TestChatIds = new List<ChatIdentity>
+    {
+        new(-100001, "Chat 1"),
+        new(-100002, "Chat 2"),
+        new(-100003, "Chat 3"),
+        new(-100004, "Chat 4"),
+        new(-100005, "Chat 5")
+    }.AsReadOnly();
 
     [SetUp]
     public void SetUp()
     {
+        _mockBotChatService = Substitute.For<IBotChatService>();
         _mockBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
-        _mockCrossChatExecutor = Substitute.For<ICrossChatExecutor>();
-        _mockUserRepository = Substitute.For<ITelegramUserRepository>();
-        _mockChatsRepository = Substitute.For<IManagedChatsRepository>();
-        _mockOperations = Substitute.For<ITelegramOperations>();
-        _mockLogger = Substitute.For<ILogger<RestrictHandler>>();
+        _mockApiClient = Substitute.For<ITelegramApiClient>();
+        _mockBotClientFactory.GetApiClientAsync().Returns(_mockApiClient);
+        _mockLogger = Substitute.For<ILogger<BotRestrictHandler>>();
 
-        // Default setup: bot client factory returns mock operations
-        _mockBotClientFactory.GetOperationsAsync().Returns(_mockOperations);
-
-        _handler = new RestrictHandler(
+        _handler = new BotRestrictHandler(
+            _mockBotChatService,
             _mockBotClientFactory,
-            _mockCrossChatExecutor,
-            _mockUserRepository,
-            _mockChatsRepository,
             _mockLogger);
     }
 
     [TearDown]
     public void TearDown()
     {
-        _mockBotClientFactory.Dispose();
+        (_mockBotClientFactory as IDisposable)?.Dispose();
     }
 
     #region Single Chat Restriction Tests (chatId > 0)
@@ -65,29 +66,23 @@ public class RestrictHandlerTests
         var duration = TimeSpan.FromHours(1);
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, duration, "Test mute");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, duration, "Test mute");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(1));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
             Assert.That(result.ExpiresAt, Is.GreaterThan(DateTimeOffset.UtcNow));
-        });
+        }
 
         // Verify single-chat API call was made
-        await _mockOperations.Received(1).RestrictChatMemberAsync(
+        await _mockApiClient.Received(1).RestrictChatMemberAsync(
             chatId,
             userId,
             Arg.Is<ChatPermissions>(p => p.CanSendMessages == false),
             Arg.Any<DateTime?>(),
-            Arg.Any<CancellationToken>());
-
-        // Verify cross-chat executor was NOT called
-        await _mockCrossChatExecutor.DidNotReceive().ExecuteAcrossChatsAsync(
-            Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -103,15 +98,15 @@ public class RestrictHandlerTests
         var expectedExpiryUpper = DateTimeOffset.UtcNow.AddMinutes(31);
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, duration, "Timeout");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, duration, "Timeout");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ExpiresAt, Is.GreaterThan(expectedExpiryLower));
             Assert.That(result.ExpiresAt, Is.LessThan(expectedExpiryUpper));
-        });
+        }
     }
 
     [Test]
@@ -122,7 +117,7 @@ public class RestrictHandlerTests
         const long chatId = 67890L;
         var executor = Actor.FromSystem("test");
 
-        _mockOperations.RestrictChatMemberAsync(
+        _mockApiClient.RestrictChatMemberAsync(
                 Arg.Any<long>(),
                 Arg.Any<long>(),
                 Arg.Any<ChatPermissions>(),
@@ -131,15 +126,15 @@ public class RestrictHandlerTests
             .ThrowsAsync(new Exception("User not found in chat"));
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("User not found in chat"));
             Assert.That(result.ChatsAffected, Is.EqualTo(0));
-        });
+        }
     }
 
     [Test]
@@ -151,7 +146,7 @@ public class RestrictHandlerTests
         var executor = Actor.FromSystem("test");
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromMinutes(15), reason: null);
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, TimeSpan.FromMinutes(15), reason: null);
 
         // Assert
         Assert.That(result.Success, Is.True);
@@ -162,39 +157,34 @@ public class RestrictHandlerTests
     #region Global Restriction Tests (chatId = 0)
 
     [Test]
-    public async Task RestrictAsync_Global_UsesCrossChatExecutor()
+    public async Task RestrictAsync_Global_CallsApiForEachHealthyChat()
     {
         // Arrange
         const long userId = 12345L;
-        const long chatId = 0; // Global sentinel
         var executor = Actor.FromSystem("test");
         var duration = TimeSpan.FromHours(2);
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Restrict",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 5, FailCount: 0, SkippedCount: 1));
+        // Setup 5 healthy chats
+        _mockBotChatService.GetHealthyChatIdentities().Returns(TestChatIds);
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, duration, "Global mute");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, duration, "Global mute");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True);
             Assert.That(result.ChatsAffected, Is.EqualTo(5));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
-        });
+        }
 
-        // Verify cross-chat executor was called
-        await _mockCrossChatExecutor.Received(1).ExecuteAcrossChatsAsync(
-            Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-            "Restrict",
+        // Verify API was called once per chat
+        await _mockApiClient.Received(5).RestrictChatMemberAsync(
+            Arg.Any<long>(),
+            userId,
+            Arg.Any<ChatPermissions>(),
+            Arg.Any<DateTime?>(),
             Arg.Any<CancellationToken>());
-
-        // Verify direct bot client was NOT called (except through cross-chat executor)
-        await _mockBotClientFactory.DidNotReceive().GetOperationsAsync();
     }
 
     [Test]
@@ -202,76 +192,77 @@ public class RestrictHandlerTests
     {
         // Arrange
         const long userId = 12345L;
-        const long chatId = 0;
         var executor = Actor.FromTelegramUser(888, "Admin");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Restrict",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 3, FailCount: 2, SkippedCount: 1));
+        // Setup 5 healthy chats, but make 2 fail
+        _mockBotChatService.GetHealthyChatIdentities().Returns(TestChatIds);
+
+        _mockApiClient.RestrictChatMemberAsync(TestChatIds[1].Id, userId, Arg.Any<ChatPermissions>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Chat error 1"));
+        _mockApiClient.RestrictChatMemberAsync(TestChatIds[3].Id, userId, Arg.Any<ChatPermissions>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("Chat error 2"));
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Spam");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Spam");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True, "Partial success is still success");
             Assert.That(result.ChatsAffected, Is.EqualTo(3));
             Assert.That(result.ChatsFailed, Is.EqualTo(2));
-        });
+        }
     }
 
     [Test]
-    public async Task RestrictAsync_Global_ExceptionThrown_ReturnsFailure()
+    public async Task RestrictAsync_Global_ExceptionBeforeForEach_ReturnsFailure()
     {
         // Arrange
         const long userId = 12345L;
-        const long chatId = 0;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Restrict",
-                Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("No managed chats available"));
+        // Make getting healthy chats fail
+        _mockBotChatService.GetHealthyChatIdentities()
+            .Returns(_ => throw new InvalidOperationException("No managed chats available"));
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("No managed chats available"));
-        });
+        }
     }
 
     [Test]
-    public async Task RestrictAsync_Global_AllChatsSkipped_ReturnsZeroCounts()
+    public async Task RestrictAsync_Global_NoHealthyChats_ReturnsZeroCounts()
     {
         // Arrange - No healthy chats available
         const long userId = 12345L;
-        const long chatId = 0;
         var executor = Actor.FromSystem("test");
 
-        _mockCrossChatExecutor.ExecuteAcrossChatsAsync(
-                Arg.Any<Func<ITelegramOperations, long, CancellationToken, Task>>(),
-                "Restrict",
-                Arg.Any<CancellationToken>())
-            .Returns(new CrossChatResult(SuccessCount: 0, FailCount: 0, SkippedCount: 5));
+        _mockBotChatService.GetHealthyChatIdentities().Returns(new List<ChatIdentity>().AsReadOnly());
 
         // Act
-        var result = await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        var result = await _handler.RestrictAsync(UserIdentity.FromId(userId), chat: null, executor, TimeSpan.FromHours(1), "Test");
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Success, Is.True, "No failures = still success, even with zero affected");
             Assert.That(result.ChatsAffected, Is.EqualTo(0));
             Assert.That(result.ChatsFailed, Is.EqualTo(0));
-        });
+        }
+
+        // Verify API was never called (no chats to process)
+        await _mockApiClient.DidNotReceive().RestrictChatMemberAsync(
+            Arg.Any<long>(),
+            Arg.Any<long>(),
+            Arg.Any<ChatPermissions>(),
+            Arg.Any<DateTime?>(),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -287,7 +278,7 @@ public class RestrictHandlerTests
         var executor = Actor.FromSystem("test");
 
         ChatPermissions? capturedPermissions = null;
-        _mockOperations.RestrictChatMemberAsync(
+        _mockApiClient.RestrictChatMemberAsync(
                 Arg.Any<long>(),
                 Arg.Any<long>(),
                 Arg.Do<ChatPermissions>(p => capturedPermissions = p),
@@ -296,11 +287,11 @@ public class RestrictHandlerTests
             .Returns(Task.CompletedTask);
 
         // Act
-        await _handler.RestrictAsync(userId, chatId, executor, TimeSpan.FromHours(1), "Test");
+        await _handler.RestrictAsync(UserIdentity.FromId(userId), ChatIdentity.FromId(chatId), executor, TimeSpan.FromHours(1), "Test");
 
         // Assert - All permissions should be false (full mute)
         Assert.That(capturedPermissions, Is.Not.Null);
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(capturedPermissions!.CanSendMessages, Is.False);
             Assert.That(capturedPermissions.CanSendAudios, Is.False);
@@ -316,7 +307,7 @@ public class RestrictHandlerTests
             Assert.That(capturedPermissions.CanInviteUsers, Is.False);
             Assert.That(capturedPermissions.CanPinMessages, Is.False);
             Assert.That(capturedPermissions.CanManageTopics, Is.False);
-        });
+        }
     }
 
     #endregion

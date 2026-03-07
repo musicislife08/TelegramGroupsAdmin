@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Threading;
+using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Media;
@@ -9,14 +9,14 @@ namespace TelegramGroupsAdmin.Telegram.Services.Media;
 /// Thread-safe subscription management with broadcast notifications
 /// Multiple components can subscribe to the same media
 /// </summary>
-public class MediaNotificationService : IMediaNotificationService
+public class MediaNotificationService(ILogger<MediaNotificationService> logger) : IMediaNotificationService
 {
     private readonly ConcurrentDictionary<string, List<Action>> _subscriptions = new();
     private readonly Lock _lock = new();
 
-    public void Subscribe(long messageId, MediaType mediaType, Action callback)
+    public void Subscribe(int messageId, long chatId, MediaType mediaType, Action callback)
     {
-        var key = $"{messageId}:{mediaType}";
+        var key = $"{messageId}:{chatId}:{mediaType}";
         using (_lock.EnterScope())
         {
             if (!_subscriptions.TryGetValue(key, out var callbacks))
@@ -42,9 +42,9 @@ public class MediaNotificationService : IMediaNotificationService
         }
     }
 
-    public void Unsubscribe(long messageId, MediaType mediaType, Action callback)
+    public void Unsubscribe(int messageId, long chatId, MediaType mediaType, Action callback)
     {
-        var key = $"{messageId}:{mediaType}";
+        var key = $"{messageId}:{chatId}:{mediaType}";
         using (_lock.EnterScope())
         {
             if (_subscriptions.TryGetValue(key, out var callbacks))
@@ -74,9 +74,9 @@ public class MediaNotificationService : IMediaNotificationService
         }
     }
 
-    public void NotifyMediaReady(long messageId, MediaType mediaType)
+    public void NotifyMediaReady(int messageId, long chatId, MediaType mediaType)
     {
-        var key = $"{messageId}:{mediaType}";
+        var key = $"{messageId}:{chatId}:{mediaType}";
         List<Action>? callbacks;
 
         using (_lock.EnterScope())
@@ -96,9 +96,9 @@ public class MediaNotificationService : IMediaNotificationService
             {
                 callback();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore callback errors to prevent one component from breaking others
+                logger.LogWarning(ex, "Media notification callback failed for key {Key}", key);
             }
         }
     }
@@ -125,9 +125,9 @@ public class MediaNotificationService : IMediaNotificationService
             {
                 callback();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore callback errors
+                logger.LogWarning(ex, "Media notification callback failed for key {Key}", key);
             }
         }
     }

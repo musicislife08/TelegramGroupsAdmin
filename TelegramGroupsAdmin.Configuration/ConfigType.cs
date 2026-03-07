@@ -63,5 +63,13 @@ public enum ConfigType
     /// Controls whether celebratory GIFs are posted when users are banned
     /// Supports per-chat overrides
     /// </summary>
-    BanCelebration
+    BanCelebration,
+
+    /// <summary>
+    /// Telegram User API configuration (user_api_config column)
+    /// Contains: UserApiConfig model
+    /// API credentials for WTelegram/MTProto (API ID in JSONB, API Hash in encrypted column)
+    /// GLOBAL ONLY - not available for per-chat configuration
+    /// </summary>
+    UserApi
 }

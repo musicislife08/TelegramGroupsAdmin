@@ -2,7 +2,6 @@ using Serilog.Core;
 using Serilog.Events;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -116,6 +115,9 @@ public class SerilogDynamicConfiguration
         GetSwitch("Microsoft.EntityFrameworkCore.Database.Command").MinimumLevel = LogEventLevel.Warning; // Hide SQL queries
         GetSwitch("Npgsql").MinimumLevel = LogEventLevel.Warning;
         GetSwitch("System").MinimumLevel = LogEventLevel.Warning;
+
+        // WTelegram User API client: Warning (noisy DC reconnection logs at Info)
+        GetSwitch("WTelegram").MinimumLevel = LogEventLevel.Warning;
 
         // Our application code: Information
         GetSwitch("TelegramGroupsAdmin").MinimumLevel = LogEventLevel.Information;

@@ -98,6 +98,7 @@ WORKDIR /src
 # Excludes TelegramGroupsAdmin.Tests - not needed for production runtime
 COPY ["TelegramGroupsAdmin.sln", "./"]
 COPY ["Directory.Build.props", "./"]
+COPY ["Directory.Packages.props", "./"]
 COPY ["global.json", "./"]
 COPY ["TelegramGroupsAdmin/TelegramGroupsAdmin.csproj", "TelegramGroupsAdmin/"]
 COPY ["TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.csproj", "TelegramGroupsAdmin.Configuration/"]

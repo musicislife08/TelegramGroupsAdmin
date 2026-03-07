@@ -2,7 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -56,7 +59,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
         // Get the exam config to know how many questions
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
             Configuration.ConfigType.Welcome, TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
@@ -64,7 +67,7 @@ public class ExamFlowE2ETests : E2ETestBase
         // Start exam in DM (simulates user clicking deep link)
         var botUser = CreateTelegramUser(TestUserId, "testexamuser", "Test", "ExamUser");
         var startResult = await examFlowService.StartExamInDmAsync(
-            TestGroupChatId, botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
+            new ChatIdentity(TestGroupChatId, "Test Tech Group"), botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
 
         Assert.That(startResult.Success, Is.True, "Exam should start successfully");
 
@@ -88,9 +91,12 @@ public class ExamFlowE2ETests : E2ETestBase
         // Assert: Welcome response updated in database
         var updatedWelcome = await welcomeRepo.GetByUserAndChatAsync(TestUserId, TestGroupChatId);
         Assert.That(updatedWelcome, Is.Not.Null, "Welcome response should still exist");
-        Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
-        Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted),
-            "Welcome response should be marked as Accepted");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
+            Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted),
+                "Welcome response should be marked as Accepted");
+        }
     }
 
     [Test]
@@ -129,7 +135,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var messageProcessingService = scope.ServiceProvider.GetRequiredService<IMessageProcessingService>();
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
             Configuration.ConfigType.Welcome, TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
@@ -137,7 +143,7 @@ public class ExamFlowE2ETests : E2ETestBase
         // Start exam in DM
         var botUser = CreateTelegramUser(TestUserId, "testexamuser", "Test", "ExamUser");
         await examFlowService.StartExamInDmAsync(
-            TestGroupChatId, botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
+            new ChatIdentity(TestGroupChatId, "Test Tech Group"), botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
 
         var session = await GetExamSessionAsync(TestGroupChatId, TestUserId);
 
@@ -161,8 +167,11 @@ public class ExamFlowE2ETests : E2ETestBase
         // Assert: Welcome response updated
         var updatedWelcome = await welcomeRepo.GetByUserAndChatAsync(TestUserId, TestGroupChatId);
         Assert.That(updatedWelcome, Is.Not.Null);
-        Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
-        Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout job ID should be cleared");
+            Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Accepted));
+        }
     }
 
     [Test]
@@ -200,7 +209,7 @@ public class ExamFlowE2ETests : E2ETestBase
         var messageProcessingService = scope.ServiceProvider.GetRequiredService<IMessageProcessingService>();
         var welcomeRepo = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
 
-        var configService = scope.ServiceProvider.GetRequiredService<Configuration.Services.IConfigService>();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
         var welcomeConfig = await configService.GetEffectiveAsync<WelcomeConfig>(
             Configuration.ConfigType.Welcome, TestGroupChatId);
         var examConfig = welcomeConfig!.ExamConfig!;
@@ -208,7 +217,7 @@ public class ExamFlowE2ETests : E2ETestBase
         // Start exam in DM
         var botUser = CreateTelegramUser(TestUserId, "testexamuser", "Test", "ExamUser");
         await examFlowService.StartExamInDmAsync(
-            TestGroupChatId, botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
+            new ChatIdentity(TestGroupChatId, "Test Tech Group"), botUser, TestDmChatId, welcomeConfig, CancellationToken.None);
 
         var session = await GetExamSessionAsync(TestGroupChatId, TestUserId);
 
@@ -231,9 +240,12 @@ public class ExamFlowE2ETests : E2ETestBase
         // Assert: Welcome response stays Pending (admin will decide)
         var updatedWelcome = await welcomeRepo.GetByUserAndChatAsync(TestUserId, TestGroupChatId);
         Assert.That(updatedWelcome, Is.Not.Null);
-        Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout should be cleared");
-        Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Pending),
-            "Should stay Pending while in review queue");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(updatedWelcome!.TimeoutJobId, Is.Null, "Timeout should be cleared");
+            Assert.That(updatedWelcome.Response, Is.EqualTo(WelcomeResponseType.Pending),
+                "Should stay Pending while in review queue");
+        }
     }
 
     #region Helper Methods

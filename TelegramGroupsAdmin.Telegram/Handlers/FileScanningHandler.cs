@@ -2,9 +2,10 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
-using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -118,8 +119,8 @@ public class FileScanningHandler
         // Temp file deleted after scan (no persistent storage)
         var scanPayload = new FileScanJobPayload(
             MessageId: message.MessageId,
-            ChatId: chatId,
-            UserId: userId,
+            Chat: ChatIdentity.From(message.Chat),
+            User: message.From != null ? UserIdentity.From(message.From) : UserIdentity.FromId(userId),
             FileId: detection.FileId,
             FileSize: detection.FileSize,
             FileName: detection.FileName,

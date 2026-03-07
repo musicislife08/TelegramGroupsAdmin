@@ -1,8 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Constants;
 
@@ -16,7 +19,7 @@ public class TempBanCommand : IBotCommand
 {
     private readonly ILogger<TempBanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IModerationOrchestrator _moderationService;
+    private readonly IBotModerationService _moderationService;
 
     public string Name => "tempban";
     public string Description => "Temporarily ban user with auto-unrestriction";
@@ -29,7 +32,7 @@ public class TempBanCommand : IBotCommand
     public TempBanCommand(
         ILogger<TempBanCommand> logger,
         IServiceProvider serviceProvider,
-        IModerationOrchestrator moderationService)
+        IBotModerationService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -95,12 +98,15 @@ public class TempBanCommand : IBotCommand
 
             // Execute temp ban via ModerationActionService
             var result = await _moderationService.TempBanUserAsync(
-                userId: targetUser.Id,
-                messageId: message.ReplyToMessage.MessageId,
-                executor: executor,
-                reason: reason,
-                duration: duration,
-                cancellationToken: cancellationToken);
+                new TempBanIntent
+                {
+                    User = UserIdentity.From(targetUser),
+                    Executor = executor,
+                    Reason = reason,
+                    MessageId = message.ReplyToMessage.MessageId,
+                    Duration = duration
+                },
+                cancellationToken);
 
             if (!result.Success)
             {
@@ -115,8 +121,8 @@ public class TempBanCommand : IBotCommand
 
             _logger.LogInformation(
                 "{TargetUser} temp banned by {Executor} from {ChatsAffected} chats for {Duration}. Reason: {Reason}",
-                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
-                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                targetUser.ToLogInfo(),
+                message.From.ToLogInfo(),
                 result.ChatsAffected, duration, reason);
 
             // Return CommandResult with dynamic deletion time matching tempban duration
@@ -125,7 +131,7 @@ public class TempBanCommand : IBotCommand
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to temp ban {User}",
-                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
+                targetUser.ToLogDebug());
             return new CommandResult($"❌ Failed to temp ban user: {ex.Message}", DeleteCommandMessage);
         }
     }

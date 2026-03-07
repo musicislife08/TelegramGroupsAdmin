@@ -293,8 +293,11 @@ public class TelegramUserMessageTests : MudBlazorTestContext
         var children = bubble.Children.ToList();
 
         Assert.That(children.Count, Is.EqualTo(2));
-        Assert.That(children[0].ClassList, Does.Contain("telegram-message-text"));
-        Assert.That(children[1].ClassList, Does.Contain("telegram-message-time"));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(children[0].ClassList, Does.Contain("telegram-message-text"));
+            Assert.That(children[1].ClassList, Does.Contain("telegram-message-time"));
+        }
     }
 
     #endregion
