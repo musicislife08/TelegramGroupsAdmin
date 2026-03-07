@@ -248,7 +248,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var requiresAIConfirmation = totalScore > 0;
 
         var primaryReason = totalScore >= config.ReviewQueueThreshold
-            ? $"Additive score: {totalScore:F1} points (threshold: {config.AutoBanThreshold:F1})"
+            ? $"Additive score: {totalScore:F1} points (review threshold: {config.ReviewQueueThreshold:F1})"
             : "No spam detected";
 
         var result = new ContentDetectionResult

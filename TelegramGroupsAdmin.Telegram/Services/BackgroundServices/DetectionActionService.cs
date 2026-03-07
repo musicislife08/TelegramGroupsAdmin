@@ -107,7 +107,7 @@ public class DetectionActionService(
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
             var openAIConfident = openAIResult != null && openAIResult.Score >= config.AutoBanThreshold;
 
-            if (spamResult.TotalScore >= config.AutoBanThreshold && openAIConfident && !openAIResult!.Abstained && openAIResult.Score > 0)
+            if (spamResult.TotalScore >= config.AutoBanThreshold && openAIConfident && !openAIResult!.Abstained)
             {
                 // High confidence + OpenAI confirmed = auto-ban
                 logger.LogInformation(
