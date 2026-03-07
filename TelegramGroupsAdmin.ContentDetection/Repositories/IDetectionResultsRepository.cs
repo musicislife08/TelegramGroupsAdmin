@@ -118,7 +118,7 @@ public interface IDetectionResultsRepository
         string messageText,
         bool isSpam,
         string source,
-        int? confidence,
+        double? score,
         string? addedBy,
         string? translatedText = null,
         string? detectedLanguage = null,

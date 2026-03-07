@@ -148,7 +148,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             foreach (var checkResult in fullResult.CheckResults)
             {
                 if (criticalCheckNames.Contains(checkResult.CheckName.ToString()) &&
-                    checkResult.Result == CheckResultType.Spam)
+                    !checkResult.Abstained && checkResult.Score > 0)
                 {
                     criticalViolations.Add($"{checkResult.CheckName}: {checkResult.Details}");
 

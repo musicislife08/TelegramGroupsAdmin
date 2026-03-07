@@ -1,7 +1,5 @@
 @page "/"
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
@@ -14,7 +12,6 @@
 @inject IReportsRepository ReportsRepository
 @inject IUserActionsRepository UserActionsRepository
 @inject ITelegramUserRepository TelegramUserRepository
-@inject IThresholdRecommendationsRepository ThresholdRecommendationsRepository
 @inject NavigationManager Navigation
 @inject ILogger<Home> Logger
 @attribute [Authorize]
@@ -27,17 +24,6 @@
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-    }
-
-    @* Alerts Section *@
-    @if (_pendingRecommendationsCount > 0)
-    {
-        <MudAlert Severity="Severity.Info" Class="mb-4" Variant="Variant.Outlined">
-            <MudText>
-                <strong>@_pendingRecommendationsCount threshold recommendation(s)</strong> pending review.
-                <MudLink Href="/settings/threshold-recommendations" Underline="Underline.Always">Review now</MudLink>
-            </MudText>
-        </MudAlert>
     }
 
     @* Stats Summary *@
@@ -229,7 +215,6 @@
     private DailySpamSummary? _dailySpamSummary;
     private List<UserActionRecord>? _recentActions;
     private int _pendingReportsCount;
-    private int _pendingRecommendationsCount;
     private int _activeBansCount;
     private int _trustedUsersCount;
     private bool _loading = true;
@@ -260,7 +245,6 @@
             var dailySpamTask = AnalyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
             var pendingReportsTask = ReportsRepository.GetPendingCountAsync();
             var recentActionsTask = UserActionsRepository.GetRecentAsync(MaxRecentActivityItems);
-            var recommendationsTask = ThresholdRecommendationsRepository.GetPendingCountAsync();
             var trustedUsersTask = TelegramUserRepository.GetTrustedUsersAsync();
             var bannedUsersTask = TelegramUserRepository.GetBannedUsersAsync();
 
@@ -270,7 +254,6 @@
                 dailySpamTask,
                 pendingReportsTask,
                 recentActionsTask,
-                recommendationsTask,
                 trustedUsersTask,
                 bannedUsersTask);
 
@@ -279,7 +262,6 @@
             _dailySpamSummary = await dailySpamTask;
             _pendingReportsCount = await pendingReportsTask;
             _recentActions = await recentActionsTask;
-            _pendingRecommendationsCount = await recommendationsTask;
 
             // Get trusted/banned users from telegram_users table (source of truth)
             var trustedUsers = await trustedUsersTask;

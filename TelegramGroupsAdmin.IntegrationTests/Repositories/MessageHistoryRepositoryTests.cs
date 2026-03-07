@@ -1338,7 +1338,7 @@ public class MessageHistoryRepositoryTests
                 {
                     Assert.That(detection.MessageId, Is.GreaterThan(0));
                     Assert.That(detection.DetectionMethod, Is.Not.Null.Or.Empty);
-                    Assert.That(detection.Confidence, Is.GreaterThanOrEqualTo(0));
+                    Assert.That(detection.Score, Is.GreaterThanOrEqualTo(0));
                 }
             }
         }
@@ -1391,11 +1391,7 @@ public class MessageHistoryRepositoryTests
         {
             foreach (var (messageId, contentCheck) in contentChecks)
             {
-                using (Assert.EnterMultipleScope())
-                {
-                    Assert.That(messageIds, Does.Contain(messageId), "Returned message ID should be in request list");
-                    Assert.That(contentCheck.CheckType, Is.Not.Null.Or.Empty);
-                }
+                Assert.That(messageIds, Does.Contain(messageId), "Returned message ID should be in request list");
             }
         }
     }

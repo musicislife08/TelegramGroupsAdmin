@@ -45,7 +45,7 @@
                                             @(result.IsSpam ? "SPAM" : "HAM")
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Info">
-                                            Net: @result.NetConfidence
+                                            Net: @result.NetScore.ToString("F1")
                                         </MudChip>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Default">
                                             @result.DetectionSource
@@ -65,7 +65,7 @@
 
                                     <MudStack Row="true" Spacing="1">
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                            Confidence: @Math.Abs(result.NetConfidence)%
+                                            Score: @Math.Abs(result.NetScore).ToString("F1")
                                         </MudChip>
                                         @if (result.UsedForTraining)
                                         {
@@ -96,7 +96,7 @@
                                                                 <tr>
                                                                     <th>Check</th>
                                                                     <th>Result</th>
-                                                                    <th>Confidence</th>
+                                                                    <th>Score</th>
                                                                     <th>Processing</th>
                                                                     <th>Details</th>
                                                                 </tr>
@@ -108,13 +108,13 @@
                                                                         <td><strong>@check.CheckName.ToString()</strong></td>
                                                                         <td>
                                                                             <MudChip T="string" Size="Size.Small"
-                                                                                     Color="@(check.Result == CheckResultType.Spam ? Color.Error : Color.Success)">
-                                                                                @check.Result.ToString()
+                                                                                     Color="@(check.IsSpam ? Color.Error : (check.Abstained ? Color.Default : Color.Success))">
+                                                                                @(check.IsSpam ? "SPAM" : (check.Abstained ? "ABSTAINED" : "CLEAN"))
                                                                             </MudChip>
                                                                         </td>
-                                                                        <td>@check.Confidence%</td>
+                                                                        <td>@check.Score.ToString("F1")</td>
                                                                         <td>@FormatProcessingTime(check.ProcessingTimeMs)</td>
-                                                                        <td>@check.Reason</td>
+                                                                        <td>@check.Details</td>
                                                                     </tr>
                                                                 }
                                                             </tbody>

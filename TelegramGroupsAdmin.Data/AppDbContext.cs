@@ -54,7 +54,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TrainingLabelDto> TrainingLabels => Set<TrainingLabelDto>();
     public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
-    public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
     public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
     public DbSet<VideoTrainingSampleDto> VideoTrainingSamples => Set<VideoTrainingSampleDto>();
 
@@ -133,10 +132,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(d => new { d.MessageId, d.ChatId })
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Configure is_spam as computed column (PostgreSQL: net_confidence > 0)
+        // Configure is_spam as computed column (PostgreSQL: net_score > 0)
         modelBuilder.Entity<DetectionResultRecordDto>()
             .Property(d => d.IsSpam)
-            .HasComputedColumnSql("(net_confidence > 0)", stored: true);
+            .HasComputedColumnSql("(net_score > 0)", stored: true);
 
         // Messages → MessageEdits (one-to-many)
         modelBuilder.Entity<MessageEditRecordDto>()
@@ -690,14 +689,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Index for analytics (notifications by type)
         modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
-
-        // ThresholdRecommendations indexes
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => tr.Status);  // Filter by status (pending, applied, rejected)
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => tr.CreatedAt);  // Sort by date
-        modelBuilder.Entity<ThresholdRecommendationDto>()
-            .HasIndex(tr => new { tr.AlgorithmName, tr.Status });  // Filter by algorithm + status
 
         // ImageTrainingSamples indexes
         modelBuilder.Entity<ImageTrainingSampleDto>()

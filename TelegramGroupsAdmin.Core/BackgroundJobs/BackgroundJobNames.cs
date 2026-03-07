@@ -48,6 +48,12 @@ public static class BackgroundJobNames
     /// </summary>
     public const string TextClassifierRetraining = "TextClassifierRetrainingJob";
 
+    /// <summary>
+    /// Bayes classifier retraining (retrains Naive Bayes spam model with latest data)
+    /// Quartz Job: BayesClassifierRetrainingJob
+    /// </summary>
+    public const string BayesClassifierRetraining = "BayesClassifierRetrainingJob";
+
     // ============================================
     // Ad-Hoc Jobs (one-time delayed execution)
     // ============================================

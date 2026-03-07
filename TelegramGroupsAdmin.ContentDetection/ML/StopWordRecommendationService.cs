@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// <summary>
 /// ML-powered service for generating stop word recommendations
 /// Analyzes spam/ham corpus to suggest additions, removals, and performance cleanup
-/// Follows ThresholdRecommendationService pattern
+/// Analyzes detection results to produce actionable stop word changes
 /// </summary>
 public class StopWordRecommendationService : IStopWordRecommendationService
 {
@@ -337,7 +337,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
                     continue;
 
                 // Check if this stop word triggered (appears in the Reason field)
-                var triggered = stopWordsCheck.Reason?.Contains(wordLower, StringComparison.OrdinalIgnoreCase) ?? false;
+                var triggered = stopWordsCheck.Details?.Contains(wordLower, StringComparison.OrdinalIgnoreCase) ?? false;
 
                 if (!triggered)
                     continue;

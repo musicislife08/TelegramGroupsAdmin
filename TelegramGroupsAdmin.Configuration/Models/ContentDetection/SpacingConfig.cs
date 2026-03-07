@@ -32,16 +32,6 @@ public class SpacingConfig
     public double ShortWordRatioThreshold { get; set; } = 0.7;
 
     /// <summary>
-    /// Threshold for space ratio (0.0 - 1.0)
-    /// </summary>
-    public double SpaceRatioThreshold { get; set; } = 0.3;
-
-    /// <summary>
-    /// Confidence threshold for spam classification (0-100)
-    /// </summary>
-    public int ConfidenceThreshold { get; set; } = 70;
-
-    /// <summary>
     /// Always run this check for all users (bypasses trust/admin status)
     /// </summary>
     public bool AlwaysRun { get; set; }

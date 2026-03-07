@@ -232,7 +232,20 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
             migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
-            migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
+            // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
+            migrationBuilder.Sql("""
+                CREATE VIEW hourly_detection_stats AS
+                SELECT
+                    DATE(dr.detected_at) AS detection_date,
+                    EXTRACT(HOUR FROM dr.detected_at)::int AS detection_hour,
+                    COUNT(*) AS total_count,
+                    COUNT(*) FILTER (WHERE dr.is_spam) AS spam_count,
+                    COUNT(*) FILTER (WHERE NOT dr.is_spam) AS ham_count,
+                    COUNT(*) FILTER (WHERE dr.detection_source = 'manual') AS manual_count,
+                    AVG(dr.confidence) AS avg_confidence
+                FROM detection_results dr
+                GROUP BY DATE(dr.detected_at), EXTRACT(HOUR FROM dr.detected_at);
+                """);
         }
 
         /// <inheritdoc />
@@ -371,7 +384,20 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 """);
             migrationBuilder.Sql(EnrichedReportView.CreateViewSql);
             migrationBuilder.Sql(DetectionAccuracyView.CreateViewSql);
-            migrationBuilder.Sql(HourlyDetectionStatsView.CreateViewSql);
+            // Inline SQL snapshot — the C# constant was later updated for V2 scoring columns.
+            migrationBuilder.Sql("""
+                CREATE VIEW hourly_detection_stats AS
+                SELECT
+                    DATE(dr.detected_at) AS detection_date,
+                    EXTRACT(HOUR FROM dr.detected_at)::int AS detection_hour,
+                    COUNT(*) AS total_count,
+                    COUNT(*) FILTER (WHERE dr.is_spam) AS spam_count,
+                    COUNT(*) FILTER (WHERE NOT dr.is_spam) AS ham_count,
+                    COUNT(*) FILTER (WHERE dr.detection_source = 'manual') AS manual_count,
+                    AVG(dr.confidence) AS avg_confidence
+                FROM detection_results dr
+                GROUP BY DATE(dr.detected_at), EXTRACT(HOUR FROM dr.detected_at);
+                """);
         }
     }
 }

@@ -208,12 +208,12 @@ public class ContentDetectionOrchestrator
             DetectionMethod = spamResult.CheckResults.Count > 0
                 ? string.Join(", ", spamResult.CheckResults.Select(c => c.CheckName))
                 : "Unknown",
-            // IsSpam is computed from net_confidence (don't set it here)
-            Confidence = spamResult.MaxConfidence,
+            // IsSpam is computed from net_score (don't set it here)
+            Score = spamResult.TotalScore,
             Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
             AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
             UsedForTraining = isTrainingWorthy,
-            NetConfidence = spamResult.NetConfidence,
+            NetScore = spamResult.TotalScore,
             CheckResultsJson = CheckResultsSerializer.Serialize(spamResult.CheckResults),
             EditVersion = editVersion
         };
@@ -222,11 +222,11 @@ public class ContentDetectionOrchestrator
 
         var editInfo = editVersion > 0 ? $" (edit #{editVersion})" : "";
         _logger.LogDebug(
-            "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetConfidence}, training: {UsedForTraining})",
+            "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetScore}, training: {UsedForTraining})",
             message.MessageId,
             editInfo,
             spamResult.IsSpam ? "spam" : "ham",
-            spamResult.NetConfidence,
+            spamResult.TotalScore,
             detectionResult.UsedForTraining);
 
         return detectionResult;
@@ -234,7 +234,7 @@ public class ContentDetectionOrchestrator
 
     /// <summary>
     /// Determine if detection result should be used for training.
-    /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions.
+    /// High-quality samples only: Confident OpenAI results (score >= 4.25) or manual admin decisions.
     /// Low-confidence auto-detections are NOT training-worthy.
     /// </summary>
     private static bool DetermineIfTrainingWorthy(ContentDetectionResult result)
@@ -242,17 +242,17 @@ public class ContentDetectionOrchestrator
         // Manual admin decisions are always training-worthy (will be set when admin uses Mark as Spam/Ham)
         // For auto-detections, only confident results are training-worthy
 
-        // Check if OpenAI was involved and was confident (85%+ confidence)
+        // Check if OpenAI was involved and was confident (score >= 4.25)
         var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
         if (openAIResult != null)
         {
-            // OpenAI confident (85%+) = training-worthy
-            return openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
+            // OpenAI confident (score >= 4.25) = training-worthy
+            return openAIResult.Score >= SpamDetectionConstants.OpenAIConfidentThreshold;
         }
 
         // No OpenAI veto = borderline/uncertain detection
-        // Only use for training if net confidence is very high (>80)
+        // Only use for training if total score is very high (> 4.0)
         // This prevents low-quality auto-detections from polluting training data
-        return result.NetConfidence > SpamDetectionConstants.TrainingConfidenceThreshold;
+        return result.TotalScore > SpamDetectionConstants.TrainingConfidenceThreshold;
     }
 }

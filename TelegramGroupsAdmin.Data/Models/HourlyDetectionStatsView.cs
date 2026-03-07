@@ -29,7 +29,7 @@ public class HourlyDetectionStatsView
             COUNT(*) FILTER (WHERE dr.is_spam) AS spam_count,
             COUNT(*) FILTER (WHERE NOT dr.is_spam) AS ham_count,
             COUNT(*) FILTER (WHERE dr.detection_source = 'manual') AS manual_count,
-            AVG(dr.confidence) AS avg_confidence
+            AVG(dr.score) AS avg_score
         FROM detection_results dr
         GROUP BY DATE(dr.detected_at), EXTRACT(HOUR FROM dr.detected_at);
         """;
@@ -82,8 +82,8 @@ public class HourlyDetectionStatsView
     /// <summary>
     /// Average confidence score for this hour
     /// </summary>
-    [Column("avg_confidence")]
-    public double? AvgConfidence { get; set; }
+    [Column("avg_score")]
+    public double? AvgScore { get; set; }
 
     #endregion
 }

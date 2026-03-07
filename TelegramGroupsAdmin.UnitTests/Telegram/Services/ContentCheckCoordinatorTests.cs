@@ -217,10 +217,7 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = false,
-            MaxConfidence = 0,
-            AvgConfidence = 0,
-            SpamFlags = 0,
-            NetConfidence = 0,
+            TotalScore = 0,
             CheckResults = []
         };
         _mockSpamDetectionEngine.CheckMessageAsync(
@@ -270,18 +267,16 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = true,
-            MaxConfidence = 95,
-            AvgConfidence = 95,
-            SpamFlags = 1,
-            NetConfidence = 95,
+            TotalScore = 4.75,
             CheckResults =
             [
-                new ContentCheckResponse
+                new ContentCheckResponseV2
                 {
                     CheckName = CheckName.UrlBlocklist,
-                    Result = CheckResultType.Spam,
+                    Score = 4.75,
+                    Abstained = false,
                     Details = "Malicious URL detected: malicious-link.com",
-                    Confidence = 95
+                    ProcessingTimeMs = 0
                 }
             ]
         };
@@ -365,7 +360,7 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = false,
-            MaxConfidence = 0,
+            TotalScore = 0,
             CheckResults = []
         };
         _mockSpamDetectionEngine.CheckMessageAsync(Arg.Any<SpamLibRequest>(), Arg.Any<CancellationToken>())
@@ -409,18 +404,16 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = true,
-            MaxConfidence = 85,
-            AvgConfidence = 85,
-            SpamFlags = 1,
-            NetConfidence = 85,
+            TotalScore = 4.25,
             CheckResults =
             [
-                new ContentCheckResponse
+                new ContentCheckResponseV2
                 {
                     CheckName = CheckName.Bayes,
-                    Result = CheckResultType.Spam,
+                    Score = 4.25,
+                    Abstained = false,
                     Details = "Spam pattern detected",
-                    Confidence = 85
+                    ProcessingTimeMs = 0
                 }
             ]
         };
@@ -466,7 +459,7 @@ public class ContentCheckCoordinatorTests
         _mockConfigService.GetCriticalCheckNamesAsync(request.Chat.Id, Arg.Any<CancellationToken>())
             .Returns(new HashSet<string>());
 
-        var detectionResult = new ContentDetectionResult { IsSpam = false };
+        var detectionResult = new ContentDetectionResult { IsSpam = false, TotalScore = 0 };
         _mockSpamDetectionEngine.CheckMessageAsync(Arg.Any<SpamLibRequest>(), Arg.Any<CancellationToken>())
             .Returns(detectionResult);
 
@@ -511,6 +504,7 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = false,
+            TotalScore = 0,
             CheckResults = []
         };
         _mockSpamDetectionEngine.CheckMessageAsync(Arg.Any<SpamLibRequest>(), Arg.Any<CancellationToken>())
@@ -545,15 +539,16 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = true,
-            MaxConfidence = 98,
+            TotalScore = 4.9,
             CheckResults =
             [
-                new ContentCheckResponse
+                new ContentCheckResponseV2
                 {
                     CheckName = CheckName.UrlBlocklist,
-                    Result = CheckResultType.Spam,
+                    Score = 4.9,
+                    Abstained = false,
                     Details = "Phishing site detected: evil.com",
-                    Confidence = 98
+                    ProcessingTimeMs = 0
                 }
             ]
         };
@@ -629,6 +624,7 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = false,
+            TotalScore = 0,
             CheckResults = null! // Force null for testing
         };
         _mockSpamDetectionEngine.CheckMessageAsync(Arg.Any<SpamLibRequest>(), Arg.Any<CancellationToken>())
@@ -663,15 +659,16 @@ public class ContentCheckCoordinatorTests
         var detectionResult = new ContentDetectionResult
         {
             IsSpam = true,
-            MaxConfidence = 90,
+            TotalScore = 4.5,
             CheckResults =
             [
-                new ContentCheckResponse
+                new ContentCheckResponseV2
                 {
                     CheckName = CheckName.UrlBlocklist, // "UrlBlocklist"
-                    Result = CheckResultType.Spam,
+                    Score = 4.5,
+                    Abstained = false,
                     Details = "Test",
-                    Confidence = 90
+                    ProcessingTimeMs = 0
                 }
             ]
         };

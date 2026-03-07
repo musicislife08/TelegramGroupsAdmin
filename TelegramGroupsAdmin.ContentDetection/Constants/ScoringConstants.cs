@@ -6,27 +6,11 @@ namespace TelegramGroupsAdmin.ContentDetection.Constants;
 /// </summary>
 public static class ScoringConstants
 {
-    /// <summary>
-    /// Maximum score value (definitive threat)
-    /// </summary>
-    public const double MaxScore = 5.0;
-
-    /// <summary>
-    /// Minimum score value (no evidence of threat)
-    /// </summary>
-    public const double MinScore = 0.0;
-
     // Spacing check scores
     /// <summary>
     /// Score for spacing/formatting anomaly detection
     /// </summary>
     public const double ScoreFormattingAnomaly = 0.8;
-
-    // CAS check scores
-    /// <summary>
-    /// Score for user banned by Combot Anti-Spam (CAS)
-    /// </summary>
-    public const double ScoreCasBanned = 5.0;
 
     // Stop words check scores
     /// <summary>

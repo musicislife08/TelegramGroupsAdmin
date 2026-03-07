@@ -219,14 +219,6 @@ public class HomePage
     }
 
     /// <summary>
-    /// Checks if the threshold recommendations alert is visible.
-    /// </summary>
-    public async Task<bool> IsThresholdRecommendationsAlertVisibleAsync()
-    {
-        return await _page.Locator(".mud-alert:has-text('threshold recommendation')").IsVisibleAsync();
-    }
-
-    /// <summary>
     /// Gets the count of recent activity items displayed.
     /// </summary>
     public async Task<int> GetActivityFeedItemCountAsync()

@@ -42,6 +42,8 @@ jobs:
 
             Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
+            IMPORTANT: Never use # followed by a number (e.g. #1, #2, #3) when numbering findings or list items. GitHub renders these as issue/PR links, which pollutes unrelated issues with cross-references. Use "1.", "2.", "3." or "Finding 1:", "Finding 2:" etc. instead.
+
             Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
 
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md

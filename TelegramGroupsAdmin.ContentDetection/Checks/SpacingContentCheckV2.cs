@@ -43,7 +43,8 @@ public class SpacingContentCheckV2(ILogger<SpacingContentCheckV2> logger) : ICon
 
         try
         {
-            var (hasSuspiciousSpacing, details) = CheckForSuspiciousSpacing(req.Message, req.SuspiciousRatioThreshold);
+            var (hasSuspiciousSpacing, details) = CheckForSuspiciousSpacing(
+                req.Message, req.SuspiciousRatioThreshold, req.ShortWordLength, req.MinWordsCount);
 
             if (hasSuspiciousSpacing)
             {
@@ -81,12 +82,19 @@ public class SpacingContentCheckV2(ILogger<SpacingContentCheckV2> logger) : ICon
         }
     }
 
-    private static (bool hasSuspiciousSpacing, string details) CheckForSuspiciousSpacing(string message, double threshold)
+    private static (bool hasSuspiciousSpacing, string details) CheckForSuspiciousSpacing(
+        string message, double threshold, int shortWordLength, int minWordsCount)
     {
-        // Simplified spacing check - count short words
         var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var shortWords = words.Count(w => w.Length <= 2);
-        var suspiciousRatio = words.Length > 0 ? (double)shortWords / words.Length : 0;
+
+        // Skip messages with too few words to analyze reliably
+        // Clamp to at least 1 to prevent division by zero if config has MinWordsCount=0
+        var effectiveMinWords = Math.Max(1, minWordsCount);
+        if (words.Length < effectiveMinWords)
+            return (false, $"Too few words ({words.Length} < {effectiveMinWords})");
+
+        var shortWords = words.Count(w => w.Length <= shortWordLength);
+        var suspiciousRatio = (double)shortWords / words.Length;
 
         if (suspiciousRatio > threshold)
         {

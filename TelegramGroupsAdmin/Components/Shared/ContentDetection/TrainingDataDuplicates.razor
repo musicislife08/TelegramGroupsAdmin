@@ -95,7 +95,7 @@
                                     <MudChip T="string" Size="Size.Small" Color="@(group.IsSameClass ? Color.Info : Color.Error)">
                                         @(group.IsSameClass ? "Same Class" : "⚠️ CROSS-CLASS CONFLICT")
                                     </MudChip>
-                                    <MudText Typo="Typo.body2">@group.DuplicateCount duplicates · Avg confidence: @group.AverageConfidence.ToString("F0")%</MudText>
+                                    <MudText Typo="Typo.body2">@group.DuplicateCount duplicates · Avg score: @group.AverageScore.ToString("F1")</MudText>
                                 </MudStack>
                                 <MudButton Variant="Variant.Outlined"
                                           Color="Color.Warning"
@@ -129,7 +129,7 @@
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
                                                     }
                                                     <MudText Typo="Typo.body2">
-                                                        @sample.DetectionSource · @sample.Confidence% · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                                        @sample.DetectionSource · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
                                                     </MudText>
                                                 </MudStack>
                                                 @if (sample.Id != group.RecommendedKeep?.Id)
@@ -160,7 +160,7 @@
                                                 <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
                                             }
                                             <MudText Typo="Typo.body2">
-                                                @sample.DetectionSource · @sample.Confidence% · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                                @sample.DetectionSource · @sample.Score.ToString("F2") · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
                                             </MudText>
                                         </MudStack>
                                         @if (sample.Id != group.RecommendedKeep?.Id)

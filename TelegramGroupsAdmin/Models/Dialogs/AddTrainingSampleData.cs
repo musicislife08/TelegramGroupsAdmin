@@ -5,7 +5,7 @@ public class AddTrainingSampleData
     public string MessageText { get; set; } = string.Empty;
     public bool IsSpam { get; set; }
     public string Source { get; set; } = string.Empty;
-    public int? Confidence { get; set; }
+    public double? Score { get; set; }
 
     /// <summary>
     /// Optional translated text (Phase 4.20+: Translation support for manual training samples)

@@ -17,11 +17,6 @@ public class StopWordsConfig
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Confidence threshold for spam classification (0-100)
-    /// </summary>
-    public int ConfidenceThreshold { get; set; } = 50;
-
-    /// <summary>
     /// Always run this check for all users (bypasses trust/admin status)
     /// </summary>
     public bool AlwaysRun { get; set; }

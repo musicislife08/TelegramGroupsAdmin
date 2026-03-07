@@ -31,8 +31,8 @@ public class EnrichedDetectionView
             dr.detection_source,
             dr.detection_method,
             dr.is_spam,
-            dr.confidence,
-            dr.net_confidence,
+            dr.score,
+            dr.net_score,
             dr.reason,
             dr.check_results_json,
             dr.edit_version,
@@ -91,11 +91,11 @@ public class EnrichedDetectionView
     [Column("is_spam")]
     public bool IsSpam { get; set; }
 
-    [Column("confidence")]
-    public int Confidence { get; set; }
+    [Column("score")]
+    public double Score { get; set; }
 
-    [Column("net_confidence")]
-    public int NetConfidence { get; set; }
+    [Column("net_score")]
+    public double NetScore { get; set; }
 
     [Column("reason")]
     public string? Reason { get; set; }

@@ -32,8 +32,8 @@ public class DetectionResultRecordDto
     [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
     public bool IsSpam { get; set; }
 
-    [Column("confidence")]
-    public int Confidence { get; set; }
+    [Column("score")]
+    public double Score { get; set; }
 
     [Column("reason")]
     public string? Reason { get; set; }
@@ -53,9 +53,9 @@ public class DetectionResultRecordDto
     [Column("used_for_training")]
     public bool UsedForTraining { get; set; } = true;
 
-    [Column("net_confidence")]
+    [Column("net_score")]
     [Required]
-    public int NetConfidence { get; set; }
+    public double NetScore { get; set; }
 
     [Column("check_results_json", TypeName = "jsonb")]
     public string? CheckResultsJson { get; set; }

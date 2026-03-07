@@ -17,8 +17,6 @@ public class TranslationConfigData
 
     public double LanguageDetectionConfidenceThreshold { get; set; } = 0.80;
 
-    public int ConfidenceThreshold { get; set; } = 80;
-
     public bool WarnNonEnglish { get; set; }
 
     public string WarningMessage { get; set; } = "This is an English-only chat. Please use English in {chat_name}. You have {warnings_remaining} warnings remaining before removal.";

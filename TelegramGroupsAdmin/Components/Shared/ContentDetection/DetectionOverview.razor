@@ -73,21 +73,21 @@
 
                 @* Row 2: Thresholds *@
                 <MudItem xs="12" md="4">
-                    <FieldWithHelp HelpText="Messages with confidence ≥ this value will be automatically deleted and the user banned.">
+                    <FieldWithHelp HelpText="Messages with score ≥ this value will be automatically deleted and the user banned.">
                         <MudNumericField @bind-Value="_config.AutoBanThreshold"
                                         Label="Auto-Ban Threshold"
-                                        Min="50" Max="100"
+                                        Min="2.5" Max="5.0" Step="0.25"
                                         Disabled="@_config.TrainingMode"
-                                        HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= triggers ban")" />
+                                        HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Score >= triggers ban")" />
                     </FieldWithHelp>
                 </MudItem>
 
                 <MudItem xs="12" md="4">
-                    <FieldWithHelp HelpText="Messages with confidence ≥ this value but below auto-ban go to review queue.">
+                    <FieldWithHelp HelpText="Messages with score ≥ this value but below auto-ban go to review queue.">
                         <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
                                         Label="Review Queue Threshold"
-                                        Min="20" Max="80"
-                                        HelperText="Confidence >= goes to review" />
+                                        Min="1.0" Max="4.0" Step="0.25"
+                                        HelperText="Score >= goes to review" />
                     </FieldWithHelp>
                 </MudItem>
 
@@ -146,11 +146,11 @@
     </MudText>
 
     <ConceptualAlert Title="How Algorithm Orchestration Works" Severity="Severity.Info" Class="mb-3">
-        All enabled algorithms run in parallel and each returns a confidence score (0-100). Scores are aggregated to produce a final confidence level:
+        All enabled algorithms run in parallel and each returns a score (0.0-5.0). Scores are added to produce a final score:
         <ul class="mt-2 mb-0">
-            <li><strong>≥ @_config.AutoBanThreshold%</strong> (Auto-Ban): Message deleted, user banned across all chats</li>
-            <li><strong>@_config.ReviewQueueThreshold%-@(_config.AutoBanThreshold-1)%</strong> (Review Queue): Message sent to moderator review</li>
-            <li><strong>&lt; @_config.ReviewQueueThreshold%</strong> (Pass): Message allowed</li>
+            <li><strong>≥ @_config.AutoBanThreshold</strong> (Auto-Ban): Message deleted, user banned across all chats</li>
+            <li><strong>@_config.ReviewQueueThreshold-@_config.AutoBanThreshold</strong> (Review Queue): Message sent to moderator review</li>
+            <li><strong>&lt; @_config.ReviewQueueThreshold</strong> (Pass): Message allowed</li>
         </ul>
         <div class="mt-2">
             OpenAI in <strong>Veto Mode</strong> can override high-confidence detections to reduce false positives. Enable algorithms incrementally and use Training Mode when testing new configurations.
@@ -180,11 +180,9 @@
         @if (_config.StopWords.Enabled)
         {
             <MudCardContent>
-                <MudNumericField @bind-Value="_config.StopWords.ConfidenceThreshold"
-                                Label="Confidence Threshold"
-                                Min="1" Max="100"
-                                Variant="Variant.Outlined"
-                                helperText="Confidence level when stop words are detected (0-100%)" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Matches messages against a customizable list of spam keywords. Click "Configure" for settings.
+                </MudText>
             </MudCardContent>
         }
     </MudCard>
@@ -242,11 +240,9 @@
         @if (_config.Bayes.Enabled)
         {
             <MudCardContent>
-                <MudNumericField @bind-Value="_config.Bayes.MinSpamProbability"
-                                Label="Minimum Spam Probability"
-                                Min="1.0" Max="99.0" Step="0.1"
-                                Variant="Variant.Outlined"
-                                helperText="Minimum probability (%) to classify as spam" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Statistical classifier that learns spam patterns from word frequency in training samples. Click "Configure" for settings.
+                </MudText>
             </MudCardContent>
         }
     </MudCard>

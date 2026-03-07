@@ -11,8 +11,4 @@ public static class FileScanConstants
     /// </summary>
     public const double InfectedScoreThreshold = 4.0;
 
-    /// <summary>
-    /// Multiplier to convert V2 score (0-5.0) to V1 confidence percentage (0-100).
-    /// </summary>
-    public const int ScoreToConfidenceMultiplier = 20;
 }

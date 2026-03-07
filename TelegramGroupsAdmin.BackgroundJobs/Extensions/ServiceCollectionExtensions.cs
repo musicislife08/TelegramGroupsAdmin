@@ -89,6 +89,7 @@ public static class ServiceCollectionExtensions
         q.AddJob<RefreshUserPhotosJob>(opts => opts.WithIdentity(BackgroundJobNames.UserPhotoRefresh).StoreDurably());
         q.AddJob<ScheduledBackupJob>(opts => opts.WithIdentity(BackgroundJobNames.ScheduledBackup).StoreDurably());
         q.AddJob<TextClassifierRetrainingJob>(opts => opts.WithIdentity(BackgroundJobNames.TextClassifierRetraining).StoreDurably());
+        q.AddJob<BayesClassifierRetrainingJob>(opts => opts.WithIdentity(BackgroundJobNames.BayesClassifierRetraining).StoreDurably());
         q.AddJob<ProfileRescanJob>(opts => opts.WithIdentity(BackgroundJobNames.ProfileRescan).StoreDurably());
 
         // Ad-hoc jobs (one-time triggered, no UI)

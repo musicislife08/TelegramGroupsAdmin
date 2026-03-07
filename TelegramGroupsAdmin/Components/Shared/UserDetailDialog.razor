@@ -542,7 +542,7 @@
                                             @(detection.IsSpam ? "SPAM" : "HAM")
                                         </MudChip>
                                         <div style="flex: 1;">
-                                            <MudText Typo="Typo.body2">Confidence: @detection.Confidence%</MudText>
+                                            <MudText Typo="Typo.body2">Score: @detection.Score.ToString("F2")</MudText>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @detection.DetectionMethod • <span class="local-timestamp" data-utc="@detection.DetectedAt.ToString("o")">@detection.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                                             </MudText>

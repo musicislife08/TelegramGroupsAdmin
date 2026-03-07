@@ -62,8 +62,8 @@ public sealed class NotificationService : INotificationService
         ChatIdentity chat,
         UserIdentity user,
         Actor? bannedBy,
-        int netConfidence,
-        int confidence,
+        double netScore,
+        double score,
         string? detectionReason,
         int chatsAffected,
         bool messageDeleted,
@@ -82,8 +82,8 @@ public sealed class NotificationService : INotificationService
             .WithSection("Message", s => s
                 .WithText(messagePreview ?? "[No text]"))
             .WithSection("Detection", s => s
-                .WithField("Net Confidence", $"{netConfidence}%")
-                .WithField("Confidence", $"{confidence}%")
+                .WithField("Net Score", $"{netScore:F2}")
+                .WithField("Score", $"{score:F2}")
                 .WithFieldIf(detectionReason != null, "Reason", detectionReason))
             .WithSection("Action Taken", s => s
                 .WithField("Banned from", $"{chatsAffected} managed chats")

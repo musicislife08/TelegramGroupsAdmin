@@ -175,13 +175,13 @@
                             <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-2" />
                             Soft Block
                         </MudText>
-                        <HelpTooltip Text="Soft Block = Contributes to spam confidence voting (adds ~70-85 confidence). Message may be deleted if total confidence exceeds threshold, but OpenAI can veto false positives. Use for suspicious domains (URL shorteners, newly registered domains, SEO spam). Runs DURING spam detection pipeline." />
+                        <HelpTooltip Text="Soft Block = Contributes to spam score voting (adds points to the spam score). Message may be deleted if total score exceeds threshold, but OpenAI can veto false positives. Use for suspicious domains (URL shorteners, newly registered domains, SEO spam). Runs DURING spam detection pipeline." />
                     </MudStack>
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning">OpenAI Veto</MudChip>
                 </MudStack>
 
                 <ConceptualAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
-                    Soft Block domains add confidence to spam score but <strong>can be vetoed by OpenAI</strong>. Message deleted only if combined confidence ≥ threshold. Safer for questionable domains that might have legitimate uses.
+                    Soft Block domains add points to spam score but <strong>can be vetoed by OpenAI</strong>. Message deleted only if combined score ≥ threshold. Safer for questionable domains that might have legitimate uses.
                 </ConceptualAlert>
 
                 @if (_loading)

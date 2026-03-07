@@ -276,8 +276,7 @@ public class MessageQueryService : IMessageQueryService
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
 
-        // Query detection_results table (spam_checks table was dropped in normalized schema)
-        // Map detection_results fields to ContentCheckRecord for backward compatibility
+        // Query detection_results table
         // Note: Returns only the LATEST detection result per message for quick display
         // Full detection history is available via GetByMessageIdAsync in DetectionResultsRepository
         var results = await context.DetectionResults
@@ -294,8 +293,8 @@ public class MessageQueryService : IMessageQueryService
                     m.UserId,
                     m.ContentHash,
                     dr.IsSpam,
-                    dr.Confidence,
-                    dr.NetConfidence,
+                    dr.Score,
+                    dr.NetScore,
                     Reason = dr.Reason ?? $"{dr.DetectionMethod}: Spam detected",
                     CheckType = dr.DetectionMethod,
                     MatchedMessageId = dr.MessageId
@@ -308,17 +307,14 @@ public class MessageQueryService : IMessageQueryService
             .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
             .ToList();
 
-        // Build final result with absolute net_confidence as display confidence
+        // Build final result with absolute net_score as display score
         return latestResults
             .Select(r => new UiModels.ContentCheckRecord(
-                Id: r.Id,
                 CheckTimestamp: r.CheckTimestamp,
                 UserId: r.UserId,
-                ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: Math.Abs(r.NetConfidence), // Use absolute net_confidence for display
+                Score: Math.Abs(r.NetScore),
                 Reason: r.Reason,
-                CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))
             .Where(c => c.MatchedMessageId.HasValue)
             .ToDictionary(c => c.MatchedMessageId!.Value, c => c);

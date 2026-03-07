@@ -32,6 +32,11 @@ public record ContentCheckResponseV2
     public required string Details { get; init; }
 
     /// <summary>
+    /// Whether this check flagged as spam (non-abstained with positive score)
+    /// </summary>
+    public bool IsSpam => !Abstained && Score > 0;
+
+    /// <summary>
     /// Exception that occurred during check execution (if any)
     /// </summary>
     public Exception? Error { get; init; }

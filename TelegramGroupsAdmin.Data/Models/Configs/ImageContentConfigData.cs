@@ -13,7 +13,7 @@ public class ImageContentConfigData
 
     public bool UseOCR { get; set; } = true;
 
-    public int OcrConfidenceThreshold { get; set; } = 75;
+    public double OcrConfidenceThreshold { get; set; } = 3.75;
 
     public int MinOcrTextLength { get; set; } = 10;
 
@@ -21,7 +21,7 @@ public class ImageContentConfigData
 
     public double HashSimilarityThreshold { get; set; } = 0.85;
 
-    public int HashMatchConfidence { get; set; } = 95;
+    public double HashMatchConfidence { get; set; } = 4.75;
 
     public int MaxTrainingSamplesToCompare { get; set; } = 1000;
 

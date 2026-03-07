@@ -856,14 +856,11 @@
         // Use latest detection result (already ordered DESC by DetectedAt in repository)
         var latest = wrapper.DetectionResults.First();
         return new ContentCheckRecord(
-            Id: latest.Id,
             CheckTimestamp: latest.DetectedAt,
             UserId: latest.UserId,
-            ContentHash: wrapper.Message.ContentHash,
             IsSpam: latest.IsSpam,
-            Confidence: Math.Abs(latest.NetConfidence),
+            Score: Math.Abs(latest.NetScore),
             Reason: latest.Reason,
-            CheckType: latest.DetectionMethod,
             MatchedMessageId: messageId
         );
     }
@@ -976,13 +973,13 @@
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
-                // IsSpam computed from net_confidence (-100 = strong ham)
-                Confidence = 0, // 0% spam (ham)
+                // IsSpam computed from net_score (negative = ham)
+                Score = 0.0, // No spam score (ham)
                 Reason = reason,
                 AddedBy = executor,
                 UserId = message.User.Id, // Detection result uses raw ID for DB FK
                 UsedForTraining = false, // History only - training handled by training_labels
-                NetConfidence = -100, // Strong ham signal (manual admin decision)
+                NetScore = -5.0, // Strong ham signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
@@ -1029,7 +1026,7 @@
             else
             {
                 Logger.LogInformation(
-                    "Message {MessageId} marked as ham (training sample): detection result created with net_confidence = -100",
+                    "Message {MessageId} marked as ham (training sample): detection result created with net_score = -5.0",
                     message.MessageId);
             }
 
@@ -1061,14 +1058,11 @@
         {
             var latest = history.OrderByDescending(h => h.DetectedAt).First();
             _contentChecks[messageId] = new ContentCheckRecord(
-                Id: latest.Id,
                 CheckTimestamp: latest.DetectedAt,
                 UserId: userId,
-                ContentHash: null,
                 IsSpam: latest.IsSpam,
-                Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
+                Score: Math.Abs(latest.NetScore),
                 Reason: latest.Reason,
-                CheckType: latest.DetectionMethod,
                 MatchedMessageId: null
             );
         }
@@ -1508,7 +1502,7 @@
                 EditId: null,
                 TranslatedText: translationResult.TranslatedText,
                 DetectedLanguage: translationResult.DetectedLanguage,
-                Confidence: null, // OpenAI doesn't return confidence for translation
+                Confidence: translationResult.Confidence,
                 TranslatedAt: DateTimeOffset.UtcNow
             );
 

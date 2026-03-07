@@ -3,7 +3,8 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Aggregated spam detection result from multiple checks
+/// Aggregated spam detection result from multiple checks.
+/// Uses V2 additive scoring (0.0-5.0+) directly — no V1 conversion.
 /// </summary>
 public record ContentDetectionResult
 {
@@ -13,30 +14,14 @@ public record ContentDetectionResult
     public bool IsSpam { get; init; }
 
     /// <summary>
-    /// Highest confidence score from all checks
+    /// Total additive score from all checks (0.0-5.0+, SpamAssassin-style)
     /// </summary>
-    public int MaxConfidence { get; init; }
+    public double TotalScore { get; init; }
 
     /// <summary>
-    /// Average confidence from spam-flagging checks
+    /// Results from individual V2 checks
     /// </summary>
-    public int AvgConfidence { get; init; }
-
-    /// <summary>
-    /// Number of checks that flagged as spam
-    /// </summary>
-    public int SpamFlags { get; init; }
-
-    /// <summary>
-    /// Phase 2.6: Net confidence from weighted voting
-    /// Sum(spam confidences) - Sum(ham confidences)
-    /// </summary>
-    public int NetConfidence { get; init; }
-
-    /// <summary>
-    /// Results from individual checks
-    /// </summary>
-    public List<ContentCheckResponse> CheckResults { get; init; } = [];
+    public List<ContentCheckResponseV2> CheckResults { get; init; } = [];
 
     /// <summary>
     /// Primary reason for spam classification
@@ -49,9 +34,10 @@ public record ContentDetectionResult
     public DetectionAction RecommendedAction { get; init; }
 
     /// <summary>
-    /// Whether the message should be submitted to OpenAI for veto
+    /// Whether this result still needs AI confirmation before the action is taken.
+    /// True when pipeline checks detected spam signals but AI hasn't reviewed yet.
     /// </summary>
-    public bool ShouldVeto { get; init; }
+    public bool RequiresAIConfirmation { get; init; }
 
     /// <summary>
     /// Phase 4.13: Hard block result if URL pre-filter blocked the message

@@ -289,15 +289,11 @@ public class AIContentCheckV2(
                 };
             }
 
-            // Map confidence (0.0-1.0) to V2 score (0.0-5.0)
-            var confidence = jsonResponse.Confidence ?? ContentDetectionConstants.DefaultOpenAIConfidence;
-            var score = confidence * AIConstants.ConfidenceToScoreMultiplier;
-
-            // Review = medium score (capped at review threshold)
-            if (isReview)
-            {
-                score = Math.Min(score, ContentDetectionConstants.ReviewThreshold); // Cap review at review threshold
-            }
+            // Use AI-provided score directly, clamped to safety boundaries
+            var score = Math.Clamp(
+                jsonResponse.Score ?? ContentDetectionConstants.DefaultAIScore,
+                ContentDetectionConstants.MinScore,
+                ContentDetectionConstants.MaxScore);
 
             var spamDetails = $"AI: {(isReview ? "Review" : "Spam")} - {jsonResponse.Reason}";
             if (fromCache) spamDetails += " (cached)";

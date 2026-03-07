@@ -4,7 +4,6 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 
 /// <summary>
 /// Naive Bayes classifier for spam detection
-/// Shared by both V1 and V2 implementations
 /// </summary>
 internal class BayesClassifier
 {
@@ -13,7 +12,6 @@ internal class BayesClassifier
     private readonly ITokenizerService _tokenizerService;
     private int _spamMessageCount;
     private int _hamMessageCount;
-    private int _totalWordCount;
 
     public BayesClassifier(ITokenizerService tokenizerService)
     {
@@ -31,7 +29,6 @@ internal class BayesClassifier
         foreach (var word in words)
         {
             wordCounts[word] = wordCounts.GetValueOrDefault(word, 0) + 1;
-            _totalWordCount++;
         }
 
         if (isSpam)
@@ -47,17 +44,17 @@ internal class BayesClassifier
     /// <summary>
     /// Classify a message and return spam probability with certainty score
     /// </summary>
-    public (double spamProbability, string details, double certainty) ClassifyMessage(string message)
+    public BayesClassificationResult ClassifyMessage(string message)
     {
         if (_spamMessageCount == 0 || _hamMessageCount == 0)
         {
-            return (0.0, "Classifier not trained", 0.0);
+            return new BayesClassificationResult(0.0, "Classifier not trained", 0.0);
         }
 
         var words = _tokenizerService.Tokenize(message);
         if (!words.Any())
         {
-            return (0.0, "No words to analyze", 0.0);
+            return new BayesClassificationResult(0.0, "No words to analyze", 0.0);
         }
 
         // Calculate prior probabilities
@@ -108,6 +105,6 @@ internal class BayesClassifier
             ? $"Spam probability: {spamProbability:F3}" + (significantWords.Any() ? $" (key words: {string.Join(", ", significantWords.Take(3))})" : "")
             : $"Ham probability: {1 - spamProbability:F3}";
 
-        return (spamProbability, details, certainty);
+        return new BayesClassificationResult(spamProbability, details, certainty);
     }
 }

@@ -210,17 +210,17 @@ public class AnalyticsRepository : IAnalyticsRepository
                 }
                 stats.TotalChecks++;
 
-                if (check.Result == CheckResultType.Spam)
+                if (check.IsSpam)
                 {
                     stats.SpamVotes++;
-                    stats.SpamConfidences.Add(check.Confidence);
+                    stats.SpamConfidences.Add(check.Score);
 
                     if (isFalsePositive)
                     {
                         stats.ContributedToFPs++;
                     }
                 }
-                else if (check.Result == CheckResultType.Clean && isFalseNegative)
+                else if (!check.IsSpam && isFalseNegative)
                 {
                     stats.ContributedToFNs++;
                 }

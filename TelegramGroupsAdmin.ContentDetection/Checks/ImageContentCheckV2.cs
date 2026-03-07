@@ -23,7 +23,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Layer 1: Hash similarity (fastest, cheapest, most reliable for known spam)
 /// Layer 2: OCR + text spam checks (fast, cheap, good for text-heavy images)
 /// Layer 3: AI Vision fallback (slow, expensive, comprehensive)
-/// Scoring: Maps confidence (0-100%) to points (0.0-5.0)
+/// Scoring: AI returns scores directly on 0.0-5.0 scale
 /// </summary>
 public class ImageContentCheckV2(
     ILogger<ImageContentCheckV2> logger,
@@ -119,8 +119,8 @@ public class ImageContentCheckV2(
                         // Check if similarity meets threshold
                         if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
                         {
-                            // Map confidence to score
-                            var score = (imageConfig.HashMatchConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+                            // Use configured score directly, clamped to safety boundaries
+                            var score = Math.Clamp(imageConfig.HashMatchConfidence, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
 
                             // If matched HAM (not spam), abstain (don't give negative signal in V2)
                             if (matchedSpamLabel == false)
@@ -202,17 +202,17 @@ public class ImageContentCheckV2(
                 var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
 
                 // Check if result is confident enough to skip expensive Vision API
-                if (ocrResult.MaxConfidence >= imageConfig.OcrConfidenceThreshold)
+                if (ocrResult.TotalScore >= imageConfig.OcrConfidenceThreshold)
                 {
-                    // Map OCR text check confidence to score
-                    var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier : 0.0;
+                    // V2: Use total score directly
+                    var score = ocrResult.IsSpam ? ocrResult.TotalScore : 0.0;
 
                     // V2: Only return score if spam detected, otherwise abstain
                     if (!ocrResult.IsSpam)
                     {
                         logger.LogDebug(
-                            "ImageSpam V2 Layer 2: OCR text checks returned clean ({Confidence}%), abstaining",
-                            ocrResult.MaxConfidence);
+                            "ImageSpam V2 Layer 2: OCR text checks returned clean (score {Score:F2}), abstaining",
+                            ocrResult.TotalScore);
 
                         return new ContentCheckResponseV2
                         {
@@ -226,13 +226,13 @@ public class ImageContentCheckV2(
                     }
 
                     var flaggedChecks = ocrResult.CheckResults
-                        .Where(c => c.Result == CheckResultType.Spam)
+                        .Where(c => !c.Abstained && c.Score > 0)
                         .Select(c => c.CheckName)
                         .ToList();
 
                     logger.LogInformation(
-                        "ImageSpam V2 Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning {Score:F2} points",
-                        ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold, score);
+                        "ImageSpam V2 Layer 2: OCR text checks confident (score {Score:F2} >= {Threshold:F2}), returning {ReturnScore:F2} points",
+                        ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold, score);
 
                     return new ContentCheckResponseV2
                     {
@@ -247,8 +247,8 @@ public class ImageContentCheckV2(
 
                 // OCR checks uncertain - proceed to Vision (Layer 3)
                 logger.LogDebug(
-                    "ImageSpam V2 Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
-                    ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold);
+                    "ImageSpam V2 Layer 2: OCR text checks uncertain (score {Score:F2} < {Threshold:F2}), proceeding to Vision",
+                    ocrResult.TotalScore, imageConfig.OcrConfidenceThreshold);
             }
             else if (!string.IsNullOrWhiteSpace(extractedOcrText))
             {
@@ -397,7 +397,7 @@ public class ImageContentCheckV2(
             Respond ONLY with valid JSON (no markdown, no code blocks):
             {
               "spam": true or false,
-              "confidence": 1-100,
+              "score": 0.0-5.0 (continuous scale: 0.0 = clearly not spam, 5.0 = unmistakably spam. Use the full range — e.g., 1.2 for mildly suspicious, 3.7 for likely spam),
               "reason": "specific explanation",
               "patterns_detected": ["list", "of", "patterns"]
             }
@@ -438,7 +438,7 @@ public class ImageContentCheckV2(
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<VisionSpamResponse>(
+            var response = JsonSerializer.Deserialize<MediaSpamResponse>(
                 content,
                 CaseInsensitiveJsonOptions);
 
@@ -457,8 +457,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            logger.LogDebug("AI Vision V2 analysis for {User}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
-                user.ToLogDebug(), response.Spam, response.Confidence, response.Reason);
+            logger.LogDebug("AI Vision V2 analysis for {User}: Spam={Spam}, Score={Score}, Reason={Reason}",
+                user.ToLogDebug(), response.Spam, response.Score, response.Reason);
 
             // Build raw Vision text for downstream processing (AI veto)
             var rawVisionText = response.Reason ?? "";
@@ -489,8 +489,8 @@ public class ImageContentCheckV2(
                 };
             }
 
-            // Map confidence to score: 0-100% → 0.0-5.0 points
-            var score = (response.Confidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
+            // Use AI-provided score directly, clamped to safety boundaries
+            var score = Math.Clamp(response.Score, ContentDetectionConstants.MinScore, ContentDetectionConstants.MaxScore);
 
             return new ContentCheckResponseV2
             {
@@ -521,13 +521,3 @@ public class ImageContentCheckV2(
     }
 }
 
-/// <summary>
-/// Expected JSON response structure from AI Vision for spam detection.
-/// This is the format we request in our prompts.
-/// </summary>
-internal record VisionSpamResponse(
-    [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("confidence")] int Confidence,
-    [property: JsonPropertyName("reason")] string? Reason,
-    [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
-);

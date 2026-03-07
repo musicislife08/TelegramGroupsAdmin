@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 41; // Updated 2026-02-23: +profile_scan_results
+    public const int TotalTableCount = 40; // Updated 2026-03-07: -threshold_recommendations (V1 remnant removed)
 
     /// <summary>
     /// Web application users (ASP.NET Identity)
@@ -232,17 +232,17 @@ public static class GoldenDataset
     {
         public const int Result1_MessageId = Messages.Msg1_Id;
         public const string Result1_DetectionMethod = "InvisibleChars, StopWords, CAS, Similarity, Bayes, Spacing";
-        public const int Result1_Confidence = 0;
+        public const double Result1_Score = 0.0;
         public const bool Result1_IsSpam = false;
         public const string Result1_Reason = "No spam detected";
-        public const int Result1_NetConfidence = 0;
+        public const double Result1_NetScore = 0.0;
 
         public const int Result2_MessageId = 82581; // "I hit 30 last summer"
         public const string Result2_DetectionMethod = "InvisibleChars, StopWords, CAS, Similarity, Bayes, Spacing";
-        public const int Result2_Confidence = 37;
+        public const double Result2_Score = 1.85;
         public const bool Result2_IsSpam = false;
         public const string Result2_Reason = "Spam probability: 0.752 (key words: hit) (certainty: 0.504)";
-        public const int Result2_NetConfidence = 37;
+        public const double Result2_NetScore = 1.85;
     }
 
     /// <summary>

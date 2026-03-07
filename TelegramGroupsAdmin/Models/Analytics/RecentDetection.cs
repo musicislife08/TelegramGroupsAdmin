@@ -12,7 +12,7 @@ public class RecentDetection
     public string DetectionSource { get; set; } = string.Empty;
     public string DetectionMethod { get; set; } = string.Empty;
     public bool IsSpam { get; set; }
-    public int Confidence { get; set; }
+    public double Score { get; set; }
     public string? Reason { get; set; }
 
     /// <summary>
@@ -23,7 +23,7 @@ public class RecentDetection
     public long UserId { get; set; }
     public string? MessageText { get; set; }
     public string? ContentHash { get; set; }
-    public int NetConfidence { get; set; }
+    public double NetScore { get; set; }
     public string? CheckResultsJson { get; set; }
     public int EditVersion { get; set; }
 
