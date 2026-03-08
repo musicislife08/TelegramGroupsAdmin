@@ -1337,7 +1337,7 @@ public class MessageHistoryRepositoryTests
                 using (Assert.EnterMultipleScope())
                 {
                     Assert.That(detection.MessageId, Is.GreaterThan(0));
-                    Assert.That(detection.DetectionMethod, Is.Not.Null.Or.Empty);
+                    Assert.That(detection.DetectionMethod, Is.Not.Null.And.Not.Empty);
                     Assert.That(detection.Score, Is.GreaterThanOrEqualTo(0));
                 }
             }
