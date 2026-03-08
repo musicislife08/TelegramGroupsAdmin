@@ -75,13 +75,16 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
 
             foreach (var sample in spamSamples.Concat(hamSamples))
             {
-                var isSpam = sample.Label == TrainingLabel.Spam;
-                newClassifier.Train(sample.Text, isSpam);
-
-                if (isSpam)
+                if (sample.Label == TrainingLabel.Spam)
+                {
+                    newClassifier.TrainSpam(sample.Text);
                     spamCount++;
+                }
                 else
+                {
+                    newClassifier.TrainHam(sample.Text);
                     hamCount++;
+                }
 
                 if (sample.Source == TrainingSampleSource.Explicit)
                     explicitCount++;

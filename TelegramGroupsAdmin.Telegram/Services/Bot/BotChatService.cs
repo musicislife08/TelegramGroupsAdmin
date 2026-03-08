@@ -303,7 +303,7 @@ public class BotChatService(
                     );
 
                     await userActionsRepo.InsertAsync(trustAction, ct);
-                    await userRepo.UpdateTrustStatusAsync(user.Id, isTrusted: true, ct);
+                    await userRepo.TrustUserAsync(user.Id, ct);
 
                     logger.LogInformation(
                         "Auto-trusted {User} - admin in {Chat}",
@@ -472,7 +472,7 @@ public class BotChatService(
                         );
 
                         await userActionsRepo.InsertAsync(trustAction, ct);
-                        await userRepo.UpdateTrustStatusAsync(admin.User.Id, isTrusted: true, ct);
+                        await userRepo.TrustUserAsync(admin.User.Id, ct);
 
                         logger.LogInformation(
                             "Auto-trusted {User} - admin in {Chat}",

@@ -14,15 +14,15 @@ public class TestEmailService : IEmailService
     /// </summary>
     public ConcurrentBag<SentEmail> SentEmails { get; } = new();
 
-    public Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
+    public Task SendEmailAsync(string to, string subject, string body, CancellationToken cancellationToken = default)
     {
-        SentEmails.Add(new SentEmail([to], subject, body, isHtml));
+        SentEmails.Add(new SentEmail([to], subject, body));
         return Task.CompletedTask;
     }
 
-    public Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
+    public Task SendEmailAsync(IEnumerable<string> to, string subject, string body, CancellationToken cancellationToken = default)
     {
-        SentEmails.Add(new SentEmail(to.ToArray(), subject, body, isHtml));
+        SentEmails.Add(new SentEmail(to.ToArray(), subject, body));
         return Task.CompletedTask;
     }
 
@@ -31,7 +31,7 @@ public class TestEmailService : IEmailService
         // Store template info as subject for easy test verification
         var subject = $"[Template:{template}]";
         var body = string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"));
-        SentEmails.Add(new SentEmail([to], subject, body, true, template, parameters));
+        SentEmails.Add(new SentEmail([to], subject, body, template, parameters));
         return Task.CompletedTask;
     }
 
@@ -62,6 +62,5 @@ public record SentEmail(
     string[] To,
     string Subject,
     string Body,
-    bool IsHtml,
     EmailTemplate? Template = null,
     Dictionary<string, string>? Parameters = null);

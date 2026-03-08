@@ -74,10 +74,10 @@ public class WebBotMessagingService : IWebBotMessagingService
             }
 
             // Check 3: User must have linked Telegram account with username
-            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUser, cancellationToken);
-            if (linkedUser == null)
+            var linkedResult = await GetLinkedTelegramUserAsync(webUser, cancellationToken);
+            if (linkedResult.User == null)
             {
-                return new WebBotFeatureAvailability(false, null, null, errorMessage);
+                return new WebBotFeatureAvailability(false, null, null, linkedResult.ErrorMessage);
             }
 
             // Get bot's user ID for identifying bot messages (use cached value from TelegramBotService)
@@ -96,9 +96,9 @@ public class WebBotMessagingService : IWebBotMessagingService
             _logger.LogDebug(
                 "WebBotMessaging available for {User} (Telegram: @{Username})",
                 webUser.ToLogDebug(),
-                linkedUser.Username);
+                linkedResult.User.Username);
 
-            return new WebBotFeatureAvailability(true, botUserId, linkedUser.Username, null);
+            return new WebBotFeatureAvailability(true, botUserId, linkedResult.User.Username, null);
         }
         catch (Exception ex)
         {
@@ -119,10 +119,10 @@ public class WebBotMessagingService : IWebBotMessagingService
         try
         {
             // Get linked Telegram user for signature
-            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUser, cancellationToken);
-            if (linkedUser == null)
+            var linkedResult = await GetLinkedTelegramUserAsync(webUser, cancellationToken);
+            if (linkedResult.User == null)
             {
-                return new WebBotMessageResult(false, null, errorMessage);
+                return new WebBotMessageResult(false, null, linkedResult.ErrorMessage);
             }
 
             // Validate input
@@ -132,7 +132,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             }
 
             // Append signature: \n\n—username
-            var signature = $"\n\n—{linkedUser.Username}";
+            var signature = $"\n\n—{linkedResult.User.Username}";
             var messageWithSignature = text + signature;
 
             // Validate total length (Telegram limit: 4096 characters)
@@ -161,7 +161,7 @@ public class WebBotMessagingService : IWebBotMessagingService
                 "Sent bot message {MessageId} from {User} (Telegram: @{Username})",
                 sentMessage.MessageId,
                 webUser.ToLogInfo(),
-                linkedUser.Username);
+                linkedResult.User.Username);
 
             return new WebBotMessageResult(true, sentMessage, null);
         }
@@ -223,8 +223,8 @@ public class WebBotMessagingService : IWebBotMessagingService
     /// <summary>
     /// Get linked Telegram user for web user ID with validation
     /// </summary>
-    /// <returns>Tuple of (TelegramUser, ErrorMessage) - user is null if validation fails</returns>
-    private async Task<(TelegramUser? User, string? ErrorMessage)> GetLinkedTelegramUserAsync(
+    /// <returns>LinkedUserResult - User is null if validation fails</returns>
+    private async Task<LinkedUserResult> GetLinkedTelegramUserAsync(
         WebUserIdentity webUser,
         CancellationToken cancellationToken)
     {
@@ -236,7 +236,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             _logger.LogDebug(
                 "WebBotMessaging unavailable for {User}: No linked Telegram account",
                 webUser.ToLogDebug());
-            return (null, "No linked Telegram account");
+            return new LinkedUserResult(null, "No linked Telegram account");
         }
 
         var linkedUser = await _userRepo.GetByTelegramIdAsync(linkedTelegramId.Value, cancellationToken);
@@ -246,9 +246,9 @@ public class WebBotMessagingService : IWebBotMessagingService
             _logger.LogDebug(
                 "WebBotMessaging unavailable for {User}: Linked user not found or has no username",
                 webUser.ToLogDebug());
-            return (null, "Linked Telegram account has no username");
+            return new LinkedUserResult(null, "Linked Telegram account has no username");
         }
 
-        return (linkedUser, null);
+        return new LinkedUserResult(linkedUser, null);
     }
 }

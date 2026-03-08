@@ -335,10 +335,16 @@
         {
             try
             {
-                await DetectionResultsRepository.UpdateDetectionResultAsync(
-                    data.Id,
+                // Exclude the old record from training (preserves detection history)
+                await DetectionResultsRepository.ExcludeFromTrainingAsync(data.Id);
+
+                // Create a corrected training sample as a new record (append-only)
+                await DetectionResultsRepository.AddManualTrainingSampleAsync(
+                    data.MessageText,
                     data.IsSpam,
-                    usedForTraining: true);
+                    data.Source,
+                    data.Score,
+                    _currentUserId);
 
                 Snackbar.Add("Training sample updated successfully", Severity.Success);
                 await TriggerRetrainingAsync();
@@ -366,10 +372,7 @@
             try
             {
                 // Soft delete: Mark as not used for training (preserves detection history)
-                await DetectionResultsRepository.UpdateDetectionResultAsync(
-                    sample.Id,
-                    sample.IsSpam,
-                    usedForTraining: false);
+                await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
 
                 Snackbar.Add("Training sample removed (detection history preserved)", Severity.Success);
                 await TriggerRetrainingAsync();

@@ -49,7 +49,7 @@ public class BotDmService(
                 user.ToLogInfo(telegramUserId));
 
             // Update bot_dm_enabled flag to true (user can receive DMs)
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -68,7 +68,7 @@ public class BotDmService(
                 fallbackChatId.HasValue ? $" - falling back to chat {fallbackChatId.Value}" : " - no fallback configured");
 
             // Update bot_dm_enabled flag to false
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
 
             // If fallback chat is configured, post message there
             if (fallbackChatId.HasValue)
@@ -129,7 +129,7 @@ public class BotDmService(
                 notificationType);
 
             // Update bot_dm_enabled flag to true (user can receive DMs)
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -147,7 +147,7 @@ public class BotDmService(
                 notificationType);
 
             // Update bot_dm_enabled flag to false and queue notification
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
 
             // Queue notification for later delivery
             await pendingNotificationsRepository.AddPendingNotificationAsync(
@@ -340,7 +340,7 @@ public class BotDmService(
             }
 
             // Update bot_dm_enabled flag to true
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -354,7 +354,7 @@ public class BotDmService(
             // User has blocked the bot - update flag and queue notification
             logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
 
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
 
             // Queue notification for later delivery
             await pendingNotificationsRepository.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
@@ -435,7 +435,7 @@ public class BotDmService(
             }
 
             // Update bot_dm_enabled flag to true
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -449,7 +449,7 @@ public class BotDmService(
             // User has blocked the bot - update flag and queue notification (without buttons)
             logger.LogInformation("{User} has blocked bot DMs (403), queuing notification", user.ToLogInfo(telegramUserId));
 
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
 
             // Queue notification for later delivery (text only, no buttons)
             await pendingNotificationsRepository.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
@@ -548,7 +548,7 @@ public class BotDmService(
                 sentMessage.MessageId);
 
             // Update bot_dm_enabled flag to true
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            await telegramUserRepository.EnableBotDmAsync(telegramUserId, cancellationToken);
 
             return new DmDeliveryResult
             {
@@ -565,7 +565,7 @@ public class BotDmService(
                 "DM blocked for {User} (403 Forbidden) - cannot send keyboard message",
                 user.ToLogDebug(telegramUserId));
 
-            await telegramUserRepository.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+            await telegramUserRepository.DisableBotDmAsync(telegramUserId, cancellationToken);
 
             return new DmDeliveryResult
             {

@@ -135,9 +135,9 @@ public class TelegramUserRepository : ITelegramUserRepository
             existing.LastName = user.LastName;
             existing.UserPhotoPath = user.UserPhotoPath;
             existing.PhotoHash = user.PhotoHash;
-            // NOTE: IsTrusted is NOT updated here - it's only set via UpdateTrustStatusAsync()
+            // NOTE: IsTrusted is NOT updated here - it's only set via TrustUserAsync/UntrustUserAsync
             // to prevent message processing from clearing trust status set by admin/auto-trust
-            // NOTE: BotDmEnabled is NOT updated here - it's only set via SetBotDmEnabledAsync()
+            // NOTE: BotDmEnabled is NOT updated here - it's only set via EnableBotDmAsync/DisableBotDmAsync
             // to prevent message processing from resetting DM status after user completes /start
             // NOTE: IsActive IS updated here - sending a message definitively makes user active
             // (unlike IsTrusted which is admin-controlled, IsActive is behavior-driven)
@@ -239,12 +239,34 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <summary>
-    /// Update trust status (Phase 5.5: Auto-trust feature)
+    /// Mark user as trusted
     /// </summary>
-    public async Task UpdateTrustStatusAsync(long telegramUserId, bool isTrusted, CancellationToken cancellationToken = default)
+    public async Task TrustUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (entity != null)
+        {
+            entity.IsTrusted = true;
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Trusted user {User}",
+                entity.ToLogInfo());
+        }
+    }
+
+    /// <summary>
+    /// Remove trust from user
+    /// </summary>
+    public async Task UntrustUserAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         // Protect Telegram system accounts - cannot remove trust
-        if (TelegramConstants.IsSystemUser(telegramUserId) && !isTrusted)
+        if (TelegramConstants.IsSystemUser(telegramUserId))
         {
             _logger.LogWarning(
                 "Blocked attempt to remove trust from Telegram system account (user {TelegramUserId}). " +
@@ -259,24 +281,21 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (entity != null)
         {
-            entity.IsTrusted = isTrusted;
+            entity.IsTrusted = false;
             entity.UpdatedAt = DateTimeOffset.UtcNow;
 
             await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Updated trust status for {User}: {IsTrusted}",
-                entity.ToLogInfo(),
-                isTrusted);
+                "Untrusted user {User}",
+                entity.ToLogInfo());
         }
     }
 
     /// <summary>
-    /// Set bot DM enabled status (user accepted bot communication)
-    /// Set to true when user sends /start in private chat
-    /// Set to false when bot receives Forbidden error (user blocked bot)
+    /// Enable bot DMs for user (called when user sends /start in private chat)
     /// </summary>
-    public async Task SetBotDmEnabledAsync(long telegramUserId, bool enabled, CancellationToken cancellationToken = default)
+    public async Task EnableBotDmAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.TelegramUsers
@@ -284,15 +303,36 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (entity != null)
         {
-            entity.BotDmEnabled = enabled;
+            entity.BotDmEnabled = true;
             entity.UpdatedAt = DateTimeOffset.UtcNow;
 
             await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Updated bot DM status for {User}: {BotDmEnabled}",
-                entity.ToLogInfo(),
-                enabled);
+                "Enabled bot DMs for {User}",
+                entity.ToLogInfo());
+        }
+    }
+
+    /// <summary>
+    /// Disable bot DMs for user (called when bot receives Forbidden error / user blocked bot)
+    /// </summary>
+    public async Task DisableBotDmAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (entity != null)
+        {
+            entity.BotDmEnabled = false;
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Disabled bot DMs for {User}",
+                entity.ToLogInfo());
         }
     }
 
@@ -1010,7 +1050,7 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task SetActiveAsync(long telegramUserId, bool isActive, CancellationToken cancellationToken = default)
+    public async Task ActivateAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -1019,18 +1059,16 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (user == null)
         {
-            _logger.LogWarning("Cannot set active status for unknown user {User}", user.ToLogDebug(telegramUserId));
+            _logger.LogWarning("Cannot activate unknown user {User}", user.ToLogDebug(telegramUserId));
             return;
         }
 
-        user.IsActive = isActive;
+        user.IsActive = true;
         user.UpdatedAt = DateTimeOffset.UtcNow;
 
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
-            "Set active status for {User}: IsActive={IsActive}",
-            user.ToLogInfo(), isActive);
+        _logger.LogInformation("Activated {User}", user.ToLogInfo());
     }
 
     /// <inheritdoc />
@@ -1115,13 +1153,24 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task SetProfileScanExcludedAsync(long telegramUserId, bool excluded, CancellationToken cancellationToken = default)
+    public async Task ExcludeFromProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         await context.TelegramUsers
             .Where(u => u.TelegramUserId == telegramUserId)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(u => u.ProfileScanExcluded, excluded)
+                .SetProperty(u => u.ProfileScanExcluded, true)
+                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task IncludeInProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.ProfileScanExcluded, false)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
     }
 

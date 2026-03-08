@@ -569,7 +569,7 @@ public sealed class NotificationService : INotificationService
             var emailAddress = user.WebUser.Email!;
             var htmlBody = NotificationRenderer.ToEmailHtml(payload);
 
-            await _emailService.SendEmailAsync(emailAddress, payload.Subject, htmlBody, isHtml: true, ct);
+            await _emailService.SendEmailAsync(emailAddress, payload.Subject, htmlBody, ct);
 
             _logger.LogInformation("Sent email notification to {User}", user.ToLogInfo());
             return true;

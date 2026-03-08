@@ -4,6 +4,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
@@ -53,13 +54,13 @@ public class ImageProcessingHandler
         var photoFileSize = largestPhoto.FileSize.HasValue ? (int)largestPhoto.FileSize.Value : (int?)null;
 
         // Download and process image
-        var (fullPath, thumbPath) = await DownloadAndProcessImageAsync(
+        var imagePaths = await DownloadAndProcessImageAsync(
             photoFileId,
             chatId,
             messageId,
             cancellationToken);
 
-        if (fullPath == null || thumbPath == null)
+        if (imagePaths.FullPath == null || imagePaths.ThumbPath == null)
         {
             return null; // Download/processing failed
         }
@@ -67,8 +68,8 @@ public class ImageProcessingHandler
         return new ImageProcessingResult(
             FileId: photoFileId,
             FileSize: photoFileSize,
-            FullPath: fullPath,
-            ThumbnailPath: thumbPath
+            FullPath: imagePaths.FullPath,
+            ThumbnailPath: imagePaths.ThumbPath
         );
     }
 
@@ -76,7 +77,7 @@ public class ImageProcessingHandler
     /// Download photo from Telegram and generate thumbnail using ImageSharp.
     /// Returns relative paths for database storage, or (null, null) on failure.
     /// </summary>
-    private async Task<(string? fullPath, string? thumbPath)> DownloadAndProcessImageAsync(
+    private async Task<ImagePaths> DownloadAndProcessImageAsync(
         string photoFileId,
         long chatId,
         int messageId,
@@ -102,7 +103,7 @@ public class ImageProcessingHandler
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for photo {FileId}", photoFileId);
-                return (null, null);
+                return new ImagePaths(null, null);
             }
 
             // Download to temp file first
@@ -135,7 +136,7 @@ public class ImageProcessingHandler
                     messageId, chatId);
 
                 // Return relative paths for storage in database
-                return ($"full/{chatId}/{fileName}", $"thumbs/{chatId}/{fileName}");
+                return new ImagePaths($"full/{chatId}/{fileName}", $"thumbs/{chatId}/{fileName}");
             }
             finally
             {
@@ -150,14 +151,14 @@ public class ImageProcessingHandler
             _logger.LogWarning(ioEx,
                 "Filesystem error downloading image for message {MessageId} in chat {ChatId}. Message will be stored without image.",
                 messageId, chatId);
-            return (null, null);
+            return new ImagePaths(null, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "Error downloading/processing image for message {MessageId} in chat {ChatId}",
                 messageId, chatId);
-            return (null, null);
+            return new ImagePaths(null, null);
         }
     }
 }

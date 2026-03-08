@@ -1167,7 +1167,11 @@
 
         try
         {
-            await TelegramUserRepository.SetProfileScanExcludedAsync(_userDetail.User.Id, excluded);
+            if (excluded)
+                await TelegramUserRepository.ExcludeFromProfileScanAsync(_userDetail.User.Id);
+            else
+                await TelegramUserRepository.IncludeInProfileScanAsync(_userDetail.User.Id);
+
             _userDetail.ProfileScanExcluded = excluded;
             Snackbar.Add(excluded ? "User excluded from automatic rescans" : "User included in automatic rescans", Severity.Info);
         }

@@ -81,11 +81,6 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
             cancellationToken: cancellationToken);
     }
 
-    public async Task SetUserActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default)
-    {
-        await userRepository.SetActiveAsync(userId, isActive, cancellationToken);
-    }
-
     public async Task Reset2FaAsync(string userId, string modifiedBy, CancellationToken cancellationToken = default)
     {
         // Reset TOTP (clears secret, disables TOTP, clears setup timestamp)

@@ -129,7 +129,7 @@ public class UserAutoTrustService
             var actionId = await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
 
             // Update telegram_users.is_trusted flag for UI display (same as manual trust)
-            await _userRepository.UpdateTrustStatusAsync(userId, isTrusted: true, cancellationToken);
+            await _userRepository.TrustUserAsync(userId, cancellationToken);
 
             _logger.LogInformation(
                 "Auto-trusted {User} after {Count} non-spam messages (action ID: {ActionId})",

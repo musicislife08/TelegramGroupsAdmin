@@ -415,18 +415,6 @@ public class UserRepository : IUserRepository
             LogDisplayName.WebUserInfo(entity.Email, userId), permissionLevel, modifiedBy);
     }
 
-    public async Task SetActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (entity == null) return;
-
-        entity.IsActive = isActive;
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Set {User} active status to {IsActive}", LogDisplayName.WebUserInfo(entity.Email, userId), isActive);
-    }
-
     public async Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

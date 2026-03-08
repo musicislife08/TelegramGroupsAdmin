@@ -30,8 +30,10 @@ public interface ITelegramUserRepository
     Task UpdateUserPhotoPathAsync(long telegramUserId, string? photoPath, string? photoHash = null, CancellationToken cancellationToken = default);
     Task UpdatePhotoFileUniqueIdAsync(long telegramUserId, string? fileUniqueId, string? photoPath, CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUser>> GetActiveUsersAsync(int days, CancellationToken cancellationToken = default);
-    Task UpdateTrustStatusAsync(long telegramUserId, bool isTrusted, CancellationToken cancellationToken = default);
-    Task SetBotDmEnabledAsync(long telegramUserId, bool enabled, CancellationToken cancellationToken = default);
+    Task TrustUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task UntrustUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task EnableBotDmAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task DisableBotDmAsync(long telegramUserId, CancellationToken cancellationToken = default);
     Task<List<long>> GetTrustedUserIdsAsync(CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(List<long> chatIds, CancellationToken cancellationToken = default);
@@ -86,10 +88,9 @@ public interface ITelegramUserRepository
     Task<UiModels.TelegramUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Set user's active status.
-    /// Active = user has completed welcome flow OR sent a message.
+    /// Mark user as active (completed welcome flow or sent a message).
     /// </summary>
-    Task SetActiveAsync(long telegramUserId, bool isActive, CancellationToken cancellationToken = default);
+    Task ActivateAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Search users by name (fuzzy contains match on combined "first last" and username).
@@ -115,11 +116,16 @@ public interface ITelegramUserRepository
     Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Set whether a user is excluded from automatic profile re-scans.
+    /// Exclude a user from automatic profile re-scans.
     /// Set when the user cannot be resolved via Telegram API (likely deleted account).
+    /// </summary>
+    Task ExcludeFromProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Include a user in automatic profile re-scans.
     /// Cleared when a manual rescan successfully resolves the user.
     /// </summary>
-    Task SetProfileScanExcludedAsync(long telegramUserId, bool excluded, CancellationToken cancellationToken = default);
+    Task IncludeInProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get user IDs eligible for periodic profile re-scanning.

@@ -37,9 +37,8 @@ public class TrustHandler : ITrustHandler
 
         try
         {
-            await _telegramUserRepository.UpdateTrustStatusAsync(
+            await _telegramUserRepository.TrustUserAsync(
                 user.Id,
-                isTrusted: true,
                 cancellationToken);
 
             _logger.LogInformation(
@@ -68,11 +67,8 @@ public class TrustHandler : ITrustHandler
 
         try
         {
-            // Use UpdateTrustStatusAsync for symmetry with TrustAsync
-            // telegram_users.is_trusted is the source of truth
-            await _telegramUserRepository.UpdateTrustStatusAsync(
+            await _telegramUserRepository.UntrustUserAsync(
                 user.Id,
-                isTrusted: false,
                 cancellationToken);
 
             _logger.LogInformation(
