@@ -50,27 +50,13 @@ public class TrainingHandlerTests
     }
 
     [Test]
-    public async Task CreateSpamSampleAsync_ExistingDetectionRecord_SkipsInsert()
+    public async Task CreateSpamSampleAsync_ExistingDetectionRecord_StillCreatesManualResult()
     {
         // Arrange - message exists and already has a detection record (from automated pipeline)
+        // Manual result should ALWAYS be created for the detection history timeline
         var message = CreateTestMessage(messageText: "Buy cheap watches");
         _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
-
-        var existingDetection = new DetectionResultRecord
-        {
-            Id = 1,
-            MessageId = TestMessageId,
-            DetectedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
-            DetectionSource = "automated",
-            DetectionMethod = "TextClassifier",
-            Score = 4.75,
-            AddedBy = Actor.FromSystem("automated_pipeline"),
-            UserId = TestUserId,
-            NetScore = 4.75
-        };
-        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new List<DetectionResultRecord> { existingDetection });
 
         _mockImageTrainingRepo.SaveTrainingSampleAsync(
                 TestMessageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
@@ -81,9 +67,14 @@ public class TrainingHandlerTests
         // Act
         await _handler.CreateSpamSampleAsync(TestMessageId, ChatIdentity.FromId(-100), executor);
 
-        // Assert - InsertAsync should NOT be called since detection already exists
-        await _mockDetectionRepo.DidNotReceive()
-            .InsertAsync(Arg.Any<DetectionResultRecord>(), Arg.Any<CancellationToken>());
+        // Assert - InsertAsync IS called (manual result alongside existing auto result)
+        await _mockDetectionRepo.Received(1).InsertAsync(
+            Arg.Is<DetectionResultRecord>(d =>
+                d.MessageId == TestMessageId &&
+                d.DetectionSource == "manual" &&
+                d.DetectionMethod == "Manual" &&
+                d.Score == 5.0),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -93,9 +84,6 @@ public class TrainingHandlerTests
         var message = CreateTestMessage(messageText: "Buy cheap watches");
         _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
-
-        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new List<DetectionResultRecord>());
 
         _mockImageTrainingRepo.SaveTrainingSampleAsync(
                 TestMessageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
@@ -118,27 +106,12 @@ public class TrainingHandlerTests
     }
 
     [Test]
-    public async Task CreateSpamSampleAsync_ExistingDetectionRecord_StillCreatesTrainingLabel()
+    public async Task CreateSpamSampleAsync_AlwaysCreatesTrainingLabel()
     {
-        // Arrange - detection record already exists, but training label should still be created
+        // Arrange - training label should always be created alongside detection result
         var message = CreateTestMessage(messageText: "Buy cheap watches");
         _mockMessageRepo.GetMessageAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(message);
-
-        var existingDetection = new DetectionResultRecord
-        {
-            Id = 1,
-            MessageId = TestMessageId,
-            DetectedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
-            DetectionSource = "automated",
-            DetectionMethod = "TextClassifier",
-            Score = 4.75,
-            AddedBy = Actor.FromSystem("automated_pipeline"),
-            UserId = TestUserId,
-            NetScore = 4.75
-        };
-        _mockDetectionRepo.GetByMessageIdAsync(TestMessageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new List<DetectionResultRecord> { existingDetection });
 
         _mockImageTrainingRepo.SaveTrainingSampleAsync(
                 TestMessageId, Arg.Any<long>(), true, Arg.Any<Actor>(), Arg.Any<CancellationToken>())
@@ -149,7 +122,7 @@ public class TrainingHandlerTests
         // Act
         await _handler.CreateSpamSampleAsync(TestMessageId, ChatIdentity.FromId(-100), executor);
 
-        // Assert - training label still created even though detection record was skipped
+        // Assert - training label created alongside detection result
         await _mockTrainingLabelsRepo.Received(1).UpsertLabelAsync(
             TestMessageId,
             Arg.Any<long>(),

@@ -56,36 +56,26 @@ public class TrainingHandler : ITrainingHandler
         }
 
         // Create detection result for history (NOT for training - use training_labels instead)
-        // Guard: skip insert if a detection record already exists (e.g., from the automated pipeline)
+        // Always insert — the UI shows all results in a timeline (latest drives the badge)
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
-        var existingDetections = await _detectionResultsRepository.GetByMessageIdAsync(messageId, chat.Id, cancellationToken);
-        if (existingDetections.Count == 0)
+        var detectionResult = new DetectionResultRecord
         {
-            var detectionResult = new DetectionResultRecord
-            {
-                MessageId = messageId,
-                ChatId = chat.Id,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "manual",
-                DetectionMethod = "Manual",
-                Score = 5.0,
-                Reason = "Marked as spam by moderator",
-                AddedBy = executor,
-                UserId = message.User.Id,
-                UsedForTraining = false, // History only - training handled by training_labels table
-                NetScore = 5.0,
-                CheckResultsJson = null,
-                EditVersion = 0
-            };
+            MessageId = messageId,
+            ChatId = chat.Id,
+            DetectedAt = DateTimeOffset.UtcNow,
+            DetectionSource = "manual",
+            DetectionMethod = "Manual",
+            Score = 5.0,
+            Reason = "Marked as spam by moderator",
+            AddedBy = executor,
+            UserId = message.User.Id,
+            UsedForTraining = false, // History only - training handled by training_labels table
+            NetScore = 5.0,
+            CheckResultsJson = null,
+            EditVersion = 0
+        };
 
-            await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
-        }
-        else
-        {
-            _logger.LogDebug(
-                "Detection record already exists for message {MessageId}, skipping insert",
-                messageId);
-        }
+        await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
 
         // Create explicit training label for ML (spam)
         if (hasText)

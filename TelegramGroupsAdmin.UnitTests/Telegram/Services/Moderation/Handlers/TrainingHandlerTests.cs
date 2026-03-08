@@ -53,10 +53,6 @@ public class TrainingHandlerTests
         _mockJobTrigger = Substitute.For<IJobTriggerService>();
         _mockLogger = Substitute.For<ILogger<TrainingHandler>>();
 
-        // Default: no existing detection records (Bug 1+2 guard passes through)
-        _mockDetectionRepo.GetByMessageIdAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new List<DetectionResultRecord>());
-
         _handler = new TrainingHandler(
             _mockMessageRepo,
             _mockDetectionRepo,

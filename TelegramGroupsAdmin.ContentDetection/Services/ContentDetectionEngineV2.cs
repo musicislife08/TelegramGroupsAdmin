@@ -123,15 +123,17 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var infrastructureEnabled = connection?.Enabled ?? false;
         var spamDetectionEnabled = config.AIVeto.Enabled;
 
-        // AI always runs as veto to confirm ANY spam detection (even low confidence)
-        // This reduces false positives by having AI double-check all spam signals
-        var hasAnySpam = pipelineResult.TotalScore > 0;
-        var shouldRunAIVeto = hasAnySpam
+        // AI veto exists to double-check text heuristics (stop words, similarity, spacing, etc.)
+        // ImageSpam/VideoSpam already use OpenAI Vision API — vetoing them with text-only AI
+        // is redundant and harmful (text veto sees blank content for image-only messages)
+        var hasNonAISpam = pipelineResult.CheckResults
+            .Any(r => r.Score > 0 && !r.Abstained && r.CheckName is not (CheckName.ImageSpam or CheckName.VideoSpam));
+        var shouldRunAIVeto = hasNonAISpam
             && infrastructureEnabled  // Global kill switch
             && spamDetectionEnabled;  // Per-chat spam detection toggle
 
-        _logger.LogDebug("AI veto decision: HasAnySpam={HasAnySpam}, TotalScore={TotalScore}, InfraEnabled={InfraEnabled}, SpamDetectionEnabled={SpamEnabled}, ShouldRun={ShouldRun}",
-            hasAnySpam, pipelineResult.TotalScore, infrastructureEnabled, spamDetectionEnabled, shouldRunAIVeto);
+        _logger.LogDebug("AI veto decision: HasNonAISpam={HasNonAISpam}, TotalScore={TotalScore}, InfraEnabled={InfraEnabled}, SpamDetectionEnabled={SpamEnabled}, ShouldRun={ShouldRun}",
+            hasNonAISpam, pipelineResult.TotalScore, infrastructureEnabled, spamDetectionEnabled, shouldRunAIVeto);
 
         if (shouldRunAIVeto)
         {
