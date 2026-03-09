@@ -11,6 +11,13 @@ public class WelcomeConfig
     public int TimeoutSeconds { get; set; }
 
     /// <summary>
+    /// Maximum number of kicks before auto-banning the user.
+    /// After this many kicks (all-time), the next kick escalates to a permanent ban.
+    /// Set to 0 to disable auto-ban escalation.
+    /// </summary>
+    public int MaxKicksBeforeBan { get; set; }
+
+    /// <summary>
     /// Security checks that run when a user joins.
     /// Includes CAS check and impersonation detection.
     /// These run regardless of whether the welcome message is enabled.

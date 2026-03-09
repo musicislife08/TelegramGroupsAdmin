@@ -5,6 +5,7 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -35,6 +36,7 @@ public class BotModerationServiceTests
     private IBanCelebrationService _mockBanCelebrationService = null!;
     private IReportService _mockReportService = null!;
     private INotificationService _mockNotificationService = null!;
+    private IUserActionsRepository _mockUserActionsRepository = null!;
     private IConfigService _mockConfigService = null!;
     private ILogger<BotModerationService> _mockLogger = null!;
     private BotModerationService _orchestrator = null!;
@@ -53,6 +55,7 @@ public class BotModerationServiceTests
         _mockBanCelebrationService = Substitute.For<IBanCelebrationService>();
         _mockReportService = Substitute.For<IReportService>();
         _mockNotificationService = Substitute.For<INotificationService>();
+        _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
         _mockConfigService = Substitute.For<IConfigService>();
         _mockLogger = Substitute.For<ILogger<BotModerationService>>();
 
@@ -68,6 +71,7 @@ public class BotModerationServiceTests
             _mockBanCelebrationService,
             _mockReportService,
             _mockNotificationService,
+            _mockUserActionsRepository,
             _mockConfigService,
             _mockLogger);
     }
@@ -1477,7 +1481,7 @@ public class BotModerationServiceTests
         const long chatId = -100123456789L;
         var executor = Actor.FromTelegramUser(999, "Admin");
 
-        _mockBanHandler.KickFromChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _mockBanHandler.KickFromChatAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), executor, Arg.Any<string>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
             .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
 
         _mockAuditHandler.LogKickAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), executor, Arg.Any<string>(), Arg.Any<CancellationToken>())

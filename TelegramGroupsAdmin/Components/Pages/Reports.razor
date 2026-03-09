@@ -434,7 +434,8 @@
                                 User = args.Alert.User,
                                 Chat = args.Alert.Chat,
                                 Executor = executor,
-                                Reason = $"Profile scan alert #{args.Alert.Id} — kicked after review"
+                                Reason = $"Profile scan alert #{args.Alert.Id} — kicked after review",
+                                RevokeMessages = false
                             });
                     }
                     await ReportsRepository.UpdateStatusAsync(

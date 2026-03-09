@@ -1,9 +1,13 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Constants;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
@@ -43,6 +47,9 @@ public class BotModerationService : IBotModerationService
     private readonly IReportService _reportService;
     private readonly INotificationService _notificationService;
 
+    // Repositories
+    private readonly IUserActionsRepository _userActionsRepository;
+
     // Configuration
     private readonly IConfigService _configService;
     private readonly ILogger<BotModerationService> _logger;
@@ -59,6 +66,7 @@ public class BotModerationService : IBotModerationService
         IBanCelebrationService banCelebrationService,
         IReportService reportService,
         INotificationService notificationService,
+        IUserActionsRepository userActionsRepository,
         IConfigService configService,
         ILogger<BotModerationService> logger)
     {
@@ -73,6 +81,7 @@ public class BotModerationService : IBotModerationService
         _banCelebrationService = banCelebrationService;
         _reportService = reportService;
         _notificationService = notificationService;
+        _userActionsRepository = userActionsRepository;
         _configService = configService;
         _logger = logger;
     }
@@ -512,8 +521,42 @@ public class BotModerationService : IBotModerationService
         var protectionResult = CheckServiceAccountProtection(intent.User);
         if (protectionResult != null) return protectionResult;
 
+        // Check kick history for escalation
+        var kickDuration = ModerationConstants.DefaultKickDuration;
+        var config = await _configService.GetEffectiveAsync<WelcomeConfig>(
+            ConfigType.Welcome, intent.Chat.Id);
+        var maxKicks = config?.MaxKicksBeforeBan ?? ModerationConstants.DefaultMaxKicksBeforeBan;
+
+        if (maxKicks > 0)
+        {
+            var priorKicks = await _userActionsRepository.GetActiveActionsAsync(
+                intent.User.Id, UserActionType.Kick, cancellationToken);
+            var priorKickCount = priorKicks.Count;
+
+            if (priorKickCount >= maxKicks)
+            {
+                // Escalate to permanent ban
+                _logger.LogInformation(
+                    "Escalating kick to ban for {User}: {PriorKicks} prior kicks exceeds threshold {Threshold}",
+                    intent.User.ToLogInfo(), priorKickCount, maxKicks);
+
+                return await BanUserAsync(new BanIntent
+                {
+                    User = intent.User,
+                    Chat = intent.Chat,
+                    Executor = intent.Executor,
+                    Reason = $"Auto-ban: {priorKickCount} prior kicks (threshold: {maxKicks})"
+                }, cancellationToken);
+            }
+
+            // Escalate duration based on prior kicks
+            kickDuration = GetKickDuration(priorKickCount);
+        }
+
         var kickResult = await _banHandler.KickFromChatAsync(
-            intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken);
+            intent.User, intent.Chat, intent.Executor, intent.Reason,
+            new KickOptions { Duration = kickDuration, RevokeMessages = intent.RevokeMessages },
+            cancellationToken);
 
         if (!kickResult.Success)
             return ModerationResult.Failed(kickResult.ErrorMessage ?? "Failed to kick user");
@@ -528,6 +571,17 @@ public class BotModerationService : IBotModerationService
             Success = true,
             ChatsAffected = kickResult.ChatsAffected
         };
+    }
+
+    /// <summary>
+    /// Exponential backoff for kick duration: 1 min * 2^priorKickCount, capped at MaxKickDuration.
+    /// 0 prior = 1m, 1 prior = 2m, 2 prior = 4m, 3 = 8m, 4 = 16m, 5 = 32m, 6 = ~1h, 7 = ~2h, ...
+    /// </summary>
+    private static TimeSpan GetKickDuration(int priorKickCount)
+    {
+        var minutes = 1 << priorKickCount; // 2^n minutes
+        var duration = TimeSpan.FromMinutes(minutes);
+        return duration > ModerationConstants.MaxKickDuration ? ModerationConstants.MaxKickDuration : duration;
     }
 
     /// <inheritdoc/>
