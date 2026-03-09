@@ -82,11 +82,15 @@ public class VapidKeyGenerationService : IHostedService
         // Public key: 0x04 || X || Y (uncompressed point format)
         var publicKeyBytes = new byte[65];
         publicKeyBytes[0] = 0x04;
-        Buffer.BlockCopy(parameters.Q.X!, 0, publicKeyBytes, 1, 32);
-        Buffer.BlockCopy(parameters.Q.Y!, 0, publicKeyBytes, 33, 32);
+        var x = parameters.Q.X ?? throw new CryptographicException("Missing X coordinate from ECDsa parameters");
+        var y = parameters.Q.Y ?? throw new CryptographicException("Missing Y coordinate from ECDsa parameters");
+        var d = parameters.D ?? throw new CryptographicException("Missing private key (D) from ECDsa parameters");
+
+        Buffer.BlockCopy(x, 0, publicKeyBytes, 1, 32);
+        Buffer.BlockCopy(y, 0, publicKeyBytes, 33, 32);
 
         // Private key: just the D parameter
-        var privateKeyBytes = parameters.D!;
+        var privateKeyBytes = d;
 
         // Base64 URL-safe encoding (no padding)
         var publicKey = Base64UrlEncode(publicKeyBytes);

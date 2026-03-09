@@ -244,9 +244,10 @@ public class BackupService : IBackupService
     private object EncryptProtectedData(object? dto, Type dtoType, List<PropertyInfo> protectedProperties)
     {
         if (dto == null)
-            return dto!;
+            throw new ArgumentNullException(nameof(dto));
 
-        var encryptedDto = Activator.CreateInstance(dtoType)!;
+        var encryptedDto = Activator.CreateInstance(dtoType)
+            ?? throw new InvalidOperationException($"Failed to create instance of {dtoType.Name}");
 
         // Only process properties that are actual database columns (same filter as ExportTableAsync)
         var writableProperties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -752,12 +753,13 @@ public class BackupService : IBackupService
         {
             // Convert object back to DTO type via JSON round-trip (handles JsonElement → DTO)
             var jsonElement = (JsonElement)record;
-            var dto = JsonSerializer.Deserialize(jsonElement.GetRawText(), dtoType, jsonOptions)!;
+            var dto = JsonSerializer.Deserialize(jsonElement.GetRawText(), dtoType, jsonOptions)
+                ?? throw new InvalidOperationException($"Failed to deserialize {dtoType.Name} from backup data");
 
             // Encrypt any [ProtectedData] properties for the new machine
             if (protectedProperties.Any())
             {
-                dto = EncryptProtectedData(dto, dtoType, protectedProperties)!;
+                dto = EncryptProtectedData(dto, dtoType, protectedProperties);
             }
 
             // Build parameters, serializing complex JSONB properties to JSON strings
