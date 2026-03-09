@@ -620,7 +620,7 @@ public partial class MessageProcessingService(
             if (urls != null && urls.Any() && text != null)
             {
                 var urlScrapingService = messageScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IUrlContentScrapingService>();
-                var enrichedText = await urlScrapingService.EnrichMessageWithUrlPreviewsAsync(text!, cancellationToken);
+                var enrichedText = await urlScrapingService.EnrichMessageWithUrlPreviewsAsync(text, cancellationToken);
 
                 if (enrichedText != text) // Content was enriched
                 {

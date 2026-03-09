@@ -29,10 +29,7 @@ public class LoginPage
     /// </summary>
     public async Task NavigateAsync()
     {
-        await _page.GotoAsync("/login", new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.Load
-        });
+        await _page.GotoAsync("/login");
         await _page.WaitForSelectorAsync(EmailInput);
     }
 
