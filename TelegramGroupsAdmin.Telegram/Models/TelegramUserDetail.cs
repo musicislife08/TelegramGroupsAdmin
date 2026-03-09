@@ -21,6 +21,7 @@ public class TelegramUserDetail
     // Moderation state (source of truth from telegram_users table)
     public bool IsBanned { get; set; }
     public DateTimeOffset? BanExpiresAt { get; set; }
+    public int KickCount { get; set; }
     public List<WarningEntry> Warnings { get; set; } = [];  // JSONB from telegram_users
 
     // Profile scan data

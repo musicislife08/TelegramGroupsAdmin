@@ -126,13 +126,13 @@ public class TelegramUserRepositoryKickCountTests
     // ============================================================================
 
     [Test]
-    public async Task IncrementKickCountAsync_FirstKick_ReturnsOne()
+    public async Task IncrementKickCountAsync_FirstKick_ReturnsRowsAffected()
     {
         // Arrange
         const long userId = 100_003L;
         await CreateTestUserAsync(userId);
 
-        // Act
+        // Act — returns rows affected (1 = success)
         var result = await _repository!.IncrementKickCountAsync(userId);
 
         // Assert
@@ -140,19 +140,28 @@ public class TelegramUserRepositoryKickCountTests
     }
 
     [Test]
-    public async Task IncrementKickCountAsync_MultipleKicks_AccumulatesCorrectly()
+    public async Task IncrementKickCountAsync_MultipleKicks_EachReturnsRowsAffected()
     {
         // Arrange
         const long userId = 100_004L;
         await CreateTestUserAsync(userId);
 
-        // Act
-        await _repository!.IncrementKickCountAsync(userId);
-        await _repository!.IncrementKickCountAsync(userId);
-        var result = await _repository!.IncrementKickCountAsync(userId);
+        // Act — each call returns rows affected (always 1 for existing user)
+        var result1 = await _repository!.IncrementKickCountAsync(userId);
+        var result2 = await _repository!.IncrementKickCountAsync(userId);
+        var result3 = await _repository!.IncrementKickCountAsync(userId);
 
-        // Assert
-        Assert.That(result, Is.EqualTo(3));
+        // Assert — rows affected is always 1; actual count verified via GetKickCountAsync
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result1, Is.EqualTo(1));
+            Assert.That(result2, Is.EqualTo(1));
+            Assert.That(result3, Is.EqualTo(1));
+        }
+
+        // Verify count accumulated correctly
+        var kickCount = await _repository!.GetKickCountAsync(userId);
+        Assert.That(kickCount, Is.EqualTo(3));
     }
 
     [Test]

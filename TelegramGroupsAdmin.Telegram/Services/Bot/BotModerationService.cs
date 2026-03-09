@@ -583,7 +583,7 @@ public class BotModerationService : IBotModerationService
     /// </summary>
     internal static TimeSpan GetKickDuration(int priorKickCount)
     {
-        var shift = Math.Clamp(priorKickCount, 0, 30); // Guard against bit shift overflow (negative wraps to 1<<31)
+        var shift = Math.Clamp(priorKickCount, 0, 30); // Guard: 1<<-1 masks to 1<<31 = int.MinValue; >30 overflows
         var minutes = 1 << shift; // 2^n minutes
         var duration = TimeSpan.FromMinutes(minutes);
         return duration > ModerationConstants.MaxKickDuration ? ModerationConstants.MaxKickDuration : duration;

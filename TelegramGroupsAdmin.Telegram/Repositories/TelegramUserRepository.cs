@@ -895,6 +895,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             IsTrusted = user.IsTrusted,
             IsBanned = user.IsBanned,
             BanExpiresAt = user.BanExpiresAt,
+            KickCount = user.KickCount,
             BotDmEnabled = user.BotDmEnabled,
             FirstSeenAt = user.FirstSeenAt,
             LastSeenAt = user.LastSeenAt,
@@ -1047,17 +1048,9 @@ public class TelegramUserRepository : ITelegramUserRepository
             return 0;
         }
 
-        var newCount = await context.TelegramUsers
-            .AsNoTracking()
-            .Where(u => u.TelegramUserId == telegramUserId)
-            .Select(u => u.KickCount)
-            .FirstOrDefaultAsync(cancellationToken);
+        _logger.LogInformation("Incremented kick count for user {UserId}", telegramUserId);
 
-        _logger.LogInformation(
-            "Incremented kick count for user {UserId}: {KickCount}",
-            telegramUserId, newCount);
-
-        return newCount;
+        return rowsAffected;
     }
 
     /// <inheritdoc />
