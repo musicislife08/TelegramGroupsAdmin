@@ -22,15 +22,3 @@ public interface IWelcomeAdmissionHandler
     Task<AdmissionResult> TryAdmitUserAsync(
         UserIdentity user, ChatIdentity chat, Actor executor, string reason, CancellationToken ct);
 }
-
-/// <summary>
-/// Result of an admission check.
-/// </summary>
-public enum AdmissionResult
-{
-    /// <summary>All gates cleared — user was unmuted.</summary>
-    Admitted,
-
-    /// <summary>One or more gates still pending — user remains muted.</summary>
-    StillWaiting
-}

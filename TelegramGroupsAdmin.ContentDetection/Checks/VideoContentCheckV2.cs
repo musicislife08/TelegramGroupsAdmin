@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -650,12 +649,3 @@ public class VideoContentCheckV2(
         }
     }
 }
-
-/// <summary>
-/// Keyframe hash JSON structure for deserialization from video_training_samples.keyframe_hashes
-/// </summary>
-internal record KeyframeHashJson(
-    [property: JsonPropertyName("position")] double Position,
-    [property: JsonPropertyName("hash")] string Hash
-);
-

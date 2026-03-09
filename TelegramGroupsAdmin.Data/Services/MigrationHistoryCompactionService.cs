@@ -5,38 +5,6 @@ using TelegramGroupsAdmin.Data.Constants;
 namespace TelegramGroupsAdmin.Data.Services;
 
 /// <summary>
-/// Result of migration history compaction check.
-/// </summary>
-public enum MigrationCompactionResult
-{
-    /// <summary>No history table - fresh database, proceed with full migration</summary>
-    FreshDatabase,
-
-    /// <summary>History compacted to baseline - proceed (migrations will be no-op)</summary>
-    Compacted,
-
-    /// <summary>Already at or past baseline - no action needed</summary>
-    NoActionNeeded,
-
-    /// <summary>Database at incompatible state - cannot proceed</summary>
-    IncompatibleState
-}
-
-/// <summary>
-/// Pre-migration service that compacts migration history when database
-/// is at a known stable state (v1.5.0), replacing all previous migrations
-/// with a single consolidated baseline.
-/// </summary>
-public interface IMigrationHistoryCompactionService
-{
-    /// <summary>
-    /// Checks migration history state and performs compaction if appropriate.
-    /// Must be called BEFORE context.Database.MigrateAsync().
-    /// </summary>
-    Task<MigrationCompactionResult> CompactIfEligibleAsync(CancellationToken cancellationToken = default);
-}
-
-/// <summary>
 /// Implementation of migration history compaction.
 /// Uses raw NpgsqlConnection to check/modify history before EF Core touches it.
 /// </summary>

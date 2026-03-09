@@ -47,9 +47,3 @@ public interface IWebUserMessagingService
         string text,
         CancellationToken cancellationToken = default);
 }
-
-public record WebUserFeatureAvailability(bool IsAvailable, string? UnavailableReason);
-
-public record WebUserChatAvailability(bool CanSend, string? UnavailableReason);
-
-public record WebUserMessageResult(bool Success, string? ErrorMessage);

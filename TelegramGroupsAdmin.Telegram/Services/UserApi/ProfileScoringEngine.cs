@@ -11,38 +11,6 @@ using TelegramGroupsAdmin.Core.Services.AI;
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 /// <summary>
-/// Result of a profile scan containing all extracted data, computed score, and outcome.
-/// </summary>
-public record ProfileScanResult(
-    long TelegramUserId,
-    string? Bio,
-    long? PersonalChannelId,
-    string? PersonalChannelTitle,
-    string? PersonalChannelAbout,
-    bool HasPinnedStories,
-    string? PinnedStoryCaptions,
-    bool IsScam,
-    bool IsFake,
-    bool IsVerified,
-    decimal Score,
-    ProfileScanOutcome Outcome,
-    string? AiReason,
-    string[]? AiSignalsDetected,
-    bool ContainsNudity = false,
-    string? SkipReason = null);
-
-/// <summary>Result from the full two-layer scoring pipeline.</summary>
-public record ScoringResult(
-    decimal Score,
-    ProfileScanOutcome Outcome,
-    decimal RuleScore,
-    decimal AiScore,
-    int? AiConfidence,
-    string? AiReason,
-    string[]? AiSignals,
-    bool ContainsNudity = false);
-
-/// <summary>
 /// Two-layer scoring engine for profile risk assessment.
 /// Layer 1: Cheap rule-based pre-filters (instant, run first).
 /// Layer 2: AI vision analysis (expensive, skipped if Layer 1 already hits ban threshold).
@@ -297,25 +265,3 @@ public sealed class ProfileScoringEngine(
 
     private static decimal Cap(decimal score) => Math.Min(score, MaxScore);
 }
-
-/// <summary>
-/// Extracted profile data passed to the scoring engine.
-/// Decouples scoring from the WTelegram API types.
-/// </summary>
-public record ProfileData(
-    UserIdentity User,
-    ChatIdentity Chat,
-    string? FirstName,
-    string? LastName,
-    string? Username,
-    string? Bio,
-    long? PersonalChannelId,
-    string? PersonalChannelTitle,
-    string? PersonalChannelAbout,
-    bool HasPinnedStories,
-    string? PinnedStoryCaptions,
-    int StoryCount,
-    IReadOnlyList<string>? StoryCaptions,
-    bool IsScam,
-    bool IsFake,
-    bool IsVerified);
