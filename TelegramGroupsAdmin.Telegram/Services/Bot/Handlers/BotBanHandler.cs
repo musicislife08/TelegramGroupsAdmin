@@ -6,6 +6,7 @@ using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -266,8 +267,11 @@ public class BotBanHandler : IBotBanHandler
         ChatIdentity chat,
         Actor executor,
         string? reason,
+        KickOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        options ??= new KickOptions();
+
         _logger.LogDebug(
             "Executing kick for user {User} from chat {Chat} by {Executor}",
             user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
@@ -275,14 +279,16 @@ public class BotBanHandler : IBotBanHandler
         try
         {
             var apiClient = await _botClientFactory.GetApiClientAsync();
+            var untilDate = DateTime.UtcNow.Add(options.Duration);
 
-            // Ban then immediately unban (removes user from chat without permanent ban)
-            await apiClient.BanChatMemberAsync(chat.Id, user.Id, ct: cancellationToken);
-            await apiClient.UnbanChatMemberAsync(chat.Id, user.Id, onlyIfBanned: true, ct: cancellationToken);
+            // Temporary ban — removes user and prevents rejoin until untilDate.
+            // Telegram auto-unbans after expiry. No explicit unban needed.
+            await apiClient.BanChatMemberAsync(chat.Id, user.Id,
+                untilDate: untilDate, revokeMessages: options.RevokeMessages, ct: cancellationToken);
 
             _logger.LogInformation(
-                "Kicked {User} from chat {Chat}",
-                user.ToLogInfo(), chat.ToLogInfo());
+                "Kicked {User} from chat {Chat} (temp ban for {Duration})",
+                user.ToLogInfo(), chat.ToLogInfo(), options.Duration);
 
             // NOTE: No database state change - kick is a one-time action, not a persistent ban
             return BanResult.Succeeded(chatsAffected: 1);

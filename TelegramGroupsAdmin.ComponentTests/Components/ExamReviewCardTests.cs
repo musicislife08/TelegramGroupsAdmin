@@ -560,6 +560,7 @@ public class ExamReviewCardTests : ExamReviewCardTestContext
             IsBot: false,
             IsTrusted: true,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: now.AddDays(-30),
             LastSeenAt: now,

@@ -158,6 +158,7 @@ public class ModerationReportCardTests : ModerationReportCardTestContext
             IsBot: false,
             IsTrusted: false,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-7),
             LastSeenAt: DateTimeOffset.UtcNow.AddHours(-3),

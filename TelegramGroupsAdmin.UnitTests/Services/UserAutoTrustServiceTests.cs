@@ -241,6 +241,7 @@ public class UserAutoTrustServiceTests
             IsBot: false,
             IsTrusted: false,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: now.AddHours(-firstSeenHoursAgo),
             LastSeenAt: now,

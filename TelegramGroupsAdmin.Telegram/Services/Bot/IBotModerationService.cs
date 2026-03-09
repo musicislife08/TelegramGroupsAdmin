@@ -71,8 +71,8 @@ public interface IBotModerationService
     Task<ModerationResult> RestoreUserPermissionsAsync(RestorePermissionsIntent intent, CancellationToken ct = default);
 
     /// <summary>
-    /// Kick user from a specific chat (ban then immediately unban).
-    /// Does not affect other chats or create permanent ban record.
+    /// Kick user from a specific chat (temporary ban with escalating duration).
+    /// Checks kick history — auto-bans after exceeding configurable threshold.
     /// </summary>
     Task<ModerationResult> KickUserFromChatAsync(KickIntent intent, CancellationToken ct = default);
 

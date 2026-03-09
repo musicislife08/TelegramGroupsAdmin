@@ -1427,6 +1427,7 @@ public class ReportCallbackServiceTests
             IsBot: false,
             IsTrusted: false,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-30),
             LastSeenAt: DateTimeOffset.UtcNow.AddMinutes(-5),

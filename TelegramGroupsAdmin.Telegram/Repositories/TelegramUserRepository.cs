@@ -895,6 +895,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             IsTrusted = user.IsTrusted,
             IsBanned = user.IsBanned,
             BanExpiresAt = user.BanExpiresAt,
+            KickCount = user.KickCount,
             BotDmEnabled = user.BotDmEnabled,
             FirstSeenAt = user.FirstSeenAt,
             LastSeenAt = user.LastSeenAt,
@@ -1026,6 +1027,41 @@ public class TelegramUserRepository : ITelegramUserRepository
             .AsNoTracking()
             .Where(u => u.TelegramUserId == telegramUserId)
             .Select(u => u.IsTrusted)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> IncrementKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var rowsAffected = await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.KickCount, u => u.KickCount + 1)
+                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow),
+                cancellationToken);
+
+        if (rowsAffected == 0)
+        {
+            _logger.LogWarning("Cannot increment kick count for unknown user {UserId}", telegramUserId);
+            return 0;
+        }
+
+        _logger.LogInformation("Incremented kick count for user {UserId}", telegramUserId);
+
+        return rowsAffected;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .Select(u => u.KickCount)
             .FirstOrDefaultAsync(cancellationToken);
     }
 

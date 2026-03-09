@@ -311,6 +311,7 @@ public class TelegramUserManagementServiceTests
             IsBot: false,
             IsTrusted: isTrusted,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-30),
             LastSeenAt: DateTimeOffset.UtcNow.AddHours(-1),

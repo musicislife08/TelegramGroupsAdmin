@@ -34,4 +34,19 @@ public static class ModerationConstants
     /// Default reason used for admin-initiated bans when no specific reason is provided.
     /// </summary>
     public const string DefaultBanReason = "Banned by admin";
+
+    /// <summary>
+    /// Default kick duration (1 minute). Used when no escalation is applied.
+    /// </summary>
+    public static readonly TimeSpan DefaultKickDuration = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Maximum kick duration cap (24 hours). Prevents exponential backoff from exceeding reasonable limits.
+    /// </summary>
+    public static readonly TimeSpan MaxKickDuration = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Default MaxKicksBeforeBan value (0 = disabled). Auto-ban on repeated kicks is opt-in.
+    /// </summary>
+    public const int DefaultMaxKicksBeforeBan = 0;
 }

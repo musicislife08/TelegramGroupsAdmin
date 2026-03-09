@@ -651,6 +651,7 @@ public partial class MessageProcessingService(
                 IsBot: message.From.IsBot, // Track bot status from Telegram API
                 IsTrusted: false,
                 IsBanned: false, // New users are not banned
+                KickCount: 0,
                 BotDmEnabled: false, // Will be set to true when user sends /start in private chat
                 FirstSeenAt: now,
                 LastSeenAt: now,

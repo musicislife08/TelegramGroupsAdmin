@@ -78,6 +78,7 @@ public class WelcomeServiceTests
         IsBot: false,
         IsTrusted: false,
         IsBanned: false,
+        KickCount: 0,
         BotDmEnabled: false,
         FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-1),
         LastSeenAt: DateTimeOffset.UtcNow,

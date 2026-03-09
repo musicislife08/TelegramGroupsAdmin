@@ -77,6 +77,17 @@ public interface ITelegramUserRepository
     /// </summary>
     Task<bool> IsTrustedAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Increment user's all-time kick count by 1. Returns rows affected (0 = unknown user, 1 = success).
+    /// Source of truth for kick escalation logic (not derived from audit log).
+    /// </summary>
+    Task<int> IncrementKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get user's all-time kick count for escalation decisions.
+    /// </summary>
+    Task<int> GetKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
     // ============================================================================
     // IsActive Methods (Phase: /ban @username support)
     // ============================================================================

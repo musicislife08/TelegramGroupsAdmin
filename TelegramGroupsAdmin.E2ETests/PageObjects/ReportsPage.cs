@@ -350,19 +350,23 @@ public class ReportsPage
 
     /// <summary>
     /// Returns true if any report cards are displayed.
+    /// Uses web-first assertion with auto-retry to handle Blazor async data loading.
     /// </summary>
     public async Task<bool> HasReportsAsync()
     {
-        // Check for any type of report card by looking for their header text
-        var moderationCard = _page.GetByText("Moderation Report");
-        var impersonationCard = _page.GetByText("Impersonation Alert");
-        var examCard = _page.GetByText("Exam Review");
-
-        var hasModerationReports = await moderationCard.CountAsync() > 0;
-        var hasImpersonationAlerts = await impersonationCard.CountAsync() > 0;
-        var hasExamReviews = await examCard.CountAsync() > 0;
-
-        return hasModerationReports || hasImpersonationAlerts || hasExamReviews;
+        try
+        {
+            // Use Or() locator composition with auto-retry for Blazor async rendering
+            var reportCard = _page.GetByText("Moderation Report")
+                .Or(_page.GetByText("Impersonation Alert"))
+                .Or(_page.GetByText("Exam Review"));
+            await Expect(reportCard.First).ToBeVisibleAsync(new() { Timeout = 5000 });
+            return true;
+        }
+        catch (PlaywrightException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

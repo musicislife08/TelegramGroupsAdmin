@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
@@ -54,7 +55,7 @@ public interface IBotBanHandler
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Kick user from a specific chat (ban then immediately unban).
+    /// Kick user from a specific chat (temporary ban that auto-expires).
     /// Does not affect other chats or create permanent ban record.
     /// Used for welcome flow denials and exam failures.
     /// </summary>
@@ -63,5 +64,6 @@ public interface IBotBanHandler
         ChatIdentity chat,
         Actor executor,
         string? reason,
+        KickOptions? options = null,
         CancellationToken cancellationToken = default);
 }

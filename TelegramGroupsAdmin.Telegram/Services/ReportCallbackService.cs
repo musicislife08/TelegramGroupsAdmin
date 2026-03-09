@@ -674,7 +674,8 @@ public class ReportCallbackService(
                 User = user,
                 Chat = chat,
                 Executor = executor,
-                Reason = $"Profile scan alert #{report.Id} — kicked by admin"
+                Reason = $"Profile scan alert #{report.Id} — kicked by admin",
+                RevokeMessages = false
             },
             cancellationToken);
 

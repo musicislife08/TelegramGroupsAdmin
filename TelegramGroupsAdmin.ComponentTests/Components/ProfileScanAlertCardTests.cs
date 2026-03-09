@@ -118,6 +118,7 @@ public class ProfileScanAlertCardTests : ProfileScanAlertCardTestContext
             IsBot: false,
             IsTrusted: isTrusted,
             IsBanned: isBanned,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow.AddDays(-30),
             LastSeenAt: DateTimeOffset.UtcNow.AddHours(-3),
