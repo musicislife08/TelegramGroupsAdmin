@@ -4,12 +4,12 @@ Welcome to TelegramGroupsAdmin! This guide will help you get up and running in j
 
 ## What is TelegramGroupsAdmin?
 
-TelegramGroupsAdmin is a comprehensive spam detection and moderation tool for Telegram groups. It uses **14 different detection algorithms** working together to identify spam while minimizing false positives, and provides a powerful web interface for managing your Telegram communities.
+TelegramGroupsAdmin is a comprehensive content detection and moderation tool for Telegram groups. It uses **14 content detection checks** working together to identify spam while minimizing false positives, and provides a powerful web interface for managing your Telegram communities.
 
 ### Key Features at a Glance
 
-- **Multi-Algorithm Spam Detection** - 14 detection methods analyze each message
-- **AI-Powered Review** - Optional GPT-4 veto reduces false positives by 80-90%
+- **Multi-Check Content Detection** - 14 detection methods analyze each message
+- **AI-Powered Review** - Optional AI veto reduces false positives by 80-90%
 - **File Scanning** - Automatic malware detection for uploaded files
 - **URL Filtering** - Block malicious domains with 540,000+ built-in blocklists
 - **Self-Learning** - System improves over time from your feedback
@@ -137,19 +137,18 @@ Let's quickly tour the main navigation:
 
 - **Home** - Dashboard with chat health, recent activity, quick stats
 - **Messages** - Browse all messages from your Telegram groups (Telegram-style interface)
+- **Analytics** - Charts and graphs showing spam trends, detection rates, performance
+- **Reports** - Review queue for borderline spam detections
+- **Users** - Telegram user management, ban users, add warnings
 - **Tools** - Content Tester for testing spam detection
-- **Documentation** - This documentation system
-- **Help** - Quick help articles
+- **Documentation** - In-app documentation and guides
 - **Profile** - Your account settings, password, 2FA, Telegram linking
 
 ### Admin Navigation (GlobalAdmin/Owner Only)
 
-- **Analytics** - Charts and graphs showing spam trends, detection rates, performance
 - **Chat Management** - Manage monitored chats, configure per-chat settings
-- **Users** - Telegram user management, ban users, add warnings
-- **Reports** - Review queue for borderline spam detections
 - **Audit Log** - Track all administrative actions
-- **Settings** - System configuration (algorithms, URL filters, API keys, etc.)
+- **Settings** - System configuration (checks, URL filters, API keys, etc.)
 
 [Screenshot: Full sidebar navigation]
 
@@ -174,7 +173,7 @@ The **Reports** page shows:
 - **Moderation Reports**: Borderline spam (score between ReviewQueue and AutoBan thresholds, default 2.5-4.0 points) needing manual review
 - **Impersonation Alerts**: Suspected impersonators (duplicate photos, similar usernames)
 
-**Workflow**: Review each report and click **Confirm Spam** or **Mark as Ham**. Your feedback trains the machine learning algorithms!
+**Workflow**: Review each report and click **Delete as Spam** or **Dismiss**. Your feedback trains the content detection checks!
 
 ### Settings Page - Configuration Hub
 
@@ -206,7 +205,7 @@ Now that you're logged in and familiar with the interface, it's time to configur
 
 ### Do I need an OpenAI API key?
 
-**No**, it's optional. The system has 14 detection algorithms, and most work without OpenAI. However, the OpenAI-powered features (GPT-4 verification, translation, vision-based spam detection) significantly improve accuracy and are worth enabling once you're comfortable with the basics.
+**No**, it's optional. The system has 14 content detection checks, and most work without OpenAI. However, the OpenAI-powered features (AI verification, translation, vision-based spam detection) significantly improve accuracy and are worth enabling once you're comfortable with the basics.
 
 **Cost**: ~$0.002 per message reviewed (OpenAI only processes borderline cases, not every message).
 
@@ -264,8 +263,7 @@ Yes. All data is stored in your own PostgreSQL database. API calls to external s
 
 ## Get Help
 
-- **In-App Documentation**: Click **Documentation** in the sidebar
-- **Help Articles**: Click **Help** in the sidebar for quick reference
+- **In-App Documentation**: Click **Documentation** in the sidebar for guides and reference
 - **Audit Log**: If something unexpected happens, check the Audit Log to see what actions were taken
 
 **Ready to configure spam detection?** Continue to **[First Configuration Guide](02-first-configuration.md)**!

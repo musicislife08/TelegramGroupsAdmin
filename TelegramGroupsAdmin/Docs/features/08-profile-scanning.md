@@ -300,7 +300,7 @@ This prevents a temporary rate limit from permanently excluding users who should
 - Check logs for "Could not resolve" messages
 
 **AI scoring not working (only rule-based scores):**
-- Verify the OpenAI API key is configured (Settings > System > OpenAI)
+- Verify the AI API key is configured (Settings > System > AI Providers)
 - Check that the `ProfileScan` AI feature type is enabled in AI provider configuration
 - Look for "ProfileScan AI feature not configured" in logs
 

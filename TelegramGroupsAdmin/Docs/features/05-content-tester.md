@@ -1,4 +1,4 @@
-# Content Tester - Test Before You Deploy
+# Unified Content Tester - Test Before You Deploy
 
 The **Content Tester** is your sandbox for testing spam detection rules before they affect real messages. Test text, images, files, and URLs to see exactly how the system will respond—without risking false positives or banning legitimate users.
 
@@ -60,7 +60,7 @@ The Content Tester page has a simple, focused layout:
 
 1. Navigate to **Tools** → **Content Tester**
 2. Type or paste message text in the text area
-3. Click **Test Content**
+3. Click **Run Content Check**
 4. Review results
 
 **Example test**:
@@ -91,24 +91,24 @@ The Content Tester supports image testing for vision-based spam detection (if Op
 2. Click in text area
 3. Paste (Ctrl/Cmd+V)
 4. Image appears as preview
-5. Click **Test Content**
+5. Click **Run Content Check**
 
 **Method 2 - Drag & Drop**:
 1. Drag image file from your computer
 2. Drop into the designated area
 3. Image preview appears
-4. Click **Test Content**
+4. Click **Run Content Check**
 
 **Method 3 - File Upload**:
 1. Click **Upload Image** button
 2. Select image file from dialog
 3. Image preview appears
-4. Click **Test Content**
+4. Click **Run Content Check**
 
 ### What Gets Analyzed
 
 **If OpenAI Vision is enabled**:
-- Image content analyzed by GPT-4 Vision
+- Image content analyzed by AI Vision
 - Text in images extracted (OCR-like)
 - Visual spam indicators detected
 - Context-aware analysis
@@ -137,7 +137,7 @@ Test uploaded files for malware without actually sending them to your Telegram g
 1. Click **Upload File** button
 2. Select file (any type: PDF, ZIP, EXE, etc.)
 3. File name and size display
-4. Click **Test Content**
+4. Click **Run Content Check**
 5. Wait for scan results (may take 10-30 seconds)
 
 ### What Gets Scanned
@@ -185,7 +185,7 @@ Test links against URL filtering rules before adding them to blocklists or white
 ```
 Check out this site: https://example.com
 ```
-2. Click **Test Content**
+2. Click **Run Content Check**
 3. Review URL Content algorithm results
 
 ### URL Test Results
@@ -322,7 +322,7 @@ Based on 250 training samples
 
 **OpenAI Verification**:
 ```
-GPT-4 Analysis: "This message is unsolicited promotion with
+AI Analysis: "This message is unsolicited promotion with
 urgency tactics and suspicious links. Clear spam pattern."
 Score: +1.50 pts
 ```
@@ -456,7 +456,7 @@ Test the same message with different configurations:
 ```
 Test 1 (without OpenAI): 3.2 pts total
 Change: Enable OpenAI Verification (AI veto)
-Test 2 (with OpenAI): 1.8 pts total (GPT-4 vetoed — not spam)
+Test 2 (with OpenAI): 1.8 pts total (AI vetoed — not spam)
 
 Conclusion: OpenAI veto reduces false positive
 ```
@@ -481,7 +481,7 @@ Conclusion: OpenAI veto reduces false positive
 
 **Symptoms**:
 - Image uploaded but OpenAI Verification shows 0.00 pts
-- No GPT-4 analysis in results
+- No AI analysis in results
 
 **Solutions**:
 - Verify OpenAI API key is configured

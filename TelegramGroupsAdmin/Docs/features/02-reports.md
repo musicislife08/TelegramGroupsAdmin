@@ -37,9 +37,9 @@ Each report displays:
 - **User info** - Username, user ID, profile photo
 - **Timestamp** - When message was sent
 - **Spam score** - Overall spam score (e.g., "3.2 points")
-- **Algorithm breakdown** - Which algorithms flagged it
+- **Check breakdown** - Which checks flagged it
 - **Status** - Pending, Resolved, Dismissed
-- **Action buttons** - Confirm Spam, Mark as Ham, Dismiss
+- **Action buttons** - Delete as Spam, Ban User, Warn, Dismiss
 
 [Screenshot: Moderation report card with all elements labeled]
 
@@ -112,14 +112,13 @@ Ask yourself:
 
 ### Step 4: Make a Decision
 
-You have three options:
+You have four options:
 
-#### Option 1: Confirm Spam ✓
+#### Option 1: Delete as Spam ✓
 
 **Choose this if**: Message is definitely spam
 
 **What happens**:
-- User is permanently banned from the group
 - Message is deleted from Telegram
 - Added to spam training samples (trains ML)
 - Report marked as "Resolved"
@@ -127,22 +126,31 @@ You have three options:
 
 **Example**: Unsolicited crypto signals promotion with suspicious links
 
-#### Option 2: Mark as Ham ✗
+#### Option 2: Ban User ⛔
 
-**Choose this if**: Message is legitimate (false positive)
+**Choose this if**: User is a spammer who should be permanently removed
 
 **What happens**:
-- Message is allowed to stay
-- User is NOT banned
-- Added to ham training samples (trains ML)
+- User is permanently banned from the group
 - Report marked as "Resolved"
-- Future similar messages less likely to be flagged
+- Audit log entry created
 
-**Example**: Legitimate question about cryptocurrency that matched spam keywords
+**Example**: Known spammer account with repeated offenses
 
-#### Option 3: Dismiss ⊘
+#### Option 3: Warn ⚠
 
-**Choose this if**: You're unsure or need more information
+**Choose this if**: Message is borderline and user should be notified
+
+**What happens**:
+- User receives a warning
+- Message stays
+- Report marked as "Resolved"
+
+**Example**: Slightly promotional content from a regular member
+
+#### Option 4: Dismiss ⊘
+
+**Choose this if**: You're unsure or the message is legitimate (false positive)
 
 **What happens**:
 - No action taken
@@ -151,7 +159,7 @@ You have three options:
 - Report marked as "Dismissed"
 - Can revisit later
 
-**Example**: Borderline promotional content from regular member
+**Example**: Legitimate question about cryptocurrency that matched spam keywords
 
 [Screenshot: Report detail view with action buttons]
 
@@ -165,12 +173,13 @@ flowchart TD
 
     RQ --> A[Admin Reviews Report]
     A --> B{Decision}
-    B -->|Confirm Spam| C[Ban User + Delete Message]
-    B -->|Mark as Ham| D[Allow Message]
+    B -->|Delete as Spam| C[Delete Message]
+    B -->|Ban User| C2[Ban + Delete]
+    B -->|Warn| D[Warn User]
     B -->|Dismiss| E[No Action]
 
     C --> F[Train ML: This is Spam]
-    D --> G[Train ML: This is Ham]
+    C2 --> F
     E --> H[No ML Training]
 
     F --> I[Future Similar Messages Score Higher]
@@ -195,7 +204,7 @@ flowchart TD
 2. Filter to "Pending" status
 3. Review each report from top to bottom
 4. Make decisions on all pending reports
-5. Check "Resolved" tab to verify yesterday's actions
+5. Switch to "All" filter to verify yesterday's actions
 
 **Goal**: Empty the pending queue daily to prevent backlog.
 
@@ -206,14 +215,14 @@ flowchart TD
 - CAS Database flagged (known spammer)
 - Blocked URL domains
 - Obvious promotional content
-- **Decision**: Confirm Spam
+- **Decision**: Delete as Spam or Ban User
 
 **Clear false positive (instant decision)**:
 - Low total score (2.5-2.8 points)
 - Only one weak check flagged it
 - Established user with good history
 - On-topic, legitimate question
-- **Decision**: Mark as Ham
+- **Decision**: Dismiss
 
 **Borderline cases (investigate)**:
 - Mixed algorithm signals
@@ -277,9 +286,9 @@ flowchart TD
 
 ---
 
-## Impersonation Alerts Tab
+## Impersonation Alerts
 
-The second tab shows suspected impersonators - users who may be copying other members' profiles.
+The Impersonation Alerts filter shows suspected impersonators - users who may be copying other members' profiles.
 
 ### What Triggers an Impersonation Alert?
 
@@ -340,7 +349,7 @@ For details on how profile scanning works, see **[Profile Scanning](08-profile-s
 
 ## Status Filters
 
-Both tabs have status filters to organize reports:
+All report types share two status filters:
 
 ### Pending
 
@@ -348,23 +357,11 @@ Both tabs have status filters to organize reports:
 - **Default view**: This is what you see when opening Reports page
 - **Action needed**: Review and resolve
 
-### Resolved
-
-- **Definition**: Reports you've acted on (Confirmed Spam or Marked as Ham)
-- **Purpose**: Audit trail, verify past decisions
-- **Action**: Read-only, can revert if needed
-
-### Dismissed
-
-- **Definition**: Reports you dismissed without action
-- **Purpose**: Revisit later if more info available
-- **Action**: Can reopen and resolve
-
 ### All
 
-- **Definition**: Every report regardless of status
-- **Purpose**: Search across all reports
-- **Use case**: Find specific report by user or content
+- **Definition**: Every report regardless of status (includes resolved and dismissed)
+- **Purpose**: Search across all reports, audit trail, verify past decisions
+- **Use case**: Find specific report by user or content, review historical actions
 
 [Screenshot: Status filter dropdown]
 
@@ -503,7 +500,7 @@ Track your moderation performance in Analytics page:
    - Dismiss borderline cases for later
 4. **Switch to Impersonation Alerts**
 5. **Check for new alerts**
-6. **Verify yesterday's actions** in Resolved tab
+6. **Verify yesterday's actions** using the All status filter
 
 ### Weekly Audit
 

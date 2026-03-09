@@ -32,7 +32,7 @@ This approach minimizes the risk of accidentally banning legitimate users while 
 - **All detections** → Review Queue (no auto-bans)
 - **Review Queue threshold ignored** - Everything goes to review
 - **Auto-ban threshold ignored** - Nothing gets banned automatically
-- **You make all decisions** - Confirm Spam or Mark as Ham manually
+- **You make all decisions** - Delete as Spam or Dismiss manually
 
 **When to disable**: After you've reviewed 50-100 detections and feel confident in the system's accuracy.
 
@@ -276,11 +276,11 @@ For each detection:
 1. **Read the full message** - Click to expand details
 2. **Check which algorithms flagged it** - Review the breakdown
 3. **Make a decision**:
-   - **Confirm Spam** - If it's actually spam (trains ML algorithms)
-   - **Mark as Ham** - If it's a false positive (also trains ML)
+   - **Delete as Spam** - If it's actually spam (trains ML algorithms)
+   - **Dismiss** - If it's a false positive (also trains ML)
    - **Dismiss** - If you're unsure (doesn't train)
 
-**Important**: Your feedback is critical! Every "Confirm Spam" or "Mark as Ham" trains the machine learning algorithms to get smarter.
+**Important**: Your feedback is critical! Every "Delete as Spam" or "Dismiss" trains the machine learning algorithms to get smarter.
 
 ### How Many to Review
 
@@ -344,8 +344,8 @@ flowchart TD
     D -->|Under 2.5| G[Allow Message]
 
     F --> H{Manual Review}
-    H -->|Confirm Spam| I[Ban User]
-    H -->|Mark as Ham| J[Allow + Train ML]
+    H -->|Delete as Spam| I[Ban User]
+    H -->|Dismiss| J[Allow + Train ML]
 
     style E fill:#ff6b6b
     style F fill:#ffd93d
@@ -394,7 +394,7 @@ Here's what you've configured:
 
 Once you're comfortable with the basics, consider:
 
-- **[AI Prompt Builder](../features/06-ai-prompt-builder.md)** - Customize GPT-4 spam detection for your group's context
+- **[AI Prompt Builder](../features/06-ai-prompt-builder.md)** - Customize AI spam detection for your group's context
 - **[Content Tester](../features/05-content-tester.md)** - Test detection rules before deploying
 - **ML Threshold Tuning** - Let AI optimize your thresholds
 
@@ -458,6 +458,6 @@ Once you're comfortable with the basics, consider:
 
 - **[Spam Detection Guide](../features/03-spam-detection.md)** - Detailed algorithm explanations
 - **[Reports Documentation](../features/02-reports.md)** - Review queue best practices
-- **Audit Log** - Check Settings → Audit Log to see what actions were taken
+- **Audit Log** - Check Audit Log (top-level sidebar item) to see what actions were taken
 
 **Ready to master the review queue?** Continue to **[Reports Documentation](../features/02-reports.md)**!

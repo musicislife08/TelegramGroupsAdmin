@@ -1,8 +1,10 @@
 # Kick Escalation System
 
-The **Kick Escalation System** prevents repeatedly kicked users from instantly rejoining your group. Each time a user is kicked, the rejoin cooldown doubles -- starting at 1 minute and escalating up to 24 hours. After a configurable number of kicks, the system automatically escalates to a permanent ban.
+The **Kick Escalation System** prevents repeatedly kicked users from instantly rejoining your group. When enabled (`MaxKicksBeforeBan > 0`), each kick's cooldown doubles -- starting at 1 minute and escalating up to 24 hours. After the configured number of kicks, the system automatically escalates to a permanent ban.
 
-**Think of it as**: A graduated penalty system that makes each kick more impactful than the last.
+By default, escalation is **disabled** (`MaxKicksBeforeBan = 0`). In this mode, every kick uses a flat **1-minute cooldown** with no escalation and no auto-ban. Kick counts are still tracked for visibility.
+
+**Think of it as**: An opt-in graduated penalty system that, when enabled, makes each kick more impactful than the last.
 
 ## Why Kick Escalation?
 
@@ -16,11 +18,16 @@ Without escalation, a kicked user can rejoin the group almost immediately. This 
 
 ## How It Works
 
-When a user is kicked (from any source -- welcome timeout, exam failure, admin action, or report review), the system:
+When a user is kicked (from any source -- welcome timeout, exam failure, admin action, or profile scan alert review), the system:
 
+**Default behavior (`MaxKicksBeforeBan = 0`):**
+1. Issues a **1-minute temporary ban** via the Telegram API (flat, no escalation)
+2. **Increments the kick count** for tracking purposes
+
+**With escalation enabled (`MaxKicksBeforeBan > 0`):**
 1. Looks up the user's **all-time kick count** from the database
-2. Checks if the count exceeds the **auto-ban threshold** (if enabled)
-3. If threshold exceeded: escalates to a **permanent ban** instead of a kick
+2. Checks if the count meets or exceeds the **auto-ban threshold**
+3. If threshold met: escalates to a **permanent ban** instead of a kick
 4. If below threshold: calculates an **exponential cooldown duration** based on prior kicks
 5. Issues a **temporary ban** via the Telegram API with that duration
 6. **Increments the kick count** for future escalation decisions
@@ -59,8 +66,8 @@ Kicks can originate from several places in the system. Each source sets the `Rev
 |--------|:--------------:|--------|
 | Welcome timeout | true | Cleanup join noise (user never participated) |
 | Exam failure | true | Cleanup join noise (user never participated) |
-| Admin command (report review) | false | Preserve legitimate message history |
-| Profile scan alert (UI action) | false | Preserve legitimate message history |
+| Profile scan alert (admin command) | false | Preserve legitimate message history |
+| Profile scan alert (web UI action) | false | Preserve legitimate message history |
 
 All kick sources feed into the same escalation logic -- the kick count is shared across all sources and all chats.
 
@@ -70,7 +77,7 @@ All kick sources feed into the same escalation logic -- the kick count is shared
 
 When the auto-ban threshold is enabled and a user's prior kick count meets or exceeds it, the next kick escalates to a **permanent global ban** instead.
 
-- **Default**: `0` (disabled -- kicks never auto-escalate to bans)
+- **Default**: `0` (disabled -- kicks use a flat 1-minute cooldown with no escalation or auto-ban)
 - **Range**: 0-10
 - **Scope**: All-time, across all managed chats
 
@@ -150,7 +157,7 @@ The helper text reads: *"Auto-ban after this many kicks (all-time, across all ch
 
 - **Small community groups (< 50 members)**: Set to `3-5` -- gives users a few chances before permanent ban
 - **Large public groups (100+ members)**: Set to `2-3` -- faster escalation to reduce admin burden
-- **Disabled (`0`)**: Kicks always use escalating cooldowns but never auto-ban. Useful if you prefer manual ban decisions
+- **Disabled (`0`)**: Kicks use a flat 1-minute cooldown with no escalation and no auto-ban. Useful if you prefer manual ban decisions
 
 ---
 

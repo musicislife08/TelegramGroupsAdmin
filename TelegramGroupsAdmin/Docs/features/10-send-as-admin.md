@@ -19,7 +19,7 @@ If both checks pass, the Bot/Me toggle is enabled and defaults to **Me** mode. I
 
 | Mode | API Used | Signature | Bot Sees Update |
 |------|----------|-----------|-----------------|
-| **Bot** | Telegram Bot API | Appended (e.g., `\n\n--username`) | No -- manual page refresh required |
+| **Bot** | Telegram Bot API | Appended (e.g., `\n\n—username`) | No -- manual page refresh required |
 | **Me** | WTelegram User API (MTProto) | None -- message appears from your account | Yes -- bot receives it as a normal incoming message and the UI updates automatically |
 
 When sending in "Me" mode, the message is routed through `WebUserMessagingService`, which resolves the chat to an `InputPeer` via the session's peer cache and calls `SendMessageAsync` on the WTelegram client. The bot's polling loop picks up the message as a normal incoming message, so the chat view updates without a manual refresh.
@@ -71,7 +71,7 @@ The input field placeholder changes based on the current mode:
 ### Message Length Limits
 
 - **Me mode**: Full 4096 character limit (no signature appended)
-- **Bot mode**: Reduced by the signature length (typically 4096 minus the length of `\n\n--` plus your linked username)
+- **Bot mode**: Reduced by the signature length (typically 4096 minus the length of `\n\n—` plus your linked username)
 
 ---
 

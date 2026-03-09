@@ -100,8 +100,8 @@ Start with simple, reliable detection methods:
 2. View spam detections in the review queue
 3. For each detection:
    - Click **View** to see the full message
-   - Click **Confirm Spam** if it's actually spam
-   - Click **Mark as Ham** if it's a false positive
+   - Click **Delete as Spam** if it's actually spam
+   - Click **Dismiss** if it's a false positive
 
 **Important**: Your feedback trains the ML algorithms!
 
@@ -122,7 +122,7 @@ Once you have enough training data, enable smarter detection:
 
 Let the system recommend optimal settings:
 
-1. Navigate to **Settings** -> **Content Detection** -> **Algorithm Tuning**
+1. Navigate to **Settings** -> **Content Detection** -> **Detection Algorithms**
 2. Select **Analysis Period**: Last 30 days
 3. Click **Generate Recommendations**
 4. Review each recommendation:
@@ -172,14 +172,14 @@ Min Message Length: 10
 
 ### Optional: Enable OpenAI Veto
 
-**What it does**: GPT-4 reviews borderline spam to reduce false positives by 80-90%
+**What it does**: AI reviews borderline spam to reduce false positives by 80-90%
 
 **Cost**: ~$0.002 per message reviewed (only runs on borderline cases)
 
 **To enable**:
-1. Navigate to **Settings** -> **System** -> **OpenAI**
+1. Navigate to **Settings** -> **System** -> **AI Providers**
 2. Enter your OpenAI API key
-3. Go to **Settings** -> **Content Detection** -> **External Services Config**
+3. Go to **Settings** -> **Content Detection** -> **AI Integration**
 4. Scroll to **OpenAI Integration**
 5. Toggle **Veto Mode** to ON
 6. Optionally customize the **System Prompt** for your group's context
@@ -222,7 +222,7 @@ Min Message Length: 10
    - Read the full message and context
    - Check which checks flagged it
    - Review point scores
-   - Click **Confirm Spam** or **Mark as Ham**
+   - Click **Delete as Spam** or **Dismiss**
 
 ### Manually Banning a User
 

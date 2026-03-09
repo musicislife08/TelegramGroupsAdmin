@@ -223,7 +223,7 @@ DM delivery requires **all** of the following:
 - The DM caption uses `{username}` replaced with `You` for direct address
 - Media is sent as a video (for `.mp4` and `.gif` files) or photo (for other formats)
 - DM failures are handled silently -- if the user has blocked the bot or never started it, the celebration still posts to the chat
-- DM delivery uses the pending notification system with a 30-day expiry
+- DM delivery sends directly to the user. If the direct send fails (e.g., user blocked the bot), it falls back to the pending notification system with a 30-day expiry
 
 ---
 

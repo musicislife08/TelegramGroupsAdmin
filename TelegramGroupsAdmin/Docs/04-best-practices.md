@@ -81,7 +81,7 @@ Kick counts are tracked per-user across all time and are visible in the user det
 
 ### Auto-Ban After N Kicks
 
-The `MaxKicksBeforeBan` setting (per chat, under **Settings > Welcome**) controls whether repeated kicks automatically escalate to a permanent ban. Set to 0 (default) to disable auto-ban escalation.
+The `MaxKicksBeforeBan` setting (per chat, under **Chat Management > Configure > Welcome System**) controls whether repeated kicks automatically escalate to a permanent ban. Set to 0 (default) to disable auto-ban escalation.
 
 When enabled, after the configured number of kicks, the next kick action becomes a permanent ban with a ban celebration (if configured).
 
@@ -153,7 +153,7 @@ Profile scanning uses the Telegram User API (WTelegram) to fetch a user's full p
 
 ### Configuration
 
-Profile scanning is configured per chat under **Settings > Welcome > Join Security > Profile Scan**.
+Profile scanning is configured per chat under **Chat Management > Configure > Welcome System > Join Security > Profile Scan**.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -190,7 +190,7 @@ The service tracks metadata fingerprints (photo IDs, story IDs, bio text, channe
 ### Requirements
 
 - A connected Telegram User API session (WTelegram) — configured in **Settings > Telegram > User API**.
-- An AI provider API key for Vision analysis (configured in **Settings > System > OpenAI**).
+- An AI provider API key for Vision analysis (configured in **Settings > System > AI Providers**).
 - Profile scanning runs independently of the bot API and does not count against bot rate limits.
 
 ## Group Size Recommendations

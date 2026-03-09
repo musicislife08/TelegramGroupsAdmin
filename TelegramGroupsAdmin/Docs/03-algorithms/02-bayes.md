@@ -17,7 +17,7 @@ The Naive Bayes algorithm uses statistical word frequency analysis to classify m
 | 95--98%          | 3.5    |
 | 80--94%          | 2.0    |
 | 70--79%          | 1.0    |
-| 60--69%          | 0.5    |
+| 61--69%          | 0.5    |
 | 40--60%          | Abstain (uncertain) |
 | Below 40%        | Abstain (likely ham) |
 

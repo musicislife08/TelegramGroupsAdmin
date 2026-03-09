@@ -12,7 +12,8 @@ The Profile page is organized into sections:
 2. **Password Management** - Change password
 3. **Two-Factor Authentication** - Enable/disable 2FA
 4. **Telegram Account Linking** - Link your Telegram account(s)
-5. **Notification Preferences** - DM notification settings
+5. **Telegram User API** - Connect via Telegram User API for advanced features
+6. **Notification Preferences** - DM notification settings
 
 [Screenshot: Profile page full view]
 
@@ -245,7 +246,7 @@ Configure what notifications you receive via Telegram DM.
 
 **Spam Detection Alerts**:
 - Notified when high-confidence spam is detected
-- Includes message preview and confidence score
+- Includes message preview and spam score
 - Can be noisy in active groups
 
 **Moderation Reports**:
@@ -305,10 +306,11 @@ View recent login attempts:
 
 ### Account Lockout
 
-**Automatic lockout** after failed login attempts:
-- 5 failed attempts → 15-minute lockout
-- 10 failed attempts → 1-hour lockout
-- 15 failed attempts → 24-hour lockout
+**Automatic lockout** with exponential backoff after 5 failed login attempts:
+- 5 failed attempts → 1-minute lockout
+- 6 failed attempts → 10-minute lockout
+- 7 failed attempts → 30-minute lockout
+- 8+ failed attempts → 2-hour lockout (cap)
 
 **To unlock**:
 - Wait for lockout period to expire

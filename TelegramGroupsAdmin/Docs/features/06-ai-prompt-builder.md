@@ -32,7 +32,7 @@ Custom prompts tell the AI:
 
 ## How to Access
 
-1. Navigate to **Settings** → **Content Detection** → **External Services Config**
+1. Navigate to **Settings** → **Content Detection** → **AI Integration**
 2. Scroll to **OpenAI Integration** section
 3. Find **Custom Prompt Configuration**
 4. Click **Open Prompt Builder** button

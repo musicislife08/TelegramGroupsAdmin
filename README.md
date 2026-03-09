@@ -15,10 +15,10 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 
 ### Content Detection
 
-- **14 Content Detection Checks** - StopWords, CAS.chat, Similarity/TF-IDF, Naive Bayes, Spacing analysis, Invisible Characters, OpenAI GPT-4, Threat Intelligence, URL Blocklist, SEO Scraping, Image Spam, Video Spam, File Scanning, Channel Reply
+- **14 Content Detection Checks** - StopWords, CAS.chat, Similarity/TF-IDF, Naive Bayes, Spacing analysis, Invisible Characters, AI-Powered Analysis, Threat Intelligence, URL Blocklist, SEO Scraping, Image Spam, Video Spam, File Scanning, Channel Reply
 - **Additive Scoring Engine** - Each check contributes 0.0-5.0 points, summed to a total score (default thresholds: AutoBan = 4.0, ReviewQueue = 2.5)
 - **Self-Learning System** - Training from spam/ham samples with quality control
-- **AI-Powered Image & Video Analysis** - OpenAI Vision API for image and video spam detection
+- **AI-Powered Image & Video Analysis** - Vision API for image and video spam detection (supports multiple AI providers)
 - **URL Filtering** - Blocklists, domain filters, phishing detection, SEO scraping detection
 - **File Scanning** - ClamAV + VirusTotal integration with automatic quarantine
 - **Impersonation Detection** - Photo hash comparison and username similarity detection
@@ -46,13 +46,14 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 - **Message Trends** - Volume over time, spam/ham ratios
 - **User Activity** - Top contributors, join/leave patterns
 - **Spam Statistics** - Detection accuracy, algorithm performance
-- **Export Capabilities** - CSV/JSON data exports
+- **Data Export** - Encrypted backup and restore system
 
 ### AI-Powered Features
 
 - **Prompt Builder** - Meta-AI tool to generate/improve custom spam detection prompts
 - **Multi-Language Translation** - Automatic translation for non-Latin script messages
-- **Profile Scanning** - AI-powered join security using WTelegram User API to inspect bios, stories, personal channels, and profile photos with rule-based pre-filters and OpenAI vision analysis
+- **Profile Scanning** - AI-powered join security using WTelegram User API to inspect bios, stories, personal channels, and profile photos with rule-based pre-filters and AI vision analysis
+- **Multi-Provider AI Support** - OpenAI, Azure OpenAI, or local OpenAI-compatible servers (Ollama, LM Studio, vLLM)
 
 ### User API Features
 
@@ -85,10 +86,13 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 
 **Required Services (API keys needed):**
 
-- **OpenAI** - GPT-4 for spam detection and Vision API for image analysis
+- **AI Provider** (one of): OpenAI, Azure OpenAI, or local OpenAI-compatible server (Ollama, LM Studio, vLLM) - for spam detection and vision analysis
 - **VirusTotal** - File threat intelligence
 - **SendGrid** - Email verification and notifications
-- **CAS.chat** - Spam user database
+
+**Free Services (no key required):**
+
+- **CAS.chat** - Spam user database (free public API)
 
 **Security:**
 
@@ -105,7 +109,7 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
   - [Telegram Bot Token](https://t.me/BotFather)
   - [OpenAI API Key](https://platform.openai.com/api-keys)
   - [VirusTotal API Key](https://www.virustotal.com/gui/my-apikey)
-  - [CAS.chat API Key](https://cas.chat/)
+  - [CAS.chat](https://cas.chat/) (free, no key needed)
   - [SendGrid API Key](https://app.sendgrid.com/settings/api_keys)
 
 ### Installation
@@ -642,8 +646,6 @@ For detailed architecture patterns, coding standards, and critical rules, see [C
 
 Planned features and improvements are tracked as [GitHub Issues](https://github.com/musicislife08/TelegramGroupsAdmin/issues). Notable areas of development include:
 
-- Advanced analytics dashboards
-- Notification preferences UI
 - Custom rule engine
 
 ---

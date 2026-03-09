@@ -167,7 +167,7 @@ Score: 1.0 points (2 matches = ScoreStopWordsModerate)
 | >= 60% (`SimilarityThreshold60`) | 1.0 (`ScoreSimilarity60`) |
 | Below threshold | Abstain |
 
-**Configuration**: Settings --> Content Detection --> Similarity. Configure probability threshold (default: 0.60). **Requires** training data -- run ML training via the background jobs page.
+**Configuration**: Settings --> Content Detection --> Similarity. Configure probability threshold (default: 0.50). **Requires** training data -- run ML training via the background jobs page.
 
 **Strengths**: Learns from your group's spam patterns, language-agnostic, catches spam variations. **Weaknesses**: Requires training data, slower than keyword matching, cannot detect completely novel spam types.
 
@@ -198,7 +198,7 @@ Score: 3.5 points (>= 85% threshold)
 | >= 95% | 3.5 (`ScoreBayes95`) |
 | >= 80% | 2.0 (`ScoreBayes80`) |
 | >= 70% | 1.0 (`ScoreBayes70`) |
-| 60-70% | 0.5 (weak signal) |
+| 61-69% | 0.5 (weak signal) |
 | 40-60% | Abstain (uncertain) |
 | Below 40% | Abstain (likely ham) |
 
@@ -709,8 +709,8 @@ Machine learning checks (Similarity, Bayes) require training data to function. W
 flowchart TD
     A[Message Flagged as Spam] --> B[Sent to Review Queue]
     B --> C{Admin Decision}
-    C -->|Confirm Spam| D[Added to Spam Training Samples]
-    C -->|Mark as Ham| E[Added to Ham Training Samples]
+    C -->|Delete as Spam| D[Added to Spam Training Samples]
+    C -->|Dismiss| E[No ML Training]
     D --> F[ML Retrains via Background Job]
     E --> F
     F --> G[Future Similar Messages]

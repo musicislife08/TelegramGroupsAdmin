@@ -28,7 +28,7 @@ Both thresholds are configurable per chat in **Settings > Content Detection**.
 | **StopWords** | Matches message text against a database-managed list of known spam phrases. Scores 0.5–2.0 based on match count and severity. | Fast | Configure stop words list |
 | **CAS** | Checks users against the Combot Anti-Spam database of known spammers. Runs at **user join**, not per-message. | Fast | None (external API) |
 | **Similarity** | ML.NET SDCA classifier trained on your group's spam/ham samples. Scores based on probability: 95%=5.0, 85%=3.5, 70%=2.0, 60%=1.0. | Fast | Training samples needed |
-| **Bayes** | Naive Bayes text classifier. Scores based on spam probability: 99%=5.0, 95%=3.5, 80%=2.0, 70%=1.0. Abstains when uncertain (40–60%). | Fast | 50+ spam + 50+ ham samples |
+| **Bayes** | Naive Bayes text classifier. Scores based on spam probability: 99%=5.0, 95%=3.5, 80%=2.0, 70%=1.0, 61-69%=0.5. Abstains when uncertain (40–60%). | Fast | 20+ spam + 20+ ham samples |
 | **Spacing** | Detects abnormal word spacing patterns common in spam (excessive short words, formatting anomalies). Scores 0.8 points. | Fast | None |
 | **InvisibleChars** | Detects zero-width characters and other invisible Unicode used to bypass text filters. Scores 1.5 points. | Fast | None |
 | **OpenAI** | AI-powered analysis that can run as a regular check or as a **veto** to confirm/override pipeline results. Provider-agnostic. | Slow | AI provider API key |
@@ -51,14 +51,16 @@ flowchart TD
     D --> E{Any Spam Signal?}
     E -->|No| K[Pass]
     E -->|Yes| F{AI Veto Enabled?}
-    F -->|No| H{Total Score}
+    F -->|No| H{Pipeline Score}
     F -->|Yes| G[AI Review]
     G -->|Clean| K
     G -->|Abstained| H
-    G -->|Confirmed| H
-    H -->|4.0+| I
-    H -->|2.5 - 3.9| J[Review Queue]
+    G -->|Confirmed| L{AI Score}
+    H -->|2.5+| J[Review Queue]
     H -->|Below 2.5| K
+    L -->|4.0+| I
+    L -->|2.5 - 3.9| J
+    L -->|Below 2.5| K
 
     style I fill:#ff6b6b
     style J fill:#ffd93d
