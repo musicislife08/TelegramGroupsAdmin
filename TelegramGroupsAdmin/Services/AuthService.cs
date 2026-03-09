@@ -47,7 +47,7 @@ public class AuthService(
         // SECURITY-6: Check if account is locked
         if (user.IsLocked)
         {
-            var timeRemaining = (user.LockedUntil ?? DateTimeOffset.UtcNow) - DateTimeOffset.UtcNow;
+            var timeRemaining = (user.LockedUntil ?? throw new InvalidOperationException("User is locked but LockedUntil is null")) - DateTimeOffset.UtcNow;
             logger.LogWarning("Login attempt for locked account: {User}, locked until {LockedUntil}",
                 user.WebUser.ToLogDebug(), user.LockedUntil);
 

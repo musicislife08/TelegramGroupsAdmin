@@ -14,7 +14,7 @@ public record AlgorithmVetoStats
     /// <summary>
     /// Total number of times this algorithm flagged messages as spam
     /// </summary>
-    public int SpamFlagsCount { get; set; }
+    public int SpamFlagsCount { get; init; }
 
     /// <summary>
     /// Number of times OpenAI vetoed this algorithm's spam flag
@@ -24,5 +24,5 @@ public record AlgorithmVetoStats
     /// <summary>
     /// Percentage of this algorithm's spam flags that were vetoed (VetoedCount / SpamFlagsCount * 100)
     /// </summary>
-    public decimal VetoRate { get; set; }
+    public decimal VetoRate { get; init; }
 }

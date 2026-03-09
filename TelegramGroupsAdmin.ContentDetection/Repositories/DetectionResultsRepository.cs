@@ -667,15 +667,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             }
         }
 
-        // Recalculate veto rates with actual totals
-        foreach (var stat in algorithmStats)
-        {
-            if (totalSpamFlagsByAlgorithm.TryGetValue(stat.AlgorithmName, out var total) && total > 0)
-            {
-                stat.VetoRate = (decimal)stat.VetoedCount / total * 100;
-                stat.SpamFlagsCount = total;
-            }
-        }
+        // Recalculate veto rates with actual totals (immutable — creates new records via with)
+        algorithmStats = algorithmStats.Select(stat =>
+            totalSpamFlagsByAlgorithm.TryGetValue(stat.AlgorithmName, out var total) && total > 0
+                ? stat with { SpamFlagsCount = total, VetoRate = (decimal)stat.VetoedCount / total * 100 }
+                : stat
+        ).ToList();
 
         var totalDetections = allDetections.Count;
         var vetoedCount = actualVetoes.Count;

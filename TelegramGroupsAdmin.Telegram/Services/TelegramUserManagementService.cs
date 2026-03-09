@@ -150,10 +150,12 @@ public class TelegramUserManagementService : ITelegramUserManagementService
             await _userActionsRepository.InsertAsync(userAction);
         }
 
+        user = user with { IsTrusted = !user.IsTrusted };
+
         _logger.LogInformation(
             "{User} trust toggled to {IsTrusted} by {ModifiedBy}",
             user.ToLogInfo(),
-            !user.IsTrusted,
+            user.IsTrusted,
             modifiedBy);
 
         return true;
