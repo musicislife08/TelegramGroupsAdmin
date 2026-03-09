@@ -436,8 +436,9 @@ All admin account changes are logged:
 **Default**: 7 days
 
 **To change**:
-- Currently hardcoded
-- Future feature: Configurable in Security Settings
+1. Navigate to **Settings** → **System** → **Admin Accounts**
+2. Click **Invite New Admin**
+3. Set the **Invite valid for (days)** field (1–365 days)
 
 ### Email Verification Requirement
 
@@ -453,8 +454,6 @@ All admin account changes are logged:
 ## Related Documentation
 
 - **[Profile & Security](../user/01-profile-security.md)** - User profile settings, 2FA
-- **[Audit Log](https://future-docs/audit-log.md)** - Viewing admin actions
-- **[Security Settings](https://future-docs/security-settings.md)** - Password policy, rate limiting
 
 ---
 

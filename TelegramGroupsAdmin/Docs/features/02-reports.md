@@ -1,17 +1,19 @@
 # Reports Queue - Moderation Central
 
-The **Reports** page is your central hub for reviewing and managing spam detections that need human judgment. This is where borderline spam (confidence 70-84) and suspected impersonators land for your review.
+The **Reports** page is your central hub for reviewing and managing spam detections that need human judgment. This is where borderline spam (scores between 2.5-3.9 points), suspected impersonators, exam failures, and profile scan alerts land for your review.
 
 **Think of it as**: Your moderation inbox - messages that aren't clearly spam or ham need your decision.
 
 ## Page Overview
 
-The Reports page has two tabs:
+The Reports page uses a unified queue with type filters:
 
 1. **Moderation Reports** - Spam detections needing manual review
 2. **Impersonation Alerts** - Suspected impersonators (duplicate photos, similar usernames)
+3. **Exam Reviews** - Users who failed the welcome exam and need manual approval
+4. **Profile Scan Alerts** - Suspicious user profiles flagged by automated scanning
 
-Both tabs follow the same workflow: **Review → Decide → Act → Train**
+All types follow the same workflow: **Review → Decide → Act → Train**
 
 [Screenshot: Reports page with both tabs]
 
@@ -19,14 +21,14 @@ Both tabs follow the same workflow: **Review → Decide → Act → Train**
 
 ## Moderation Reports Tab
 
-This is where spam detections with confidence scores between **70-84** appear. These are "borderline" cases where the system isn't confident enough to auto-ban but suspicious enough to flag.
+This is where spam detections scoring between **2.5-3.9 points** appear. These are "borderline" cases where the system isn't confident enough to auto-ban but suspicious enough to flag.
 
 ### What Triggers a Moderation Report?
 
 A message lands in Moderation Reports if:
-- **Confidence score is 70-84** (above review threshold but below auto-ban)
+- **Score is 2.5-3.9 points** (above review threshold but below auto-ban)
 - **Training Mode is ON** (all detections go here regardless of score)
-- **OpenAI veto overrode** an auto-ban (GPT-4 said "not spam")
+- **AI veto overrode** an auto-ban (AI said "not spam")
 
 ### Report Card Layout
 
@@ -34,7 +36,7 @@ Each report displays:
 - **Message preview** - First few lines of the message
 - **User info** - Username, user ID, profile photo
 - **Timestamp** - When message was sent
-- **Confidence score** - Overall spam confidence (e.g., "78%")
+- **Spam score** - Overall spam score (e.g., "3.2 points")
 - **Algorithm breakdown** - Which algorithms flagged it
 - **Status** - Pending, Resolved, Dismissed
 - **Action buttons** - Confirm Spam, Mark as Ham, Dismiss
@@ -43,23 +45,22 @@ Each report displays:
 
 ---
 
-## Understanding Confidence Scores
+## Understanding Spam Scores
 
-The confidence score (0-100) represents how certain the system is that a message is spam.
+The system uses **additive scoring** where each detection check contributes 0.0-5.0 points. Individual check scores are summed to produce a total spam score.
 
 ### Score Ranges
 
-- **85-100**: High confidence spam → Auto-ban (if Training Mode OFF)
-- **70-84**: Moderate confidence → Review Queue (manual review needed)
-- **50-69**: Low confidence → Pass (allow message)
-- **0-49**: Very low confidence → Definitely pass
+- **4.0+ points**: High confidence spam → Auto-ban (if Training Mode OFF)
+- **2.5-3.9 points**: Moderate confidence → Review Queue (manual review needed)
+- **Below 2.5 points**: Low confidence → Pass (message allowed)
 
 ### Why Borderline Cases Matter
 
-**70-84 confidence** means:
-- Multiple algorithms flagged it, but not all
-- OR one algorithm strongly flagged it, others neutral
-- OR patterns similar to spam but not definitive
+**2.5-3.9 points** means:
+- Multiple checks flagged it, but the total didn't reach auto-ban threshold
+- OR one check strongly flagged it, others abstained
+- OR patterns similar to spam but not enough combined signal
 
 **Your decision trains the ML algorithms!**
 - Mark as spam → ML learns this pattern is spam
@@ -83,22 +84,22 @@ The confidence score (0-100) represents how certain the system is that a message
 
 ### Step 2: Check Algorithm Breakdown
 
-Review which algorithms flagged the message:
+Review which checks contributed points to the total score:
 
 **Strong indicators (likely spam)**:
-- ✓ **CAS Database** (100%) - User in global spammer database
-- ✓ **Stop Words** (90%+) - Multiple spam keywords matched
-- ✓ **URL Content** (85%+) - Link to known malicious domain
+- **Similarity** (3.0-5.0 pts) - High similarity to known spam samples
+- **Naive Bayes** (3.0-5.0 pts) - ML classifier strongly indicates spam
+- **Stop Words** (1.5-2.0 pts) - Multiple spam keywords matched
 
 **Moderate indicators (investigate further)**:
-- ⚠️ **Naive Bayes** (70-80%) - ML thinks it's spam but not certain
-- ⚠️ **Similarity** (70-80%) - Similar to known spam patterns
-- ⚠️ **Spacing Detection** (60-80%) - Unusual character patterns
+- **Naive Bayes** (1.0-2.9 pts) - ML leans toward spam but not certain
+- **Similarity** (1.0-2.9 pts) - Some similarity to known spam patterns
+- **Spacing Detection** (1.0-2.0 pts) - Unusual character patterns detected
 
 **Weak indicators (possibly false positive)**:
-- ○ **Stop Words** (<60%) - Matched one common word
-- ○ **Invisible Characters** (<50%) - Few suspicious characters
-- ○ **Translation** (<60%) - Inconsistent across languages
+- **Stop Words** (0.5-1.0 pt) - Matched one common keyword
+- **Invisible Characters** (0.5-1.0 pt) - Few suspicious characters
+- **Translation** (0.5-1.0 pt) - Inconsistent across languages
 
 ### Step 3: Consider Context
 
@@ -156,7 +157,14 @@ You have three options:
 
 ```mermaid
 flowchart TD
-    A[Review Report] --> B{Decision}
+    M[Message Received] --> S[Run Detection Checks]
+    S --> T{Total Score?}
+    T -->|4.0+ points| AB[Auto-Ban]
+    T -->|2.5-3.9 points| RQ[Review Queue]
+    T -->|Below 2.5| P[Pass - Allow]
+
+    RQ --> A[Admin Reviews Report]
+    A --> B{Decision}
     B -->|Confirm Spam| C[Ban User + Delete Message]
     B -->|Mark as Ham| D[Allow Message]
     B -->|Dismiss| E[No Action]
@@ -165,13 +173,15 @@ flowchart TD
     D --> G[Train ML: This is Ham]
     E --> H[No ML Training]
 
-    F --> I[Future Similar Messages More Likely Flagged]
-    G --> J[Future Similar Messages Less Likely Flagged]
+    F --> I[Future Similar Messages Score Higher]
+    G --> J[Future Similar Messages Score Lower]
     H --> K[No Change to ML]
 
+    style AB fill:#ff6b6b
     style C fill:#ff6b6b
     style D fill:#6bcf7f
     style E fill:#ffd93d
+    style P fill:#6bcf7f
 ```
 
 ---
@@ -192,15 +202,15 @@ flowchart TD
 ### How to Decide Quickly
 
 **Clear spam (instant decision)**:
-- Multiple algorithms with high confidence (80%+)
+- Multiple checks contributing high points (3.5+ total)
 - CAS Database flagged (known spammer)
 - Blocked URL domains
 - Obvious promotional content
 - **Decision**: Confirm Spam
 
 **Clear false positive (instant decision)**:
-- Low confidence across all algorithms (70-75%)
-- Only one weak algorithm flagged it
+- Low total score (2.5-2.8 points)
+- Only one weak check flagged it
 - Established user with good history
 - On-topic, legitimate question
 - **Decision**: Mark as Ham
@@ -238,7 +248,7 @@ flowchart TD
 **When**: First 30-60 days, or after major configuration changes
 
 **Behavior**:
-- **ALL detections** → Moderation Reports (even 85%+ confidence)
+- **ALL detections** → Moderation Reports (even 4.0+ point scores)
 - **No auto-bans** - You review everything
 - **Goal**: Collect 100+ training samples
 
@@ -253,12 +263,12 @@ flowchart TD
 **When**: After training phase complete
 
 **Behavior**:
-- **85%+ confidence** → Auto-ban (no review)
-- **70-84 confidence** → Moderation Reports (review)
-- **<70 confidence** → Pass (allow)
+- **4.0+ points** → Auto-ban (no review needed)
+- **2.5-3.9 points** → Moderation Reports (manual review)
+- **Below 2.5 points** → Pass (message allowed)
 
 **Review workflow**:
-1. Review only borderline cases (70-84)
+1. Review only borderline cases (2.5-3.9 points)
 2. Occasional spot checks on auto-bans
 3. Monitor for new spam patterns
 4. Adjust thresholds as needed
@@ -320,6 +330,12 @@ Each alert shows:
 
 [Screenshot: Impersonation alert comparison view]
 
+### Profile Scan Alerts Integration
+
+Profile scanning also feeds into the Reports queue. When a user's profile is scanned and the outcome is **HeldForReview**, a Profile Scan Alert is created for admin review. These alerts show the user's profile score breakdown (rule-based + AI scoring on a 0.0-5.0 scale), AI reasoning, and detected signals. From the alert, you can **Allow**, **Kick**, or **Ban** the user.
+
+For details on how profile scanning works, see **[Profile Scanning](08-profile-scanning.md)**.
+
 ---
 
 ## Status Filters
@@ -371,7 +387,7 @@ Currently planned but not implemented:
 Filter reports by:
 - **User** - Find all reports for specific user
 - **Date range** - Reports from specific timeframe
-- **Confidence range** - Only 80%+ confidence, for example
+- **Score range** - Only 3.5+ points, for example
 - **Chat** - Reports from specific Telegram group
 
 **How to search**:
@@ -425,7 +441,7 @@ Track your moderation performance in Analytics page:
 
 **Accuracy Metrics**:
 - **False positive rate** - % of reports marked as ham
-- **False negative rate** - Spam that slipped through (<70 confidence)
+- **False negative rate** - Spam that slipped through (scored below 2.5 points)
 - **ML training samples** - Total spam/ham samples collected
 
 **Action Stats**:
@@ -444,17 +460,17 @@ Track your moderation performance in Analytics page:
 ### Too many reports (overwhelmed)
 
 **Solutions**:
-- **Enable OpenAI Veto** - Reduces reports by 80-90% (GPT-4 filters borderline cases)
-- **Raise review threshold** - Change from 70 to 75 (fewer reports)
-- **Lower auto-ban threshold** - Change from 85 to 80 (more auto-bans, fewer reviews)
-- **Disable sensitive algorithms** - Turn off Spacing Detection if too many false positives
+- **Enable AI Veto** - Reduces reports significantly (AI filters borderline cases)
+- **Raise review threshold** - Increase from 2.5 to 3.0 (fewer reports)
+- **Lower auto-ban threshold** - Decrease from 4.0 to 3.5 (more auto-bans, fewer reviews)
+- **Disable sensitive checks** - Turn off Spacing Detection if too many false positives
 
 ### Too few reports (spam getting through)
 
 **Solutions**:
-- **Lower review threshold** - Change from 70 to 65 (catch more borderline spam)
-- **Enable more algorithms** - Turn on Translation, Spacing Detection
-- **Review auto-bans** - Check Messages page for 85%+ confidence spam to verify accuracy
+- **Lower review threshold** - Decrease from 2.5 to 2.0 (catch more borderline spam)
+- **Enable more checks** - Turn on Translation, Spacing Detection
+- **Review auto-bans** - Check Messages page for 4.0+ point auto-bans to verify accuracy
 
 ### False positives in every batch
 
@@ -462,7 +478,7 @@ Track your moderation performance in Analytics page:
 - **Review stop words list** - Remove overly broad keywords
 - **Whitelist common domains** - Add legitimate sites to URL whitelist
 - **Mark as ham consistently** - Train ML to recognize these patterns
-- **Adjust algorithm weights** - Coming in future update
+- **Adjust check thresholds** - Fine-tune individual check sensitivity in Settings
 
 ### Impersonation alerts are all false positives
 
@@ -505,27 +521,32 @@ Track your moderation performance in Analytics page:
    - Whitelist new domains
    - Update thresholds
 4. **Review auto-bans in Messages page**:
-   - Spot check 85%+ confidence bans
+   - Spot check 4.0+ point auto-bans
    - Unban any false positives
 
 ### Handling Backlog
 
 **If you have 50+ pending reports**:
 
-1. **Filter by confidence** - Start with 80%+ (likely spam)
+1. **Filter by score** - Start with 3.5+ points (likely spam)
 2. **Bulk decisions** - Confirm obvious spam quickly
-3. **Skip borderline** - Dismiss 70-75% confidence for now
+3. **Skip borderline** - Dismiss 2.5-2.8 point reports for now
 4. **Set aside time** - 30 minutes focused review
-5. **Enable OpenAI Veto** - Prevent future backlog
+5. **Enable AI Veto** - Prevent future backlog
 
 ---
 
 ## Related Documentation
 
 - **[Messages Tab](01-messages.md)** - View messages in context
-- **[Spam Detection Guide](03-spam-detection.md)** - Understand algorithms
+- **[Spam Detection Guide](03-spam-detection.md)** - Understand the detection checks and additive scoring
+- **[URL Filtering](04-url-filtering.md)** - URL blocklist and threat intelligence
+- **[Content Tester](05-content-tester.md)** - Test content detection without live messages
+- **[AI Prompt Builder](06-ai-prompt-builder.md)** - Configure AI veto behavior
+- **[Kick Escalation](07-kick-escalation.md)** - Automatic kick-to-ban escalation
+- **[Profile Scanning](08-profile-scanning.md)** - Automated profile analysis and alerts
+- **[Ban Celebration](09-ban-celebration.md)** - Fun ban notification messages
 - **[First Configuration](../getting-started/02-first-configuration.md)** - Set up Training Mode
-- **[Analytics](https://future-docs/analytics.md)** - Track moderation metrics
 
 ---
 
@@ -550,7 +571,7 @@ Track your moderation performance in Analytics page:
 - **Set a schedule** - Review at same time daily (habit formation)
 - **Use keyboard shortcuts** - Faster than clicking
 - **Filter aggressively** - Don't review everything at once
-- **Enable OpenAI Veto** - Best investment for reducing workload
+- **Enable AI Veto** - Best investment for reducing workload
 
 ---
 

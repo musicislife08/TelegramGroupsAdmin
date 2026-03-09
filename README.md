@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
 
-**AI-powered Telegram group moderation with advanced spam detection, content filtering, and comprehensive analytics.**
+**AI-powered Telegram group moderation with advanced content detection, profile scanning, and comprehensive analytics.**
 
-A self-hosted Blazor Server application designed for homelab deployment, combining 9 spam detection algorithms, AI-powered content analysis, file scanning, and real-time moderation tools.
+A self-hosted Blazor Server application designed for homelab deployment, combining 14 content detection checks, AI-powered profile scanning, file scanning, and real-time moderation tools.
 
 > **Inspired by [tg-spam](https://github.com/umputun/tg-spam)** - This project's anti-spam system is heavily based on the excellent work by [@umputun](https://github.com/umputun). If you're managing a single Telegram group, tg-spam is a fantastic lightweight alternative. TelegramGroupsAdmin extends the concept to multi-chat management with additional features like user management, analytics, and a comprehensive web UI.
 
@@ -13,12 +13,13 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 
 ## Features
 
-### Spam Detection & Content Filtering
+### Content Detection
 
-- **9-Algorithm Spam Detection** - Stopwords, CAS.chat, Similarity/TF-IDF, Naive Bayes, Multi-language, Spacing analysis, OpenAI GPT-4, Threat Intelligence, Image/Vision
+- **14 Content Detection Checks** - StopWords, CAS.chat, Similarity/TF-IDF, Naive Bayes, Spacing analysis, Invisible Characters, OpenAI GPT-4, Threat Intelligence, URL Blocklist, SEO Scraping, Image Spam, Video Spam, File Scanning, Channel Reply
+- **Additive Scoring Engine** - Each check contributes 0.0-5.0 points, summed to a total score (default thresholds: AutoBan = 4.0, ReviewQueue = 2.5)
 - **Self-Learning System** - Training from spam/ham samples with quality control
-- **AI-Powered Image Analysis** - OpenAI Vision API for image spam detection
-- **URL Filtering** - Blocklists, domain filters, phishing detection
+- **AI-Powered Image & Video Analysis** - OpenAI Vision API for image and video spam detection
+- **URL Filtering** - Blocklists, domain filters, phishing detection, SEO scraping detection
 - **File Scanning** - ClamAV + VirusTotal integration with automatic quarantine
 - **Impersonation Detection** - Photo hash comparison and username similarity detection
 - **Edit Detection** - Re-scans edited messages for spam content
@@ -28,6 +29,9 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 - **Real-time Message Monitoring** - Infinite scroll interface for browsing message history
 - **User Management** - Temp bans, permanent bans, cross-chat enforcement
 - **Welcome System** - Auto-kick users who don't send first message within timeout
+- **Kick Escalation** - Exponential backoff cooldowns (1 min to 24 hrs) with optional auto-ban after configurable threshold
+- **Ban Celebration** - Celebratory GIFs and witty captions posted to chat when spammers are banned, with optional DM delivery
+- **Per-User Message History** - Cross-chat view of all messages from a specific user for investigation and pattern detection
 - **Spam Reports** - Borderline cases flagged for admin review
 - **Audit Logging** - Complete action history tracking
 
@@ -48,7 +52,12 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 
 - **Prompt Builder** - Meta-AI tool to generate/improve custom spam detection prompts
 - **Multi-Language Translation** - Automatic translation for non-Latin script messages
-- **Confidence Aggregation** - Weighted scoring across all detection algorithms
+- **Profile Scanning** - AI-powered join security using WTelegram User API to inspect bios, stories, personal channels, and profile photos with rule-based pre-filters and OpenAI vision analysis
+
+### User API Features
+
+- **Send As Admin** - Bot/Me toggle to send messages as your personal Telegram account via WTelegram User API, indistinguishable from native Telegram messages
+- **WTelegram Session Management** - Connect personal Telegram accounts from the Profile page with encrypted session storage and automatic reconnection
 
 ### Security & Privacy
 
@@ -72,6 +81,7 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 
 - .NET web application with PostgreSQL database
 - Docker containerized deployment
+- WTelegram User API for profile scanning and Send As Admin
 
 **Required Services (API keys needed):**
 
@@ -172,8 +182,7 @@ See [examples/README.md](examples/README.md) for detailed configuration guide in
 
 - **[CLAUDE.md](CLAUDE.md)** - Comprehensive technical reference for AI agents and developers
 - **[examples/README.md](examples/README.md)** - Docker Compose setup guide
-- **[BACKLOG.md](BACKLOG.md)** - Development roadmap and pending features
-- **[WTELEGRAM_INTEGRATION.md](WTELEGRAM_INTEGRATION.md)** - WTelegramClient integration notes
+- **[E2E_TESTING.md](E2E_TESTING.md)** - Playwright E2E testing patterns and infrastructure
 
 ---
 
@@ -197,24 +206,27 @@ See [examples/README.md](examples/README.md) for detailed configuration guide in
     /data volume (media, keys)
 ```
 
-**Design Philosophy:** Optimized for homelab deployment - operational simplicity over horizontal scalability. Handles 1000+ messages/day on single instance.
+**Design Philosophy:** Optimized for homelab deployment - operational simplicity over horizontal scalability. Single-instance architecture with minimal external dependencies.
 
 **Performance Benchmarks:**
 
-- Spam detection: 255ms average, 821ms P95 (9 algorithms + OpenAI)
+- Content detection: 255ms average, 821ms P95 (14 checks + OpenAI)
 - Analytics queries: <100ms
 - Message page load: 50+ messages without lag
 
 **Project Structure:**
 
-- **TelegramGroupsAdmin** - Main app, Blazor UI, API endpoints, Quartz.NET jobs
+- **TelegramGroupsAdmin** - Main app, Blazor UI, API endpoints
+- **TelegramGroupsAdmin.Core** - Shared models, enums, interfaces
 - **TelegramGroupsAdmin.Configuration** - IOptions configuration classes
 - **TelegramGroupsAdmin.Data** - EF Core DbContext, migrations, Data Protection
 - **TelegramGroupsAdmin.Telegram** - Bot services, bot commands, repositories
-- **TelegramGroupsAdmin.Telegram.Abstractions** - TelegramBotClientFactory, job payloads
-- **TelegramGroupsAdmin.SpamDetection** - 9 spam detection algorithms
-- **TelegramGroupsAdmin.ContentDetection** - URL filtering, impersonation, file scanning
-- **TelegramGroupsAdmin.Tests** - Migration tests (Testcontainers.PostgreSQL)
+- **TelegramGroupsAdmin.BackgroundJobs** - Quartz.NET background jobs
+- **TelegramGroupsAdmin.ContentDetection** - 14 content detection checks, URL filtering, impersonation, file scanning
+- **TelegramGroupsAdmin.UnitTests** - Unit tests
+- **TelegramGroupsAdmin.ComponentTests** - Component tests
+- **TelegramGroupsAdmin.IntegrationTests** - Integration tests (Testcontainers.PostgreSQL)
+- **TelegramGroupsAdmin.E2ETests** - Playwright E2E browser tests
 
 ### Building from Source
 
@@ -240,13 +252,13 @@ dotnet test
 
 **CRITICAL:** Never run the app in normal mode during development - only one instance allowed (Telegram singleton constraint). Always use `--migrate-only` flag for validation.
 
-**Migration Tests:**
+**Run all tests:**
 
 ```bash
-dotnet test TelegramGroupsAdmin.Tests
+dotnet test
 ```
 
-Passing tests via Testcontainers.PostgreSQL, validates all migrations against real PostgreSQL.
+Tests include unit tests, component tests, integration tests (Testcontainers.PostgreSQL), and Playwright E2E browser tests.
 
 ### EF Core Migrations
 
@@ -628,12 +640,10 @@ For detailed architecture patterns, coding standards, and critical rules, see [C
 
 ## Roadmap
 
-See [BACKLOG.md](BACKLOG.md) for complete list of planned features including:
+Planned features and improvements are tracked as [GitHub Issues](https://github.com/musicislife08/TelegramGroupsAdmin/issues). Notable areas of development include:
 
-- Notification preferences UI
 - Advanced analytics dashboards
-- Webhook support
-- Multi-bot management
+- Notification preferences UI
 - Custom rule engine
 
 ---
@@ -661,6 +671,7 @@ TelegramGroupsAdmin includes and depends on various open-source libraries and to
 ### Technology & Services
 
 - [Telegram Bot API](https://core.telegram.org/bots/api)
+- [WTelegramClient](https://github.com/wiz0u/WTelegramClient) - MTProto User API for profile scanning and Send As Admin
 - [MudBlazor](https://mudblazor.com/) - Material Design components for Blazor
 - [Quartz.NET](https://www.quartz-scheduler.net/) - PostgreSQL-based background job scheduler
 - [OpenAI](https://platform.openai.com/) - GPT-4 and Vision API

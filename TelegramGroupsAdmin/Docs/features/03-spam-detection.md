@@ -1,24 +1,45 @@
 # Spam Detection - How It Works
 
-TelegramGroupsAdmin uses a **multi-algorithm orchestration system** that runs up to 9 different spam detection checks in parallel on each message. This guide explains how the system works, what each algorithm does, and how to optimize detection accuracy.
+TelegramGroupsAdmin uses a **multi-algorithm orchestration system** with **14 specialized content detection checks** that analyze different aspects of each message. Scores from individual checks are **summed additively** (not averaged) to produce a total spam score. This guide explains how the system works, what each check does, and how to optimize detection accuracy.
 
 ## Detection Architecture
 
-### Multi-Algorithm Approach
+### Additive Scoring Model
 
-Instead of relying on a single detection method, TelegramGroupsAdmin runs **9 specialized algorithms simultaneously**, each analyzing different aspects of the message:
+The V2 detection engine uses a **SpamAssassin-style additive scoring** approach:
 
-1. **Stop Words Detection** - Keyword matching
-2. **CAS Database** - Global spammer lookup
-3. **Similarity Detection (TF-IDF)** - Pattern comparison
-4. **Naive Bayes Classifier** - Statistical spam detection
-5. **Spacing Detection** - Character pattern analysis
-6. **Invisible Character Detection** - Unicode abuse detection
-7. **Translation** - Multi-language analysis
-8. **OpenAI Verification** - AI-powered review
-9. **URL/File Content** - Malicious link and malware detection
+- Each check returns **0.0 to 5.0 points** based on how strongly it detected a spam signal
+- Scores from all checks are **summed together** to produce a total score
+- Checks that find nothing **abstain** (score = 0.0, `Abstained = true`) instead of voting "clean"
+- Default action thresholds:
+  - **4.0+ points** -- Auto-Ban (requires AI confirmation when AI veto is enabled)
+  - **2.5+ points** -- Review Queue (human review required)
+  - **Below 2.5** -- Pass (message allowed)
 
-**Each algorithm** returns a confidence score (0-100). These scores are combined using **weighted averaging** to produce a final confidence score.
+This design fixes a critical bug from V1 where checks that found nothing would vote "Clean" and cancel out legitimate spam signals from other checks.
+
+### The 14 Checks
+
+The system defines 14 check types (`CheckName` enum), organized by their execution context:
+
+| # | Check | Category | Score Range | Execution Context |
+|---|-------|----------|-------------|-------------------|
+| 1 | StopWords | Text | 0.5 - 2.0 | Pipeline |
+| 2 | CAS | User | N/A | Join flow (WelcomeService) |
+| 3 | Similarity | ML | 1.0 - 5.0 | Pipeline |
+| 4 | Bayes | ML | 0.5 - 5.0 | Pipeline |
+| 5 | Spacing | Heuristic | 0.8 | Pipeline |
+| 6 | InvisibleChars | Heuristic | 1.5 | Pipeline |
+| 7 | OpenAI | AI | 0.0 - 5.0 | Veto (after pipeline) |
+| 8 | ThreatIntel | URL | 3.0 | Pipeline |
+| 9 | UrlBlocklist | URL | 2.0 (soft) / 5.0 (hard) | Pipeline + Pre-filter |
+| 10 | SeoScraping | Enrichment | N/A | Pre-processing (URL enrichment) |
+| 11 | ImageSpam | Media | 0.0 - 5.0 | Pipeline |
+| 12 | VideoSpam | Media | 0.0 - 5.0 | Pipeline |
+| 13 | FileScanning | File | 5.0 | Separate job (FileScanJob) |
+| 14 | ChannelReply | Contextual | 0.8 | Pipeline |
+
+**Pipeline checks** run during message processing and contribute scores that are summed. **CAS** runs at join time (not on messages). **SeoScraping** enriches message text with URL preview metadata before detection. **FileScanning** runs asynchronously via a background job. **OpenAI** runs as a veto after the pipeline to confirm or override spam verdicts.
 
 [Screenshot: Detection Algorithms configuration page]
 
@@ -26,76 +47,88 @@ Instead of relying on a single detection method, TelegramGroupsAdmin runs **9 sp
 
 ## The Detection Pipeline
 
-Here's what happens when a message arrives:
+Here is what happens when a message arrives:
 
 ```mermaid
 flowchart TD
-    A[Message Received] --> B[Fast Algorithms<br/>Stop Words, CAS, Invisible Chars<br/>~50ms]
-    B --> C[ML Algorithms<br/>TF-IDF, Bayes<br/>~100ms]
-    C --> D[URL/File Scanning<br/>ClamAV + VirusTotal<br/>Variable]
-    D --> E[Aggregate Scores<br/>Weighted Average]
-    E --> F{OpenAI Veto<br/>Enabled?}
-    F -->|Yes| G[GPT-4 Review<br/>~1.2s]
-    F -->|No| H{Final Confidence?}
-    G --> H
-    H -->|85+| I[Auto-Ban]
-    H -->|70-84| J[Review Queue]
-    H -->|Under 70| K[Pass]
+    A[Message Received] --> ENRICH[URL Content Enrichment<br/>SeoScraping scrapes link previews]
+    ENRICH --> PRE[URL Pre-Filter<br/>Hard-block check]
+    PRE -->|Hard Block| BAN[Auto-Ban<br/>5.0 points]
+    PRE -->|Pass| B[Pipeline Checks<br/>StopWords, Similarity, Bayes,<br/>Spacing, InvisibleChars,<br/>ThreatIntel, UrlBlocklist,<br/>ImageSpam, VideoSpam,<br/>ChannelReply]
+    B --> SUM[Sum Scores<br/>Additive total]
+    SUM --> F{AI Veto<br/>Enabled + Spam Signal?}
+    F -->|Yes| G[AI Veto Check]
+    F -->|No| H{Total Score?}
+    G --> AI_RESULT{AI Verdict?}
+    AI_RESULT -->|Clean| VETO[Veto: Allow Message<br/>Score reset to 0]
+    AI_RESULT -->|Spam| AI_SCORE{AI Score?}
+    AI_RESULT -->|Abstained| H
+    AI_SCORE -->|4.0+| BAN
+    AI_SCORE -->|2.5 - 3.9| REVIEW[Review Queue]
+    AI_SCORE -->|Below 2.5| PASS[Pass]
+    H -->|2.5+| REVIEW
+    H -->|Below 2.5| PASS
 
-    style I fill:#ff6b6b
-    style J fill:#ffd93d
-    style K fill:#6bcf7f
+    style BAN fill:#ff6b6b
+    style REVIEW fill:#ffd93d
+    style PASS fill:#6bcf7f
+    style VETO fill:#6bcf7f
 ```
 
-### Timing Performance
+### Abstention: A Key Concept
 
-**Average detection time**: 255ms per message
-- Fast algorithms: 45-50ms
-- ML algorithms: 87-100ms
-- URL/File scanning: Variable (depends on external APIs)
-- OpenAI verification: ~1,200ms (only for borderline cases)
+A check **abstains** when it cannot make a determination. Abstained checks contribute 0.0 points and do not influence the total score. This prevents false negatives from diluting real spam signals. Common abstention reasons:
 
-**P95 performance**: 821ms (99% of messages processed faster than this)
+- **No data**: Empty message, no URLs in message, no image attached
+- **Not trained**: ML model not loaded (Similarity, Bayes)
+- **Below threshold**: ML probability too low to be meaningful
+- **Service unavailable**: External API timeout or error (VirusTotal, AI provider)
+- **User exempt**: Trusted or admin users are skipped by most checks
 
-**Throughput**: Easily handles 5,000-20,000 messages/day on a single instance
+### Auto-Trust: Skipping Checks for Proven Users
+
+Users who post consecutive non-spam messages are automatically whitelisted ("auto-trust"). Once trusted, most checks skip execution entirely to reduce load. Auto-trust requires:
+
+- **N consecutive clean messages** (default: 3, configurable via `FirstMessagesCount`)
+- **Minimum message length** for each counted message (default: 20 chars)
+- **Minimum account age** before trust activates (default: 24 hours)
+
+Trust is **revoked** if spam is later detected (e.g., compromised account, manual `/spam` command). Both message count and account age must be satisfied simultaneously.
 
 ---
 
-## The 11 Detection Algorithms
+## The 14 Detection Checks
 
-### 1. Stop Words Detection
+### 1. StopWords
 
-**What it does**: Matches message text against a customizable keyword blocklist
+**What it does**: Matches message text, display name, and user ID against a customizable keyword blocklist stored in the database.
 
 **How it works**:
-- Compares message against your stop words list
-- Case-insensitive matching
-- Partial word matching (optional)
-- Supports phrases ("crypto signals", "guaranteed profits")
+- Loads enabled stop words from the database
+- Strips emojis from message text before comparison
+- Checks three fields: message body, username/display name, and user ID
+- Case-insensitive substring matching
+- Abstains when no stop words are configured or no matches are found
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- Manage stop words: Settings → Training Data → Stop Words Library
-- Add common spam phrases
+**Scoring tiers** (from `ScoringConstants`):
 
-**Strengths**:
-- ✓ Extremely fast (~5ms)
-- ✓ No false positives if keywords are well-chosen
-- ✓ Easy to understand and customize
-- ✓ No training required
+| Condition | Points |
+|-----------|--------|
+| 3+ matches | 2.0 (`ScoreStopWordsSevere`) |
+| 2 matches | 1.0 (`ScoreStopWordsModerate`) |
+| 1 match in short message (<50 chars) | 1.0 (`ScoreStopWordsModerate`) |
+| 1 match in normal message (50-200 chars) | 1.0 (`ScoreStopWordsModerate`) |
+| 1 match in long message (>200 chars) | 0.5 (`ScoreStopWordsMild`) |
 
-**Weaknesses**:
-- ✗ Requires manual keyword maintenance
-- ✗ Can't detect novel spam patterns
-- ✗ May catch legitimate messages with spam keywords
+**Configuration**: Settings --> Content Detection --> Stop Words (enable/disable). Manage keywords: Settings --> Training Data --> Stop Words Library.
 
-**Best for**: Groups with predictable spam patterns (crypto scams, referral spam)
+**Strengths**: Extremely fast, no training required, no false positives with well-chosen keywords. **Weaknesses**: Requires manual keyword maintenance, cannot detect novel spam patterns.
 
 **Example detection**:
 ```
 Message: "Join my VIP crypto signals group! Guaranteed 500% profits!"
-Matched keywords: "VIP signals", "guaranteed profits"
-Confidence: 100%
+Matched: "VIP signals" (in message), "guaranteed profits" (in message)
+Score: 1.0 points (2 matches = ScoreStopWordsModerate)
 ```
 
 [Screenshot: Stop Words Library management]
@@ -104,569 +137,581 @@ Confidence: 100%
 
 ### 2. CAS (Combot Anti-Spam) Database
 
-**What it does**: Looks up user ID in a global database of known spammers maintained by Combot
+**What it does**: Looks up user IDs in the global CAS database of known spammers maintained by Combot.
 
-**How it works**:
-- Sends user ID to CAS API
-- Receives yes/no response: Is this user a known spammer?
-- If yes, returns 100% confidence
-- If no, returns 0% confidence
+**How it works**: CAS checking runs during the **user join flow** (WelcomeService), not during message processing. When a user joins the group, their Telegram user ID is checked against the CAS API. If the user is a known spammer, the join security flow handles the response (block/restrict based on configuration).
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- No additional configuration needed (uses public API)
+**Configuration**: Settings --> Welcome --> Security on Join --> CAS Settings.
 
-**Strengths**:
-- ✓ Very fast (~12ms)
-- ✓ Catches known spammers across Telegram
-- ✓ Zero false positives (database curated)
-- ✓ No training required
-
-**Weaknesses**:
-- ✗ Only catches previously reported spammers
-- ✗ New spammer accounts not in database
-- ✗ Requires internet connection to CAS API
-
-**Best for**: All groups (recommended to enable always)
-
-**Example detection**:
-```
-User ID: 123456789
-CAS Database: FOUND
-Reason: "Reported for spam in 47 groups"
-Confidence: 100%
-```
+**Note**: CAS exists in the `CheckName` enum for historical compatibility and analytics tracking, but it does not participate in the message detection pipeline. It is a **join-time check**, not a content check.
 
 ---
 
-### 3. Similarity Detection (TF-IDF)
+### 3. Similarity (ML.NET SDCA Classifier)
 
-**What it does**: Compares new messages to known spam patterns using TF-IDF (Term Frequency-Inverse Document Frequency) analysis
+**What it does**: Compares new messages to trained spam/ham samples using an ML.NET SDCA (Stochastic Dual Coordinate Ascent) text classifier that predicts spam probability.
 
 **How it works**:
-- Converts messages to TF-IDF vectors (mathematical representations)
-- Compares new message vector to spam training samples
-- Calculates cosine similarity (0-1)
-- Returns similarity as confidence percentage
+- Runs the ML.NET SDCA model prediction on the message text
+- Returns a spam probability (0.0 to 1.0)
+- Abstains if the model is not loaded (training required), message is too short, or probability is below the configured threshold
+- Maps the ML probability to a score tier
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- Set similarity threshold (default: 0.75)
-- **Requires**: 100+ spam training samples
+**Scoring tiers** (from `ScoringConstants`):
 
-**Strengths**:
-- ✓ Catches spam similar to previous examples
-- ✓ Learns automatically from your feedback
-- ✓ Good at detecting spam pattern variations
-- ✓ Language-agnostic (works in any language)
+| ML Probability | Points |
+|---------------|--------|
+| >= 95% (`SimilarityThreshold95`) | 5.0 (`ScoreSimilarity95`) |
+| >= 85% (`SimilarityThreshold85`) | 3.5 (`ScoreSimilarity85`) |
+| >= 70% (`SimilarityThreshold70`) | 2.0 (`ScoreSimilarity70`) |
+| >= 60% (`SimilarityThreshold60`) | 1.0 (`ScoreSimilarity60`) |
+| Below threshold | Abstain |
 
-**Weaknesses**:
-- ✗ Requires training data (100+ samples)
-- ✗ Slower than simple keyword matching (~87ms)
-- ✗ Can't detect completely novel spam types
+**Configuration**: Settings --> Content Detection --> Similarity. Configure probability threshold (default: 0.60). **Requires** training data -- run ML training via the background jobs page.
 
-**Best for**: Groups with recurring spam patterns (pump-and-dump, phishing)
+**Strengths**: Learns from your group's spam patterns, language-agnostic, catches spam variations. **Weaknesses**: Requires training data, slower than keyword matching, cannot detect completely novel spam types.
 
 **Example detection**:
 ```
 Message: "Exclusive crypto tips! Join telegram.me/scamgroup"
-Similar to 12 known spam samples
-Average similarity: 0.82
-Confidence: 82%
+ML spam probability: 88.2%
+Score: 3.5 points (>= 85% threshold)
 ```
-
-[Screenshot: Similarity detection in action with sample comparison]
 
 ---
 
 ### 4. Naive Bayes Classifier
 
-**What it does**: Statistical machine learning algorithm that classifies messages as spam or ham based on probability
+**What it does**: Statistical machine learning algorithm that classifies messages based on word probability distributions learned from training data.
 
 **How it works**:
-- Learns word probabilities from training samples
-- Calculates P(spam | words in message)
-- Uses Bayes' theorem for classification
-- Returns probability as confidence percentage
+- Uses a singleton `IBayesClassifierService` (trained via Quartz background job at startup)
+- Strips emojis, then classifies the processed message text
+- Calculates spam probability and certainty
+- Abstains when: classifier not trained, probability below 40% (likely ham), or probability in the 40-60% uncertainty range
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- Set probability threshold (default: 0.75)
-- **Requires**: 50+ spam samples AND 50+ ham samples
+**Scoring tiers** (from `ScoringConstants` and `BayesConstants`):
 
-**Strengths**:
-- ✓ Learns from both spam AND legitimate messages
-- ✓ Fast training and prediction
-- ✓ Works well with limited data (50+ samples)
-- ✓ Handles novel spam patterns
+| Spam Probability | Points |
+|-----------------|--------|
+| >= 99% | 5.0 (`ScoreBayes99`) |
+| >= 95% | 3.5 (`ScoreBayes95`) |
+| >= 80% | 2.0 (`ScoreBayes80`) |
+| >= 70% | 1.0 (`ScoreBayes70`) |
+| 60-70% | 0.5 (weak signal) |
+| 40-60% | Abstain (uncertain) |
+| Below 40% | Abstain (likely ham) |
 
-**Weaknesses**:
-- ✗ Requires balanced training data (spam + ham)
-- ✗ Can overfit to training samples if too few
-- ✗ Less accurate than modern deep learning (but faster)
+**Configuration**: Settings --> Content Detection --> Bayes. **Requires** training data -- both spam and ham samples. Minimum message length is configurable (shared `MinMessageLength` setting).
 
-**Best for**: All groups after training phase complete
+**Strengths**: Learns from both spam and legitimate messages, fast prediction after training, handles novel patterns. **Weaknesses**: Requires balanced training data, can overfit with too few samples.
 
 **Example detection**:
 ```
 Message: "Click here for free money!"
-Word probabilities:
-  "click" → 78% spam, 22% ham
-  "free" → 91% spam, 9% ham
-  "money" → 82% spam, 18% ham
-Final probability: 0.84
-Confidence: 84%
+Spam probability: 96%
+Certainty: 0.847
+Score: 3.5 points (>= 95% threshold)
 ```
 
 ---
 
 ### 5. Spacing Detection
 
-**What it does**: Detects unusual character spacing and patterns that spammers use to evade keyword filters
+**What it does**: Detects unusual character spacing patterns used by spammers to evade keyword filters, such as excessive short words or letter-by-letter spacing.
 
 **How it works**:
-- Analyzes character distribution
-- Detects excessive spaces between letters
-- Identifies alternating case patterns
-- Checks for unusual punctuation density
+- Splits the message into words by spaces
+- Skips messages with too few words (configurable `MinWordsCount`)
+- Calculates the ratio of "short words" (at or below `ShortWordLength` chars) to total words
+- If the ratio exceeds the configurable threshold (`ShortWordRatioThreshold`), flags the message
+- Returns a flat score when suspicious patterns are detected, otherwise abstains
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- No training required
-- No threshold configuration
+**Scoring** (from `ScoringConstants`):
 
-**Strengths**:
-- ✓ Fast execution
-- ✓ Catches obfuscation attempts
-- ✓ No training required
-- ✓ Complements keyword detection
+| Condition | Points |
+|-----------|--------|
+| Suspicious short word ratio detected | 0.8 (`ScoreFormattingAnomaly`) |
+| No suspicious spacing | Abstain |
 
-**Weaknesses**:
-- ✗ Can flag artistic text formatting
-- ✗ Some legitimate messages use spacing for emphasis
-- ✗ Less reliable than other algorithms
+**Configuration**: Settings --> Content Detection --> Spacing. Configure short word ratio threshold, short word length, and minimum words count.
 
-**Best for**: Groups with persistent spammers who modify messages to evade detection
+**Strengths**: Fast, catches obfuscation attempts, no training required, complements keyword detection. **Weaknesses**: Can flag artistic text formatting, less reliable than other checks as a standalone signal.
 
 **Example detection**:
 ```
 Message: "C L I C K   H E R E   F O R   P R O F I T S"
-Spacing ratio: 3.2 (3x normal)
-Unusual pattern detected
-Confidence: 75%
+Short word ratio: 93% (well above threshold)
+Score: 0.8 points
 ```
 
 ---
 
 ### 6. Invisible Character Detection
 
-**What it does**: Detects Unicode abuse including zero-width spaces, invisible characters, and homoglyphs
+**What it does**: Detects Unicode abuse including zero-width spaces and other invisible characters that spammers use to evade text-based filters.
 
 **How it works**:
-- Scans for zero-width characters (U+200B, U+200C, U+200D, etc.)
-- Detects invisible separators
-- Identifies homoglyphs (look-alike characters from different alphabets)
-- Counts suspicious character ratio
+- Scans for specific invisible/zero-width Unicode characters: U+200B (zero-width space), U+200C (zero-width non-joiner), U+200D (zero-width joiner), U+FEFF (byte order mark)
+- Counts occurrences of these characters
+- If any are found, returns a fixed score; otherwise abstains
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- No training required
-- Automatic threshold detection
+**Scoring** (from `ScoringConstants`):
 
-**Strengths**:
-- ✓ Very fast
-- ✓ Nearly zero false positives
-- ✓ Catches sophisticated obfuscation
-- ✓ No training required
+| Condition | Points |
+|-----------|--------|
+| Invisible characters found (any count) | 1.5 (`ScoreInvisibleChars`) |
+| No invisible characters | Abstain |
 
-**Weaknesses**:
-- ✗ Only catches this specific technique
-- ✗ Spammers may use other obfuscation methods
+**Configuration**: Settings --> Content Detection --> Invisible Characters (enable/disable). No threshold configuration needed.
 
-**Best for**: All groups (recommended to enable always)
+**Strengths**: Very fast, nearly zero false positives, catches sophisticated obfuscation, no training required. **Weaknesses**: Only catches this specific technique; spammers may use other obfuscation methods.
 
 **Example detection**:
 ```
 Message: "He​llo! Cl​ick he​re"
-         (contains zero-width spaces: ​)
+         (contains zero-width spaces: U+200B)
 Invisible characters found: 3
-Suspicious character ratio: 5%
-Confidence: 90%
+Score: 1.5 points
 ```
 
 ---
 
-### 7. SEO/Scraping Spam Detection
+### 7. OpenAI / AI Veto
 
-**What it does**: Detects SEO spam, web scraping bots, and automated content promotion patterns
+**What it does**: Provider-agnostic AI check that analyzes messages with human-like understanding of context, tone, and intent. Operates as a **veto** on the pipeline results rather than a regular pipeline check.
 
 **How it works**:
-- Identifies SEO keyword stuffing patterns (excessive keywords, unnatural repetition)
-- Detects scraper signatures (automated posting patterns, templated content)
-- Checks for promotional link patterns (affiliate links, referral codes)
-- Analyzes message structure for bot-like formatting
+- **Only runs when other pipeline checks have already flagged non-AI spam signals** (it does not run on every message)
+- Combines message text, OCR-extracted text from images, and Vision analysis results into a single effective text
+- Sends the combined text plus recent message history (for context) to the configured AI provider
+- AI returns a JSON response with verdict (`spam`, `clean`, or `review`), a score (0.0-5.0), and reasoning
+- **Clean verdict** (score = 0.0, not abstained): Vetoes the spam detection -- message is allowed regardless of pipeline score
+- **Spam/Review verdict**: AI score **replaces** the pipeline total as the sole authority for action determination
+- Results are cached by content hash (1-hour TTL) with stampede protection
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- No additional configuration required
-- Works automatically on all text messages
+**Scoring**:
 
-**Strengths**:
-- ✓ Fast, pattern-based detection
-- ✓ Catches automated promotional content
-- ✓ No API keys or external services needed
-- ✓ Low false positive rate
+| AI Verdict | Effect |
+|-----------|--------|
+| `clean` | Score = 0.0, veto triggers -- message allowed |
+| `spam` with score >= 4.0 | Auto-Ban |
+| `spam` with score 2.5-3.9 | Review Queue |
+| `review` | Same as spam, uses AI-provided score |
+| Abstained (error/timeout/no spam flags) | Defers to pipeline score |
 
-**Weaknesses**:
-- ✗ May miss sophisticated scraping bots
-- ✗ Requires pattern updates as spam evolves
-- ✗ Can flag legitimate content with multiple links
+**Veto logic flow**:
 
-**Best for**: Groups targeted by SEO spammers, affiliate marketers, content scrapers
+```mermaid
+flowchart TD
+    A[Pipeline completed with spam signals] --> B{AI Veto Enabled?}
+    B -->|No| C[Use pipeline score]
+    B -->|Yes| D[AI analyzes message + context]
+    D --> E{AI Verdict?}
+    E -->|Clean| F[Override: Allow message]
+    E -->|Spam/Review| G[AI score determines action]
+    E -->|Abstained| C
+
+    style F fill:#6bcf7f
+    style G fill:#ffd93d
+```
+
+**Configuration**: Settings --> Content Detection --> AI Veto. **Requires**: AI provider configured in Settings --> System --> AI Integration. Configure custom prompt via the AI Prompt Builder. Supports `CheckShortMessages` and `MessageHistoryCount` options.
+
+**Strengths**: Best accuracy, understands context and nuance, customizable via prompt engineering, dramatically reduces false positives. **Weaknesses**: Slowest check, most expensive (API costs), requires AI provider configuration, external dependency.
 
 **Example detection**:
 ```
-Message: "Best deals on crypto! Buy now! Crypto trading crypto signals crypto profit! Click here: bit.ly/ref123"
-Analysis:
-  Keyword repetition: "crypto" appears 4 times in 15 words
-  Promotional link: Referral code detected in URL
-  SEO pattern: Excessive call-to-action phrases
-Confidence: 88%
+Pipeline detected: StopWords=1.0 + Spacing=0.8 + Similarity=2.0 = 3.8 points
+AI veto runs...
+AI verdict: "clean" - "This is a legitimate technical discussion about
+  crypto trading. Keywords triggered false positive."
+Result: VETOED - Message allowed (score reset to 0)
 ```
 
 ---
 
-### 9. Translation (Multi-Language Detection)
+### 8. ThreatIntel (Threat Intelligence)
 
-**What it does**: Translates non-English messages and analyzes translation consistency across multiple attempts
-
-**How it works**:
-- Detects non-Latin scripts (Cyrillic, Chinese, Arabic, etc.)
-- Translates to English using OpenAI
-- Runs spam detection on translated text
-- Compares multiple translation attempts for consistency
-
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- **Requires**: OpenAI API key
-- Automatic for messages <80% Latin script
-
-**Strengths**:
-- ✓ Works with any language
-- ✓ Catches international spam
-- ✓ Uses other algorithms on translated text
-- ✓ Detects translation inconsistencies (common in spam)
-
-**Weaknesses**:
-- ✗ Requires OpenAI API key ($$$)
-- ✗ Slower than other methods (~500ms)
-- ✗ Translation costs add up
-
-**Best for**: International groups with non-English spam
-
-**Example detection**:
-```
-Original (Russian): "Бесплатные деньги здесь!"
-Translation: "Free money here!"
-Stop Words match: "free money"
-Confidence: 85%
-```
-
-[Screenshot: Translation in action with original and translated text]
-
----
-
-### 10. OpenAI Verification (GPT-4 Spam Detection)
-
-**What it does**: Uses GPT-4 to analyze messages with human-like understanding of context, tone, and intent
+**What it does**: Validates URLs against threat intelligence services (currently VirusTotal) to detect malicious links.
 
 **How it works**:
-- Sends message + context to GPT-4
-- Custom prompt describes your group's rules and spam patterns
-- GPT-4 returns spam/ham verdict with reasoning
-- Confidence based on GPT-4's certainty
+- Only executes when the message contains URLs (checked via regex)
+- For each URL in the message, queries the VirusTotal API:
+  1. Tries to fetch an existing scan report by URL hash
+  2. If not found (404), submits the URL for scanning
+  3. Waits 15 seconds and retries the report lookup
+- If VirusTotal flags any URL as malicious (1+ engine detections), returns a positive score
+- Abstains if no threats are found or API errors occur (fail-open)
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- **Requires**: OpenAI API key
-- Configure custom prompt: Settings → Content Detection → External Services → OpenAI Integration
-- Set threshold (default: 75)
+**Scoring**:
 
-**Strengths**:
-- ✓ Best accuracy of all algorithms
-- ✓ Understands context and nuance
-- ✓ Customizable via prompt engineering
-- ✓ Learns from your group's culture
+| Condition | Points |
+|-----------|--------|
+| VirusTotal flags URL as malicious | 3.0 |
+| No threats detected | Abstain |
 
-**Weaknesses**:
-- ✗ Slowest algorithm (~1,200ms)
-- ✗ Most expensive ($0.002 per message)
-- ✗ Requires OpenAI API key
-- ✗ External dependency
+**Configuration**: Settings --> Content Detection --> Threat Intelligence. **Requires**: VirusTotal API key configured. Note: URL scanning has ~15 second latency when a new URL must be submitted for analysis.
 
-**Best for**: High-value groups where accuracy is critical
-
-**Example detection**:
-```
-Message: "Check out this new project: [link]"
-GPT-4 Analysis:
-  "This appears to be unsolicited promotion of an external project.
-   The message lacks context and is from a new user. The link goes
-   to a domain not associated with the group's topic. Likely spam."
-Verdict: SPAM
-Confidence: 92%
-```
-
----
-
-### 8. URL/File Content Detection
-
-**What it does**: Scans URLs against 540,000+ malicious domain blocklists and files for malware
-
-**How it works**:
-- **URLs**: Extracts all links from message
-  - Checks against Block List Project categories (phishing, scam, malware, etc.)
-  - Checks against custom blocklists
-  - Checks whitelist for exceptions
-- **Files**: Scans uploaded files
-  - ClamAV antivirus scanning
-  - VirusTotal multi-engine scanning (optional)
-  - Hash-based malware detection
-
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- Configure URL filters: Settings → Content Detection → URL Filtering
-- Configure file scanning: Settings → Content Detection → File Scanning
-- **Requires**: ClamAV running, VirusTotal API key (optional)
-
-**Strengths**:
-- ✓ Huge blocklist database (540K+ domains)
-- ✓ Multi-engine malware detection
-- ✓ Nearly zero false positives on malware
-- ✓ Catches phishing and scams
-
-**Weaknesses**:
-- ✗ Requires external services (ClamAV, VirusTotal)
-- ✗ Variable performance (depends on API response times)
-- ✗ New malicious domains may not be in database yet
-
-**Best for**: All groups (recommended to enable always)
+**Strengths**: Multi-engine malware detection (VirusTotal aggregates 70+ antivirus engines), catches phishing and scams. **Weaknesses**: Requires API key, significant latency for new URLs, rate limits apply on free API tier.
 
 **Example detection**:
 ```
 Message: "Great opportunity: http://phishing-site.com/login"
-URL Analysis:
-  Domain: phishing-site.com
-  Blocklist: Block List Project - Phishing
-  Category: Financial Phishing
-  First seen: 2 days ago
-Confidence: 100%
+VirusTotal: 3 engines flagged as malicious
+Score: 3.0 points
+```
+
+---
+
+### 9. URL Blocklist
+
+**What it does**: Validates URLs against cached domain blocklist subscriptions and manual domain filters. Supports both **hard blocks** (instant ban, pre-pipeline) and **soft blocks** (score contribution within pipeline).
+
+**How it works**:
+- **Hard block pre-filter**: Before the pipeline runs, `UrlPreFilterService` checks all URLs against hard-blocked domains. A hard block match results in an immediate auto-ban with a maximum score of 5.0 points. No further checks run.
+- **Soft block in pipeline**: During the pipeline, the check extracts URLs and standalone domains from the message, normalizes them (lowercase, remove `www.` prefix), and checks each against:
+  1. **Whitelist**: Whitelisted domains bypass all filters
+  2. **Soft block cache**: Matches against cached blocklist subscriptions and manual filters with `BlockMode = Soft`
+- Returns 2.0 points for a soft block match, otherwise abstains
+
+**Scoring**:
+
+| Condition | Points |
+|-----------|--------|
+| Hard-blocked domain (pre-filter) | 5.0 (instant ban, pipeline skipped) |
+| Soft-blocked domain (pipeline) | 2.0 |
+| Whitelisted domain | Abstain (skip) |
+| No filter matches | Abstain |
+
+**Configuration**: Settings --> Content Detection --> URL Filtering. Manage blocklist subscriptions (e.g., Block List Project categories: phishing, scam, malware), manual domain filters, and whitelist entries. Configure block mode (hard or soft) per filter.
+
+**Strengths**: Huge blocklist database, nearly zero false positives, supports per-chat whitelist overrides. **Weaknesses**: New malicious domains may not be in blocklists yet, requires periodic blocklist sync.
+
+**Example detection**:
+```
+Message: "Check this out: http://scam-domain.com/offer"
+Domain: scam-domain.com
+Soft block match: blocklist subscription ID 7
+Score: 2.0 points
 ```
 
 [Screenshot: URL Filtering configuration with blocklist categories]
 
 ---
 
-### 10. Image Spam Detection
+### 10. SeoScraping (URL Content Enrichment)
 
-**What it does**: Analyzes images in messages using 3-layer detection strategy to catch image-based spam
+**What it does**: Enriches message text by scraping URL preview metadata (title, description, OG tags) from linked pages. This is a **pre-processing step**, not a scoring check.
 
 **How it works**:
-- **Layer 1**: Perceptual hash similarity matching against known spam images (fastest, most reliable)
-- **Layer 2**: OCR text extraction + spam checks on extracted text (catches text-heavy image spam)
-- **Layer 3**: OpenAI Vision API fallback for comprehensive analysis (slow but accurate)
+- Extracts URLs from the message text
+- Scrapes each URL in parallel for HTML metadata (title, meta description, og:title, og:description)
+- Filters out technical metadata (viewport settings, charset declarations, CSS values)
+- Appends deduplicated preview content to the message text before it enters the detection pipeline
+- The enriched text gives downstream checks (StopWords, Bayes, Similarity, AI) more content to analyze
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- Requires OpenAI API key for Vision API (Layer 3)
-- Automatically trains on confirmed spam/ham images
+**Scoring**: N/A -- SeoScraping does not return a score. It enriches the message text so other checks can detect spam content hidden behind innocent-looking URLs.
 
-**Strengths**:
-- ✓ Catches spam images quickly via hash matching
-- ✓ OCR detects text-based image spam (screenshots of spam messages)
-- ✓ Vision API provides context-aware analysis
-- ✓ Self-learning (hash database grows with training)
+**Configuration**: Settings --> Content Detection --> SEO Scraping (enable/disable).
 
-**Weaknesses**:
-- ✗ Layer 3 (Vision API) is expensive (~$0.01 per image)
-- ✗ Minor image edits can bypass hash matching
-- ✗ OCR may fail on stylized text
+**Strengths**: Exposes spam content behind link previews to text-based checks, catches promotional spam that relies on link text. **Weaknesses**: Adds latency from HTTP scraping, may fail on JavaScript-rendered pages.
 
-**Best for**: Groups where spammers post image-based content (common in crypto/trading groups)
+**Example enrichment**:
+```
+Original message: "Check this out! https://scam-site.com"
+After enrichment: "Check this out! https://scam-site.com
+
+━━━ URL Previews ━━━
+
+scam-site.com
+Get Rich Quick! Guaranteed 500% Returns on Crypto!
+Join our VIP signals group for guaranteed profits!"
+
+→ StopWords now detects: "guaranteed profits", "VIP signals"
+→ Bayes probability increases due to enriched text
+```
+
+---
+
+### 11. ImageSpam (Image Content Detection)
+
+**What it does**: Analyzes images in messages using a 3-layer detection strategy, progressing from fastest/cheapest to slowest/most comprehensive.
+
+**How it works**:
+
+**Layer 1 -- Perceptual Hash Similarity** (fastest):
+- Computes a perceptual hash of the image
+- Compares against training sample hashes (limited by `MaxTrainingSamplesToCompare`)
+- If similarity exceeds threshold (`HashSimilarityThreshold`), returns the configured `HashMatchConfidence` score
+- Matches against known ham samples cause an abstention (no negative scoring in V2)
+- Falls through to Layer 2 if no hash match
+
+**Layer 2 -- OCR + Text-Based Spam Detection** (medium):
+- Extracts text from the image using OCR (Tesseract)
+- If extracted text meets `MinOcrTextLength`, creates a text-only content check request
+- Runs the full text detection pipeline (StopWords, Bayes, Similarity, etc.) on the OCR text
+- If the pipeline score exceeds `OcrConfidenceThreshold`, returns that score
+- Falls through to Layer 3 if uncertain
+
+**Layer 3 -- AI Vision Fallback** (slowest, most comprehensive):
+- Sends the image to the configured AI provider via Vision API
+- AI analyzes the image content against common spam patterns (crypto scams, phishing, impersonation, etc.)
+- AI returns a JSON response with spam verdict, score (0.0-5.0), and patterns detected
+- Uses the AI-provided score directly, clamped to 0.0-5.0
+
+OCR text is extracted early (before Layer 1) so it is available for the AI veto passthrough regardless of which layer returns the result.
+
+**Scoring**: Depends on which layer triggers.
+
+| Layer | Score Source |
+|-------|-------------|
+| Layer 1 (hash match) | Configured `HashMatchConfidence`, clamped to 0.0-5.0 |
+| Layer 2 (OCR text) | Pipeline total score from text checks |
+| Layer 3 (AI Vision) | AI-provided score, clamped to 0.0-5.0 |
+
+**Configuration**: Settings --> Content Detection --> Image Spam. Configure hash similarity threshold, OCR settings, Vision API toggle. **Requires**: AI provider for Layer 3 Vision analysis.
+
+**Strengths**: Multi-layered approach catches different types of image spam, hash matching is extremely fast for known spam, OCR catches text-heavy image spam, Vision API provides context-aware analysis. **Weaknesses**: Layer 3 is expensive (Vision API costs), minor image edits can bypass hash matching, OCR may fail on stylized text.
 
 **Example detection**:
 ```
 Message: [Image: Screenshot of "Join my signals group" text]
-Analysis:
-  Layer 1: No hash match
-  Layer 2 (OCR): Extracted text: "Join my VIP signals group! 100% profit!"
-    → Stop Words match: "signals", "profit"
-    → Confidence: 85%
-  Layer 3: Skipped (Layer 2 sufficient)
-Final Confidence: 85%
+Layer 1: Best hash similarity 42% (below 85% threshold), skipping
+Layer 2: OCR extracted 67 characters
+  → Text pipeline: StopWords=1.0, Bayes=2.0, total=3.0
+  → Score 3.0 >= OcrConfidenceThreshold, returning
+Score: 3.0 points
 ```
 
 ---
 
-### 11. Video Spam Detection
+### 12. VideoSpam (Video Content Detection)
 
-**What it does**: Analyzes video content in messages for spam indicators
+**What it does**: Analyzes video content using a 3-layer detection strategy identical in structure to ImageSpam, applied to extracted keyframes.
 
 **How it works**:
-- Extracts frames from video at intervals
-- Runs image spam detection on extracted frames
-- Checks video metadata (duration, file size) for spam patterns
 
-**Configuration**:
-- Enable/disable in Detection Algorithms page
-- Uses same configuration as Image Spam Detection
-- Automatically limits processing to first 10 frames for performance
+**Layer 1 -- Keyframe Hash Similarity** (fastest):
+- Extracts keyframes from the video using FFmpeg
+- Computes perceptual hashes for each frame
+- Compares frame hashes against video training sample keyframes
+- Returns early with configured score if a spam hash match exceeds the threshold
 
-**Strengths**:
-- ✓ Catches video-based spam campaigns
-- ✓ Reuses image detection infrastructure (efficient)
-- ✓ Metadata checks catch suspicious patterns (very short/long videos)
+**Layer 2 -- OCR on Frames** (medium):
+- Runs OCR on all extracted frames and collects text
+- If combined text meets `MinOcrTextLength`, runs the full text detection pipeline
+- Returns the pipeline score if confident enough
 
-**Weaknesses**:
-- ✗ Processing time depends on video length
-- ✗ May miss spam in middle/end of video (only samples frames)
-- ✗ Expensive if using Vision API on many frames
+**Layer 3 -- AI Vision on Representative Frame** (slowest):
+- Selects the best representative frame (prefers non-black frames near the video middle)
+- Sends the frame to AI Vision API for analysis
+- Returns the AI-provided score
 
-**Best for**: Groups where video spam is common (promotional content, scams)
+All extracted frames are cleaned up (deleted) after analysis completes.
+
+**Scoring**: Same structure as ImageSpam -- depends on which layer triggers. **Requires**: FFmpeg for frame extraction.
+
+**Configuration**: Settings --> Content Detection --> Video Spam. Configure hash similarity, OCR, and Vision API settings independently.
+
+**Strengths**: Catches video-based spam campaigns, reuses image detection infrastructure, keyframe approach avoids processing entire videos. **Weaknesses**: Processing time depends on video length, may miss spam in frames not extracted, expensive if Vision API runs.
 
 **Example detection**:
 ```
 Message: [Video: 30-second promotional video]
-Analysis:
-  Frames extracted: 5 (at 0s, 7s, 15s, 22s, 30s)
-  Frame 1: OCR detected "Limited time offer"
-    → Stop Words match: 80% confidence
-  Frame 3: Similar to known spam video (hash match)
-    → Confidence: 95%
-Final Confidence: 95%
+Keyframes extracted: 5
+Layer 1: Best hash similarity 91% >= 85% threshold (SPAM match)
+Score: 4.5 points (configured HashMatchConfidence)
 ```
 
 ---
 
-## OpenAI Veto System
+### 13. FileScanning (Malware Detection)
 
-The **OpenAI Veto** is a special feature that acts as a final check for borderline cases.
+**What it does**: Scans uploaded files for malware using a two-tier scanning architecture. This check runs on a **separate path** (via `FileScanJob` background job), not in the main detection pipeline.
 
-### How Veto Works
+**How it works**:
 
-```mermaid
-flowchart TD
-    A[Message Detection Complete] --> B{Confidence 85+?}
-    B -->|Yes| C{OpenAI Veto Enabled?}
-    B -->|No| E[Normal Processing]
-    C -->|Yes| D[Send to GPT-4]
-    C -->|No| F[Auto-Ban]
-    D --> G{GPT-4 Verdict?}
-    G -->|Not Spam| H[Override: Send to Review Queue]
-    G -->|Spam| F
-    E --> I[Continue Pipeline]
+**Hash-based caching** (24-hour TTL): Before any scan, the file hash is checked against cached results. If the file has been scanned before, the cached verdict is returned immediately.
 
-    style F fill:#ff6b6b
-    style H fill:#ffd93d
+**Tier 1 -- Local Scanners** (ClamAV):
+- Runs local antivirus scanners in parallel with OR voting (any positive = threat)
+- If a threat is detected, returns immediately with 5.0 points (no Tier 2 needed)
+- All scanner results are cached
+
+**Tier 2 -- Cloud Services** (VirusTotal):
+- Only runs if Tier 1 reports clean
+- Runs cloud scanning services sequentially in priority order
+- Includes both file upload scanning and hash lookup scanning
+- All results are cached
+
+**Scoring**:
+
+| Condition | Points |
+|-----------|--------|
+| Malware detected (any tier) | 5.0 (definitive threat) |
+| File clean (all tiers) | Abstain |
+| File exceeds size limit | Abstain (fail-open) |
+| Scan error | Abstain (fail-open) |
+
+**Configuration**: Settings --> Content Detection --> File Scanning (detection flags). Infrastructure settings (ClamAV connection, VirusTotal API key) are configured separately.
+
+**Note**: `ShouldExecute` always returns `false` for the standard pipeline -- FileScanning is invoked directly by `FileScanJob` when `MessageProcessingService` detects a file attachment. The bot downloads the file, computes its hash, and triggers the scan job asynchronously.
+
+**Strengths**: Multi-engine detection, hash caching avoids redundant scans, fail-open design prevents blocking on infrastructure errors. **Weaknesses**: Requires external services (ClamAV, optionally VirusTotal), asynchronous -- results may arrive after the message is already visible.
+
+**Example detection**:
 ```
-
-### When Veto Triggers
-
-Veto only activates when:
-- **Confidence ≥ Veto Threshold** (default: 85)
-- **OpenAI Veto is enabled**
-- **OpenAI API key is configured**
-
-**Cost**: Only runs on messages that would be auto-banned (~$0.002 per message)
-
-### Veto Impact
-
-**Effectiveness**: Reduces false positives by **80-90%**
-
-**Example**:
+Message: [Document: invoice.pdf.exe]
+Cache: MISS
+Tier 1 (ClamAV): Infected - Win.Trojan.Agent-12345
+Score: 5.0 points
+Action: Auto-Ban
 ```
-Initial detection: 88% confidence (would auto-ban)
-↓
-OpenAI Veto analyzes context
-↓
-GPT-4 verdict: "This is a legitimate technical discussion about crypto trading.
-                Keywords triggered false positive."
-↓
-Override: Send to Review Queue instead of auto-ban
-```
-
-**Best practice**: Enable veto after initial training period to dramatically improve accuracy.
-
-[Screenshot: OpenAI Veto configuration]
 
 ---
 
-## Confidence Score Aggregation
+### 14. ChannelReply (Channel Reply Signal)
 
-How individual algorithm scores combine into the final confidence:
+**What it does**: Adds a soft spam signal when a message replies to a channel post (linked channel system post or anonymous admin posting as the group). This is a common spam pattern where bots reply to channel announcements.
 
-### Weighted Averaging
+**How it works**:
+- Only executes when `request.Metadata.IsReplyToChannelPost` is true
+- Skips trusted and admin users
+- Returns a fixed score -- no complex analysis needed
 
-Each algorithm has a **weight** (importance factor):
+**Scoring** (from `ScoringConstants`):
+
+| Condition | Points |
+|-----------|--------|
+| Message is a reply to a channel post | 0.8 (`ScoreChannelReply`) |
+| Not a channel reply | Does not execute |
+
+**Configuration**: Settings --> Content Detection --> Channel Reply (enable/disable).
+
+**Strengths**: Zero processing cost (instant), catches a common bot spam pattern. **Weaknesses**: Only useful as a confidence booster alongside other checks -- 0.8 points alone is well below any threshold.
+
+**Example detection**:
+```
+Message: "Check out my trading group!" (replying to a channel announcement)
+Channel reply detected
+Score: 0.8 points (combined with other check scores)
+```
+
+---
+
+## AI Veto System
+
+The AI veto is the most important accuracy feature in the detection system. It serves as a **final check** that dramatically reduces false positives.
+
+### How the Veto Decision Works
+
+The engine decides whether to run the AI veto based on three conditions:
+
+1. **Non-AI spam signals exist** -- At least one pipeline check (excluding ImageSpam and VideoSpam, which already use AI Vision) returned a positive score
+2. **AI infrastructure is enabled** -- An AI provider connection is configured and active
+3. **AI spam detection is enabled** -- Per-chat AI veto toggle is on
+
+ImageSpam and VideoSpam are excluded from the veto trigger because they already use AI Vision API internally -- running a text-only AI veto on image-only messages would see blank content and produce meaningless results.
+
+### Veto Outcomes
+
+| Outcome | Effect |
+|---------|--------|
+| AI says `clean` (score=0, not abstained) | **Veto**: Message allowed, total score reset to 0 |
+| AI says `spam` or `review` (with score) | **AI score replaces pipeline total** as sole authority |
+| AI abstains (error, timeout, rate limit) | **Defer**: Pipeline score determines action |
+
+When AI confirms spam, the AI-provided score is used directly to determine the action (AutoBan vs ReviewQueue), not the pipeline total. The pipeline scores served only as a gate to trigger the veto; the AI verdict drives the final action.
+
+---
+
+## Score Aggregation
+
+### How Scores Combine
+
+The detection engine uses **simple additive scoring** -- all check scores are summed:
 
 ```
-Final Confidence = (
-  StopWords × 1.2 +
-  CAS × 1.5 +
-  Similarity × 1.0 +
-  Bayes × 1.1 +
-  Spacing × 0.8 +
-  InvisibleChars × 1.0 +
-  Translation × 1.0 +
-  OpenAI × 1.3 +
-  URLFile × 1.4
-) / Total Weights
+Total Score = StopWords + Similarity + Bayes + Spacing + InvisibleChars
+            + ThreatIntel + UrlBlocklist + ImageSpam + VideoSpam + ChannelReply
 ```
 
-**Higher weights** = More trust in that algorithm
+Abstained checks contribute 0.0 and are excluded from the sum. There are no weights -- each check's score already reflects its relative importance through the scoring tiers defined in `ScoringConstants`.
 
-**CAS and URLFile have highest weights** because they're nearly always accurate.
+### Action Determination
 
-### Example Calculation
+Without AI veto:
 
+```
+Total Score >= 2.5  →  Review Queue (pipeline caps at ReviewQueue to guard false positives)
+Total Score < 2.5   →  Allow
+```
+
+Pipeline results **never directly auto-ban** -- they cap at ReviewQueue. Auto-ban requires AI confirmation.
+
+With AI veto (when enabled and triggered):
+
+```
+AI Score >= AutoBanThreshold (default 4.0)   →  Auto-Ban
+AI Score >= ReviewQueueThreshold (default 2.5) →  Review Queue
+AI Score < ReviewQueueThreshold               →  Allow
+```
+
+### Example Calculations
+
+**Example 1: Multi-signal spam (no AI veto)**
 ```
 Message: "Join my VIP crypto signals! bit.ly/scam123"
 
-Algorithm Scores:
-  Stop Words: 100% × 1.2 = 120
-  CAS: 0% × 1.5 = 0
-  Similarity: 85% × 1.0 = 85
-  Bayes: 78% × 1.1 = 85.8
-  Spacing: 60% × 0.8 = 48
-  Invisible Chars: 0% × 1.0 = 0
-  Translation: N/A (English)
-  OpenAI: 92% × 1.3 = 119.6
-  URL/File: 100% × 1.4 = 140
+StopWords: 1.0 (2 matches: "VIP signals", "crypto")
+Bayes: 3.5 (96% spam probability)
+UrlBlocklist: 2.0 (bit.ly on soft block list)
+Spacing: Abstain (no suspicious patterns)
+InvisibleChars: Abstain (no invisible chars)
 
-Total: 598.4
-Total Weights: 9.3
-Final Confidence: 598.4 / 9.3 = 64.3%
-
-Action: PASS (below 70 threshold)
+Total: 1.0 + 3.5 + 2.0 = 6.5 points
+Action: Review Queue (pipeline caps at review)
 ```
 
-**Note**: This is a simplified example. Actual weights are configurable and may differ.
+**Example 2: Same message with AI veto enabled**
+```
+Pipeline total: 6.5 points (spam signals detected)
+AI veto triggered...
+AI verdict: "spam", score: 4.8, reason: "Unsolicited crypto promotion with referral link"
+AI score replaces pipeline total: 4.8
+Action: Auto-Ban (4.8 >= 4.0 threshold)
+```
+
+**Example 3: False positive rescued by AI veto**
+```
+Message: "I lost money on crypto scams, be careful with VIP signals groups"
+
+StopWords: 1.0 (matched "crypto scams", "VIP signals")
+Similarity: 2.0 (70% similar to spam training samples)
+Spacing: Abstain
+
+Pipeline total: 3.0 points → spam signals detected
+AI veto triggered...
+AI verdict: "clean", reason: "User is warning others about scams, not promoting one"
+Result: VETOED -- message allowed, score reset to 0
+```
 
 ---
 
 ## Training the ML Algorithms
 
-Machine learning algorithms (Similarity, Bayes) improve over time as you provide feedback.
+Machine learning checks (Similarity, Bayes) require training data to function. Without training data, these checks abstain on every message.
 
 ### Training Workflow
 
 ```mermaid
 flowchart TD
     A[Message Flagged as Spam] --> B[Sent to Review Queue]
-    B --> C{Your Decision}
-    C -->|Confirm Spam| D[Add to Spam Training Samples]
-    C -->|Mark as Ham| E[Add to Ham Training Samples]
-    D --> F[ML Retrains Automatically]
+    B --> C{Admin Decision}
+    C -->|Confirm Spam| D[Added to Spam Training Samples]
+    C -->|Mark as Ham| E[Added to Ham Training Samples]
+    D --> F[ML Retrains via Background Job]
     E --> F
     F --> G[Future Similar Messages]
     G --> H[More Accurate Detection]
@@ -674,45 +719,25 @@ flowchart TD
 
 ### Training Requirements
 
-**Similarity Detection (TF-IDF)**:
-- Minimum: 100 spam samples
-- Recommended: 200+ spam samples
-- Ham samples: Optional but helpful
+**Similarity (ML.NET SDCA)**:
+- Minimum: Sufficient spam + ham samples for the model to converge
+- Training runs via Quartz background job
+- Model predictions improve with more diverse training data
 
 **Naive Bayes**:
-- Minimum: 50 spam + 50 ham samples
-- Recommended: 100+ of each
-- **Must be balanced**: Equal spam and ham samples
+- Trained via singleton service at startup and via background job
+- Requires both spam and ham samples for balanced classification
+- Abstains when uncertainty is high (40-60% probability range)
 
-### Collecting Training Data
+### Training Mode
 
-**Phase 1: Training Mode (Days 1-30)**:
-1. Enable Training Mode
-2. Review all detections
-3. Mark as spam or ham consistently
-4. Goal: 100+ spam, 100+ ham samples
-
-**Phase 2: Production with Feedback (Days 31+)**:
-1. Disable Training Mode
-2. Auto-bans happen, borderline go to review
-3. Continue marking borderline cases
-4. ML continues learning from your feedback
+Enable **Training Mode** in the content detection settings to force all spam detections into the review queue instead of auto-banning. This lets you validate detection accuracy before enabling auto-ban actions.
 
 ### Training Tips
 
-**Quality over quantity**:
-- Mark samples consistently
-- Don't mark if unsure (use Dismiss)
-- Review samples should represent real spam
-
-**Balance your dataset**:
-- If you have 200 spam samples, collect 200 ham samples too
-- Imbalanced data skews ML predictions
-
-**Review training data**:
-- Settings → Training Data → Training Samples
-- Delete bad samples if needed
-- Ensure samples are correctly labeled
+- **Quality over quantity**: Mark samples consistently. Use Dismiss if unsure.
+- **Balance your dataset**: Collect roughly equal spam and ham samples to prevent bias.
+- **Review training data**: Settings --> Training Data --> Training Samples. Delete incorrectly labeled samples.
 
 [Screenshot: Training Samples management page]
 
@@ -724,79 +749,38 @@ flowchart TD
 
 **Too many false positives (legitimate messages flagged)**:
 
-**Solutions**:
-1. **Enable OpenAI Veto** - Reduces false positives by 80-90%
-2. **Increase auto-ban threshold** - 85 → 90 or 95
-3. **Whitelist common domains** - Settings → URL Filtering → Whitelist
-4. **Review stop words** - Remove overly broad keywords
-5. **Mark as ham consistently** - Train ML to recognize legitimate patterns
+1. **Enable AI Veto** -- Single most effective change for reducing false positives
+2. **Raise the review queue threshold** -- Increase from 2.5 to 3.0 or higher
+3. **Whitelist common domains** -- Settings --> URL Filtering --> Whitelist
+4. **Review stop words** -- Remove overly broad keywords
+5. **Mark false positives as ham** -- Train ML to recognize legitimate patterns
 
 **Spam getting through (false negatives)**:
 
-**Solutions**:
-1. **Lower auto-ban threshold** - 85 → 80
-2. **Enable more algorithms** - Spacing, Translation, OpenAI
-3. **Add stop words** - Keywords from spam that slipped through
-4. **Block domains manually** - Settings → URL Filtering → Manual Domains
-5. **Enable stricter URL blocklists** - Ads, Tracking categories
+1. **Lower the review queue threshold** -- Decrease from 2.5 to 2.0
+2. **Enable more checks** -- Turn on Spacing, InvisibleChars, ChannelReply
+3. **Add stop words** -- Keywords from spam that slipped through
+4. **Block domains manually** -- Settings --> URL Filtering --> Manual Domains
+5. **Enable stricter URL blocklists** -- Add more subscription categories
 
-**Inconsistent detection (same spam sometimes caught, sometimes not)**:
+**Inconsistent detection**:
 
-**Solutions**:
-1. **Collect more training data** - ML needs 100+ samples
-2. **Enable multiple algorithms** - Don't rely on just one
-3. **Use consistent thresholds** - Don't change settings frequently
-4. **Check algorithm weights** - Ensure reliable algorithms have higher weights
-
----
-
-## Performance and Scaling
-
-### Current Performance
-
-**Average detection time**: 255ms per message
-**P95 (95th percentile)**: 821ms
-**P99 (99th percentile)**: ~2 seconds (includes OpenAI calls)
-
-**Throughput**: 5,000-20,000 messages/day comfortably
-
-### Optimization Tips
-
-**If detection is slow** (>500ms average):
-
-1. **Disable slow algorithms temporarily**:
-   - Translation (500ms)
-   - OpenAI Verification (1,200ms)
-
-2. **Use OpenAI Veto instead** of always-on OpenAI Verification
-   - Veto only runs on borderline cases
-   - 10x fewer API calls
-
-3. **Limit URL blocklists**:
-   - Enable only essential categories (Phishing, Scam, Malware)
-   - Disable Ads/Tracking blocklists
-
-4. **Increase min message length**:
-   - Skip detection for very short messages (<10 chars)
-   - Most spam is longer
-
-**If using too many OpenAI API calls**:
-
-1. **Use Veto mode only** (not verification on every message)
-2. **Increase veto threshold** (85 → 90)
-3. **Disable Translation** for English-only groups
-4. **Set OpenAI rate limits** in configuration
+1. **Collect more training data** -- ML checks need diverse samples
+2. **Enable multiple checks** -- Do not rely on just one
+3. **Use consistent thresholds** -- Do not change settings frequently
 
 ---
 
 ## Related Documentation
 
-- **[First Configuration](../getting-started/02-first-configuration.md)** - Initial setup
-- **[Reports Queue](02-reports.md)** - Review and train
-- **[URL Filtering](04-url-filtering.md)** - Configure blocklists
-- **[Content Tester](05-content-tester.md)** - Test detection
-- **[AI Prompt Builder](06-ai-prompt-builder.md)** - Customize OpenAI prompts
+- **[First Configuration](../getting-started/02-first-configuration.md)** -- Initial setup
+- **[Reports Queue](02-reports.md)** -- Review and train
+- **[URL Filtering](04-url-filtering.md)** -- Configure blocklists
+- **[Content Tester](05-content-tester.md)** -- Test detection
+- **[AI Prompt Builder](06-ai-prompt-builder.md)** -- Customize AI prompts
+- **[Similarity Algorithm](../03-algorithms/01-similarity.md)** -- Deep dive into ML.NET SDCA
+- **[Bayes Algorithm](../03-algorithms/02-bayes.md)** -- Deep dive into Naive Bayes
 
 ---
 
-**Next: Master URL filtering** → Continue to **[URL Filtering Guide](04-url-filtering.md)**!
+**Next: Master URL filtering** -- Continue to **[URL Filtering Guide](04-url-filtering.md)**

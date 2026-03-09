@@ -20,7 +20,7 @@ The **Content Tester** is your sandbox for testing spam detection rules before t
 
 **Training yourself**:
 - Learn how algorithms work
-- Understand confidence scoring
+- Understand additive scoring
 - Build intuition for what gets flagged
 
 **Testing edge cases**:
@@ -39,15 +39,15 @@ The Content Tester page has a simple, focused layout:
 - **Text input** - Large text area for message content
 - **Image upload** - Drag & drop or paste images (Ctrl+V)
 - **Video upload** - Test video spam detection
-- **File upload** - File attachment support (note: file scanning integration not yet complete)
+- **File upload** - File attachment support for malware scanning (ClamAV + VirusTotal)
 - **Chat selector** - Test with chat-specific or global config
 - **Test button** - Run detection
 
 ### Results Area (Bottom)
 
-- **Overall confidence** - Final spam score (0-100%)
+- **Total score** - Final spam score (additive, 0.0-5.0+ points)
 - **Action** - What would happen (Auto-Ban, Review, Pass)
-- **Per-algorithm breakdown** - Each algorithm's verdict
+- **Per-algorithm breakdown** - Each algorithm's verdict and point contribution
 - **Detailed reasoning** - Why each algorithm flagged/passed
 
 [Screenshot: Content Tester page layout]
@@ -70,10 +70,10 @@ Click here: https://bit.ly/scam123
 ```
 
 **Expected results**:
-- Overall: 85-95% confidence
-- Stop Words: 100% (matched "VIP signals", "guaranteed profits")
-- URL Content: 100% (suspicious shortened URL)
-- Naive Bayes: 80-90% (if trained)
+- Total Score: 4.5-5.0+ pts
+- Stop Words: +2.0 pts (matched "VIP signals", "guaranteed profits")
+- URL Content: +1.5 pts (suspicious shortened URL)
+- Naive Bayes: +1.0 pts (if trained)
 - Action: AUTO-BAN
 
 [Screenshot: Text test results with breakdown]
@@ -113,7 +113,7 @@ The Content Tester supports image testing for vision-based spam detection (if Op
 - Visual spam indicators detected
 - Context-aware analysis
 
-**Confidence score based on**:
+**Score based on**:
 - Promotional imagery (ads, logos)
 - Text overlays with spam keywords
 - Visual spam patterns (urgent CTAs, fake urgency)
@@ -121,7 +121,7 @@ The Content Tester supports image testing for vision-based spam detection (if Op
 **Example**:
 ```
 Image: Screenshot of "GET RICH QUICK!" banner with crypto logos
-Expected: 85-95% confidence (OpenAI Vision flags promotional spam)
+Expected: +1.5-2.0 pts from image detection (OpenAI Vision flags promotional spam)
 ```
 
 [Screenshot: Image test with OpenAI Vision analysis]
@@ -159,7 +159,7 @@ Test uploaded files for malware without actually sending them to your Telegram g
 File: document.pdf
 ClamAV: Clean
 VirusTotal: 0/60 engines flagged
-Confidence: 0% (safe)
+Score: 0.00 pts (safe)
 ```
 
 **Infected file**:
@@ -167,8 +167,8 @@ Confidence: 0% (safe)
 File: malware.exe
 ClamAV: FOUND - Win32.Trojan.Generic
 VirusTotal: 45/60 engines flagged
-Confidence: 100% (malware detected)
-Action: AUTO-BAN
+Score: 5.00 pts (malware detected)
+Action: Delete + DM notification
 ```
 
 [Screenshot: File test results with virus scan details]
@@ -195,15 +195,15 @@ Check out this site: https://example.com
 URL: https://phishing-site.com
 Blocklist: Block List Project - Phishing
 Category: Financial Phishing
-Confidence: 100%
-Action: AUTO-BAN
+Score: +2.0 pts
+Action: AUTO-BAN (if total >= 4.0)
 ```
 
 **Whitelisted domain**:
 ```
 URL: https://github.com/yourproject
 Whitelist: Matched
-Confidence: 0% (whitelisted)
+Score: 0.00 pts (whitelisted)
 Action: PASS
 ```
 
@@ -212,7 +212,7 @@ Action: PASS
 URL: https://wikipedia.org
 Blocklist: No match
 Whitelist: No match
-Confidence: 0% (clean)
+Score: 0.00 pts (clean)
 Action: PASS
 ```
 
@@ -221,8 +221,8 @@ Action: PASS
 URL: https://bit.ly/abc123
 Resolves to: https://evil-scam-site.com
 Blocklist: Block List Project - Scam
-Confidence: 100%
-Action: AUTO-BAN
+Score: +2.0 pts
+Action: AUTO-BAN (if total >= 4.0)
 ```
 
 ---
@@ -264,37 +264,39 @@ Test same message in both configs to see different results
 
 ## Interpreting Results
 
-### Overall Confidence Score
+### Total Score
 
-The final confidence (0-100) determines the action:
+The total score is additive: each algorithm contributes 0.0-5.0 points, and the scores are summed. The total determines the action:
 
-- **85-100**: AUTO-BAN → User banned, message deleted
-- **70-84**: REVIEW QUEUE → Manual review required
-- **0-69**: PASS → Message allowed
+- **4.0+**: AUTO-BAN → User banned, message deleted (default threshold)
+- **2.5-3.9**: REVIEW QUEUE → Manual review required (default threshold)
+- **Below 2.5**: PASS → Message allowed
+
+These thresholds are configurable in Settings → Content Detection (AutoBanThreshold and ReviewQueueThreshold).
 
 **Color coding**:
-- 🔴 Red (85+): Auto-ban
-- 🟡 Yellow (70-84): Review
-- 🟢 Green (<70): Pass
+- Red (>= 4.0): Auto-ban
+- Yellow (2.5-3.9): Review
+- Green (< 2.5): Pass
 
 ### Per-Algorithm Breakdown
 
 Each algorithm shows:
-- **Name** (e.g., Stop Words, Naive Bayes)
-- **Confidence** (0-100%)
-- **Status** (Flagged ✓ or Passed ○)
-- **Reason** - Why it flagged or passed
+- **Check Name** (e.g., Stop Words, Naive Bayes)
+- **Result** (SPAM, CLEAN, or ABSTAINED)
+- **Score** - Points contributed (0.00-5.00)
+- **Details** - Why it flagged or passed
 
 **Example breakdown**:
 ```
-✓ Stop Words (100%) - Matched: "guaranteed profits", "VIP signals"
-✓ URL Content (100%) - Blocked domain: bit.ly/scam123
-✓ Naive Bayes (82%) - Classified as spam (trained on 250 samples)
-○ CAS Database (0%) - User not in global spammer database
-○ Invisible Chars (0%) - No suspicious characters detected
-○ Similarity (45%) - Low similarity to known spam patterns
+SPAM  Stop Words:     +2.00 pts - Matched: "guaranteed profits", "VIP signals"
+SPAM  URL Content:    +1.50 pts - Blocked domain: bit.ly/scam123
+SPAM  Naive Bayes:    +1.00 pts - Classified as spam (trained on 250 samples)
+CLEAN CAS Database:    0.00 pts - User not in global spammer database
+CLEAN Invisible Chars: 0.00 pts - No suspicious characters detected
+CLEAN Similarity:      0.00 pts - Low similarity to known spam patterns
 
-Overall: 87% → AUTO-BAN
+Total: 4.50 pts → AUTO-BAN
 ```
 
 ### Understanding "Why"
@@ -314,7 +316,7 @@ Blocklist: Block List Project - Redirect + Scam (after resolution)
 
 **Naive Bayes**:
 ```
-Spam probability: 0.82
+Score: +1.00 pts
 Based on 250 training samples
 ```
 
@@ -322,7 +324,7 @@ Based on 250 training samples
 ```
 GPT-4 Analysis: "This message is unsolicited promotion with
 urgency tactics and suspicious links. Clear spam pattern."
-Confidence: 92%
+Score: +1.50 pts
 ```
 
 ---
@@ -339,12 +341,12 @@ When will Bitcoin moon? 🚀 Time to buy a lambo!
 ```
 
 **Before adding stop words**:
-- Stop Words: 0%
-- Overall: 20-30% (probably passes)
+- Stop Words: 0.00 pts
+- Total: 0.5-1.0 pts (probably passes)
 
 **After adding**:
-- Stop Words: 80-90%
-- Overall: 60-70% (might hit review queue)
+- Stop Words: +2.00 pts
+- Total: 2.5-3.0 pts (might hit review queue)
 
 **Conclusion**: These words cause false positives in legitimate crypto discussion. Don't add them as stop words. Use context-aware OpenAI instead.
 
@@ -352,22 +354,22 @@ When will Bitcoin moon? 🚀 Time to buy a lambo!
 
 ### Scenario 2: Testing Threshold Changes
 
-**Goal**: You changed auto-ban threshold from 85 to 80.
+**Goal**: You changed auto-ban threshold from 4.0 to 3.5.
 
 **Test message** (borderline spam):
 ```
 Check out this new DeFi project: https://newproject.com
 ```
 
-**At 85 threshold**:
-- Overall: 82%
+**At 4.0 threshold**:
+- Total: 3.7 pts
 - Action: REVIEW QUEUE
 
-**At 80 threshold**:
-- Overall: 82%
+**At 3.5 threshold**:
+- Total: 3.7 pts
 - Action: AUTO-BAN
 
-**Conclusion**: Lowering threshold from 85 to 80 causes more auto-bans. Monitor for false positives.
+**Conclusion**: Lowering threshold from 4.0 to 3.5 causes more auto-bans. Monitor for false positives.
 
 ---
 
@@ -381,12 +383,12 @@ More details at https://yourcompany.com/promo
 ```
 
 **Without whitelist**:
-- URL Content: 50% (word "promo" in URL suspicious)
-- Overall: 40-50%
+- URL Content: +1.0 pts (word "promo" in URL suspicious)
+- Total: 1.5-2.0 pts
 
 **With whitelist**:
-- URL Content: 0% (whitelisted domain)
-- Overall: 10-20%
+- URL Content: 0.00 pts (whitelisted domain)
+- Total: 0.5-1.0 pts
 
 **Conclusion**: Whitelist working correctly.
 
@@ -399,13 +401,13 @@ More details at https://yourcompany.com/promo
 **Test**: Upload image of "LIMITED TIME OFFER! 50% OFF" banner
 
 **With OpenAI Vision**:
-- OpenAI Verification: 85%
+- OpenAI Verification: +1.5 pts
 - Reason: "Promotional imagery with urgency tactics"
-- Overall: 75-85%
+- Total: 2.5-3.5 pts
 
 **Without OpenAI Vision**:
 - No image analysis
-- Overall: 0% (text-only algorithms see nothing)
+- Total: 0.00 pts (text-only algorithms see nothing)
 
 **Conclusion**: OpenAI Vision is essential for image spam detection.
 
@@ -445,18 +447,18 @@ Test results are not saved automatically.
 Test the same message with different configurations:
 
 1. **Baseline test**: Test with current settings
-2. **Note overall confidence**
+2. **Note total score**
 3. **Change configuration** (e.g., enable algorithm)
 4. **Test again**
-5. **Compare confidence scores**
+5. **Compare scores**
 
 **Example workflow**:
 ```
-Test 1 (without OpenAI): 72% confidence
-Change: Enable OpenAI Verification
-Test 2 (with OpenAI): 58% confidence (GPT-4 said not spam)
+Test 1 (without OpenAI): 3.2 pts total
+Change: Enable OpenAI Verification (AI veto)
+Test 2 (with OpenAI): 1.8 pts total (GPT-4 vetoed — not spam)
 
-Conclusion: OpenAI reduces false positive
+Conclusion: OpenAI veto reduces false positive
 ```
 
 ---
@@ -478,7 +480,7 @@ Conclusion: OpenAI reduces false positive
 ### OpenAI not analyzing images
 
 **Symptoms**:
-- Image uploaded but OpenAI Verification shows 0%
+- Image uploaded but OpenAI Verification shows 0.00 pts
 - No GPT-4 analysis in results
 
 **Solutions**:
@@ -489,9 +491,16 @@ Conclusion: OpenAI reduces false positive
 
 ### File scanning not working
 
-**Note**: File scanning integration in Content Tester is not yet complete. The UI accepts file uploads, but scanning is not currently processed. File scanning works in production (real Telegram messages), just not in the Content Tester tool yet.
+**Symptoms**:
+- File uploaded but no scan results appear
+- Scan takes too long or times out
 
-**Workaround**: Test file scanning by sending actual files in your monitored Telegram group.
+**Solutions**:
+- Verify ClamAV is running and reachable
+- Check VirusTotal API key is configured (if using VirusTotal)
+- Ensure file is under 100MB (Content Tester limit) and under 20MB for VirusTotal
+- Use the EICAR test file (eicar.com) to verify scanning works end-to-end
+- Check browser console for errors if the upload itself fails
 
 ### Content Tester is slow
 
@@ -554,7 +563,7 @@ Keep a log of tests:
 Date: 2025-03-15
 Change: Added "moon" and "lambo" to stop words
 Test: "When Bitcoin moon?"
-Result: 85% confidence (false positive!)
+Result: 3.5 pts total (false positive — hit review queue!)
 Decision: Removed stop words, use OpenAI instead
 ```
 

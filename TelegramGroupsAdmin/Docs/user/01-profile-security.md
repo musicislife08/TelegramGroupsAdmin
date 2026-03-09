@@ -447,7 +447,7 @@ View recent login attempts:
 
 - **[Quick Start Guide](../getting-started/01-quick-start.md)** - Initial account setup
 - **[Web User Management](../admin/01-web-user-management.md)** - Managing other users
-- **[Security Settings](https://future-docs/security-settings.md)** - System-wide security
+- **Security Settings** - System-wide security (Settings → System → Security in the web UI)
 
 ---
 

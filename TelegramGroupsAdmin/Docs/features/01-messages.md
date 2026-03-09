@@ -258,6 +258,34 @@ If the message is in a foreign language, translate it to English:
 
 ---
 
+## Send As Admin
+
+The message composition area includes a **Bot/Me toggle** that lets you choose how messages are sent to the group.
+
+### Bot vs. Me Mode
+
+The `ChatInput` component displays a toggle button next to the text input:
+
+- **Bot mode** (default) -- Messages are sent as the bot account, with your linked username appended as a signature. The maximum message length is reduced to account for the signature.
+- **Me mode** -- Messages are sent via your personal Telegram account using the WTelegram User API. No signature is appended, and you get the full 4096-character limit.
+
+### Toggle Behavior
+
+- While the page checks whether the User API is available for the selected chat, a **loading skeleton** replaces the toggle button.
+- Once the check completes, the toggle appears as a clickable button showing either a robot icon ("Bot") or a person icon ("Me").
+- If the User API is available for the selected chat, the toggle **defaults to Me mode**.
+- If the User API is unavailable (no WTelegram session, or your personal account is not a member of the selected chat), the toggle is disabled and a tooltip explains why.
+
+### Requirements
+
+- **Bot mode**: Bot must be in the group and you must have a linked Telegram account (for the signature).
+- **Me mode**: Your personal Telegram account must be connected via WTelegram and must be a member of the selected chat.
+- Connect your Telegram account in **Settings** to enable Me mode.
+
+For the full setup guide, see **[Send As Admin](10-send-as-admin.md)**.
+
+---
+
 ## Understanding Message Statuses
 
 Messages can have multiple status indicators:
@@ -489,6 +517,36 @@ Translations are used by:
 
 ---
 
+## Per-User Message History
+
+You can view all messages from a specific user across every monitored group in a single dialog.
+
+### Opening the Dialog
+
+1. Open any user's profile via the **User Detail Dialog** (click a username in the message view, or navigate from the Users page).
+2. Click the **View Messages** button in the user's profile header.
+3. The **UserMessagesDialog** opens, showing that user's messages from all chats you have access to.
+
+### What You See
+
+- **Chat badges** -- Each message displays the group it came from, with the group's profile picture (or a default forum icon) and name.
+- **Message bubbles** -- Full message content rendered with the same `MessageBubbleTelegram` component used on the main Messages page.
+- **Jump to message** -- A link below each message navigates you to that message in context on the Messages page (closes the dialog and highlights the message).
+
+### Pagination
+
+- Messages load in pages of **50**.
+- A **Load More** button appears at the bottom when more messages are available.
+- Messages are sorted newest-first and paginated by timestamp.
+
+### Permission Scoping
+
+The dialog only shows messages from chats the current web user has access to. Admins see messages from their assigned chats; GlobalAdmins and Owners see messages from all chats.
+
+For more details, see **[Per-User Message History](11-per-user-messages.md)**.
+
+---
+
 ## Performance Tips
 
 ### For Large Groups (10,000+ Messages)
@@ -565,8 +623,10 @@ While no dedicated keyboard shortcuts exist yet, you can use browser shortcuts:
 
 - **[Reports Queue](02-reports.md)** - Review borderline spam detections
 - **[Spam Detection Guide](03-spam-detection.md)** - Understand detection algorithms
-- **[Users Page](https://future-docs/users.md)** - Manage Telegram users
+- **[Users Page](../admin/03-users.md)** - Manage Telegram users
 - **[Chat Management](../admin/02-chat-management.md)** - Configure per-chat settings
+- **[Send As Admin](10-send-as-admin.md)** - Send messages as your personal Telegram account
+- **[Per-User Message History](11-per-user-messages.md)** - Cross-chat message history for individual users
 
 ---
 

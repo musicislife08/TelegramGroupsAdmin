@@ -1,16 +1,14 @@
 # First Configuration Guide
 
-This guide will walk you through configuring your spam detection system for the first time. By the end, you'll have a working spam detection system that you can refine over time.
-
-**Estimated time**: 10-15 minutes
+This guide will walk you through configuring your content detection system for the first time. By the end, you'll have a working content detection system that you can refine over time.
 
 ## Configuration Philosophy: Start Conservative
 
-When setting up spam detection for the first time, it's best to:
+When setting up content detection for the first time, it's best to:
 
 1. **Start with Training Mode** - Collect spam examples without risking false positives
 2. **Enable basic algorithms first** - Stop Words, CAS, Invisible Characters, URL/File Scanning
-3. **Use high thresholds** - Require 95+ confidence for auto-bans initially
+3. **Use high thresholds** - Require a high spam score for auto-bans initially
 4. **Review everything manually** - Build confidence before automating
 5. **Enable ML algorithms later** - After collecting 100+ training samples
 
@@ -45,10 +43,10 @@ flowchart TD
     A[Message Received] --> B[Run Detection Algorithms]
     B --> C{Training Mode?}
     C -->|Yes| D[All Detections → Review Queue]
-    C -->|No| E{Confidence Score?}
-    E -->|85+| F[Auto-Ban]
-    E -->|70-84| G[Review Queue]
-    E -->|Under 70| H[Pass]
+    C -->|No| E{Spam Score?}
+    E -->|≥ 4.0| F[Auto-Ban]
+    E -->|2.5 – 3.9| G[Review Queue]
+    E -->|Under 2.5| H[Pass]
 
     style D fill:#ffd93d
     style F fill:#ff6b6b
@@ -74,7 +72,7 @@ Navigate to **Settings** → **Content Detection** → **Detection Algorithms** 
 
 **How to configure**:
 - Enable the checkbox
-- Leave threshold at default (usually 75)
+- Leave threshold at default
 - You'll add stop words later in Settings → Training Data → Stop Words Library
 
 #### 2. CAS (Combot Anti-Spam) Database ✓
@@ -125,7 +123,7 @@ Navigate to **Settings** → **Content Detection** → **Detection Algorithms** 
 
 ## Step 3: Set Conservative Thresholds
 
-Thresholds determine what action the system takes based on the confidence score.
+Thresholds determine what action the system takes based on the spam score. The system uses additive scoring where each detection algorithm contributes 0.0-5.0 points. The final spam score is the sum of all algorithm contributions.
 
 ### Threshold Settings
 
@@ -133,23 +131,23 @@ Still on the **Detection Algorithms** page, configure these values:
 
 ```
 Training Mode: ON (from Step 1)
-Auto-Ban Threshold: 95
-Review Queue Threshold: 70
+Auto-Ban Threshold: 4.0
+Review Queue Threshold: 2.5
 First Message Only: ON
 Min Message Length: 10
 ```
 
 ### What These Mean
 
-**Auto-Ban Threshold (95)**:
-- If confidence ≥ 95, message would normally be auto-banned
+**Auto-Ban Threshold (4.0)**:
+- If spam score >= 4.0, message would normally be auto-banned
 - With Training Mode ON, goes to review queue instead
-- 95 is very conservative - only near-certain spam
+- 4.0 is the default - requires multiple algorithms to flag a message
 
-**Review Queue Threshold (70)**:
-- If confidence is 70-94, message goes to review queue
+**Review Queue Threshold (2.5)**:
+- If spam score is 2.5-3.9, message goes to review queue
 - You'll manually review these
-- 70 captures borderline cases
+- 2.5 captures borderline cases where a couple of algorithms flagged the message
 
 **First Message Only (ON)**:
 - Only checks the first 3 messages from new users
@@ -248,13 +246,13 @@ He​llo! Cl​ick he​re for f​ree mo​ney
 ### Interpreting Results
 
 The Content Tester will show:
-- **Overall confidence score** (0-100)
-- **Per-algorithm breakdown** - Which algorithms flagged it and why
+- **Overall spam score** (additive points from all algorithms)
+- **Per-algorithm breakdown** - Which algorithms flagged it and their individual point contributions
 - **Action that would be taken** - Auto-Ban, Review Queue, or Pass
 
 **What to look for**:
-- Spam messages should score 70+ (ideally 85+)
-- Legitimate messages should score <70
+- Spam messages should score 2.5+ (ideally 4.0+)
+- Legitimate messages should score below 2.5
 - If something unexpected happens, adjust your configuration
 
 [Screenshot: Content Tester showing spam detection results]
@@ -322,28 +320,28 @@ When you're confident in the system (after 100+ reviews), disable Training Mode.
 
 1. Navigate to **Settings** → **Content Detection** → **Detection Algorithms**
 2. Toggle **Training Mode** to **OFF**
-3. Lower **Auto-Ban Threshold** from 95 to **85**
-4. Keep **Review Queue Threshold** at **70**
+3. Keep **Auto-Ban Threshold** at **4.0** (the default)
+4. Keep **Review Queue Threshold** at **2.5** (the default)
 5. Click **Save All Changes**
 
 ### What Changes
 
-- **85+ confidence** → Auto-ban (delete message + ban user)
-- **70-84 confidence** → Review queue (manual review required)
-- **<70 confidence** → Pass (allow message)
+- **>= 4.0 spam score** → Auto-ban (delete message + ban user)
+- **2.5-3.9 spam score** → Review queue (manual review required)
+- **< 2.5 spam score** → Pass (allow message)
 
-**Monitoring**: Continue checking the Reports page daily to review borderline cases (70-84).
+**Monitoring**: Continue checking the Reports page daily to review borderline cases (2.5-3.9).
 
 [Screenshot: Training Mode toggled OFF with updated thresholds]
 
 ```mermaid
 flowchart TD
     A[Message Received] --> B[Run Detection Algorithms]
-    B --> C[Aggregate Confidence Score]
+    B --> C[Sum Spam Score]
     C --> D{Score?}
-    D -->|85+| E[Auto-Ban + Delete]
-    D -->|70-84| F[Review Queue]
-    D -->|Under 70| G[Allow Message]
+    D -->|≥ 4.0| E[Auto-Ban + Delete]
+    D -->|2.5 – 3.9| F[Review Queue]
+    D -->|Under 2.5| G[Allow Message]
 
     F --> H{Manual Review}
     H -->|Confirm Spam| I[Ban User]
@@ -367,8 +365,8 @@ Here's what you've configured:
 - ✓ URL/File Content Detection
 
 ### Thresholds
-- Auto-Ban: 95 (Training Mode) → 85 (Production)
-- Review Queue: 70
+- Auto-Ban: 4.0 points
+- Review Queue: 2.5 points
 - First Message Only: ON
 - Min Message Length: 10
 
@@ -389,7 +387,7 @@ Here's what you've configured:
 
 1. **[Messages Documentation](../features/01-messages.md)** - Learn how to browse and manage messages
 2. **[Reports Documentation](../features/02-reports.md)** - Master the review queue workflow
-3. **[Spam Detection Guide](../features/03-spam-detection.md)** - Deep dive into all 11 algorithms
+3. **[Spam Detection Guide](../features/03-spam-detection.md)** - Deep dive into all 14 algorithms
 4. **[URL Filtering Guide](../features/04-url-filtering.md)** - Advanced URL filtering techniques
 
 ### Optional Advanced Features
@@ -398,7 +396,7 @@ Once you're comfortable with the basics, consider:
 
 - **[AI Prompt Builder](../features/06-ai-prompt-builder.md)** - Customize GPT-4 spam detection for your group's context
 - **[Content Tester](../features/05-content-tester.md)** - Test detection rules before deploying
-- **[ML Threshold Tuning](https://your-future-docs/ml-tuning.md)** - Let AI optimize your thresholds
+- **ML Threshold Tuning** - Let AI optimize your thresholds
 
 ---
 
@@ -413,12 +411,12 @@ Once you're comfortable with the basics, consider:
 ### Common Adjustments
 
 **Too many false positives?**
-- Increase Auto-Ban Threshold (85 → 90)
+- Increase Auto-Ban Threshold (4.0 → 4.5)
 - Disable aggressive algorithms
 - Add domains to whitelist
 
 **Spam getting through?**
-- Lower Auto-Ban Threshold (85 → 80)
+- Lower Auto-Ban Threshold (4.0 → 3.5)
 - Enable more algorithms (Spacing Detection, Translation)
 - Add stop words to blocklist
 
@@ -439,7 +437,7 @@ Once you're comfortable with the basics, consider:
 ### Everything is being flagged
 
 - Training Mode should prevent auto-bans
-- Check your thresholds (should be 95/70 initially)
+- Check your thresholds (should be 4.0/2.5 initially)
 - Review your stop words list (Settings → Training Data → Stop Words Library)
 
 ### Can't save configuration
