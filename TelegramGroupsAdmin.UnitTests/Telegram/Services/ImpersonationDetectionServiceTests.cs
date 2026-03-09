@@ -190,6 +190,7 @@ public class ImpersonationDetectionServiceTests
             IsBot: false,
             IsTrusted: isTrusted,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: DateTimeOffset.UtcNow,
             LastSeenAt: DateTimeOffset.UtcNow,

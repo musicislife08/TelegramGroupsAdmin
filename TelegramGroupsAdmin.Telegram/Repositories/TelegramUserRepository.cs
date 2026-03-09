@@ -1029,6 +1029,44 @@ public class TelegramUserRepository : ITelegramUserRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<int> IncrementKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var user = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
+
+        if (user == null)
+        {
+            _logger.LogWarning("Cannot increment kick count for unknown user {UserId}", telegramUserId);
+            return 0;
+        }
+
+        user.KickCount++;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Incremented kick count for {User}: {KickCount}",
+            user.ToLogInfo(), user.KickCount);
+
+        return user.KickCount;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .Select(u => u.KickCount)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     // ============================================================================
     // IsActive Methods (Phase: /ban @username support)
     // ============================================================================

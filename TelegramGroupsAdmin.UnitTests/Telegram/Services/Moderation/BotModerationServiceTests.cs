@@ -3,8 +3,10 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -36,7 +38,7 @@ public class BotModerationServiceTests
     private IBanCelebrationService _mockBanCelebrationService = null!;
     private IReportService _mockReportService = null!;
     private INotificationService _mockNotificationService = null!;
-    private IUserActionsRepository _mockUserActionsRepository = null!;
+    private ITelegramUserRepository _mockTelegramUserRepository = null!;
     private IConfigService _mockConfigService = null!;
     private ILogger<BotModerationService> _mockLogger = null!;
     private BotModerationService _orchestrator = null!;
@@ -55,7 +57,7 @@ public class BotModerationServiceTests
         _mockBanCelebrationService = Substitute.For<IBanCelebrationService>();
         _mockReportService = Substitute.For<IReportService>();
         _mockNotificationService = Substitute.For<INotificationService>();
-        _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
+        _mockTelegramUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockConfigService = Substitute.For<IConfigService>();
         _mockLogger = Substitute.For<ILogger<BotModerationService>>();
 
@@ -71,7 +73,7 @@ public class BotModerationServiceTests
             _mockBanCelebrationService,
             _mockReportService,
             _mockNotificationService,
-            _mockUserActionsRepository,
+            _mockTelegramUserRepository,
             _mockConfigService,
             _mockLogger);
     }
@@ -1916,6 +1918,494 @@ public class BotModerationServiceTests
             Arg.Any<UserIdentity>(),
             Actor.AutoDetection,
             Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Kick Escalation Tests
+
+    // ---------------------------------------------------------------------------
+    // GetKickDuration — pure static logic, tested directly
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    [TestCase(0, 1, Description = "2^0 = 1 minute (first kick)")]
+    [TestCase(1, 2, Description = "2^1 = 2 minutes")]
+    [TestCase(2, 4, Description = "2^2 = 4 minutes")]
+    [TestCase(5, 32, Description = "2^5 = 32 minutes")]
+    [TestCase(10, 1024, Description = "2^10 = 1024 minutes (~17h)")]
+    [TestCase(15, 1440, Description = "2^15 = 32768, capped at MaxKickDuration (24h = 1440 min)")]
+    [TestCase(31, 1440, Description = "Overflow guard: shift capped at 30, result exceeds max, returns 1440")]
+    [TestCase(100, 1440, Description = "Extreme value: shift capped at 30, result exceeds max, returns 1440")]
+    public void GetKickDuration_VariousPriorKickCounts_ReturnsExpectedDuration(int priorKickCount, int expectedMinutes)
+    {
+        // Act
+        var result = BotModerationService.GetKickDuration(priorKickCount);
+
+        // Assert
+        Assert.That(result.TotalMinutes, Is.EqualTo(expectedMinutes));
+    }
+
+    // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — escalation disabled (MaxKicksBeforeBan = 0)
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task KickUserFromChatAsync_MaxKicksDisabled_UsesDefaultDuration()
+    {
+        // Arrange
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        // Act
+        await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert — kick count must NOT be read when escalation is disabled
+        await _mockTelegramUserRepository.DidNotReceive().GetKickCountAsync(
+            Arg.Any<long>(), Arg.Any<CancellationToken>());
+
+        // Assert — handler called with exactly the default 1-minute duration
+        await _mockBanHandler.Received(1).KickFromChatAsync(
+            Arg.Any<UserIdentity>(),
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<Actor>(),
+            Arg.Any<string?>(),
+            Arg.Is<KickOptions?>(o => o != null && o.Duration == ModerationConstants.DefaultKickDuration),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_NullConfig_FallsBackToDefault()
+    {
+        // Arrange — GetEffectiveAsync returns null (no config stored for this chat)
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns((WelcomeConfig?)null);
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        // Act
+        await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert — null config defaults to MaxKicksBeforeBan = 0, so no kick count query
+        await _mockTelegramUserRepository.DidNotReceive().GetKickCountAsync(
+            Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — escalation enabled, below threshold
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task KickUserFromChatAsync_BelowThreshold_UsesEscalatedDuration()
+    {
+        // Arrange — 1 prior kick → 2^1 = 2-minute duration
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
+
+        _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(1);
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+
+        await _mockBanHandler.Received(1).KickFromChatAsync(
+            Arg.Any<UserIdentity>(),
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<Actor>(),
+            Arg.Any<string?>(),
+            Arg.Is<KickOptions?>(o => o != null && o.Duration == TimeSpan.FromMinutes(2)),
+            Arg.Any<CancellationToken>());
+    }
+
+    // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — escalation to ban at/above threshold
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task KickUserFromChatAsync_AtThreshold_EscalatesToBan()
+    {
+        // Arrange — prior kicks == threshold, so next action is a permanent ban
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
+
+        _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(3);
+
+        _mockBanHandler.BanAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert — BanAsync was called; KickFromChatAsync was never called
+        Assert.That(result.Success, Is.True);
+
+        await _mockBanHandler.Received(1).BanAsync(
+            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Any<Actor>(),
+            Arg.Any<string?>(),
+            Arg.Any<int?>(),
+            Arg.Any<CancellationToken>());
+
+        await _mockBanHandler.DidNotReceive().KickFromChatAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_AboveThreshold_EscalatesToBan()
+    {
+        // Arrange — prior kicks exceed threshold (e.g. 5 when threshold is 3)
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
+
+        _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(5);
+
+        _mockBanHandler.BanAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+
+        await _mockBanHandler.Received(1).BanAsync(
+            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Any<Actor>(),
+            Arg.Any<string?>(),
+            Arg.Any<int?>(),
+            Arg.Any<CancellationToken>());
+
+        await _mockBanHandler.DidNotReceive().KickFromChatAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_AutoBanReason_ContainsThreshold()
+    {
+        // Arrange — verify the escalation reason communicates kick count and threshold
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
+
+        _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(3);
+
+        _mockBanHandler.BanAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        // Act
+        await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert — auto-ban reason should explain how many kicks and the threshold
+        await _mockBanHandler.Received(1).BanAsync(
+            Arg.Any<UserIdentity>(),
+            Arg.Any<Actor>(),
+            Arg.Is<string?>(r => r != null && r.Contains("3") && r.Contains("threshold")),
+            Arg.Any<int?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — KickOptions passthrough
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task KickUserFromChatAsync_RevokeMessagesFalse_PassedToKickOptions()
+    {
+        // Arrange — admin kicks should NOT revoke messages (preserve legitimate content)
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        // Act
+        await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test",
+                RevokeMessages = false
+            });
+
+        // Assert — RevokeMessages=false must flow through to the handler unchanged
+        await _mockBanHandler.Received(1).KickFromChatAsync(
+            Arg.Any<UserIdentity>(),
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<Actor>(),
+            Arg.Any<string?>(),
+            Arg.Is<KickOptions?>(o => o != null && o.RevokeMessages == false),
+            Arg.Any<CancellationToken>());
+    }
+
+    // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — failure path
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task KickUserFromChatAsync_HandlerFails_ReturnsFailure()
+    {
+        // Arrange
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Failed("User is chat admin"));
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo("User is chat admin"));
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — kick count tracking
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task KickUserFromChatAsync_Success_IncrementsKickCount()
+    {
+        // Arrange — successful kick must persist the new count so future kicks escalate
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert
+        Assert.That(result.Success, Is.True);
+
+        await _mockTelegramUserRepository.Received(1).IncrementKickCountAsync(
+            userId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_EscalatesToBan_DoesNotIncrementKickCount()
+    {
+        // Arrange — when we ban instead of kick, we must not also increment kick count
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
+
+        _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(3);
+
+        _mockBanHandler.BanAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        // Act
+        await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert — IncrementKickCountAsync must not be called on the ban escalation path
+        await _mockTelegramUserRepository.DidNotReceive().IncrementKickCountAsync(
+            Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_HandlerFails_DoesNotIncrementKickCount()
+    {
+        // Arrange — failed kick must not register against the user's escalation history
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 0 });
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Failed("API error"));
+
+        // Act
+        await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert
+        await _mockTelegramUserRepository.DidNotReceive().IncrementKickCountAsync(
+            Arg.Any<long>(), Arg.Any<CancellationToken>());
+    }
+
+    // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — system account protection
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task KickUserFromChatAsync_TelegramSystemAccount_ReturnsError(long systemUserId)
+    {
+        // Arrange — system accounts must be immune to all moderation actions
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(systemUserId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "Attempted kick of system account"
+            });
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("system account"));
+        }
+
+        // Verify no handler was invoked
+        await _mockBanHandler.DidNotReceive().KickFromChatAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+            Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

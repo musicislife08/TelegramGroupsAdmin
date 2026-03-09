@@ -48,7 +48,7 @@ public class BotModerationService : IBotModerationService
     private readonly INotificationService _notificationService;
 
     // Repositories
-    private readonly IUserActionsRepository _userActionsRepository;
+    private readonly ITelegramUserRepository _telegramUserRepository;
 
     // Configuration
     private readonly IConfigService _configService;
@@ -66,7 +66,7 @@ public class BotModerationService : IBotModerationService
         IBanCelebrationService banCelebrationService,
         IReportService reportService,
         INotificationService notificationService,
-        IUserActionsRepository userActionsRepository,
+        ITelegramUserRepository telegramUserRepository,
         IConfigService configService,
         ILogger<BotModerationService> logger)
     {
@@ -81,7 +81,7 @@ public class BotModerationService : IBotModerationService
         _banCelebrationService = banCelebrationService;
         _reportService = reportService;
         _notificationService = notificationService;
-        _userActionsRepository = userActionsRepository;
+        _telegramUserRepository = telegramUserRepository;
         _configService = configService;
         _logger = logger;
     }
@@ -529,9 +529,8 @@ public class BotModerationService : IBotModerationService
 
         if (maxKicks > 0)
         {
-            var priorKicks = await _userActionsRepository.GetActiveActionsAsync(
-                intent.User.Id, UserActionType.Kick, cancellationToken);
-            var priorKickCount = priorKicks.Count;
+            var priorKickCount = await _telegramUserRepository.GetKickCountAsync(
+                intent.User.Id, cancellationToken);
 
             if (priorKickCount >= maxKicks)
             {
@@ -561,10 +560,13 @@ public class BotModerationService : IBotModerationService
         if (!kickResult.Success)
             return ModerationResult.Failed(kickResult.ErrorMessage ?? "Failed to kick user");
 
-        // Audit successful kick
+        // Audit the kick (best-effort — metadata for history)
         await SafeAuditAsync(
             () => _auditHandler.LogKickAsync(intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken),
             "kick", intent.User, intent.Chat);
+
+        // Increment kick count (primary operation — drives escalation logic)
+        await _telegramUserRepository.IncrementKickCountAsync(intent.User.Id, cancellationToken);
 
         return new ModerationResult
         {
@@ -577,9 +579,10 @@ public class BotModerationService : IBotModerationService
     /// Exponential backoff for kick duration: 1 min * 2^priorKickCount, capped at MaxKickDuration.
     /// 0 prior = 1m, 1 prior = 2m, 2 prior = 4m, 3 = 8m, 4 = 16m, 5 = 32m, 6 = ~1h, 7 = ~2h, ...
     /// </summary>
-    private static TimeSpan GetKickDuration(int priorKickCount)
+    internal static TimeSpan GetKickDuration(int priorKickCount)
     {
-        var minutes = 1 << priorKickCount; // 2^n minutes
+        var shift = Math.Min(priorKickCount, 30); // Guard against bit shift overflow
+        var minutes = 1 << shift; // 2^n minutes
         var duration = TimeSpan.FromMinutes(minutes);
         return duration > ModerationConstants.MaxKickDuration ? ModerationConstants.MaxKickDuration : duration;
     }

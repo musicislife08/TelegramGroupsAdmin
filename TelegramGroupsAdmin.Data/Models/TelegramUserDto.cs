@@ -109,6 +109,14 @@ public class TelegramUserDto
     public DateTimeOffset? BanExpiresAt { get; set; }
 
     /// <summary>
+    /// All-time kick count. Source of truth for escalation logic (not derived from audit log).
+    /// Incremented after each successful kick. Used to determine escalating kick durations
+    /// and auto-ban threshold.
+    /// </summary>
+    [Column("kick_count")]
+    public int KickCount { get; set; }
+
+    /// <summary>
     /// Active warnings as JSONB collection. See WarningEntry for architectural rationale.
     /// Each warning has expiry - expired warnings are filtered in application code.
     /// Null or empty list = no warnings.

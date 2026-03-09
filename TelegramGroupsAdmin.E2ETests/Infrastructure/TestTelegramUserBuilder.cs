@@ -146,6 +146,7 @@ public class TestTelegramUserBuilder
             IsBot: _isBot,
             IsTrusted: _isTrusted,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: _botDmEnabled,
             FirstSeenAt: _firstSeenAt,
             LastSeenAt: _lastSeenAt,
