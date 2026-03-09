@@ -5,29 +5,6 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Result of starting an exam session
-/// </summary>
-/// <param name="Success">Whether the exam started successfully</param>
-/// <param name="WelcomeMessageId">ID of the first exam message sent</param>
-public record ExamStartResult(bool Success, int WelcomeMessageId);
-
-/// <summary>
-/// Result of processing an exam answer
-/// </summary>
-/// <param name="ExamComplete">Whether all questions have been answered</param>
-/// <param name="Passed">Whether the user passed (only valid if ExamComplete)</param>
-/// <param name="SentToReview">Whether the user was sent to review queue</param>
-/// <param name="GroupChatId">The group chat ID where user joined (for welcome response lookup in DM flow)</param>
-public record ExamAnswerResult(bool ExamComplete, bool? Passed, bool SentToReview, long? GroupChatId = null);
-
-/// <summary>
-/// Context for an active exam session, including whether it's awaiting an open-ended answer.
-/// </summary>
-/// <param name="GroupChatId">The group chat where user joined</param>
-/// <param name="AwaitingOpenEndedAnswer">True if MC questions are complete and open-ended is pending</param>
-public record ActiveExamContext(long GroupChatId, bool AwaitingOpenEndedAnswer);
-
-/// <summary>
 /// Service for managing entrance exam flow.
 /// Handles MC question display, answer validation, open-ended evaluation.
 /// </summary>

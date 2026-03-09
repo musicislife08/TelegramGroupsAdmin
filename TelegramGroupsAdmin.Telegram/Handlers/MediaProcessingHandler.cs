@@ -199,28 +199,3 @@ public class MediaProcessingHandler
         return null;
     }
 }
-
-/// <summary>
-/// Result of media detection (pure metadata extraction from Telegram message)
-/// </summary>
-public record MediaDetectionResult(
-    MediaType MediaType,
-    string FileId,
-    long FileSize,
-    string? FileName,
-    string? MimeType,
-    int? Duration
-);
-
-/// <summary>
-/// Result of complete media processing (detection + download coordination)
-/// </summary>
-public record MediaProcessingResult(
-    MediaType MediaType,
-    string? FileId, // Null for oversized files (prevents download attempts)
-    long FileSize,
-    string? FileName,
-    string? MimeType,
-    int? Duration,
-    string? LocalPath // Null for Documents (metadata-only)
-);

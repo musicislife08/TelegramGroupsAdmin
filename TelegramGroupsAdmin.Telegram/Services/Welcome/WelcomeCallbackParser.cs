@@ -69,29 +69,3 @@ public static class WelcomeCallbackParser
         return new WelcomeCallbackData(WelcomeCallbackType.DmAccept, userId, chatId);
     }
 }
-
-/// <summary>
-/// Callback type for welcome system button clicks.
-/// </summary>
-public enum WelcomeCallbackType
-{
-    /// <summary>User accepted rules in chat</summary>
-    Accept,
-
-    /// <summary>User declined rules in chat</summary>
-    Deny,
-
-    /// <summary>User accepted rules via DM</summary>
-    DmAccept
-}
-
-/// <summary>
-/// Parsed welcome callback data.
-/// </summary>
-/// <param name="Type">Type of callback action</param>
-/// <param name="UserId">Target user ID</param>
-/// <param name="ChatId">Group chat ID (only for DmAccept)</param>
-public record WelcomeCallbackData(
-    WelcomeCallbackType Type,
-    long UserId,
-    long? ChatId = null);

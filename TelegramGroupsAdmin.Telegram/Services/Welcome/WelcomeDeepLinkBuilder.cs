@@ -111,17 +111,3 @@ public static class WelcomeDeepLinkBuilder
     public static bool IsExamPayload(string? payload)
         => !string.IsNullOrEmpty(payload) && payload.StartsWith(ExamPrefix);
 }
-
-/// <summary>
-/// Parsed /start payload from a welcome deep link.
-/// </summary>
-/// <param name="ChatId">Group chat ID</param>
-/// <param name="UserId">Target user ID</param>
-public record WelcomeStartPayload(long ChatId, long UserId);
-
-/// <summary>
-/// Parsed /start payload from an exam deep link.
-/// </summary>
-/// <param name="ChatId">Group chat ID where user joined</param>
-/// <param name="UserId">Target user ID taking the exam</param>
-public record ExamStartPayload(long ChatId, long UserId);

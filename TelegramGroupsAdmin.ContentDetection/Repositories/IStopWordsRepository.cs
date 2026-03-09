@@ -16,9 +16,14 @@ public interface IStopWordsRepository
     Task<long> AddStopWordAsync(Models.StopWord stopWord, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Enable or disable a stop word
+    /// Enable a stop word
     /// </summary>
-    Task<bool> SetStopWordEnabledAsync(long id, bool enabled, CancellationToken cancellationToken = default);
+    Task<bool> EnableStopWordAsync(long id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Disable a stop word
+    /// </summary>
+    Task<bool> DisableStopWordAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Check if a word exists as a stop word

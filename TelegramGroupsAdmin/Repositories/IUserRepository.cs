@@ -54,7 +54,6 @@ public interface IUserRepository
     Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
     Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default);
-    Task SetActiveAsync(string userId, bool isActive, CancellationToken cancellationToken = default);
     Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken cancellationToken = default);
     Task UpdateAsync(UserRecord user, CancellationToken cancellationToken = default);
 

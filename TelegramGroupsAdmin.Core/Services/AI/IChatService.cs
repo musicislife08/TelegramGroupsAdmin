@@ -116,8 +116,3 @@ public interface IChatService
         ChatCompletionOptions? options = null,
         CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// Represents an image to include in a multi-image vision completion request.
-/// </summary>
-public record ImageInput(byte[] Data, string MimeType);

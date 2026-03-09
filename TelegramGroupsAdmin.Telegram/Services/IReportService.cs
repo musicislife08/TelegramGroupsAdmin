@@ -4,12 +4,6 @@ using TelegramGroupsAdmin.Core.Models;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Result of creating a report
-/// </summary>
-public record ReportCreationResult(
-    long ReportId);
-
-/// <summary>
 /// Service for creating reports and sending notifications
 /// Consolidates report creation logic used by both /report command and automated detection
 /// </summary>

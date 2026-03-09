@@ -92,10 +92,10 @@ public interface IDetectionResultsRepository
     Task<TrainingDataStats> GetTrainingDataStatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Update a detection result's spam classification and training flag
-    /// Used when editing training samples
+    /// Exclude a detection result from ML training data (sets used_for_training = false).
+    /// Does not modify the detection's classification or score — preserves append-only history.
     /// </summary>
-    Task UpdateDetectionResultAsync(long id, bool isSpam, bool usedForTraining, CancellationToken cancellationToken = default);
+    Task ExcludeFromTrainingAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete a detection result (hard delete)

@@ -231,10 +231,12 @@
     {
         try
         {
-            var newStatus = !stopWord.Enabled;
-            await StopWordsRepository.SetStopWordEnabledAsync(stopWord.Id, newStatus);
+            if (stopWord.Enabled)
+                await StopWordsRepository.DisableStopWordAsync(stopWord.Id);
+            else
+                await StopWordsRepository.EnableStopWordAsync(stopWord.Id);
 
-            Snackbar.Add($"Stop word {(newStatus ? "enabled" : "disabled")} successfully", Severity.Success);
+            Snackbar.Add($"Stop word {(!stopWord.Enabled ? "enabled" : "disabled")} successfully", Severity.Success);
             await LoadStopWords();
         }
         catch (Exception ex)

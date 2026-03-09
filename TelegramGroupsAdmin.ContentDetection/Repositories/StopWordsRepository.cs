@@ -64,9 +64,9 @@ public class StopWordsRepository : IStopWordsRepository
     }
 
     /// <summary>
-    /// Enable or disable a stop word
+    /// Enable a stop word
     /// </summary>
-    public async Task<bool> SetStopWordEnabledAsync(long id, bool enabled, CancellationToken cancellationToken = default)
+    public async Task<bool> EnableStopWordAsync(long id, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
@@ -77,15 +77,42 @@ public class StopWordsRepository : IStopWordsRepository
                 return false;
             }
 
-            stopWord.Enabled = enabled;
+            stopWord.Enabled = true;
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Updated stop word {Id} enabled status to {Enabled}", id, enabled);
+            _logger.LogInformation("Enabled stop word {Id}", id);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update stop word {Id} enabled status", id);
+            _logger.LogError(ex, "Failed to enable stop word {Id}", id);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Disable a stop word
+    /// </summary>
+    public async Task<bool> DisableStopWordAsync(long id, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        try
+        {
+            var stopWord = await context.StopWords.FindAsync([id], cancellationToken);
+            if (stopWord == null)
+            {
+                return false;
+            }
+
+            stopWord.Enabled = false;
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Disabled stop word {Id}", id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to disable stop word {Id}", id);
             throw;
         }
     }

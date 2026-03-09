@@ -18,27 +18,24 @@ internal class BayesClassifier
         _tokenizerService = tokenizerService;
     }
 
-    /// <summary>
-    /// Train the classifier with a message sample
-    /// </summary>
-    public void Train(string message, bool isSpam)
+    public void TrainSpam(string message)
     {
         var words = _tokenizerService.Tokenize(message);
-        var wordCounts = isSpam ? _spamWordCounts : _hamWordCounts;
-
         foreach (var word in words)
         {
-            wordCounts[word] = wordCounts.GetValueOrDefault(word, 0) + 1;
+            _spamWordCounts[word] = _spamWordCounts.GetValueOrDefault(word, 0) + 1;
         }
+        _spamMessageCount++;
+    }
 
-        if (isSpam)
+    public void TrainHam(string message)
+    {
+        var words = _tokenizerService.Tokenize(message);
+        foreach (var word in words)
         {
-            _spamMessageCount++;
+            _hamWordCounts[word] = _hamWordCounts.GetValueOrDefault(word, 0) + 1;
         }
-        else
-        {
-            _hamMessageCount++;
-        }
+        _hamMessageCount++;
     }
 
     /// <summary>

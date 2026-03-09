@@ -98,11 +98,8 @@ public class TelegramUserManagementService : ITelegramUserManagementService
             return false;
         }
 
-        // Toggle trust status
-        var newTrustStatus = !user.IsTrusted;
-
         // Protect Telegram system accounts - cannot remove trust
-        if (TelegramConstants.IsSystemUser(telegramUserId) && !newTrustStatus)
+        if (TelegramConstants.IsSystemUser(telegramUserId) && user.IsTrusted)
         {
             _logger.LogWarning(
                 "Blocked attempt to remove trust from Telegram system account ({User}). " +
@@ -110,27 +107,11 @@ public class TelegramUserManagementService : ITelegramUserManagementService
                 user.ToLogDebug());
             return false;
         }
-        await _userRepository.UpdateTrustStatusAsync(telegramUserId, newTrustStatus, cancellationToken);
 
-        if (newTrustStatus)
+        if (user.IsTrusted)
         {
-            // Create trust action record
-            var userAction = new UserActionRecord(
-                Id: 0, // Will be set by database
-                UserId: telegramUserId,
-                ActionType: UserActionType.Trust,
-                MessageId: null, // No specific message associated
-                ChatId: null,
-                IssuedBy: modifiedBy,
-                IssuedAt: DateTimeOffset.UtcNow,
-                ExpiresAt: null, // Trust doesn't expire
-                Reason: "User manually trusted"
-            );
+            await _userRepository.UntrustUserAsync(telegramUserId, cancellationToken);
 
-            await _userActionsRepository.InsertAsync(userAction);
-        }
-        else
-        {
             // Expire all active trusts
             await _userActionsRepository.ExpireTrustsForUserAsync(telegramUserId);
 
@@ -149,11 +130,32 @@ public class TelegramUserManagementService : ITelegramUserManagementService
 
             await _userActionsRepository.InsertAsync(untrustAction);
         }
+        else
+        {
+            await _userRepository.TrustUserAsync(telegramUserId, cancellationToken);
+
+            // Create trust action record
+            var userAction = new UserActionRecord(
+                Id: 0, // Will be set by database
+                UserId: telegramUserId,
+                ActionType: UserActionType.Trust,
+                MessageId: null, // No specific message associated
+                ChatId: null,
+                IssuedBy: modifiedBy,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: null, // Trust doesn't expire
+                Reason: "User manually trusted"
+            );
+
+            await _userActionsRepository.InsertAsync(userAction);
+        }
+
+        user = user with { IsTrusted = !user.IsTrusted };
 
         _logger.LogInformation(
             "{User} trust toggled to {IsTrusted} by {ModifiedBy}",
             user.ToLogInfo(),
-            newTrustStatus,
+            user.IsTrusted,
             modifiedBy);
 
         return true;

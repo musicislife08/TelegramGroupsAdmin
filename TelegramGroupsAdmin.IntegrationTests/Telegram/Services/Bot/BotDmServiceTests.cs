@@ -130,7 +130,7 @@ public class BotDmServiceTests
     public async Task SendDmAsync_Blocked403_SetsBotDmEnabledFalse()
     {
         // Arrange - First enable DMs to verify it gets disabled
-        await _userRepository!.SetBotDmEnabledAsync(TestUserId, true);
+        await _userRepository!.EnableBotDmAsync(TestUserId);
 
         _mockMessageHandler.SendAsync(
             Arg.Is<long>(id => id == TestUserId),

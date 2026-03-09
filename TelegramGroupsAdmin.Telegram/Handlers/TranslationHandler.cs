@@ -203,21 +203,3 @@ public class TranslationHandler : ITranslationHandler
         return totalChars > 0 ? (double)latinChars / totalChars : 0.0;
     }
 }
-
-/// <summary>
-/// Result of translation processing (detection + coordination + translation)
-/// </summary>
-public record TranslationProcessingResult(
-    MessageTranslation Translation,
-    double LatinScriptRatio,
-    bool WasTranslated
-);
-
-/// <summary>
-/// Result for content detection - provides text to use and optional translation metadata
-/// </summary>
-public record TranslationForDetectionResult(
-    string TextForDetection,
-    MessageTranslation? Translation,
-    string? DetectedLanguage
-);

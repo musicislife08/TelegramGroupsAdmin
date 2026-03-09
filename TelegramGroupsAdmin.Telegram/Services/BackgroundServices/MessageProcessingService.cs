@@ -617,10 +617,10 @@ public partial class MessageProcessingService(
 
             // Enrich message with URL previews if URLs are present (reuse already-extracted URLs from line 292)
             // This runs AFTER message save but BEFORE content detection so all algorithms benefit
-            if (urls != null && urls.Any())
+            if (urls != null && urls.Any() && text != null)
             {
                 var urlScrapingService = messageScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IUrlContentScrapingService>();
-                var enrichedText = await urlScrapingService.EnrichMessageWithUrlPreviewsAsync(text!, cancellationToken);
+                var enrichedText = await urlScrapingService.EnrichMessageWithUrlPreviewsAsync(text, cancellationToken);
 
                 if (enrichedText != text) // Content was enriched
                 {

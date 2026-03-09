@@ -26,11 +26,6 @@ public interface IImageTextExtractionService
     bool IsAvailable { get; }
 }
 
-/// <summary>
-/// Result of Tesseract OCR extraction including confidence score
-/// </summary>
-public record OcrResult(string Text, double Confidence);
-
 public class ImageTextExtractionService : IImageTextExtractionService
 {
     private readonly ILogger<ImageTextExtractionService> _logger;

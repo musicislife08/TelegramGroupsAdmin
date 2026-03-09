@@ -105,7 +105,7 @@ public sealed class ProfileScanService(
         if (resolvedUser == null)
         {
             logger.LogWarning("Could not resolve {User} — marking as excluded from future rescans", user.ToLogDebug());
-            await userRepo.SetProfileScanExcludedAsync(user.Id, true, ct);
+            await userRepo.ExcludeFromProfileScanAsync(user.Id, ct);
             return EmptyResult(user.Id, "User could not be resolved — they may have deleted their Telegram account.");
         }
 
@@ -293,7 +293,7 @@ public sealed class ProfileScanService(
 
         // Clear exclusion flag on successful scan (user is accessible again)
         if (existingUser?.ProfileScanExcluded == true)
-            await userRepo.SetProfileScanExcludedAsync(user.Id, false, ct);
+            await userRepo.IncludeInProfileScanAsync(user.Id, ct);
 
         // Persist scan result history
         var scanResultsRepo = sp.GetRequiredService<IProfileScanResultsRepository>();

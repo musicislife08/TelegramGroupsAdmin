@@ -71,7 +71,7 @@ public class StartCommand : IBotCommand
         // This allows the bot to send private messages to this user in the future
         if (message.From != null)
         {
-            await _telegramUserRepository.SetBotDmEnabledAsync(message.From.Id, enabled: true, cancellationToken);
+            await _telegramUserRepository.EnableBotDmAsync(message.From.Id, cancellationToken);
 
             // Deliver any pending notifications
             await DeliverPendingNotificationsAsync(message.From.Id, cancellationToken);

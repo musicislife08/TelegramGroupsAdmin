@@ -47,9 +47,8 @@ public class TrustHandlerTests
         }
 
         // Verify repository was called with correct parameters
-        await _mockUserRepository.Received(1).UpdateTrustStatusAsync(
+        await _mockUserRepository.Received(1).TrustUserAsync(
             userId,
-            isTrusted: true,
             Arg.Any<CancellationToken>());
     }
 
@@ -74,9 +73,8 @@ public class TrustHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockUserRepository.UpdateTrustStatusAsync(
+        _mockUserRepository.TrustUserAsync(
                 userId,
-                Arg.Any<bool>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new Exception("Database connection failed"));
 
@@ -133,9 +131,8 @@ public class TrustHandlerTests
         }
 
         // Verify repository was called with isTrusted: false
-        await _mockUserRepository.Received(1).UpdateTrustStatusAsync(
+        await _mockUserRepository.Received(1).UntrustUserAsync(
             userId,
-            isTrusted: false,
             Arg.Any<CancellationToken>());
     }
 
@@ -160,9 +157,8 @@ public class TrustHandlerTests
         const long userId = 12345L;
         var executor = Actor.FromSystem("test");
 
-        _mockUserRepository.UpdateTrustStatusAsync(
+        _mockUserRepository.UntrustUserAsync(
                 userId,
-                Arg.Any<bool>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("User not found"));
 
@@ -191,9 +187,8 @@ public class TrustHandlerTests
         Assert.That(result.Success, Is.True);
 
         // Verify the repository was called
-        await _mockUserRepository.Received(1).UpdateTrustStatusAsync(
+        await _mockUserRepository.Received(1).UntrustUserAsync(
             userId,
-            isTrusted: false,
             Arg.Any<CancellationToken>());
     }
 
