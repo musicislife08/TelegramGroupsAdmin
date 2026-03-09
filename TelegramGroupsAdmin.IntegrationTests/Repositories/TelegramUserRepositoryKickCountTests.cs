@@ -20,6 +20,7 @@ public class TelegramUserRepositoryKickCountTests
 {
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
+    private IServiceScope? _scope;
     private ITelegramUserRepository? _repository;
 
     [SetUp]
@@ -44,13 +45,14 @@ public class TelegramUserRepositoryKickCountTests
 
         _serviceProvider = services.BuildServiceProvider();
 
-        var scope = _serviceProvider.CreateScope();
-        _repository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        _scope = _serviceProvider.CreateScope();
+        _repository = _scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
     }
 
     [TearDown]
     public void TearDown()
     {
+        _scope?.Dispose();
         _testHelper?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
     }
@@ -164,6 +166,19 @@ public class TelegramUserRepositoryKickCountTests
 
         // Assert
         Assert.That(result, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task GetKickCountAsync_UnknownUser_ReturnsZero()
+    {
+        // Arrange — no user created, so user does not exist in the database
+        const long userId = 999_998L;
+
+        // Act
+        var kickCount = await _repository!.GetKickCountAsync(userId);
+
+        // Assert
+        Assert.That(kickCount, Is.EqualTo(0));
     }
 
     [Test]

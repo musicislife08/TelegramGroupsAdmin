@@ -565,8 +565,10 @@ public class BotModerationService : IBotModerationService
             () => _auditHandler.LogKickAsync(intent.User, intent.Chat, intent.Executor, intent.Reason, cancellationToken),
             "kick", intent.User, intent.Chat);
 
-        // Increment kick count (primary operation — drives escalation logic)
-        await _telegramUserRepository.IncrementKickCountAsync(intent.User.Id, cancellationToken);
+        // Increment kick count (non-critical — kick already succeeded on Telegram)
+        await SafeExecuteAsync(
+            () => _telegramUserRepository.IncrementKickCountAsync(intent.User.Id, cancellationToken),
+            $"Increment kick count for user {intent.User.Id}");
 
         return new ModerationResult
         {
@@ -581,7 +583,7 @@ public class BotModerationService : IBotModerationService
     /// </summary>
     internal static TimeSpan GetKickDuration(int priorKickCount)
     {
-        var shift = Math.Min(priorKickCount, 30); // Guard against bit shift overflow
+        var shift = Math.Clamp(priorKickCount, 0, 30); // Guard against bit shift overflow (negative wraps to 1<<31)
         var minutes = 1 << shift; // 2^n minutes
         var duration = TimeSpan.FromMinutes(minutes);
         return duration > ModerationConstants.MaxKickDuration ? ModerationConstants.MaxKickDuration : duration;

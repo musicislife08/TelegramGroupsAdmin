@@ -62,6 +62,7 @@ public class WelcomeConfig
         Enabled = true,
         Mode = WelcomeMode.ChatAcceptDeny,
         TimeoutSeconds = 60,
+        MaxKicksBeforeBan = 0,
         JoinSecurity = new JoinSecurityConfig(),
         MainWelcomeMessage = """
             Welcome {username} to {chat_name}!

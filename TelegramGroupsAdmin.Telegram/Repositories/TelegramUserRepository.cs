@@ -1034,25 +1034,30 @@ public class TelegramUserRepository : ITelegramUserRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var user = await context.TelegramUsers
-            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
+        var rowsAffected = await context.TelegramUsers
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.KickCount, u => u.KickCount + 1)
+                .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow),
+                cancellationToken);
 
-        if (user == null)
+        if (rowsAffected == 0)
         {
             _logger.LogWarning("Cannot increment kick count for unknown user {UserId}", telegramUserId);
             return 0;
         }
 
-        user.KickCount++;
-        user.UpdatedAt = DateTimeOffset.UtcNow;
-
-        await context.SaveChangesAsync(cancellationToken);
+        var newCount = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .Select(u => u.KickCount)
+            .FirstOrDefaultAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Incremented kick count for {User}: {KickCount}",
-            user.ToLogInfo(), user.KickCount);
+            "Incremented kick count for user {UserId}: {KickCount}",
+            telegramUserId, newCount);
 
-        return user.KickCount;
+        return newCount;
     }
 
     /// <inheritdoc />

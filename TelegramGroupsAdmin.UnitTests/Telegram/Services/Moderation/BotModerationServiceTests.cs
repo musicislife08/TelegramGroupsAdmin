@@ -2018,6 +2018,49 @@ public class BotModerationServiceTests
     }
 
     // ---------------------------------------------------------------------------
+    // KickUserFromChatAsync — escalation enabled, first kick (priorCount=0)
+    // ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task KickUserFromChatAsync_FirstKickWithEscalation_Uses1MinDuration()
+    {
+        // Arrange — 0 prior kicks → 2^0 = 1 minute (distinguishes from "disabled" which uses DefaultKickDuration)
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
+
+        _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(0);
+
+        _mockBanHandler.KickFromChatAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 1, chatsFailed: 0));
+
+        // Act
+        var result = await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert — escalation enabled with 0 prior kicks uses GetKickDuration(0) = 1 minute
+        Assert.That(result.Success, Is.True);
+
+        await _mockBanHandler.Received(1).KickFromChatAsync(
+            Arg.Any<UserIdentity>(),
+            Arg.Any<ChatIdentity>(),
+            Arg.Any<Actor>(),
+            Arg.Any<string?>(),
+            Arg.Is<KickOptions?>(o => o != null && o.Duration == TimeSpan.FromMinutes(1)),
+            Arg.Any<CancellationToken>());
+    }
+
+    // ---------------------------------------------------------------------------
     // KickUserFromChatAsync — escalation enabled, below threshold
     // ---------------------------------------------------------------------------
 
@@ -2154,6 +2197,45 @@ public class BotModerationServiceTests
         await _mockBanHandler.DidNotReceive().KickFromChatAsync(
             Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
             Arg.Any<string?>(), Arg.Any<KickOptions?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickUserFromChatAsync_EscalatesToBan_SendsBanCelebration()
+    {
+        // Arrange — escalation forwards Chat to BanIntent, which triggers ban celebration
+        const long userId = 12345L;
+
+        _mockConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig { MaxKicksBeforeBan = 3 });
+
+        _mockTelegramUserRepository.GetKickCountAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(3);
+
+        _mockBanHandler.BanAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(BanResult.Succeeded(chatsAffected: 5, chatsFailed: 0));
+
+        _mockTrustHandler.UntrustAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<Actor>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(UntrustResult.Succeeded());
+
+        // Act
+        await _orchestrator.KickUserFromChatAsync(
+            new KickIntent
+            {
+                User = UserIdentity.FromId(userId),
+                Chat = ChatIdentity.FromId(TestChatId),
+                Executor = Actor.FromSystem("test"),
+                Reason = "test"
+            });
+
+        // Assert — ban celebration should fire because BanIntent.Chat carries the originating chat
+        await _mockBanCelebrationService.Received(1).SendBanCelebrationAsync(
+            Arg.Is<ChatIdentity>(c => c.Id == TestChatId),
+            Arg.Is<UserIdentity>(u => u.Id == userId),
+            Arg.Any<bool>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Test]
