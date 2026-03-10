@@ -330,19 +330,13 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Note: Per CLAUDE.md, detection_results should be permanent
-        // This method exists for completeness but should rarely be used
-        var toDelete = await context.DetectionResults
-            .Where(dr => dr.DetectedAt < timestamp)
-            .ToListAsync(cancellationToken);
 
-        var deleted = toDelete.Count;
+        var deleted = await context.DetectionResults
+            .Where(dr => dr.DetectedAt < timestamp)
+            .ExecuteDeleteAsync(cancellationToken);
 
         if (deleted > 0)
         {
-            context.DetectionResults.RemoveRange(toDelete);
-            await context.SaveChangesAsync(cancellationToken);
-
             _logger.LogWarning(
                 "Deleted {Count} old detection results (timestamp < {Timestamp})",
                 deleted,

@@ -420,7 +420,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         foreach (var (jobName, defaultConfig) in defaults)
         {
-            if (!existing.ContainsKey(jobName))
+            if (!existing.TryGetValue(jobName, out var existingConfig))
             {
                 // Create new config if doesn't exist
                 await UpdateJobConfigAsync(jobName, defaultConfig, cancellationToken);
@@ -428,8 +428,6 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             }
             else
             {
-                // Validate and repair existing config
-                var existingConfig = existing[jobName];
                 var needsRepair = false;
 
                 // Check for invalid schedule configuration

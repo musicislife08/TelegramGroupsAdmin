@@ -34,11 +34,12 @@ public class SerilogDynamicConfiguration
     /// </summary>
     public LoggingLevelSwitch GetSwitch(string category)
     {
-        if (!_switches.ContainsKey(category))
+        if (!_switches.TryGetValue(category, out var @switch))
         {
-            _switches[category] = new LoggingLevelSwitch(LogEventLevel.Information);
+            @switch = new LoggingLevelSwitch(LogEventLevel.Information);
+            _switches[category] = @switch;
         }
-        return _switches[category];
+        return @switch;
     }
 
     /// <summary>
