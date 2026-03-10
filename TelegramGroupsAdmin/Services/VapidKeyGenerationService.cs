@@ -28,7 +28,7 @@ public class VapidKeyGenerationService : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("VapidKeyGenerationService starting...");
+        _logger.LogDebug("VapidKeyGenerationService starting...");
 
         try
         {
