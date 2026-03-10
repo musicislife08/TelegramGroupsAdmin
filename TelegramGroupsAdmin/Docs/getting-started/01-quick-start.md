@@ -4,12 +4,12 @@ Welcome to TelegramGroupsAdmin! This guide will help you get up and running in j
 
 ## What is TelegramGroupsAdmin?
 
-TelegramGroupsAdmin is a comprehensive spam detection and moderation tool for Telegram groups. It uses **11 different detection algorithms** working together to identify spam while minimizing false positives, and provides a powerful web interface for managing your Telegram communities.
+TelegramGroupsAdmin is a comprehensive content detection and moderation tool for Telegram groups. It uses **14 content detection checks** working together to identify spam while minimizing false positives, and provides a powerful web interface for managing your Telegram communities.
 
 ### Key Features at a Glance
 
-- **Multi-Algorithm Spam Detection** - 11 detection methods analyze each message
-- **AI-Powered Review** - Optional GPT-4 veto reduces false positives by 80-90%
+- **Multi-Check Content Detection** - 14 detection methods analyze each message
+- **AI-Powered Review** - Optional AI veto reduces false positives by 80-90%
 - **File Scanning** - Automatic malware detection for uploaded files
 - **URL Filtering** - Block malicious domains with 540,000+ built-in blocklists
 - **Self-Learning** - System improves over time from your feedback
@@ -20,7 +20,7 @@ TelegramGroupsAdmin is a comprehensive spam detection and moderation tool for Te
 
 ### Registration
 
-1. Navigate to your TelegramGroupsAdmin web interface (typically `http://localhost:5000` or your configured domain)
+1. Navigate to your TelegramGroupsAdmin web interface (typically `http://localhost:8080` or your configured domain)
 2. Click **Register** on the login page
 3. Enter your email address and choose a strong password
 4. Click **Create Account**
@@ -122,8 +122,8 @@ A healthy bot status indicates:
 Common issues and solutions:
 - **Bot not admin**: Make the bot an admin in your Telegram group
 - **Missing permissions**: Grant the bot these permissions: Delete Messages, Ban Users, Invite Users via Link
-- **Wrong chat ID**: Verify the `TELEGRAM__CHATID` configuration matches your group
-- **Invalid token**: Check that `TELEGRAM__BOTTOKEN` is correct
+- **Wrong chat ID**: Verify the chat configuration in **Settings > Telegram > Bot Configuration**
+- **Invalid token**: Check the bot token in **Settings > Telegram > Bot Configuration**
 
 [Screenshot: Dashboard showing Chat Health section with healthy status]
 
@@ -137,19 +137,18 @@ Let's quickly tour the main navigation:
 
 - **Home** - Dashboard with chat health, recent activity, quick stats
 - **Messages** - Browse all messages from your Telegram groups (Telegram-style interface)
+- **Analytics** - Charts and graphs showing spam trends, detection rates, performance
+- **Reports** - Review queue for borderline spam detections
+- **Users** - Telegram user management, ban users, add warnings
 - **Tools** - Content Tester for testing spam detection
-- **Documentation** - This documentation system
-- **Help** - Quick help articles
+- **Documentation** - In-app documentation and guides
 - **Profile** - Your account settings, password, 2FA, Telegram linking
 
 ### Admin Navigation (GlobalAdmin/Owner Only)
 
-- **Analytics** - Charts and graphs showing spam trends, detection rates, performance
 - **Chat Management** - Manage monitored chats, configure per-chat settings
-- **Users** - Telegram user management, ban users, add warnings
-- **Reports** - Review queue for borderline spam detections
 - **Audit Log** - Track all administrative actions
-- **Settings** - System configuration (algorithms, URL filters, API keys, etc.)
+- **Settings** - System configuration (checks, URL filters, API keys, etc.)
 
 [Screenshot: Full sidebar navigation]
 
@@ -171,18 +170,20 @@ The **Messages** page is like a Telegram client inside your browser:
 ### Reports Page - The Review Queue
 
 The **Reports** page shows:
-- **Moderation Reports**: Borderline spam (confidence 70-84) needing manual review
+- **Moderation Reports**: Borderline spam (score between ReviewQueue and AutoBan thresholds, default 2.5-4.0 points) needing manual review
 - **Impersonation Alerts**: Suspected impersonators (duplicate photos, similar usernames)
 
-**Workflow**: Review each report and click **Confirm Spam** or **Mark as Ham**. Your feedback trains the machine learning algorithms!
+**Workflow**: Review each report and click **Delete as Spam** or **Dismiss**. Your feedback trains the content detection checks!
 
 ### Settings Page - Configuration Hub
 
-The **Settings** page has nested navigation with 4 groups:
-- **System**: General, security, admin accounts, external services, logging, backups
-- **Telegram**: Bot configuration, notifications
-- **Content Detection**: Algorithms, tuning, OpenAI, URL filtering, file scanning
-- **Training Data**: Stop words, training samples
+The **Settings** page has nested navigation with 6 groups:
+- **System**: General, security, admin accounts, AI providers, email, ClamAV, VirusTotal, logging, background jobs, backup configuration
+- **Telegram**: Bot configuration, User API, service messages
+- **Moderation**: Ban celebration
+- **Notifications**: Web push notifications
+- **Content Detection**: Detection algorithms, AI integration, URL filtering, file scanning
+- **Training Data**: Stop words library, training samples
 
 **Don't worry**: You don't need to configure everything now. We'll walk through the essentials in the next guide.
 
@@ -204,7 +205,7 @@ Now that you're logged in and familiar with the interface, it's time to configur
 
 ### Do I need an OpenAI API key?
 
-**No**, it's optional. The system has 11 detection algorithms, and most work without OpenAI. However, the OpenAI-powered features (GPT-4 verification, translation, vision-based spam detection) significantly improve accuracy and are worth enabling once you're comfortable with the basics.
+**No**, it's optional. The system has 14 content detection checks, and most work without OpenAI. However, the OpenAI-powered features (AI verification, translation, vision-based spam detection) significantly improve accuracy and are worth enabling once you're comfortable with the basics.
 
 **Cost**: ~$0.002 per message reviewed (OpenAI only processes borderline cases, not every message).
 
@@ -256,14 +257,13 @@ Yes. All data is stored in your own PostgreSQL database. API calls to external s
 
 - Ensure the bot is active and polling for messages
 - Send a test message in your Telegram group
-- Check Settings → Telegram → Bot Configuration to verify bot token and chat ID are correct
+- Check **Settings > Telegram > Bot Configuration** to verify the bot token is correct
 
 ---
 
 ## Get Help
 
-- **In-App Documentation**: Click **Documentation** in the sidebar
-- **Help Articles**: Click **Help** in the sidebar for quick reference
+- **In-App Documentation**: Click **Documentation** in the sidebar for guides and reference
 - **Audit Log**: If something unexpected happens, check the Audit Log to see what actions were taken
 
 **Ready to configure spam detection?** Continue to **[First Configuration Guide](02-first-configuration.md)**!

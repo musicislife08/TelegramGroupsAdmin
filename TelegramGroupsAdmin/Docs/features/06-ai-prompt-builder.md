@@ -1,8 +1,8 @@
-# AI Prompt Builder - Customize GPT-4 Detection
+# AI Prompt Builder - Customize AI Detection
 
-The **AI Prompt Builder** is a meta-AI feature that uses GPT-4 to generate and improve custom spam detection prompts tailored to your group's specific context, rules, and culture.
+The **AI Prompt Builder** is a meta-AI feature that uses your configured AI provider to generate and improve custom spam detection prompts tailored to your group's specific context, rules, and culture.
 
-**What it does**: Creates custom prompts that tell GPT-4 exactly what spam looks like in YOUR group, dramatically improving detection accuracy.
+**What it does**: Creates custom prompts that tell the AI exactly what spam looks like in YOUR group, dramatically improving detection accuracy.
 
 ## Why Custom Prompts Matter
 
@@ -20,7 +20,7 @@ But context matters:
 
 ### The Solution: Context-Aware Prompts
 
-Custom prompts tell GPT-4:
+Custom prompts tell the AI:
 - What your group discusses
 - What's allowed vs. not allowed
 - Your community's culture and norms
@@ -32,7 +32,7 @@ Custom prompts tell GPT-4:
 
 ## How to Access
 
-1. Navigate to **Settings** → **Content Detection** → **External Services Config**
+1. Navigate to **Settings** → **Content Detection** → **AI Integration**
 2. Scroll to **OpenAI Integration** section
 3. Find **Custom Prompt Configuration**
 4. Click **Open Prompt Builder** button
@@ -54,7 +54,7 @@ Use the form-based builder to create a new prompt from your requirements.
 
 ### Method 2: Improve Existing Prompt
 
-Let GPT-4 analyze your current prompt and suggest improvements based on feedback.
+Let AI analyze your current prompt and suggest improvements based on feedback.
 
 **Best for**:
 - Refining existing prompts
@@ -118,9 +118,9 @@ Example:
 ```
 
 **Strictness Level** (Required):
-- **Lenient**: Fewer false positives, might miss some spam
-- **Moderate**: Balanced (recommended)
-- **Strict**: Catches more spam, more false positives
+- **Conservative**: Fewer false positives, prefers letting spam through over blocking legitimate content
+- **Balanced**: Middle ground (recommended)
+- **Aggressive**: Catches more spam, accepts more false positives to block questionable content
 
 [Screenshot: Prompt generation form filled out]
 
@@ -129,8 +129,8 @@ Example:
 Click **Generate Prompt** button.
 
 **What happens**:
-- Form data sent to GPT-4
-- GPT-4 analyzes your group's context
+- Form data sent to your configured AI provider
+- AI analyzes your group's context and training samples
 - Generates custom spam detection prompt
 - Prompt appears in text area (usually 300-500 words)
 
@@ -138,7 +138,7 @@ Click **Generate Prompt** button.
 
 #### 4. Review Generated Prompt
 
-GPT-4 returns a structured prompt like:
+The AI returns a structured prompt like:
 
 ```
 You are analyzing messages for a cryptocurrency trading community.
@@ -239,7 +239,7 @@ Spam that got through:
 
 **Additional Context** (Optional):
 ```
-Any other information GPT-4 should know:
+Any other information the AI should know:
 "We recently allowed referral codes from users with 100+ messages.
 New members cannot share referrals."
 ```
@@ -251,8 +251,8 @@ New members cannot share referrals."
 Click **Generate Improvements**.
 
 **What happens**:
-- Current prompt sent to GPT-4 with your feedback
-- GPT-4 analyzes issues and examples
+- Current prompt sent to AI with your feedback
+- AI analyzes issues and examples
 - Generates improved version addressing your concerns
 - Shows side-by-side comparison of old vs. new
 
@@ -260,7 +260,7 @@ Click **Generate Improvements**.
 
 #### 4. Review Improvements
 
-GPT-4 shows:
+The AI shows:
 - **What changed**: Specific sections modified
 - **Why**: Reasoning for each change
 - **Expected impact**: How this should improve detection
@@ -352,7 +352,7 @@ Click **Improve** on any version to use it as the base for improvements.
 
 **DON'T**:
 - Be vague: "A group"
-- Assume GPT-4 knows: "The usual spam stuff"
+- Assume AI knows: "The usual spam stuff"
 - Skip examples: "You know what spam is"
 
 ### Iterative Improvement
@@ -452,8 +452,8 @@ Click **Improve** on any version to use it as the base for improvements.
 **Symptom**: Custom prompt performs similar to default
 
 **Solution**:
-- Check that OpenAI Verification is enabled
-- Verify OpenAI API key is working
+- Check that AI veto is enabled in content detection settings
+- Verify your AI provider connection is working
 - Ensure prompt is actually active (check version history)
 - Provide more specific legitimate content examples
 
@@ -463,15 +463,15 @@ Click **Improve** on any version to use it as the base for improvements.
 
 **Solution**:
 - Use **Improve** with missed spam examples
-- Set strictness to "Strict" when regenerating
+- Set strictness to "Aggressive" when regenerating
 - Add specific spam patterns to prompt
-- Consider combining with other algorithms (Stop Words, URL filters)
+- Consider tuning other content detection checks (14 checks contribute additive scores)
 
 ---
 
 ## Cost Considerations
 
-### OpenAI API Costs
+### AI API Costs
 
 **Prompt generation**: ~$0.01 per generation
 **Prompt improvement**: ~$0.02 per improvement
@@ -479,10 +479,10 @@ Click **Improve** on any version to use it as the base for improvements.
 
 ### Cost Optimization
 
-**Use Veto Mode** (recommended):
-- Only runs GPT-4 on borderline cases (70-84 confidence)
-- Costs ~10x less than running on every message
-- Still gets benefit of custom prompt
+**Veto mode** (how AI runs):
+- AI always runs as a veto check, verifying spam flagged by other content detection algorithms
+- Only messages already flagged by other checks are sent to AI for verification
+- This dramatically reduces API costs compared to analyzing every message
 
 **Batch improvements**:
 - Collect feedback for 1-2 weeks
@@ -520,7 +520,7 @@ Click **Improve** on any version to use it as the base for improvements.
 
 ## Related Documentation
 
-- **[Spam Detection Guide](03-spam-detection.md)** - How OpenAI Verification works
+- **[Content Detection Guide](03-spam-detection.md)** - How content detection and AI veto work
 - **[Content Tester](05-content-tester.md)** - Test custom prompts
 - **[Reports Queue](02-reports.md)** - Monitor false positives
 - **[First Configuration](../getting-started/02-first-configuration.md)** - When to enable OpenAI
