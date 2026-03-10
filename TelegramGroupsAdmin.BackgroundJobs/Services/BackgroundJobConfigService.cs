@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using HumanCron.Quartz.Abstractions;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Data;
@@ -85,7 +86,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         }
     }
 
-    public async Task UpdateJobConfigAsync(string jobName, BackgroundJobConfig config, CancellationToken cancellationToken = default)
+    public async Task UpdateJobConfigAsync(string jobName, BackgroundJobConfig config, WebUserIdentity? changedBy = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -123,14 +124,15 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             if (scheduleChanged)
             {
                 config.NextRunAt = null; // Clear scheduled time - will be recalculated on next scheduler run
-                _logger.LogDebug("Schedule changed for {JobName}, clearing NextRunAt for immediate reschedule", jobName);
+                _logger.LogInformation("Schedule changed for {JobName} by {User}, clearing NextRunAt for immediate reschedule",
+                    jobName, changedBy?.ToLogInfo() ?? "system");
                 requiresResync = true;
             }
 
             if (enabledChanged)
             {
-                _logger.LogDebug("Enabled status changed for {JobName} from {Old} to {New}",
-                    jobName, existingJob.Enabled, config.Enabled);
+                _logger.LogInformation("Enabled status changed for {JobName} from {Old} to {New} by {User}",
+                    jobName, existingJob.Enabled, config.Enabled, changedBy?.ToLogInfo() ?? "system");
                 requiresResync = true;
             }
         }
@@ -190,7 +192,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         config.NextRunAt = nextRunAt;
         config.LastError = error;
 
-        await UpdateJobConfigAsync(jobName, config, cancellationToken);
+        await UpdateJobConfigAsync(jobName, config, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -423,7 +425,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             if (!existing.TryGetValue(jobName, out var existingConfig))
             {
                 // Create new config if doesn't exist
-                await UpdateJobConfigAsync(jobName, defaultConfig, cancellationToken);
+                await UpdateJobConfigAsync(jobName, defaultConfig, cancellationToken: cancellationToken);
                 _logger.LogInformation("Created default config for {JobName}", jobName);
             }
             else
@@ -457,7 +459,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 // Save repaired config
                 if (needsRepair)
                 {
-                    await UpdateJobConfigAsync(jobName, existingConfig, cancellationToken);
+                    await UpdateJobConfigAsync(jobName, existingConfig, cancellationToken: cancellationToken);
                     _logger.LogInformation("Repaired config for {JobName}", jobName);
                 }
             }

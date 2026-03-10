@@ -283,7 +283,7 @@ public class QuartzSchedulingSyncService(
                     if (nextFireTime.HasValue)
                     {
                         config.NextRunAt = nextFireTime.Value.UtcDateTime;
-                        await jobConfigService.UpdateJobConfigAsync(jobName, config, cancellationToken);
+                        await jobConfigService.UpdateJobConfigAsync(jobName, config, cancellationToken: cancellationToken);
 
                         var nextFireTimeFormatted = FormatNextFireTime(trigger, nextFireTime);
                         logger.LogDebug(
