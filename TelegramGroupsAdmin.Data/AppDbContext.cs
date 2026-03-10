@@ -100,6 +100,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Configure composite primary keys
         modelBuilder.Entity<MessageRecordDto>().HasKey(m => new { m.MessageId, m.ChatId });
         modelBuilder.Entity<MessageRecordDto>().Property(m => m.MessageId).ValueGeneratedNever();
+        modelBuilder.Entity<ManagedChatRecordDto>().Property(mc => mc.ChatId).ValueGeneratedNever();
+        modelBuilder.Entity<TelegramLinkTokenRecordDto>().Property(t => t.Token).ValueGeneratedNever();
+        modelBuilder.Entity<InviteRecordDto>().Property(i => i.Token).ValueGeneratedNever();
         modelBuilder.Entity<TrainingLabelDto>().HasKey(tl => new { tl.MessageId, tl.ChatId });
 
         // Configure relationships

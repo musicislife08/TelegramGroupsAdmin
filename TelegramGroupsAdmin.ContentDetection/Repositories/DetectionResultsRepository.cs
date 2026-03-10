@@ -630,7 +630,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         // Calculate per-algorithm statistics
         var algorithmStats = actualVetoes
-            .SelectMany(v => v!.Checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam).Select(c => c.CheckName.ToString()))
+            .SelectMany(v => v?.Checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam).Select(c => c.CheckName.ToString()) ?? [])
             .GroupBy(name => name)
             .Select(g => new AlgorithmVetoStats
             {

@@ -161,6 +161,17 @@ public static class WebApplicationExtensions
                 app.Logger.LogWarning(ex, "Failed to backfill ban celebration GIF hashes (non-fatal)");
             }
 
+            // One-time cleanup: Remove historical V1 detection records (CAS, SeoScraping)
+            try
+            {
+                var v1Cleanup = scope.ServiceProvider.GetRequiredService<V1DetectionCleanupService>();
+                await v1Cleanup.CleanupAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to clean up V1 detection records (non-fatal)");
+            }
+
         }
     }
 

@@ -116,6 +116,9 @@ public class SerilogDynamicConfiguration
         GetSwitch("Npgsql").MinimumLevel = LogEventLevel.Warning;
         GetSwitch("System").MinimumLevel = LogEventLevel.Warning;
 
+        // Quartz.NET scheduler: Warning (noisy "Replacing job", "Freed 0 triggers", recovery logs)
+        GetSwitch("Quartz").MinimumLevel = LogEventLevel.Warning;
+
         // WTelegram User API client: Warning (noisy DC reconnection logs at Info)
         GetSwitch("WTelegram").MinimumLevel = LogEventLevel.Warning;
 

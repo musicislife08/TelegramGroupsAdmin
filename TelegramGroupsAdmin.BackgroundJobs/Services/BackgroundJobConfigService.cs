@@ -123,13 +123,13 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             if (scheduleChanged)
             {
                 config.NextRunAt = null; // Clear scheduled time - will be recalculated on next scheduler run
-                _logger.LogInformation("Schedule changed for {JobName}, clearing NextRunAt for immediate reschedule", jobName);
+                _logger.LogDebug("Schedule changed for {JobName}, clearing NextRunAt for immediate reschedule", jobName);
                 requiresResync = true;
             }
 
             if (enabledChanged)
             {
-                _logger.LogInformation("Enabled status changed for {JobName} from {Old} to {New}",
+                _logger.LogDebug("Enabled status changed for {JobName} from {Old} to {New}",
                     jobName, existingJob.Enabled, config.Enabled);
                 requiresResync = true;
             }
@@ -150,12 +150,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Updated background job config for {JobName}", jobName);
+        _logger.LogDebug("Updated background job config for {JobName}", jobName);
 
         // Only trigger re-sync if Schedule or Enabled changed (not for timestamp updates)
         if (requiresResync)
         {
-            _logger.LogInformation("Triggering Quartz re-sync for {JobName} due to config change", jobName);
+            _logger.LogDebug("Triggering Quartz re-sync for {JobName} due to config change", jobName);
             _syncService?.TriggerResync();
         }
 
