@@ -252,6 +252,8 @@
     private string _editContextRetention = "7d";
     private string _editNotificationRetention = "7d";
 
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private readonly DialogOptions _dialogOptions = new()
     {
         MaxWidth = MaxWidth.Small,
@@ -307,7 +309,7 @@
             return;
 
         job.Enabled = enabled;
-        await JobConfigService.UpdateJobConfigAsync(jobName, job);
+        await JobConfigService.UpdateJobConfigAsync(jobName, job, WebUser);
 
         Snackbar.Add($"{job.DisplayName} {(enabled ? "enabled" : "disabled")}",
             enabled ? Severity.Success : Severity.Info);
@@ -444,7 +446,7 @@
             }
 
             var jobName = _editingJob.JobName;
-            await JobConfigService.UpdateJobConfigAsync(jobName, _editingJob);
+            await JobConfigService.UpdateJobConfigAsync(jobName, _editingJob, WebUser);
 
             // NextRunAt will be populated by QuartzSchedulingSyncService asynchronously
             // and will be visible on next page refresh or when the job list reloads

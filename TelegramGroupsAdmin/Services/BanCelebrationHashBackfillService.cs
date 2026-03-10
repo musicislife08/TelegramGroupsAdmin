@@ -30,7 +30,7 @@ public class BanCelebrationHashBackfillService(
 
         if (!gifsNeedBackfill)
         {
-            logger.LogInformation("Ban celebration GIF hash backfill already complete, skipping");
+            logger.LogDebug("Ban celebration GIF hash backfill already complete, skipping");
             return;
         }
 

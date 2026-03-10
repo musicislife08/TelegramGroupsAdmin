@@ -34,11 +34,12 @@ public class SerilogDynamicConfiguration
     /// </summary>
     public LoggingLevelSwitch GetSwitch(string category)
     {
-        if (!_switches.ContainsKey(category))
+        if (!_switches.TryGetValue(category, out var @switch))
         {
-            _switches[category] = new LoggingLevelSwitch(LogEventLevel.Information);
+            @switch = new LoggingLevelSwitch(LogEventLevel.Information);
+            _switches[category] = @switch;
         }
-        return _switches[category];
+        return @switch;
     }
 
     /// <summary>
@@ -115,6 +116,9 @@ public class SerilogDynamicConfiguration
         GetSwitch("Microsoft.EntityFrameworkCore.Database.Command").MinimumLevel = LogEventLevel.Warning; // Hide SQL queries
         GetSwitch("Npgsql").MinimumLevel = LogEventLevel.Warning;
         GetSwitch("System").MinimumLevel = LogEventLevel.Warning;
+
+        // Quartz.NET scheduler: Warning (noisy "Replacing job", "Freed 0 triggers", recovery logs)
+        GetSwitch("Quartz").MinimumLevel = LogEventLevel.Warning;
 
         // WTelegram User API client: Warning (noisy DC reconnection logs at Info)
         GetSwitch("WTelegram").MinimumLevel = LogEventLevel.Warning;

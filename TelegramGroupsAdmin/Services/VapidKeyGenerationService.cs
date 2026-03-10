@@ -28,7 +28,7 @@ public class VapidKeyGenerationService : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("VapidKeyGenerationService starting...");
+        _logger.LogDebug("VapidKeyGenerationService starting...");
 
         try
         {
@@ -38,7 +38,7 @@ public class VapidKeyGenerationService : IHostedService
             // Check if VAPID keys exist in new location
             if (await configRepo.HasVapidKeysAsync(cancellationToken))
             {
-                _logger.LogInformation("VAPID keys already configured for Web Push");
+                _logger.LogDebug("VAPID keys already configured for Web Push");
                 return;
             }
 

@@ -26,7 +26,7 @@ public interface IBackgroundJobConfigService
     /// <summary>
     /// Updates configuration for a specific job
     /// </summary>
-    Task UpdateJobConfigAsync(string jobName, BackgroundJobConfig config, CancellationToken cancellationToken = default);
+    Task UpdateJobConfigAsync(string jobName, BackgroundJobConfig config, WebUserIdentity? changedBy = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Checks if a job is enabled

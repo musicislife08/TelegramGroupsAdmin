@@ -140,9 +140,6 @@ public static class ServiceCollectionExtensions
             // Exam criteria builder service (Phase 2: Entrance exam evaluation criteria generation)
             services.AddScoped<Services.ExamCriteriaBuilder.IExamCriteriaBuilderService, Services.ExamCriteriaBuilder.ExamCriteriaBuilderService>();
 
-            // Backup services (replaces old UserDataExportService)
-            services.AddBackupServices();
-
             // Email service (SendGrid)
             services.AddScoped<Services.Email.IEmailService, Services.Email.SendGridEmailService>();
 
@@ -174,6 +171,9 @@ public static class ServiceCollectionExtensions
 
             // Ban celebration GIF hash backfill service (one-time migration for duplicate detection)
             services.AddScoped<BanCelebrationHashBackfillService>();
+
+            // V1 detection record cleanup (one-time removal of obsolete CAS/SeoScraping records)
+            services.AddScoped<V1DetectionCleanupService>();
 
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
@@ -323,22 +323,3 @@ file sealed class RejectedRateLimitLease : RateLimitLease
     }
 }
 
-/// <summary>
-/// Extension methods for registering backup services
-/// Used by both main app and tests to ensure consistent registration
-/// </summary>
-public static class BackupServiceCollectionExtensions
-{
-    extension(IServiceCollection services)
-    {
-        /// <summary>
-        /// Add backup services and handlers to DI container
-        /// </summary>
-        public IServiceCollection AddBackupServices()
-        {
-            // Note: Backup services are now registered by AddBackgroundJobs() in BackgroundJobs library
-
-            return services;
-        }
-    }
-}
