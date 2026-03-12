@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
 @inject ITelegramUserManagementService UserManagementService
@@ -389,11 +390,8 @@
                                 @if (!string.IsNullOrEmpty(group.DateLabel))
                                 {
                                     <MudTimelineItem Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
-                                        <ItemOpposite>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@group.DateLabel</MudText>
-                                        </ItemOpposite>
                                         <ItemContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">━━━━━━━━━━━━━━━━</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">━━ @group.DateLabel ━━</MudText>
                                         </ItemContent>
                                     </MudTimelineItem>
                                 }
@@ -403,11 +401,6 @@
                                     <MudTimelineItem Size="Size.Small"
                                                      Color="@GetActionColor(action.ActionType)"
                                                      Icon="@GetActionIcon(action.ActionType)">
-                                        <ItemOpposite>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                <span class="local-timestamp" data-utc="@action.IssuedAt.ToString("o")">@action.IssuedAt.ToLocalTime().ToString("h:mm tt")</span>
-                                            </MudText>
-                                        </ItemOpposite>
                                         <ItemContent>
                                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Style="width: 100%;">
                                                 <MudStack Spacing="0" Class="ml-2" Style="flex: 1;">
@@ -421,7 +414,7 @@
                                                         </MudText>
                                                     }
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        by @FormatIssuedBy(action.IssuedBy)
+                                                        by @FormatIssuedBy(action.IssuedBy) · <span class="local-timestamp" data-utc="@action.IssuedAt.ToString("o")">@DateTimeUtilities.FormatRelativeDateWithTime(action.IssuedAt)</span>
                                                     </MudText>
                                                 </MudStack>
                                                 @if (action.ActionType == UserActionType.Warn)
@@ -1002,6 +995,7 @@
             return actionDate.ToString("MMMM dd"); // Month Day (January 15)
         return actionDate.ToString("MMMM dd, yyyy"); // Month Day, Year (January 15, 2024)
     }
+
 
     private static string FormatActionType(UserActionType actionType)
     {

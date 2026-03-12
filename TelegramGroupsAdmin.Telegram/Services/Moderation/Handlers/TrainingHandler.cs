@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -55,27 +56,31 @@ public class TrainingHandler : ITrainingHandler
             return;
         }
 
-        // Create detection result for history (NOT for training - use training_labels instead)
-        // Always insert — the UI shows all results in a timeline (latest drives the badge)
+        // Create detection result for history — only for manual moderator actions.
+        // Auto-detected spam already has a detection_result from the content detection pipeline;
+        // inserting a second "manual" entry would corrupt the notification reason and timeline.
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
-        var detectionResult = new DetectionResultRecord
+        if (executor.Type != ActorType.System)
         {
-            MessageId = messageId,
-            ChatId = chat.Id,
-            DetectedAt = DateTimeOffset.UtcNow,
-            DetectionSource = "manual",
-            DetectionMethod = "Manual",
-            Score = 5.0,
-            Reason = "Marked as spam by moderator",
-            AddedBy = executor,
-            UserId = message.User.Id,
-            UsedForTraining = false, // History only - training handled by training_labels table
-            NetScore = 5.0,
-            CheckResultsJson = null,
-            EditVersion = 0
-        };
+            var detectionResult = new DetectionResultRecord
+            {
+                MessageId = messageId,
+                ChatId = chat.Id,
+                DetectedAt = DateTimeOffset.UtcNow,
+                DetectionSource = SpamDetectionConstants.ManualDetectionSource,
+                DetectionMethod = SpamDetectionConstants.ManualDetectionMethod,
+                Score = 5.0,
+                Reason = SpamDetectionConstants.ManualSpamReason,
+                AddedBy = executor,
+                UserId = message.User.Id,
+                UsedForTraining = false, // History only - training handled by training_labels table
+                NetScore = 5.0,
+                CheckResultsJson = null,
+                EditVersion = 0
+            };
 
-        await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+            await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+        }
 
         // Create explicit training label for ML (spam)
         if (hasText)
@@ -85,7 +90,7 @@ public class TrainingHandler : ITrainingHandler
                 chat.Id,
                 label: TrainingLabel.Spam,
                 labeledByUserId: executor.GetTelegramUserId(), // Null if executor is web user or system
-                reason: "Marked as spam by moderator",
+                reason: SpamDetectionConstants.ManualSpamReason,
                 auditLogId: null,
                 cancellationToken: cancellationToken);
 

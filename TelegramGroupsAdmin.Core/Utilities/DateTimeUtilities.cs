@@ -42,4 +42,27 @@ public static class DateTimeUtilities
 
         return TimeSpanUtilities.FormatDuration(span) + " ago";
     }
+
+    /// <summary>
+    /// Format a timestamp as a relative date with time.
+    /// Suitable for timelines and audit logs where both date context and exact time are needed.
+    /// </summary>
+    /// <param name="timestamp">The UTC timestamp to format</param>
+    /// <returns>String like "Today, 12:40 PM" / "Yesterday, 3:15 PM" / "Monday, 9:00 AM" / "Mar 10, 2:30 PM"</returns>
+    public static string FormatRelativeDateWithTime(DateTimeOffset timestamp)
+    {
+        var local = timestamp.ToLocalTime();
+        var now = DateTimeOffset.Now;
+        var time = local.ToString("h:mm tt");
+
+        if (local.Date == now.Date)
+            return $"Today, {time}";
+        if (local.Date == now.AddDays(-1).Date)
+            return $"Yesterday, {time}";
+        if (local.Date >= now.AddDays(-7).Date)
+            return $"{local:dddd}, {time}";
+        if (local.Year == now.Year)
+            return $"{local:MMM d}, {time}";
+        return $"{local:MMM d, yyyy}, {time}";
+    }
 }
