@@ -892,6 +892,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(u => u.IsBanned)
             .HasDefaultValue(false);
         modelBuilder.Entity<TelegramUserDto>()
+            .Property(u => u.BannedAt)
+            .HasColumnName("banned_at");
+        modelBuilder.Entity<TelegramUserDto>()
             .Property(u => u.HasPinnedStories)
             .HasDefaultValue(false);
         modelBuilder.Entity<TelegramUserDto>()

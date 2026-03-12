@@ -170,10 +170,8 @@
                      ServerData="@LoadBannedServerDataAsync"
                      Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
-                    <MudTh>User</MudTh>
-                    <MudTh>Ban Date</MudTh>
-                    <MudTh>Banned By</MudTh>
-                    <MudTh>Reason</MudTh>
+                    <MudTh><MudTableSortLabel T="BannedUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="BannedUserListItem" SortLabel="BannedAt" InitialDirection="SortDirection.Descending">Banned</MudTableSortLabel></MudTh>
                     <MudTh>Expires</MudTh>
                     <MudTh>Warnings</MudTh>
                     <MudTh>Actions</MudTh>
@@ -182,16 +180,15 @@
                     <MudTd DataLabel="User">
                         <UserInfoCell User="context" />
                     </MudTd>
-                    <MudTd DataLabel="Ban Date">
-                        <MudText Typo="Typo.body2">
-                            <LocalTimestamp Value="@context.BanDate" />
-                        </MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Banned By">
-                        <MudText Typo="Typo.body2">@context.BannedBy</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Reason">
-                        <MudText Typo="Typo.body2">@(context.BanReason ?? "No reason provided")</MudText>
+                    <MudTd DataLabel="Banned">
+                        @if (context.BannedAt.HasValue)
+                        {
+                            <LocalTimestamp Value="@context.BannedAt.Value" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Unknown</MudText>
+                        }
                     </MudTd>
                     <MudTd DataLabel="Expires">
                         @if (context.IsPermanentBan)
@@ -235,16 +232,6 @@
                         <MudTooltip Text="View Details">
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ViewUserDetail(context.TelegramUserId))" />
                         </MudTooltip>
-                        @if (context.TriggerMessageId.HasValue)
-                        {
-                            <MudTooltip Text="View Trigger Message">
-                                <MudIconButton Icon="@Icons.Material.Filled.Message"
-                                              Size="Size.Small"
-                                              Color="Color.Info"
-                                              Href="@($"/messages?messageId={context.TriggerMessageId}")"
-                                              Target="_blank" />
-                            </MudTooltip>
-                        }
                     </MudTd>
                 </RowTemplate>
                 <PagerContent>
