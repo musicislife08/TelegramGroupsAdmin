@@ -122,8 +122,8 @@ public class UsersTests : SharedAuthenticatedTestBase
                 "Should have 'Trusted' tab");
             Assert.That(tabNames.Any(t => t.Contains("BANNED", StringComparison.OrdinalIgnoreCase)),
                 "Should have 'Banned' tab");
-            Assert.That(tabNames.Any(t => t.Contains("INACTIVE", StringComparison.OrdinalIgnoreCase)),
-                "Should have 'Inactive' tab");
+            Assert.That(tabNames.Any(t => t.Contains("KICKED", StringComparison.OrdinalIgnoreCase)),
+                "Should have 'Kicked' tab");
         }
     }
 
@@ -320,7 +320,7 @@ public class UsersTests : SharedAuthenticatedTestBase
     }
 
     [Test]
-    public async Task Users_CanSwitchToInactiveTab()
+    public async Task Users_CanSwitchToKickedTab()
     {
         // Arrange
         await LoginAsOwnerAsync();
@@ -329,13 +329,13 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.NavigateAsync();
         await _usersPage.WaitForLoadAsync();
 
-        // Switch to Inactive tab
-        await _usersPage.SelectTabAsync("Inactive");
+        // Switch to Kicked tab
+        await _usersPage.SelectTabAsync("Kicked");
 
-        // Assert - Inactive tab displays (may be empty)
+        // Assert - Kicked tab displays (may be empty)
         var displayedCount = await _usersPage.GetDisplayedUserCountAsync();
         Assert.That(displayedCount, Is.GreaterThanOrEqualTo(0),
-            "Inactive tab should display user list (may be empty)");
+            "Kicked tab should display user list (may be empty)");
     }
 
     [Test]

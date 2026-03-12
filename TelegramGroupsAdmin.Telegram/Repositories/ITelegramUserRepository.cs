@@ -110,10 +110,10 @@ public interface ITelegramUserRepository
     Task<List<UiModels.TelegramUser>> SearchByNameAsync(string searchText, int limit = 10, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get inactive users (users who joined but never engaged).
-    /// Used by the Inactive Users UI tab.
+    /// Get kicked users (removed from group but not banned).
+    /// Used by the Kicked Users UI tab.
     /// </summary>
-    Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
+    Task<List<UiModels.TelegramUserListItem>> GetKickedUsersAsync(CancellationToken cancellationToken = default);
 
     // ============================================================================
     // Profile Scan Methods

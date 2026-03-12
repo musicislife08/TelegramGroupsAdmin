@@ -421,7 +421,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             .ToHashSetAsync(cancellationToken);
 
         // Query 9: Get active users and populate with pre-computed stats (O(1) lookups)
-        // Filters to IsActive=true by default (inactive users shown via GetInactiveUsersAsync)
+        // Filters to IsActive=true by default (kicked users shown via GetKickedUsersAsync)
         var users = await context.TelegramUsers
             .AsNoTracking()
             .Where(u => u.IsActive)
@@ -1131,15 +1131,15 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default)
+    public async Task<List<UiModels.TelegramUserListItem>> GetKickedUsersAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Get inactive users (joined but never engaged)
+        // Get kicked users (removed but not banned)
         // Uses partial index ix_telegram_users_is_active for efficient filtering
         return await context.TelegramUsers
             .AsNoTracking()
-            .Where(u => !u.IsActive)
+            .Where(u => !u.IsActive && !u.IsBanned)
             .OrderByDescending(u => u.CreatedAt)
             .Select(u => new UiModels.TelegramUserListItem
             {
@@ -1150,11 +1150,10 @@ public class TelegramUserRepository : ITelegramUserRepository
                 UserPhotoPath = u.UserPhotoPath,
                 IsTrusted = u.IsTrusted,
                 LastSeenAt = u.LastSeenAt,
-                // Stats not needed for inactive users (they haven't engaged)
                 ChatCount = 0,
                 WarningCount = 0,
                 NoteCount = 0,
-                IsBanned = u.IsBanned,
+                IsBanned = false,
                 HasWarnings = false,
                 IsTagged = false,
                 IsAdmin = false,

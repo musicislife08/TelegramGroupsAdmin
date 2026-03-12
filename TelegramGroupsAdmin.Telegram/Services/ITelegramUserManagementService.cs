@@ -26,8 +26,8 @@ public interface ITelegramUserManagementService
     /// <summary>Gets all trusted users.</summary>
     Task<List<TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Gets inactive users based on activity threshold.</summary>
-    Task<List<TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
+    /// <summary>Gets kicked users (removed from group but not banned).</summary>
+    Task<List<TelegramUserListItem>> GetKickedUsersAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Gets moderation queue statistics (pending reports, reviews).</summary>
     Task<ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default);

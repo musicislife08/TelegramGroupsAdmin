@@ -1,0 +1,55 @@
+@using TelegramGroupsAdmin.Telegram.Models
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+    @if (!string.IsNullOrEmpty(User.UserPhotoPath))
+    {
+        <img src="@($"/media/{User.UserPhotoPath}")" alt="@User.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+    }
+    else
+    {
+        <MudAvatar Size="Size.Small" Color="Color.Secondary">
+            <MudIcon Icon="@Icons.Material.Filled.Person" />
+        </MudAvatar>
+    }
+    <div>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudText Typo="Typo.body2">@User.DisplayName</MudText>
+            @if (ShowBadges)
+            {
+                @if (User.IsTrusted)
+                {
+                    <MudTooltip Text="Trusted User">
+                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                    </MudTooltip>
+                }
+                @if (User.IsAdmin)
+                {
+                    <MudTooltip Text="Admin in at least one chat">
+                        <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                    </MudTooltip>
+                }
+                @if (User.IsTagged)
+                {
+                    <MudTooltip Text="Has tags or notes">
+                        <MudIcon Icon="@Icons.Material.Filled.LocalOffer" Color="Color.Warning" Size="Size.Small" />
+                    </MudTooltip>
+                }
+            }
+        </MudStack>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            @if (!string.IsNullOrEmpty(User.Username))
+            {
+                <text>@@@User.Username · </text>
+            }
+            ID: @User.TelegramUserId
+        </MudText>
+    </div>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public IUserDisplayInfo User { get; set; } = null!;
+
+    [Parameter]
+    public bool ShowBadges { get; set; } = true;
+}

@@ -70,9 +70,9 @@ public class TelegramUserManagementService : ITelegramUserManagementService
     }
 
     /// <inheritdoc/>
-    public Task<List<TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default)
+    public Task<List<TelegramUserListItem>> GetKickedUsersAsync(CancellationToken cancellationToken = default)
     {
-        return _userRepository.GetInactiveUsersAsync(cancellationToken);
+        return _userRepository.GetKickedUsersAsync(cancellationToken);
     }
 
     /// <inheritdoc/>

@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// Banned user list item with ban-specific details
 /// Used in the Banned tab to show ban context
 /// </summary>
-public class BannedUserListItem
+public class BannedUserListItem : IUserDisplayInfo
 {
     public long TelegramUserId { get; set; }
     public string? Username { get; set; }
