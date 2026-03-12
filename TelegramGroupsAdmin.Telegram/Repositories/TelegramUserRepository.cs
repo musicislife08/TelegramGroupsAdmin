@@ -1135,7 +1135,7 @@ public class TelegramUserRepository : ITelegramUserRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Get kicked users (removed but not banned)
+        // Get kicked users — removed from group but not banned (banned users have their own tab)
         // Uses partial index ix_telegram_users_is_active for efficient filtering
         return await context.TelegramUsers
             .AsNoTracking()
@@ -1149,14 +1149,8 @@ public class TelegramUserRepository : ITelegramUserRepository
                 LastName = u.LastName,
                 UserPhotoPath = u.UserPhotoPath,
                 IsTrusted = u.IsTrusted,
+                IsBanned = u.IsBanned,
                 LastSeenAt = u.LastSeenAt,
-                ChatCount = 0,
-                WarningCount = 0,
-                NoteCount = 0,
-                IsBanned = false,
-                HasWarnings = false,
-                IsTagged = false,
-                IsAdmin = false,
                 ProfileScanScore = u.ProfileScanScore,
                 IsScam = u.IsScam,
                 IsFake = u.IsFake
