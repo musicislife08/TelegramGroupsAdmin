@@ -36,12 +36,36 @@ public interface ITelegramUserRepository
     Task DisableBotDmAsync(long telegramUserId, CancellationToken cancellationToken = default);
     Task<List<long>> GetTrustedUserIdsAsync(CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(List<long> chatIds, CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetBannedUsersAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken cancellationToken = default);
     Task<UiModels.ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default);
+
+    // ============================================================================
+    // Paginated Methods (server-side pagination for Users page)
+    // ============================================================================
+
+    /// <summary>
+    /// Get a page of users filtered by tab, search text, and accessible chats.
+    /// Stats (ChatCount, WarningCount, etc.) are enriched only for the returned page.
+    /// </summary>
+    Task<(List<UiModels.TelegramUserListItem> Items, int TotalCount)> GetPagedUsersAsync(
+        UiModels.UserListFilter filter, int skip, int take,
+        string? searchText, List<long>? chatIds,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get a page of banned users with full ban details (date, issuer, reason, expiry).
+    /// </summary>
+    Task<(List<UiModels.BannedUserListItem> Items, int TotalCount)> GetPagedBannedUsersWithDetailsAsync(
+        int skip, int take, string? searchText,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get counts for all user tabs in a single round-trip (5 parallel COUNT queries).
+    /// </summary>
+    Task<UiModels.UserTabCounts> GetUserTabCountsAsync(
+        List<long>? chatIds, string? searchText,
+        CancellationToken cancellationToken = default);
     Task<UiModels.TelegramUserDetail?> GetUserDetailAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     // ============================================================================
@@ -108,12 +132,6 @@ public interface ITelegramUserRepository
     /// Searches ALL users (active and inactive) - used by ban command to find timeout users.
     /// </summary>
     Task<List<UiModels.TelegramUser>> SearchByNameAsync(string searchText, int limit = 10, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get inactive users (users who joined but never engaged).
-    /// Used by the Inactive Users UI tab.
-    /// </summary>
-    Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
 
     // ============================================================================
     // Profile Scan Methods

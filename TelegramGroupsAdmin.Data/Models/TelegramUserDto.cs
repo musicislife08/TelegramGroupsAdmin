@@ -109,6 +109,14 @@ public class TelegramUserDto
     public DateTimeOffset? BanExpiresAt { get; set; }
 
     /// <summary>
+    /// When the user was banned (null = not banned).
+    /// Set to UtcNow on ban, cleared on unban. Used for Banned tab sort/pagination.
+    /// Backfilled from user_actions for existing bans; new bans set this directly.
+    /// </summary>
+    [Column("banned_at")]
+    public DateTimeOffset? BannedAt { get; set; }
+
+    /// <summary>
     /// All-time kick count. Source of truth for escalation logic (not derived from audit log).
     /// Incremented after each successful kick. Used to determine escalating kick durations
     /// and auto-ban threshold.

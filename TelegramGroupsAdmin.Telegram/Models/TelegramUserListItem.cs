@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 /// List item model for Telegram users table
 /// Includes computed stats and counts for quick display
 /// </summary>
-public class TelegramUserListItem
+public class TelegramUserListItem : IUserDisplayInfo
 {
     public long TelegramUserId { get; set; }
     public string? Username { get; set; }

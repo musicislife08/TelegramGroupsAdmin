@@ -2,7 +2,7 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Core.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Models.Analytics
 @using TelegramGroupsAdmin.Repositories
@@ -11,7 +11,7 @@
 @inject IAnalyticsRepository AnalyticsRepository
 @inject IReportsRepository ReportsRepository
 @inject IUserActionsRepository UserActionsRepository
-@inject ITelegramUserRepository TelegramUserRepository
+@inject ITelegramUserManagementService UserManagementService
 @inject NavigationManager Navigation
 @inject ILogger<Home> Logger
 @attribute [Authorize]
@@ -245,8 +245,7 @@
             var dailySpamTask = AnalyticsRepository.GetDailySpamSummaryAsync(DefaultTimeZoneId);
             var pendingReportsTask = ReportsRepository.GetPendingCountAsync();
             var recentActionsTask = UserActionsRepository.GetRecentAsync(MaxRecentActivityItems);
-            var trustedUsersTask = TelegramUserRepository.GetTrustedUsersAsync();
-            var bannedUsersTask = TelegramUserRepository.GetBannedUsersAsync();
+            var tabCountsTask = UserManagementService.GetUserTabCountsAsync(chatIds: null, searchText: null);
 
             await Task.WhenAll(
                 statsTask,
@@ -254,8 +253,7 @@
                 dailySpamTask,
                 pendingReportsTask,
                 recentActionsTask,
-                trustedUsersTask,
-                bannedUsersTask);
+                tabCountsTask);
 
             _stats = await statsTask;
             _detectionStats = await detectionStatsTask;
@@ -263,12 +261,9 @@
             _pendingReportsCount = await pendingReportsTask;
             _recentActions = await recentActionsTask;
 
-            // Get trusted/banned users from telegram_users table (source of truth)
-            var trustedUsers = await trustedUsersTask;
-            _trustedUsersCount = trustedUsers.Count;
-
-            var bannedUsers = await bannedUsersTask;
-            _activeBansCount = bannedUsers.Count;
+            var tabCounts = await tabCountsTask;
+            _trustedUsersCount = tabCounts.TrustedCount;
+            _activeBansCount = tabCounts.BannedCount;
         }
         catch (Exception ex)
         {

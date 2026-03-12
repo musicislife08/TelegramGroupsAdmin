@@ -596,6 +596,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasFilter("is_active = false")
             .HasDatabaseName("ix_telegram_users_is_active"); // Partial index for inactive users (UI filtering)
         modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.BannedAt)
+            .HasFilter("is_banned = true")
+            .HasDatabaseName("ix_telegram_users_banned_at"); // Partial index for Banned tab sort/pagination
+        modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.ProfileScannedAt)
             .HasDatabaseName("ix_telegram_users_profile_scanned_at"); // Background re-scan job ordering
 
