@@ -138,6 +138,9 @@ public class TrainingHandlerTests
                 dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
                 dr.Reason == SpamDetectionConstants.ManualSpamReason &&
                 dr.Score == 5.0 &&
+                dr.NetScore == 5.0 &&
+                dr.UserId == userId &&
+                dr.AddedBy == executor &&
                 dr.UsedForTraining == false // History only!
             ),
             Arg.Any<CancellationToken>());
@@ -305,7 +308,7 @@ public class TrainingHandlerTests
             messageId,
             Arg.Any<long>(),
             TrainingLabel.Spam,
-            Arg.Any<long?>(),
+            (long?)null, // System actor has no telegram user ID
             SpamDetectionConstants.AutoDetectedSpamReason,
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
@@ -353,7 +356,11 @@ public class TrainingHandlerTests
                 dr.MessageId == messageId &&
                 dr.DetectionSource == SpamDetectionConstants.ManualDetectionSource &&
                 dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
-                dr.Reason == SpamDetectionConstants.ManualSpamReason),
+                dr.Reason == SpamDetectionConstants.ManualSpamReason &&
+                dr.Score == 5.0 &&
+                dr.NetScore == 5.0 &&
+                dr.UserId == 123 && // message.User.Id
+                dr.AddedBy == executor),
             Arg.Any<CancellationToken>());
 
         // Assert - Training label uses manual reason (not auto-detected)
@@ -361,7 +368,7 @@ public class TrainingHandlerTests
             messageId,
             Arg.Any<long>(),
             TrainingLabel.Spam,
-            Arg.Any<long?>(), // WebUser has no telegram user ID
+            (long?)null, // WebUser has no telegram user ID
             SpamDetectionConstants.ManualSpamReason,
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());

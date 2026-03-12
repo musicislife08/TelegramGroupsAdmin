@@ -401,11 +401,8 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Select(kv => kv.Key)
             .ToHashSet();
 
-        // Query 6: Users with notes
-        var usersWithNotes = await context.AdminNotes
-            .Select(n => n.TelegramUserId)
-            .Distinct()
-            .ToHashSetAsync(cancellationToken);
+        // Users with notes (derived from noteCounts — any key means at least 1 note)
+        var usersWithNotes = noteCounts.Keys.ToHashSet();
 
         // Query 7: Users with tags
         var usersWithTags = await context.UserTags
@@ -781,12 +778,8 @@ public class TelegramUserRepository : ITelegramUserRepository
                 .ToHashSetAsync(cancellationToken);
         }
 
-        // Users with notes
-        var usersWithNotes = await context.AdminNotes
-            .Where(n => userIds.Contains(n.TelegramUserId))
-            .Select(n => n.TelegramUserId)
-            .Distinct()
-            .ToHashSetAsync(cancellationToken);
+        // Users with notes (derived from noteCounts — any key means at least 1 note)
+        var usersWithNotes = noteCounts.Keys.ToHashSet();
 
         // Users with tags
         var usersWithTags = await context.UserTags
@@ -809,7 +802,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             user.WarningCount = warningCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.NoteCount = noteCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
-            user.HasWarnings = warningCounts.GetValueOrDefault(user.TelegramUserId, 0) > 0;
+            user.HasWarnings = user.WarningCount > 0;
             user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
             user.IsAdmin = usersWhoAreAdmins.Contains(user.TelegramUserId);
         }
