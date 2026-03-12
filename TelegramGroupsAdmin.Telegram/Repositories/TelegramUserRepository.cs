@@ -401,11 +401,8 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Select(kv => kv.Key)
             .ToHashSet();
 
-        // Query 6: Users with notes
-        var usersWithNotes = await context.AdminNotes
-            .Select(n => n.TelegramUserId)
-            .Distinct()
-            .ToHashSetAsync(cancellationToken);
+        // Users with notes (derived from noteCounts — any key means at least 1 note)
+        var usersWithNotes = noteCounts.Keys.ToHashSet();
 
         // Query 7: Users with tags
         var usersWithTags = await context.UserTags
@@ -781,12 +778,8 @@ public class TelegramUserRepository : ITelegramUserRepository
                 .ToHashSetAsync(cancellationToken);
         }
 
-        // Users with notes
-        var usersWithNotes = await context.AdminNotes
-            .Where(n => userIds.Contains(n.TelegramUserId))
-            .Select(n => n.TelegramUserId)
-            .Distinct()
-            .ToHashSetAsync(cancellationToken);
+        // Users with notes (derived from noteCounts — any key means at least 1 note)
+        var usersWithNotes = noteCounts.Keys.ToHashSet();
 
         // Users with tags
         var usersWithTags = await context.UserTags
@@ -809,7 +802,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             user.WarningCount = warningCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.NoteCount = noteCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
-            user.HasWarnings = warningCounts.GetValueOrDefault(user.TelegramUserId, 0) > 0;
+            user.HasWarnings = user.WarningCount > 0;
             user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
             user.IsAdmin = usersWhoAreAdmins.Contains(user.TelegramUserId);
         }
@@ -905,12 +898,29 @@ public class TelegramUserRepository : ITelegramUserRepository
         })
         .ToList();
 
-        // Get user actions (warnings, bans, trusts)
-        var actions = await context.UserActions
-            .AsNoTracking()
-            .Where(ua => ua.UserId == telegramUserId)
-            .OrderByDescending(ua => ua.IssuedAt)
-            .ToListAsync(cancellationToken);
+        // Get user actions with actor display name enrichment (LEFT JOINs for IssuedBy)
+        var actions = await (
+            from ua in context.UserActions.AsNoTracking()
+            join tu in context.TelegramUsers.AsNoTracking() on ua.TelegramUserId equals tu.TelegramUserId into telegramActors
+            from ta in telegramActors.DefaultIfEmpty()
+            join wu in context.Users.AsNoTracking() on ua.WebUserId equals wu.Id into webActors
+            from wa in webActors.DefaultIfEmpty()
+            join target in context.TelegramUsers.AsNoTracking() on ua.UserId equals target.TelegramUserId into targets
+            from t in targets.DefaultIfEmpty()
+            where ua.UserId == telegramUserId
+            orderby ua.IssuedAt descending
+            select new
+            {
+                Action = ua,
+                TelegramActorUsername = ta.Username,
+                TelegramActorFirstName = ta.FirstName,
+                TelegramActorLastName = ta.LastName,
+                WebActorEmail = wa.Email,
+                TargetUsername = t.Username,
+                TargetFirstName = t.FirstName,
+                TargetLastName = t.LastName
+            }
+        ).ToListAsync(cancellationToken);
 
         // Get detection history (join through messages to filter by user)
         var detectionHistory = await (
@@ -979,7 +989,14 @@ public class TelegramUserRepository : ITelegramUserRepository
             LatestAiReason = latestScanResult?.AiReason,
             LatestAiSignals = latestScanResult?.AiSignals,
             ChatMemberships = chatMemberships,
-            Actions = actions.Select(a => a.ToModel()).ToList(),
+            Actions = actions.Select(a => a.Action.ToModel(
+                webUserEmail: a.WebActorEmail,
+                telegramUsername: a.TelegramActorUsername,
+                telegramFirstName: a.TelegramActorFirstName,
+                telegramLastName: a.TelegramActorLastName,
+                targetUsername: a.TargetUsername,
+                targetFirstName: a.TargetFirstName,
+                targetLastName: a.TargetLastName)).ToList(),
             Warnings = activeWarnings,
             DetectionHistory = detectionHistory.Select(d => d.ToModel()).ToList(),
             Notes = notes.Select(n => n.ToModel()).ToList(),

@@ -124,4 +124,27 @@ public static class TimeSpanUtilities
             return $"{years} year{(years != 1 ? "s" : "")}";
         }
     }
+
+    /// <summary>
+    /// Format a TimeSpan with compound precision (e.g., "2 days 3 hours").
+    /// Unlike <see cref="FormatDuration"/> which returns only the largest unit,
+    /// this includes days + hours for durations >= 1 day with remaining hours.
+    /// Suitable for temp ban display where precision matters.
+    /// </summary>
+    public static string FormatDurationDetailed(TimeSpan duration)
+    {
+        if (duration.TotalMinutes < 60)
+            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes == 1 ? "" : "s")}";
+
+        if (duration.TotalHours < 24)
+            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours == 1 ? "" : "s")}";
+
+        var days = (int)duration.TotalDays;
+        var hours = duration.Hours;
+
+        if (hours == 0)
+            return $"{days} day{(days == 1 ? "" : "s")}";
+
+        return $"{days} day{(days == 1 ? "" : "s")} {hours} hour{(hours == 1 ? "" : "s")}";
+    }
 }

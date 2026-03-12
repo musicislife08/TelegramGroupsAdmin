@@ -44,4 +44,29 @@ public static class SpamDetectionConstants
     /// Prevents duplicate cleanup jobs for the same user within this window
     /// </summary>
     public static readonly TimeSpan CleanupJobDeduplicationWindow = TimeSpan.FromSeconds(30);
+
+    // ============================================================
+    // MANUAL SPAM CLASSIFICATION CONSTANTS
+    // Used by TrainingHandler when moderators mark messages as spam.
+    // ============================================================
+
+    /// <summary>
+    /// Detection source identifier for manual moderator actions
+    /// </summary>
+    public const string ManualDetectionSource = "manual";
+
+    /// <summary>
+    /// Detection method identifier for manual moderator actions
+    /// </summary>
+    public const string ManualDetectionMethod = "Manual";
+
+    /// <summary>
+    /// Reason text for manual spam classification by moderator
+    /// </summary>
+    public const string ManualSpamReason = "Marked as spam by moderator";
+
+    /// <summary>
+    /// Reason text for auto-detected spam classification by the detection pipeline
+    /// </summary>
+    public const string AutoDetectedSpamReason = "Auto-detected spam";
 }

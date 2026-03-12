@@ -42,4 +42,5 @@ public static class DateTimeUtilities
 
         return TimeSpanUtilities.FormatDuration(span) + " ago";
     }
+
 }

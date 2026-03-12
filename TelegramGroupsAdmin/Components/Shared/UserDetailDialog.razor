@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
 @inject ITelegramUserManagementService UserManagementService
@@ -104,11 +105,11 @@
                     <MudStack Spacing="2">
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" Color="Color.Success" />
-                            <MudText Typo="Typo.body2">First seen: <span class="local-timestamp" data-utc="@_userDetail.FirstSeenAt.ToString("o")">@_userDetail.FirstSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span></MudText>
+                            <MudText Typo="Typo.body2">First seen: <LocalTimestamp Value="@_userDetail.FirstSeenAt" /></MudText>
                         </MudStack>
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Info" />
-                            <MudText Typo="Typo.body2">Last seen: <span class="local-timestamp" data-utc="@_userDetail.LastSeenAt.ToString("o")">@_userDetail.LastSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span></MudText>
+                            <MudText Typo="Typo.body2">Last seen: <LocalTimestamp Value="@_userDetail.LastSeenAt" /></MudText>
                         </MudStack>
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                             <MudIcon Icon="@(_userDetail.BotDmEnabled ? Icons.Material.Filled.MarkEmailRead : Icons.Material.Filled.MarkEmailUnread)"
@@ -135,7 +136,7 @@
                                 @if (_userDetail.ProfileScannedAt.HasValue)
                                 {
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        Scanned: <span class="local-timestamp" data-utc="@_userDetail.ProfileScannedAt.Value.ToString("o")">@_userDetail.ProfileScannedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                        Scanned: <LocalTimestamp Value="@_userDetail.ProfileScannedAt.Value" />
                                     </MudText>
                                 }
                                 <MudButton Variant="Variant.Text"
@@ -357,7 +358,7 @@
                                                 }
                                             </MudStack>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @membership.MessageCount messages • Last: <span class="local-timestamp" data-utc="@membership.LastActivityAt.ToString("o")">@membership.LastActivityAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                                @membership.MessageCount messages • Last: <LocalTimestamp Value="@membership.LastActivityAt" />
                                             </MudText>
                                         </div>
                                     </MudStack>
@@ -384,59 +385,39 @@
                         </MudStack>
 
                         <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
-                            @foreach (var group in GetGroupedActions())
+                            @foreach (var action in GetActiveActions())
                             {
-                                @if (!string.IsNullOrEmpty(group.DateLabel))
-                                {
-                                    <MudTimelineItem Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
-                                        <ItemOpposite>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@group.DateLabel</MudText>
-                                        </ItemOpposite>
-                                        <ItemContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">━━━━━━━━━━━━━━━━</MudText>
-                                        </ItemContent>
-                                    </MudTimelineItem>
-                                }
-
-                                @foreach (var action in group.Actions)
-                                {
-                                    <MudTimelineItem Size="Size.Small"
-                                                     Color="@GetActionColor(action.ActionType)"
-                                                     Icon="@GetActionIcon(action.ActionType)">
-                                        <ItemOpposite>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                <span class="local-timestamp" data-utc="@action.IssuedAt.ToString("o")">@action.IssuedAt.ToLocalTime().ToString("h:mm tt")</span>
-                                            </MudText>
-                                        </ItemOpposite>
-                                        <ItemContent>
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Style="width: 100%;">
-                                                <MudStack Spacing="0" Class="ml-2" Style="flex: 1;">
-                                                    <MudText Typo="Typo.body2">
-                                                        <strong>@FormatActionType(action.ActionType)</strong>
-                                                    </MudText>
-                                                    @if (!string.IsNullOrEmpty(action.Reason))
-                                                    {
-                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                            @action.Reason
-                                                        </MudText>
-                                                    }
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        by @FormatIssuedBy(action.IssuedBy)
-                                                    </MudText>
-                                                </MudStack>
-                                                @if (action.ActionType == UserActionType.Warn)
+                                <MudTimelineItem Size="Size.Small"
+                                                 Color="@GetActionColor(action.ActionType)"
+                                                 Icon="@GetActionIcon(action.ActionType)">
+                                    <ItemContent>
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Style="width: 100%;">
+                                            <MudStack Spacing="0" Class="ml-2" Style="flex: 1;">
+                                                <MudText Typo="Typo.body2">
+                                                    <strong>@FormatActionType(action.ActionType)</strong>
+                                                </MudText>
+                                                @if (!string.IsNullOrEmpty(action.Reason))
                                                 {
-                                                    <MudTooltip Text="Remove warning">
-                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                                       Size="Size.Small"
-                                                                       Color="Color.Error"
-                                                                       OnClick="@(() => RemoveWarning(action))" />
-                                                    </MudTooltip>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @action.Reason
+                                                    </MudText>
                                                 }
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    by @action.IssuedBy.GetDisplayText() · <LocalTimestamp Value="@action.IssuedAt" />
+                                                </MudText>
                                             </MudStack>
-                                        </ItemContent>
-                                    </MudTimelineItem>
-                                }
+                                            @if (action.ActionType == UserActionType.Warn)
+                                            {
+                                                <MudTooltip Text="Remove warning">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                   Size="Size.Small"
+                                                                   Color="Color.Error"
+                                                                   OnClick="@(() => RemoveWarning(action))" />
+                                                </MudTooltip>
+                                            }
+                                        </MudStack>
+                                    </ItemContent>
+                                </MudTimelineItem>
                             }
                         </MudTimeline>
                     </MudPaper>
@@ -480,10 +461,10 @@
                                             </MudStack>
                                         </MudStack>
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            By @note.CreatedBy • <span class="local-timestamp" data-utc="@note.CreatedAt.ToString("o")">@note.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                            By @note.CreatedBy • <LocalTimestamp Value="@note.CreatedAt" />
                                             @if (note.UpdatedAt.HasValue)
                                             {
-                                                <text> (edited <span class="local-timestamp" data-utc="@note.UpdatedAt.Value.ToString("o")">@note.UpdatedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>)</text>
+                                                <text> (edited <LocalTimestamp Value="@note.UpdatedAt.Value" />)</text>
                                             }
                                         </MudText>
                                     </MudStack>
@@ -550,7 +531,7 @@
                                         <div style="flex: 1;">
                                             <MudText Typo="Typo.body2">Score: @detection.Score.ToString("F2")</MudText>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @detection.DetectionMethod • <span class="local-timestamp" data-utc="@detection.DetectedAt.ToString("o")">@detection.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                                @detection.DetectionMethod • <LocalTimestamp Value="@detection.DetectedAt" />
                                             </MudText>
                                         </div>
                                     </MudStack>
@@ -770,9 +751,8 @@
 
             if (banResult.Success)
             {
-                var expiryTime = DateTimeOffset.UtcNow.Add(tempBanResult.Duration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
                 Snackbar.Add(
-                    $"User temporarily banned for {FormatDuration(tempBanResult.Duration)} from {banResult.ChatsAffected} chat(s). Auto-unban at {expiryTime}.",
+                    $"User temporarily banned for {TimeSpanUtilities.FormatDurationDetailed(tempBanResult.Duration)} from {banResult.ChatsAffected} chat(s).",
                     Severity.Success);
 
                 await LoadUserDetailAsync();
@@ -845,23 +825,6 @@
         }
     }
 
-    private static string FormatDuration(TimeSpan duration)
-    {
-        if (duration.TotalMinutes < 60)
-            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes == 1 ? "" : "s")}";
-
-        if (duration.TotalHours < 24)
-            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours == 1 ? "" : "s")}";
-
-        var days = (int)duration.TotalDays;
-        var hours = duration.Hours;
-
-        if (hours == 0)
-            return $"{days} day{(days == 1 ? "" : "s")}";
-
-        return $"{days} day{(days == 1 ? "" : "s")} {hours} hour{(hours == 1 ? "" : "s")}";
-    }
-
     private void Close() => MudDialog.Close();
 
     private static Color GetStatusColor(TelegramUserStatus status) => status switch
@@ -905,14 +868,6 @@
     };
 
     /// <summary>
-    /// Format actor for display in timeline (Phase 4.19: Actor system)
-    /// </summary>
-    private static string FormatIssuedBy(Actor actor)
-    {
-        return actor.DisplayName ?? "System";
-    }
-
-    /// <summary>
     /// Get count of active (non-expired) warnings
     /// </summary>
     private int GetActiveWarningCount()
@@ -947,60 +902,18 @@
         _timelineExpanded = !_timelineExpanded;
     }
 
-    private IEnumerable<ActionGroup> GetGroupedActions()
+    private IReadOnlyList<UserActionRecord> GetActiveActions()
     {
         if (_userDetail == null || !_userDetail.Actions.Any())
             return [];
 
         var nowUtc = DateTimeOffset.UtcNow;
 
-        // Filter out expired warnings (ExpiresAt != null && ExpiresAt <= now)
-        var activeActions = _userDetail.Actions
+        return _userDetail.Actions
             .Where(a => a.ExpiresAt == null || a.ExpiresAt > nowUtc)
             .OrderByDescending(a => a.IssuedAt)
             .Take(_timelineExpanded ? int.MaxValue : TimelineShowCount)
             .ToList();
-
-        var nowLocal = DateTimeOffset.Now.ToLocalTime();
-        var groups = new List<ActionGroup>();
-        string? currentDateLabel = null;
-
-        foreach (var action in activeActions)
-        {
-            var actionDate = action.IssuedAt.ToLocalTime();
-            var dateLabel = GetDateLabel(actionDate, nowLocal);
-
-            // Add date separator if the date label changed
-            if (dateLabel != currentDateLabel)
-            {
-                groups.Add(new ActionGroup
-                {
-                    DateLabel = dateLabel,
-                    Actions = [action]
-                });
-                currentDateLabel = dateLabel;
-            }
-            else
-            {
-                // Add to current group
-                groups[^1].Actions.Add(action);
-            }
-        }
-
-        return groups;
-    }
-
-    private static string GetDateLabel(DateTimeOffset actionDate, DateTimeOffset now)
-    {
-        if (actionDate.Date == now.Date)
-            return "Today";
-        if (actionDate.Date == now.AddDays(-1).Date)
-            return "Yesterday";
-        if (actionDate.Date >= now.AddDays(-7).Date)
-            return actionDate.ToString("dddd"); // Day name (Monday, Tuesday, etc.)
-        if (actionDate.Year == now.Year)
-            return actionDate.ToString("MMMM dd"); // Month Day (January 15)
-        return actionDate.ToString("MMMM dd, yyyy"); // Month Day, Year (January 15, 2024)
     }
 
     private static string FormatActionType(UserActionType actionType)
@@ -1016,12 +929,6 @@
         };
     }
 
-    // Helper class for grouping actions by date
-    private class ActionGroup
-    {
-        public string DateLabel { get; init; } = string.Empty;
-        public List<UserActionRecord> Actions { get; init; } = [];
-    }
 
     // ============================================================================
     // Admin Notes Methods (Phase 4.12)
