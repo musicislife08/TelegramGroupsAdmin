@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -20,13 +21,14 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// - Triggers immediate ML.NET text classifier retraining via JobTriggerService
 /// - Saves image training samples for vision-based detection
 ///
-/// Test Coverage (6 tests):
-/// - CreateSpamSampleAsync with text: Verifies label + retraining trigger
+/// Test Coverage (7 tests):
+/// - CreateSpamSampleAsync with text: Verifies label + retraining trigger + detection result fields
 /// - CreateSpamSampleAsync message not found: Logs warning, no action
 /// - CreateSpamSampleAsync without text: Skips training label/retraining
 /// - CreateSpamSampleAsync with photo: Saves image sample
 /// - Actor telegram user ID extraction: Verifies labeled_by_user_id
 /// - System actor (auto-detection): Skips detection_result insert, still creates training data
+/// - WebUser actor: Inserts detection_result (guards against broadening System skip)
 ///
 /// Mocking Strategy:
 /// - NSubstitute for all dependencies
@@ -128,10 +130,14 @@ public class TrainingHandlerTests
         // Act
         await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
 
-        // Assert - Verify detection result created (history only)
+        // Assert - Verify detection result created with correct field values
         await _mockDetectionRepo.Received(1).InsertAsync(
             Arg.Is<DetectionResultRecord>(dr =>
                 dr.MessageId == messageId &&
+                dr.DetectionSource == SpamDetectionConstants.ManualDetectionSource &&
+                dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
+                dr.Reason == SpamDetectionConstants.ManualSpamReason &&
+                dr.Score == 5.0 &&
                 dr.UsedForTraining == false // History only!
             ),
             Arg.Any<CancellationToken>());
@@ -294,13 +300,13 @@ public class TrainingHandlerTests
         // Assert - NO detection result inserted (auto-detection pipeline already created one)
         await _mockDetectionRepo.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
 
-        // Assert - Training label IS still created (ML training is separate from detection history)
+        // Assert - Training label IS still created with auto-detected reason
         await _mockTrainingRepo.Received(1).UpsertLabelAsync(
             messageId,
             Arg.Any<long>(),
             TrainingLabel.Spam,
             Arg.Any<long?>(),
-            Arg.Any<string>(),
+            SpamDetectionConstants.AutoDetectedSpamReason,
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
 
@@ -320,6 +326,44 @@ public class TrainingHandlerTests
             Arg.Any<long>(),
             isSpam: true,
             Arg.Any<Actor>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task CreateSpamSampleAsync_WebUserActor_InsertsDetectionResult()
+    {
+        // Arrange — web admin marking a message as spam should insert a manual detection result
+        const int messageId = 12345;
+        var message = CreateTestMessage(messageId, userId: 123, chatId: 1, messageText: "spam text");
+
+        _mockMessageRepo.GetMessageAsync(messageId, Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(message);
+
+        _mockImageRepo.SaveTrainingSampleAsync(Arg.Any<int>(), Arg.Any<long>(), Arg.Any<bool>(), Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var executor = Actor.FromWebUser("admin-guid", "admin@example.com");
+
+        // Act
+        await _handler.CreateSpamSampleAsync(messageId, ChatIdentity.FromId(-100), executor);
+
+        // Assert - Detection result IS inserted (web admin override, not system)
+        await _mockDetectionRepo.Received(1).InsertAsync(
+            Arg.Is<DetectionResultRecord>(dr =>
+                dr.MessageId == messageId &&
+                dr.DetectionSource == SpamDetectionConstants.ManualDetectionSource &&
+                dr.DetectionMethod == SpamDetectionConstants.ManualDetectionMethod &&
+                dr.Reason == SpamDetectionConstants.ManualSpamReason),
+            Arg.Any<CancellationToken>());
+
+        // Assert - Training label uses manual reason (not auto-detected)
+        await _mockTrainingRepo.Received(1).UpsertLabelAsync(
+            messageId,
+            Arg.Any<long>(),
+            TrainingLabel.Spam,
+            Arg.Any<long?>(), // WebUser has no telegram user ID
+            SpamDetectionConstants.ManualSpamReason,
+            auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
     }
 

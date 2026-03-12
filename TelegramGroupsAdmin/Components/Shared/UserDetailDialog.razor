@@ -1,7 +1,6 @@
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
-@using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
 @inject ITelegramUserManagementService UserManagementService
@@ -385,51 +384,39 @@
                         </MudStack>
 
                         <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
-                            @foreach (var group in GetGroupedActions())
+                            @foreach (var action in GetActiveActions())
                             {
-                                @if (!string.IsNullOrEmpty(group.DateLabel))
-                                {
-                                    <MudTimelineItem Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
-                                        <ItemContent>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">━━ @group.DateLabel ━━</MudText>
-                                        </ItemContent>
-                                    </MudTimelineItem>
-                                }
-
-                                @foreach (var action in group.Actions)
-                                {
-                                    <MudTimelineItem Size="Size.Small"
-                                                     Color="@GetActionColor(action.ActionType)"
-                                                     Icon="@GetActionIcon(action.ActionType)">
-                                        <ItemContent>
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Style="width: 100%;">
-                                                <MudStack Spacing="0" Class="ml-2" Style="flex: 1;">
-                                                    <MudText Typo="Typo.body2">
-                                                        <strong>@FormatActionType(action.ActionType)</strong>
-                                                    </MudText>
-                                                    @if (!string.IsNullOrEmpty(action.Reason))
-                                                    {
-                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                            @action.Reason
-                                                        </MudText>
-                                                    }
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        by @FormatIssuedBy(action.IssuedBy) · <span class="local-timestamp" data-utc="@action.IssuedAt.ToString("o")">@DateTimeUtilities.FormatRelativeDateWithTime(action.IssuedAt)</span>
-                                                    </MudText>
-                                                </MudStack>
-                                                @if (action.ActionType == UserActionType.Warn)
+                                <MudTimelineItem Size="Size.Small"
+                                                 Color="@GetActionColor(action.ActionType)"
+                                                 Icon="@GetActionIcon(action.ActionType)">
+                                    <ItemContent>
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Style="width: 100%;">
+                                            <MudStack Spacing="0" Class="ml-2" Style="flex: 1;">
+                                                <MudText Typo="Typo.body2">
+                                                    <strong>@FormatActionType(action.ActionType)</strong>
+                                                </MudText>
+                                                @if (!string.IsNullOrEmpty(action.Reason))
                                                 {
-                                                    <MudTooltip Text="Remove warning">
-                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                                       Size="Size.Small"
-                                                                       Color="Color.Error"
-                                                                       OnClick="@(() => RemoveWarning(action))" />
-                                                    </MudTooltip>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @action.Reason
+                                                    </MudText>
                                                 }
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    by @action.IssuedBy.GetDisplayText() · <LocalTimestamp Value="@action.IssuedAt" />
+                                                </MudText>
                                             </MudStack>
-                                        </ItemContent>
-                                    </MudTimelineItem>
-                                }
+                                            @if (action.ActionType == UserActionType.Warn)
+                                            {
+                                                <MudTooltip Text="Remove warning">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                   Size="Size.Small"
+                                                                   Color="Color.Error"
+                                                                   OnClick="@(() => RemoveWarning(action))" />
+                                                </MudTooltip>
+                                            }
+                                        </MudStack>
+                                    </ItemContent>
+                                </MudTimelineItem>
                             }
                         </MudTimeline>
                     </MudPaper>
@@ -898,14 +885,6 @@
     };
 
     /// <summary>
-    /// Format actor for display in timeline (Phase 4.19: Actor system)
-    /// </summary>
-    private static string FormatIssuedBy(Actor actor)
-    {
-        return actor.DisplayName ?? "System";
-    }
-
-    /// <summary>
     /// Get count of active (non-expired) warnings
     /// </summary>
     private int GetActiveWarningCount()
@@ -940,62 +919,19 @@
         _timelineExpanded = !_timelineExpanded;
     }
 
-    private IEnumerable<ActionGroup> GetGroupedActions()
+    private IReadOnlyList<UserActionRecord> GetActiveActions()
     {
         if (_userDetail == null || !_userDetail.Actions.Any())
             return [];
 
         var nowUtc = DateTimeOffset.UtcNow;
 
-        // Filter out expired warnings (ExpiresAt != null && ExpiresAt <= now)
-        var activeActions = _userDetail.Actions
+        return _userDetail.Actions
             .Where(a => a.ExpiresAt == null || a.ExpiresAt > nowUtc)
             .OrderByDescending(a => a.IssuedAt)
             .Take(_timelineExpanded ? int.MaxValue : TimelineShowCount)
             .ToList();
-
-        var nowLocal = DateTimeOffset.Now.ToLocalTime();
-        var groups = new List<ActionGroup>();
-        string? currentDateLabel = null;
-
-        foreach (var action in activeActions)
-        {
-            var actionDate = action.IssuedAt.ToLocalTime();
-            var dateLabel = GetDateLabel(actionDate, nowLocal);
-
-            // Add date separator if the date label changed
-            if (dateLabel != currentDateLabel)
-            {
-                groups.Add(new ActionGroup
-                {
-                    DateLabel = dateLabel,
-                    Actions = [action]
-                });
-                currentDateLabel = dateLabel;
-            }
-            else
-            {
-                // Add to current group
-                groups[^1].Actions.Add(action);
-            }
-        }
-
-        return groups;
     }
-
-    private static string GetDateLabel(DateTimeOffset actionDate, DateTimeOffset now)
-    {
-        if (actionDate.Date == now.Date)
-            return "Today";
-        if (actionDate.Date == now.AddDays(-1).Date)
-            return "Yesterday";
-        if (actionDate.Date >= now.AddDays(-7).Date)
-            return actionDate.ToString("dddd"); // Day name (Monday, Tuesday, etc.)
-        if (actionDate.Year == now.Year)
-            return actionDate.ToString("MMMM dd"); // Month Day (January 15)
-        return actionDate.ToString("MMMM dd, yyyy"); // Month Day, Year (January 15, 2024)
-    }
-
 
     private static string FormatActionType(UserActionType actionType)
     {
@@ -1010,12 +946,6 @@
         };
     }
 
-    // Helper class for grouping actions by date
-    private class ActionGroup
-    {
-        public string DateLabel { get; init; } = string.Empty;
-        public List<UserActionRecord> Actions { get; init; } = [];
-    }
 
     // ============================================================================
     // Admin Notes Methods (Phase 4.12)

@@ -908,24 +908,24 @@ public class TelegramUserRepository : ITelegramUserRepository
         // Get user actions with actor display name enrichment (LEFT JOINs for IssuedBy)
         var actions = await (
             from ua in context.UserActions.AsNoTracking()
-            join tu in context.TelegramUsers on ua.TelegramUserId equals tu.TelegramUserId into telegramActors
+            join tu in context.TelegramUsers.AsNoTracking() on ua.TelegramUserId equals tu.TelegramUserId into telegramActors
             from ta in telegramActors.DefaultIfEmpty()
-            join wu in context.Users on ua.WebUserId equals wu.Id into webActors
+            join wu in context.Users.AsNoTracking() on ua.WebUserId equals wu.Id into webActors
             from wa in webActors.DefaultIfEmpty()
-            join target in context.TelegramUsers on ua.UserId equals target.TelegramUserId into targets
+            join target in context.TelegramUsers.AsNoTracking() on ua.UserId equals target.TelegramUserId into targets
             from t in targets.DefaultIfEmpty()
             where ua.UserId == telegramUserId
             orderby ua.IssuedAt descending
             select new
             {
                 Action = ua,
-                TelegramActorUsername = ta != null ? ta.Username : null,
-                TelegramActorFirstName = ta != null ? ta.FirstName : null,
-                TelegramActorLastName = ta != null ? ta.LastName : null,
-                WebActorEmail = wa != null ? wa.Email : null,
-                TargetUsername = t != null ? t.Username : null,
-                TargetFirstName = t != null ? t.FirstName : null,
-                TargetLastName = t != null ? t.LastName : null
+                TelegramActorUsername = ta.Username,
+                TelegramActorFirstName = ta.FirstName,
+                TelegramActorLastName = ta.LastName,
+                WebActorEmail = wa.Email,
+                TargetUsername = t.Username,
+                TargetFirstName = t.FirstName,
+                TargetLastName = t.LastName
             }
         ).ToListAsync(cancellationToken);
 

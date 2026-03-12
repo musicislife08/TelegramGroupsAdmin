@@ -89,7 +89,7 @@ Launch ALL applicable agents in a **single message** with multiple Task tool cal
 
 #### Agent 6: Your Choice (CONDITIONAL — based on changed files)
 - **Decision**: At runtime, examine the changed files and determine if there is a domain that other agents don't adequately cover. Pick the most appropriate agent from the available agent types. Examples of when to pick what:
-  - `.razor` / UI component changes → `ux-reviewer` (accessibility, MudBlazor patterns, UX)
+  - `.razor` / UI component changes → `ux-reviewer` (MudBlazor patterns, UX layout, information hierarchy — do NOT review accessibility/ARIA/screen readers)
   - Akka.NET actor changes → `dotnet-skills:akka-net-specialist`
   - DocFX / documentation changes → `dotnet-skills:docfx-specialist`
   - Performance-sensitive code paths → `dotnet-skills:dotnet-performance-analyst`

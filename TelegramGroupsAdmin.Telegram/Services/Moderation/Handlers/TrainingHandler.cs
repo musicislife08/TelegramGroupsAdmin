@@ -85,12 +85,16 @@ public class TrainingHandler : ITrainingHandler
         // Create explicit training label for ML (spam)
         if (hasText)
         {
+            var labelReason = executor.Type == ActorType.System
+                ? SpamDetectionConstants.AutoDetectedSpamReason
+                : SpamDetectionConstants.ManualSpamReason;
+
             await _trainingLabelsRepository.UpsertLabelAsync(
                 messageId,
                 chat.Id,
                 label: TrainingLabel.Spam,
                 labeledByUserId: executor.GetTelegramUserId(), // Null if executor is web user or system
-                reason: SpamDetectionConstants.ManualSpamReason,
+                reason: labelReason,
                 auditLogId: null,
                 cancellationToken: cancellationToken);
 
@@ -113,7 +117,7 @@ public class TrainingHandler : ITrainingHandler
         else
         {
             _logger.LogInformation(
-                "Created detection result for message {MessageId} marked as spam by {Executor} (no text, skipped training)",
+                "Message {MessageId} has no text; skipped training label for {Executor}",
                 messageId, executor.GetDisplayText());
         }
 

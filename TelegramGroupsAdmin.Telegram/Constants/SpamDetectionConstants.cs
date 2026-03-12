@@ -64,4 +64,9 @@ public static class SpamDetectionConstants
     /// Reason text for manual spam classification by moderator
     /// </summary>
     public const string ManualSpamReason = "Marked as spam by moderator";
+
+    /// <summary>
+    /// Reason text for auto-detected spam classification by the detection pipeline
+    /// </summary>
+    public const string AutoDetectedSpamReason = "Auto-detected spam";
 }
