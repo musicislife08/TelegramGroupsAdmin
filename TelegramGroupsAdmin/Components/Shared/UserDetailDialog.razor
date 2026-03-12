@@ -751,9 +751,8 @@
 
             if (banResult.Success)
             {
-                var expiryTime = DateTimeOffset.UtcNow.Add(tempBanResult.Duration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
                 Snackbar.Add(
-                    $"User temporarily banned for {TimeSpanUtilities.FormatDurationDetailed(tempBanResult.Duration)} from {banResult.ChatsAffected} chat(s). Auto-unban at {expiryTime}.",
+                    $"User temporarily banned for {TimeSpanUtilities.FormatDurationDetailed(tempBanResult.Duration)} from {banResult.ChatsAffected} chat(s).",
                     Severity.Success);
 
                 await LoadUserDetailAsync();
