@@ -8,29 +8,29 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public interface ITelegramUserManagementService
 {
-    /// <summary>Gets all Telegram users.</summary>
+    /// <summary>Gets all Telegram users (used by WebAdminAccounts for account linking).</summary>
     Task<List<TelegramUserListItem>> GetAllUsersAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>Gets users filtered by specific chat IDs.</summary>
-    Task<List<TelegramUserListItem>> GetAllUsersAsync(List<long> chatIds, CancellationToken cancellationToken = default);
-
-    /// <summary>Gets users with any tags applied.</summary>
-    Task<List<TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>Gets all banned users.</summary>
-    Task<List<TelegramUserListItem>> GetBannedUsersAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>Gets banned users with detailed ban information.</summary>
-    Task<List<BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>Gets all trusted users.</summary>
-    Task<List<TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>Gets kicked users (removed from group but not banned).</summary>
-    Task<List<TelegramUserListItem>> GetKickedUsersAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Gets moderation queue statistics (pending reports, reviews).</summary>
     Task<ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Gets a page of users filtered by tab, search, and accessible chats.</summary>
+    Task<(List<TelegramUserListItem> Items, int TotalCount)> GetPagedUsersAsync(
+        UserListFilter filter, int skip, int take,
+        string? searchText, List<long>? chatIds,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Gets a page of banned users with full ban details.</summary>
+    Task<(List<BannedUserListItem> Items, int TotalCount)> GetPagedBannedUsersWithDetailsAsync(
+        int skip, int take, string? searchText,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Gets counts for all user tabs (5 parallel COUNT queries).</summary>
+    Task<UserTabCounts> GetUserTabCountsAsync(
+        List<long>? chatIds, string? searchText,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Gets detailed information for a specific user.</summary>
     Task<TelegramUserDetail?> GetUserDetailAsync(long telegramUserId, CancellationToken cancellationToken = default);

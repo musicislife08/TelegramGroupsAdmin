@@ -1,8 +1,10 @@
 @page "/users"
 @attribute [Authorize]
+@implements IDisposable
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Telegram.Models
 @inject ITelegramUserManagementService UserManagementService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISnackbar Snackbar
@@ -14,35 +16,19 @@
     <MudText Typo="Typo.h4" GutterBottom="true">Telegram Users</MudText>
     <MudText Typo="Typo.body1" Class="mb-4">Manage Telegram users across all monitored chats</MudText>
 
-    @* Search and Filter Bar *@
+    @* Search Bar *@
     <MudPaper Class="pa-4 mb-4" Elevation="1">
-        <MudStack Spacing="3">
-            <MudTextField @bind-Value="_searchText"
-                          Label="Search users"
-                          Placeholder="Search by name, username, or ID..."
-                          Variant="Variant.Outlined"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          Immediate="true"
-                          OnKeyUp="@((_) => ApplyFilters())"
-                          Clearable="true"
-                          OnClearButtonClick="@(() => { _searchText = string.Empty; ApplyFilters(); })" />
-
-            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-                <MudChip T="string"
-                         Text="@($"Total: {_allUsers.Count}")"
-                         Color="Color.Default"
-                         Size="Size.Small" />
-                @if (!string.IsNullOrWhiteSpace(_searchText))
-                {
-                    <MudChip T="string"
-                             Text="@($"Filtered: {_filteredCount}")"
-                             Color="Color.Primary"
-                             Size="Size.Small"
-                             OnClose="@(() => { _searchText = string.Empty; ApplyFilters(); })"/>
-                }
-            </MudStack>
-        </MudStack>
+        <MudTextField @bind-Value="_searchText"
+                      Label="Search users"
+                      Placeholder="Search by name, username, or ID..."
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Immediate="true"
+                      DebounceInterval="300"
+                      OnDebounceIntervalElapsed="OnSearchChanged"
+                      Clearable="true"
+                      OnClearButtonClick="@(() => { _searchText = string.Empty; OnSearchChanged(); })" />
     </MudPaper>
 
     @if (_loading)
@@ -51,14 +37,17 @@
     }
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6">
-        <MudTabPanel Text="Active" Icon="@Icons.Material.Filled.People" BadgeData="@FilteredActiveUsers.Count">
-            <MudTable Items="@FilteredActiveUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="Active" Icon="@Icons.Material.Filled.People" BadgeData="@_tabCounts.ActiveCount">
+            <MudTable T="TelegramUserListItem"
+                     @ref="_activeTable"
+                     ServerData="@LoadActiveServerDataAsync"
+                     Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.ChatCount)">Chats</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.WarningCount)">Warnings</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Last Seen</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="Status">Status</MudTableSortLabel></MudTh>
+                    <MudTh>Chats</MudTh>
+                    <MudTh>Warnings</MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -102,13 +91,16 @@
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Tagged" Icon="@Icons.Material.Filled.LocalOffer" BadgeData="@FilteredTaggedUsers.Count" BadgeColor="Color.Warning">
-            <MudTable Items="@FilteredTaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="Tagged" Icon="@Icons.Material.Filled.LocalOffer" BadgeData="@_tabCounts.TaggedCount" BadgeColor="Color.Warning">
+            <MudTable T="TelegramUserListItem"
+                     @ref="_taggedTable"
+                     ServerData="@LoadTaggedServerDataAsync"
+                     Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.WarningCount)">Warnings</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Last Seen</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="Status">Status</MudTableSortLabel></MudTh>
+                    <MudTh>Warnings</MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -132,15 +124,21 @@
                         </MudTooltip>
                     </MudTd>
                 </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="[25, 50, 100]" />
+                </PagerContent>
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Trusted" Icon="@Icons.Material.Filled.VerifiedUser" BadgeData="@FilteredTrustedUsers.Count" BadgeColor="Color.Success">
-            <MudTable Items="@FilteredTrustedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="Trusted" Icon="@Icons.Material.Filled.VerifiedUser" BadgeData="@_tabCounts.TrustedCount" BadgeColor="Color.Success">
+            <MudTable T="TelegramUserListItem"
+                     @ref="_trustedTable"
+                     ServerData="@LoadTrustedServerDataAsync"
+                     Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.ChatCount)">Chats</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Last Seen</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
+                    <MudTh>Chats</MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -160,11 +158,17 @@
                         </MudTooltip>
                     </MudTd>
                 </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="[25, 50, 100]" />
+                </PagerContent>
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Banned" Icon="@Icons.Material.Filled.Block" BadgeData="@FilteredBannedUsersWithDetails.Count" BadgeColor="Color.Error">
-            <MudTable Items="@FilteredBannedUsersWithDetails" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="Banned" Icon="@Icons.Material.Filled.Block" BadgeData="@_tabCounts.BannedCount" BadgeColor="Color.Error">
+            <MudTable T="BannedUserListItem"
+                     @ref="_bannedTable"
+                     ServerData="@LoadBannedServerDataAsync"
+                     Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Ban Date</MudTh>
@@ -243,17 +247,23 @@
                         }
                     </MudTd>
                 </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="[25, 50, 100]" />
+                </PagerContent>
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Kicked" Icon="@Icons.Material.Filled.PersonRemove" BadgeData="@FilteredKickedUsers.Count" BadgeColor="Color.Default">
+        <MudTabPanel Text="Kicked" Icon="@Icons.Material.Filled.PersonRemove" BadgeData="@_tabCounts.KickedCount" BadgeColor="Color.Default">
             <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
                 Users who were removed from the group but not banned. Typically from failed welcome verification or admin kicks.
             </MudText>
-            <MudTable Items="@FilteredKickedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+            <MudTable T="TelegramUserListItem"
+                     @ref="_kickedTable"
+                     ServerData="@LoadKickedServerDataAsync"
+                     Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Joined</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Joined</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -290,114 +300,135 @@
 @code {
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
 
-    private List<TelegramUserListItem> _allUsers = [];
-    private List<TelegramUserListItem> _taggedUsers = [];
-    private List<TelegramUserListItem> _trustedUsers = [];
-    private List<TelegramUserListItem> _bannedUsers = [];
-    private List<BannedUserListItem> _bannedUsersWithDetails = [];
-    private List<TelegramUserListItem> _kickedUsers = [];
+    // Table refs for server-side data reload
+    private MudTable<TelegramUserListItem> _activeTable = null!;
+    private MudTable<TelegramUserListItem> _taggedTable = null!;
+    private MudTable<TelegramUserListItem> _trustedTable = null!;
+    private MudTable<BannedUserListItem> _bannedTable = null!;
+    private MudTable<TelegramUserListItem> _kickedTable = null!;
+
+    private UserTabCounts _tabCounts = new();
+    private List<long>? _chatIds;
     private bool _loading = true;
-
-    // Search and filter state
     private string _searchText = string.Empty;
-    private int _filteredCount;
-
-    // Filtered lists (computed)
-    private List<TelegramUserListItem> FilteredAllUsers => FilterUsers(_allUsers);
-    private List<TelegramUserListItem> FilteredActiveUsers => FilterUsers(_allUsers.Where(u => !u.IsBanned).ToList());
-    private List<TelegramUserListItem> FilteredTaggedUsers => FilterUsers(_taggedUsers);
-    private List<TelegramUserListItem> FilteredTrustedUsers => FilterUsers(_trustedUsers);
-    private List<TelegramUserListItem> FilteredBannedUsers => FilterUsers(_bannedUsers);
-    private List<BannedUserListItem> FilteredBannedUsersWithDetails => FilterBannedUsers(_bannedUsersWithDetails);
-    private List<TelegramUserListItem> FilteredKickedUsers => FilterUsers(_kickedUsers);
+    private CancellationTokenSource _searchCts = new();
 
     protected override async Task OnInitializedAsync()
     {
         if (WebUser is null) return;
 
-        await LoadUsersAsync();
+        // Load accessible chats once
+        var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
+            WebUser.Id,
+            WebUser.PermissionLevel);
+        _chatIds = accessibleChats.Select(c => c.Identity.Id).ToList();
+
+        // Empty list means all chats (GlobalAdmin/Owner) — normalize to null
+        if (_chatIds.Count == 0)
+            _chatIds = null;
+
+        // Load tab counts (tables load lazily via ServerData)
+        _tabCounts = await UserManagementService.GetUserTabCountsAsync(_chatIds, null);
+        _loading = false;
     }
 
-    private List<TelegramUserListItem> FilterUsers(List<TelegramUserListItem> users)
+    // ============================================================================
+    // ServerData Callbacks
+    // ============================================================================
+
+    private Task<TableData<TelegramUserListItem>> LoadActiveServerDataAsync(TableState state, CancellationToken ct)
+        => LoadUsersServerDataAsync(UserListFilter.Active, state, ct);
+
+    private Task<TableData<TelegramUserListItem>> LoadTaggedServerDataAsync(TableState state, CancellationToken ct)
+        => LoadUsersServerDataAsync(UserListFilter.Tagged, state, ct);
+
+    private Task<TableData<TelegramUserListItem>> LoadTrustedServerDataAsync(TableState state, CancellationToken ct)
+        => LoadUsersServerDataAsync(UserListFilter.Trusted, state, ct);
+
+    private Task<TableData<TelegramUserListItem>> LoadKickedServerDataAsync(TableState state, CancellationToken ct)
+        => LoadUsersServerDataAsync(UserListFilter.Kicked, state, ct);
+
+    private async Task<TableData<TelegramUserListItem>> LoadUsersServerDataAsync(
+        UserListFilter filter, TableState state, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_searchText))
-            return users;
-
-        var search = _searchText.Trim().ToLowerInvariant();
-
-        return users.Where(u =>
-            (u.Username?.ToLowerInvariant().Contains(search) ?? false) ||
-            (u.FirstName?.ToLowerInvariant().Contains(search) ?? false) ||
-            (u.LastName?.ToLowerInvariant().Contains(search) ?? false) ||
-            u.TelegramUserId.ToString().Contains(search)
-        ).ToList();
-    }
-
-    private List<BannedUserListItem> FilterBannedUsers(List<BannedUserListItem> users)
-    {
-        if (string.IsNullOrWhiteSpace(_searchText))
-            return users;
-
-        var search = _searchText.Trim().ToLowerInvariant();
-
-        return users.Where(u =>
-            (u.Username?.ToLowerInvariant().Contains(search) ?? false) ||
-            (u.FirstName?.ToLowerInvariant().Contains(search) ?? false) ||
-            (u.LastName?.ToLowerInvariant().Contains(search) ?? false) ||
-            u.TelegramUserId.ToString().Contains(search) ||
-            (u.BannedBy?.ToLowerInvariant().Contains(search) ?? false) ||
-            (u.BanReason?.ToLowerInvariant().Contains(search) ?? false)
-        ).ToList();
-    }
-
-    private void ApplyFilters()
-    {
-        // Update filtered count (use "Active" tab as source of truth)
-        _filteredCount = FilteredActiveUsers.Count;
-        StateHasChanged();
-    }
-
-    private async Task LoadUsersAsync()
-    {
-        _loading = true;
-        StateHasChanged();
-
         try
         {
-            // Get accessible chat IDs for filtering
-            var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
-                WebUser!.Id,
-                WebUser.PermissionLevel);
-            var chatIds = accessibleChats.Select(c => c.Identity.Id).ToList();
+            var (items, totalCount) = await UserManagementService.GetPagedUsersAsync(
+                filter,
+                skip: state.Page * state.PageSize,
+                take: state.PageSize,
+                searchText: string.IsNullOrWhiteSpace(_searchText) ? null : _searchText,
+                chatIds: _chatIds,
+                sortLabel: state.SortLabel,
+                sortDescending: state.SortDirection == SortDirection.Descending,
+                cancellationToken: cancellationToken);
 
-            // Load all user lists in parallel (filtered by accessible chats for Admin users)
-            var allUsersTask = UserManagementService.GetAllUsersAsync(chatIds);
-            var taggedTask = UserManagementService.GetTaggedUsersAsync();
-            var trustedTask = UserManagementService.GetTrustedUsersAsync();
-            var bannedTask = UserManagementService.GetBannedUsersAsync();
-            var bannedWithDetailsTask = UserManagementService.GetBannedUsersWithDetailsAsync();
-            var kickedTask = UserManagementService.GetKickedUsersAsync();
-
-            await Task.WhenAll(allUsersTask, taggedTask, trustedTask, bannedTask, bannedWithDetailsTask, kickedTask);
-
-            // Exclude system user (telegram_user_id=0) from all lists
-            _allUsers = (await allUsersTask).Where(u => u.TelegramUserId != 0).ToList();
-            _taggedUsers = (await taggedTask).Where(u => u.TelegramUserId != 0).ToList();
-            _trustedUsers = (await trustedTask).Where(u => u.TelegramUserId != 0).ToList();
-            _bannedUsers = (await bannedTask).Where(u => u.TelegramUserId != 0).ToList();
-            _bannedUsersWithDetails = (await bannedWithDetailsTask).Where(u => u.TelegramUserId != 0).ToList();
-            _kickedUsers = (await kickedTask).Where(u => u.TelegramUserId != 0).ToList();
+            return new TableData<TelegramUserListItem> { Items = items, TotalItems = totalCount };
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading users: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _loading = false;
-            StateHasChanged();
+            return new TableData<TelegramUserListItem> { Items = [], TotalItems = 0 };
         }
     }
+
+    private async Task<TableData<BannedUserListItem>> LoadBannedServerDataAsync(TableState state, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var (items, totalCount) = await UserManagementService.GetPagedBannedUsersWithDetailsAsync(
+                skip: state.Page * state.PageSize,
+                take: state.PageSize,
+                searchText: string.IsNullOrWhiteSpace(_searchText) ? null : _searchText,
+                sortLabel: state.SortLabel,
+                sortDescending: state.SortDirection == SortDirection.Descending,
+                cancellationToken: cancellationToken);
+
+            return new TableData<BannedUserListItem> { Items = items, TotalItems = totalCount };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading banned users: {ex.Message}", Severity.Error);
+            return new TableData<BannedUserListItem> { Items = [], TotalItems = 0 };
+        }
+    }
+
+    // ============================================================================
+    // Search
+    // ============================================================================
+
+    private async void OnSearchChanged()
+    {
+        // Cancel any previous search
+        await _searchCts.CancelAsync();
+        _searchCts.Dispose();
+        _searchCts = new CancellationTokenSource();
+
+        try
+        {
+            // Refresh tab counts with search filter
+            _tabCounts = await UserManagementService.GetUserTabCountsAsync(
+                _chatIds,
+                string.IsNullOrWhiteSpace(_searchText) ? null : _searchText,
+                _searchCts.Token);
+
+            // Reload all visible tables
+            await ReloadAllTablesAsync();
+            StateHasChanged();
+        }
+        catch (OperationCanceledException)
+        {
+            return; // Debounced search superseded by a newer keystroke
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error searching: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ============================================================================
+    // Actions
+    // ============================================================================
 
     private async Task ToggleTrust(TelegramUserListItem user)
     {
@@ -411,7 +442,7 @@
             if (success)
             {
                 Snackbar.Add($"Successfully {action}ed {user.DisplayName}", Severity.Success);
-                await LoadUsersAsync();
+                await RefreshAfterActionAsync();
             }
             else
             {
@@ -428,7 +459,6 @@
     {
         try
         {
-            // Show confirmation dialog
             var confirmed = await DialogService.ShowMessageBoxAsync(
                 "Confirm Unban",
                 $"Are you sure you want to unban {user.DisplayName}?",
@@ -440,13 +470,12 @@
 
             var executor = WebUser!.ToActor();
 
-            // Unban the user
             var success = await UserManagementService.UnbanAsync(user.TelegramUserId, executor, reason: "Unbanned from web interface");
 
             if (success)
             {
                 Snackbar.Add($"Successfully unbanned {user.DisplayName}", Severity.Success);
-                await LoadUsersAsync();
+                await RefreshAfterActionAsync();
             }
             else
             {
@@ -477,11 +506,32 @@
         var dialog = await DialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
         var result = await dialog.Result;
 
-        // Reload users if dialog made changes
         if (result is { Canceled: false })
         {
-            await LoadUsersAsync();
+            await RefreshAfterActionAsync();
         }
+    }
+
+    // ============================================================================
+    // Helpers
+    // ============================================================================
+
+    private async Task RefreshAfterActionAsync()
+    {
+        _tabCounts = await UserManagementService.GetUserTabCountsAsync(
+            _chatIds,
+            string.IsNullOrWhiteSpace(_searchText) ? null : _searchText);
+        await ReloadAllTablesAsync();
+        StateHasChanged();
+    }
+
+    private async Task ReloadAllTablesAsync()
+    {
+        if (_activeTable != null) await _activeTable.ReloadServerData();
+        if (_taggedTable != null) await _taggedTable.ReloadServerData();
+        if (_trustedTable != null) await _trustedTable.ReloadServerData();
+        if (_bannedTable != null) await _bannedTable.ReloadServerData();
+        if (_kickedTable != null) await _kickedTable.ReloadServerData();
     }
 
     private static Color GetStatusColor(TelegramUserStatus status) => status switch
@@ -503,4 +553,9 @@
         TelegramUserStatus.Clean => "🔵",
         _ => ""
     };
+
+    public void Dispose()
+    {
+        _searchCts.Dispose();
+    }
 }

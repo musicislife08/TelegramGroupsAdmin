@@ -232,9 +232,9 @@ public class UsersTests : SharedAuthenticatedTestBase
         // Search for "Developer"
         await _usersPage.SearchUsersAsync("Developer");
 
-        // Wait for the filtered chip to appear (Blazor re-renders asynchronously)
-        var filteredChip = Page.Locator(".mud-chip:has-text('Filtered:')");
-        await Expect(filteredChip).ToBeVisibleAsync(new() { Timeout = 5000 });
+        // Wait for the filtered user to appear in the table (server-side search with debounce)
+        var developerRow = Page.Locator(".mud-table-body tr:has-text('Developer')");
+        await Expect(developerRow).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         var displayedNames = await _usersPage.GetUserDisplayNamesAsync();
         Assert.That(displayedNames.Any(n => n.Contains("Developer")), Is.True,
@@ -285,18 +285,20 @@ public class UsersTests : SharedAuthenticatedTestBase
 
         // Search and then clear
         await _usersPage.SearchUsersAsync("Alpha");
+
+        // Wait for search results to load
+        var alphaRow = Page.Locator(".mud-table-body tr:has-text('Alpha')");
+        await Expect(alphaRow).ToBeVisibleAsync(new() { Timeout = 10000 });
+
         await _usersPage.ClearSearchAsync();
+
+        // Wait for table to reload with all users
+        await _usersPage.WaitForLoadAsync();
 
         // Assert - all users visible again
         var finalCount = await _usersPage.GetTotalUserCountAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(finalCount, Is.EqualTo(initialCount),
-                      "Should show all users when search is cleared");
-
-            Assert.That(await _usersPage.IsFilteredChipVisibleAsync(), Is.False,
-                "Filtered chip should not be visible when search is cleared");
-        }
+        Assert.That(finalCount, Is.EqualTo(initialCount),
+            "Should show all users when search is cleared");
     }
 
     [Test]
