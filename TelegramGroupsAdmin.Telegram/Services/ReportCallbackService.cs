@@ -272,6 +272,7 @@ public class ReportCallbackService(
             new BanIntent
             {
                 User = user,
+                Chat = chat,
                 Executor = executor,
                 Reason = "Banned via report review",
                 MessageId = report.MessageId

@@ -524,8 +524,9 @@
             if (args.Alert.ReviewedAt.HasValue)
             {
                 var handledBy = args.Alert.ReviewedByEmail ?? "another admin";
+                var verdict = args.Alert.Verdict?.ToString() ?? "unknown";
                 var time = args.Alert.ReviewedAt.Value.UtcDateTime.ToString("g");
-                Snackbar.Add($"Already handled by {handledBy} at {time} UTC", Severity.Warning);
+                Snackbar.Add($"Already handled by {handledBy} ({verdict}) at {time} UTC", Severity.Warning);
                 await LoadReportsAsync();
                 return;
             }
@@ -607,6 +608,17 @@
 
         try
         {
+            // Guard: check if already handled by another admin (stale UI)
+            if (args.ExamFailure.ReviewedAt.HasValue)
+            {
+                var handledBy = args.ExamFailure.ReviewedBy ?? "another admin";
+                var action = args.ExamFailure.ActionTaken ?? "unknown";
+                var time = args.ExamFailure.ReviewedAt.Value.UtcDateTime.ToString("g");
+                Snackbar.Add($"Already handled by {handledBy} ({action}) at {time} UTC", Severity.Warning);
+                await LoadReportsAsync();
+                return;
+            }
+
             var executor = WebUser!.ToActor();
 
             switch (args.Action)
@@ -625,12 +637,16 @@
                         return;
                     }
 
-                    await ReportsRepository.UpdateStatusAsync(
-                        args.ExamFailure.Id,
-                        ReportStatus.Reviewed,
-                        WebUser!.DisplayName,
-                        "approve",
-                        "Manually approved after exam failure");
+                    if (!await ReportsRepository.TryUpdateStatusAsync(
+                            args.ExamFailure.Id,
+                            ReportStatus.Reviewed,
+                            WebUser!.DisplayName,
+                            "approve",
+                            "Manually approved after exam failure"))
+                    {
+                        await ShowAlreadyHandledSnackbarAsync(args.ExamFailure.Id);
+                        return;
+                    }
 
                     Snackbar.Add("User approved - permissions restored", Severity.Success);
                     break;
@@ -648,12 +664,16 @@
                         return;
                     }
 
-                    await ReportsRepository.UpdateStatusAsync(
-                        args.ExamFailure.Id,
-                        ReportStatus.Reviewed,
-                        WebUser!.DisplayName,
-                        "deny",
-                        "Denied entry after exam review");
+                    if (!await ReportsRepository.TryUpdateStatusAsync(
+                            args.ExamFailure.Id,
+                            ReportStatus.Reviewed,
+                            WebUser!.DisplayName,
+                            "deny",
+                            "Denied entry after exam review"))
+                    {
+                        await ShowAlreadyHandledSnackbarAsync(args.ExamFailure.Id);
+                        return;
+                    }
 
                     Snackbar.Add("User denied - they can re-join to try again", Severity.Warning);
                     break;
@@ -671,12 +691,16 @@
                         return;
                     }
 
-                    await ReportsRepository.UpdateStatusAsync(
-                        args.ExamFailure.Id,
-                        ReportStatus.Reviewed,
-                        WebUser!.DisplayName,
-                        "deny_ban",
-                        "Denied and banned after exam review");
+                    if (!await ReportsRepository.TryUpdateStatusAsync(
+                            args.ExamFailure.Id,
+                            ReportStatus.Reviewed,
+                            WebUser!.DisplayName,
+                            "deny_ban",
+                            "Denied and banned after exam review"))
+                    {
+                        await ShowAlreadyHandledSnackbarAsync(args.ExamFailure.Id);
+                        return;
+                    }
 
                     Snackbar.Add("User denied and banned globally", Severity.Error);
                     break;
