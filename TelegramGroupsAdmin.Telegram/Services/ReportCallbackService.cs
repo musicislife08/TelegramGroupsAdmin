@@ -48,15 +48,16 @@ public sealed class ReportCallbackService(
             return;
         }
 
-        using var scope = scopeFactory.CreateScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
         var callbackContextRepo = scope.ServiceProvider.GetRequiredService<IReportCallbackContextRepository>();
+        var dmService = scope.ServiceProvider.GetRequiredService<IBotDmService>();
 
         // Look up callback context from database
         var context = await callbackContextRepo.GetByIdAsync(contextId, cancellationToken);
         if (context == null)
         {
             logger.LogWarning("Review callback context {ContextId} not found (button expired)", contextId);
-            await UpdateMessageWithResultAsync(callbackQuery, "Button expired - please use web UI", cancellationToken);
+            await UpdateMessageWithResultAsync(callbackQuery, "Button expired - please use web UI", dmService, cancellationToken);
             return;
         }
 
@@ -79,7 +80,7 @@ public sealed class ReportCallbackService(
         var result = await RouteToServiceAsync(reportType, reviewId, actionInt, executor, cancellationToken);
 
         // Update DM message to show result (removes buttons)
-        await UpdateMessageWithResultAsync(callbackQuery, result.Message, cancellationToken);
+        await UpdateMessageWithResultAsync(callbackQuery, result.Message, dmService, cancellationToken);
 
         // Delete callback context (the service handles report-level cleanup)
         await callbackContextRepo.DeleteAsync(contextId, cancellationToken);
@@ -162,13 +163,11 @@ public sealed class ReportCallbackService(
     private async Task UpdateMessageWithResultAsync(
         CallbackQuery callbackQuery,
         string resultMessage,
+        IBotDmService dmService,
         CancellationToken cancellationToken)
     {
         if (callbackQuery.Message == null)
             return;
-
-        await using var dmScope = scopeFactory.CreateAsyncScope();
-        var dmService = dmScope.ServiceProvider.GetRequiredService<IBotDmService>();
 
         try
         {

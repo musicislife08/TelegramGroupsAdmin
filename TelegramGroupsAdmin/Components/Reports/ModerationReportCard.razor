@@ -142,9 +142,6 @@
     public required Report Report { get; set; }
 
     [Parameter]
-    public EventCallback OnActionCompleted { get; set; }
-
-    [Parameter]
     public EventCallback<(Report Report, ReportAction Action)> OnAction { get; set; }
 
     private MessageRecord? _message;

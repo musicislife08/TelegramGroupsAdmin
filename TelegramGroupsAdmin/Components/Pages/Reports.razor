@@ -396,7 +396,10 @@
             ProfileScanAction.Allow => await ReportActionsService.HandleProfileScanAllowAsync(args.Alert.Id, executor, _cts.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
-        Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Warning);
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
         await LoadReportsAsync();
     }
 
@@ -411,7 +414,10 @@
             ReportAction.Dismiss => await ReportActionsService.HandleContentDismissAsync(args.Report.Id, executor, ct: _cts.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
-        Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Warning);
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
         await LoadReportsAsync();
     }
 
@@ -425,7 +431,10 @@
             ImpersonationAction.Trust => await ReportActionsService.HandleImpersonationTrustAsync(args.Alert.Id, executor, _cts.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
-        Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Warning);
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
         await LoadReportsAsync();
     }
 
@@ -439,7 +448,10 @@
             ExamAction.DenyAndBan => await ReportActionsService.HandleExamDenyAndBanAsync(args.ExamFailure.Id, executor, _cts.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
-        Snackbar.Add(result.Message, result.Success ? Severity.Success : Severity.Warning);
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
         await LoadReportsAsync();
     }
 

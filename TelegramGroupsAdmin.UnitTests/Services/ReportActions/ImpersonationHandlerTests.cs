@@ -112,6 +112,7 @@ public class ImpersonationHandlerTests
         Assert.That(result.Success, Is.False);
         Assert.That(result.Message, Does.Contain("Already handled"));
         Assert.That(result.Message, Does.Contain("other@test.com"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     [Test]
@@ -188,6 +189,7 @@ public class ImpersonationHandlerTests
         var result = await _handler.DismissAsync(TestAlertId, TestExecutor, CancellationToken.None);
 
         Assert.That(result.Success, Is.False);
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     #endregion
@@ -244,6 +246,122 @@ public class ImpersonationHandlerTests
 
         Assert.That(result.Success, Is.False);
         Assert.That(result.Message, Does.Contain("Cannot trust"));
+    }
+
+    [Test]
+    public async Task TrustAsync_AlreadyHandled_ReturnsFailure()
+    {
+        var alert = CreateTestAlert(reviewed: true);
+        _mockReportsRepo.GetImpersonationAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+
+        var result = await _handler.TrustAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    #endregion
+
+    #region Race Condition Tests
+
+    [Test]
+    public async Task ConfirmAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var alert = CreateTestAlert();
+        _mockModerationService.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestAlert(reviewed: true);
+        _mockReportsRepo.GetImpersonationAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert, handled);
+
+        var result = await _handler.ConfirmAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    [Test]
+    public async Task DismissAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var alert = CreateTestAlert();
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestAlert(reviewed: true);
+        _mockReportsRepo.GetImpersonationAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert, handled);
+
+        var result = await _handler.DismissAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    [Test]
+    public async Task TrustAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var alert = CreateTestAlert();
+        _mockModerationService.TrustUserAsync(Arg.Any<TrustIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestAlert(reviewed: true);
+        _mockReportsRepo.GetImpersonationAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert, handled);
+
+        var result = await _handler.TrustAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    #endregion
+
+    #region Cleanup Tests
+
+    [Test]
+    public async Task DismissAsync_Success_CleansUpCallbackContext()
+    {
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetImpersonationAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+
+        await _handler.DismissAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task TrustAsync_Success_CleansUpCallbackContext()
+    {
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetImpersonationAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _mockModerationService.TrustUserAsync(Arg.Any<TrustIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        await _handler.TrustAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
     }
 
     #endregion

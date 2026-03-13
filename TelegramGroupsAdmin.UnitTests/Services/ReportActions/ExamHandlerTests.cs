@@ -92,6 +92,7 @@ public class ExamHandlerTests
         Assert.That(result.Success, Is.False);
         Assert.That(result.Message, Does.Contain("Already handled"));
         Assert.That(result.Message, Does.Contain("other@test.com"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     [Test]
@@ -143,6 +144,7 @@ public class ExamHandlerTests
         var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
 
         Assert.That(result.Success, Is.False);
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     [Test]
@@ -194,6 +196,7 @@ public class ExamHandlerTests
         var result = await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
 
         Assert.That(result.Success, Is.False);
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     [Test]
@@ -218,7 +221,7 @@ public class ExamHandlerTests
     #region Race Condition Tests
 
     [Test]
-    public async Task ApproveAsync_RaceCondition_TryUpdateFails_ReturnsFailure()
+    public async Task ApproveAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
     {
         var exam = CreateTestExam();
         _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
@@ -242,6 +245,99 @@ public class ExamHandlerTests
 
         Assert.That(result.Success, Is.False);
         Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    [Test]
+    public async Task DenyAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var exam = CreateTestExam();
+        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+            .Returns(exam);
+        _mockExamFlowService.DenyExamFailureAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
+                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestExam(reviewed: true);
+        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+            .Returns(exam, handled);
+
+        var result = await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    [Test]
+    public async Task DenyAndBanAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var exam = CreateTestExam();
+        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+            .Returns(exam);
+        _mockExamFlowService.DenyAndBanExamFailureAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
+                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestExam(reviewed: true);
+        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+            .Returns(exam, handled);
+
+        var result = await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    #endregion
+
+    #region Cleanup Tests
+
+    [Test]
+    public async Task DenyAsync_Success_CleansUpCallbackContext()
+    {
+        var exam = CreateTestExam();
+        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+            .Returns(exam);
+        _mockExamFlowService.DenyExamFailureAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
+                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        await _handler.DenyAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteByReportIdAsync(TestExamId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task DenyAndBanAsync_Success_CleansUpCallbackContext()
+    {
+        var exam = CreateTestExam();
+        _mockReportsRepo.GetExamFailureAsync(TestExamId, Arg.Any<CancellationToken>())
+            .Returns(exam);
+        _mockExamFlowService.DenyAndBanExamFailureAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(),
+                Arg.Any<Actor>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        await _handler.DenyAndBanAsync(TestExamId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteByReportIdAsync(TestExamId, Arg.Any<CancellationToken>());
     }
 
     #endregion

@@ -101,6 +101,7 @@ public class ProfileScanHandlerTests
 
         Assert.That(result.Success, Is.False);
         Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     [Test]
@@ -202,6 +203,7 @@ public class ProfileScanHandlerTests
         var result = await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
 
         Assert.That(result.Success, Is.False);
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     #endregion
@@ -286,6 +288,7 @@ public class ProfileScanHandlerTests
         var result = await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
 
         Assert.That(result.Success, Is.False);
+        Assert.That(result.IsAlreadyHandled, Is.True);
     }
 
     [Test]
@@ -306,6 +309,136 @@ public class ProfileScanHandlerTests
         await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestAlertId, ReportStatus.Dismissed, Arg.Any<string>(),
             "allow", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Race Condition Tests
+
+    [Test]
+    public async Task BanAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var alert = CreateTestAlert();
+        _mockModerationService.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestAlert(reviewed: true);
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert, handled);
+
+        var result = await _handler.BanAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    [Test]
+    public async Task KickAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var alert = CreateTestAlert();
+        _mockModerationService.KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestAlert(reviewed: true);
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert, handled);
+
+        var result = await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    [Test]
+    public async Task AllowAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var alert = CreateTestAlert();
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns((WelcomeResponse?)null);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.Admitted);
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handled = CreateTestAlert(reviewed: true);
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert, handled);
+
+        var result = await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    #endregion
+
+    #region Cleanup Tests
+
+    [Test]
+    public async Task BanAsync_Success_CleansUpCallbackContext()
+    {
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _mockModerationService.BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 1 });
+
+        await _handler.BanAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task KickAsync_Success_CleansUpCallbackContext()
+    {
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _mockModerationService.KickUserFromChatAsync(Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AllowAsync_Success_CleansUpCallbackContext()
+    {
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns((WelcomeResponse?)null);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.Admitted);
+
+        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        await _mockCallbackContextRepo.Received(1)
+            .DeleteByReportIdAsync(TestAlertId, Arg.Any<CancellationToken>());
     }
 
     #endregion

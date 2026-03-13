@@ -25,13 +25,16 @@ internal sealed class ProfileScanHandler(
 {
     public async Task<ReviewActionResult> BanAsync(long alertId, Actor executor, CancellationToken ct)
     {
-        var (alert, error) = await FetchAlertAsync(alertId, ct);
-        if (error != null) return error;
+        var fetch = await FetchAlertAsync(alertId, ct);
+        if (!fetch.Success)
+            return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
+
+        var alert = fetch.Value!;
 
         var result = await moderationService.BanUserAsync(
             new BanIntent
             {
-                User = alert!.User,
+                User = alert.User,
                 Executor = executor,
                 Reason = $"Profile scan alert #{alertId} confirmed \u2014 score {alert.Score:F1}",
                 Chat = alert.Chat
@@ -41,9 +44,17 @@ internal sealed class ProfileScanHandler(
         if (!result.Success)
             return new ReviewActionResult(false, $"Ban failed: {result.ErrorMessage}");
 
-        var statusResult = await UpdateStatusAtomicallyAsync(
-            alertId, ReportStatus.Reviewed, executor, "ban",
-            $"Banned after profile scan review (affected {result.ChatsAffected} chats)", ct);
+        var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
+            reportsRepository, alertId, ReportStatus.Reviewed, executor, "ban",
+            $"Banned after profile scan review (affected {result.ChatsAffected} chats)",
+            async () =>
+            {
+                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
+                return current?.ReviewedAt.HasValue == true
+                    ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
+                    : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+            },
+            ct);
         if (statusResult != null) return statusResult;
 
         logger.LogInformation("Profile scan alert {AlertId}: User {User} banned by {Executor}",
@@ -59,10 +70,13 @@ internal sealed class ProfileScanHandler(
 
     public async Task<ReviewActionResult> KickAsync(long alertId, Actor executor, CancellationToken ct)
     {
-        var (alert, error) = await FetchAlertAsync(alertId, ct);
-        if (error != null) return error;
+        var fetch = await FetchAlertAsync(alertId, ct);
+        if (!fetch.Success)
+            return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
-        if (alert!.Chat.Id != 0)
+        var alert = fetch.Value!;
+
+        if (alert.Chat.Id != 0)
         {
             var result = await moderationService.KickUserFromChatAsync(
                 new KickIntent
@@ -83,8 +97,16 @@ internal sealed class ProfileScanHandler(
             ? "Kick not applicable (global alert)"
             : "Kicked from chat after review";
 
-        var statusResult = await UpdateStatusAtomicallyAsync(
-            alertId, ReportStatus.Reviewed, executor, "kick", notes, ct);
+        var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
+            reportsRepository, alertId, ReportStatus.Reviewed, executor, "kick", notes,
+            async () =>
+            {
+                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
+                return current?.ReviewedAt.HasValue == true
+                    ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
+                    : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+            },
+            ct);
         if (statusResult != null) return statusResult;
 
         logger.LogInformation("Profile scan alert {AlertId}: User {User} kicked by {Executor}",
@@ -101,12 +123,15 @@ internal sealed class ProfileScanHandler(
 
     public async Task<ReviewActionResult> AllowAsync(long alertId, Actor executor, CancellationToken ct)
     {
-        var (alert, error) = await FetchAlertAsync(alertId, ct);
-        if (error != null) return error;
+        var fetch = await FetchAlertAsync(alertId, ct);
+        if (!fetch.Success)
+            return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
+
+        var alert = fetch.Value!;
 
         // If user was kicked by welcome timeout, just close the report
         var welcomeResponse = await welcomeResponsesRepository.GetByUserAndChatAsync(
-            alert!.User.Id, alert.Chat.Id, ct);
+            alert.User.Id, alert.Chat.Id, ct);
 
         string message;
         if (welcomeResponse is { Response: Models.WelcomeResponseType.Timeout })
@@ -131,9 +156,17 @@ internal sealed class ProfileScanHandler(
                 : "User allowed \u2014 awaiting welcome gate completion";
         }
 
-        var statusResult = await UpdateStatusAtomicallyAsync(
-            alertId, ReportStatus.Dismissed, executor, "allow",
-            "User allowed after profile scan review", ct);
+        var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
+            reportsRepository, alertId, ReportStatus.Dismissed, executor, "allow",
+            "User allowed after profile scan review",
+            async () =>
+            {
+                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
+                return current?.ReviewedAt.HasValue == true
+                    ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
+                    : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+            },
+            ct);
         if (statusResult != null) return statusResult;
 
         await CleanupSiblingAlertsAsync(alert, "Allow", ct);
@@ -142,45 +175,18 @@ internal sealed class ProfileScanHandler(
         return new ReviewActionResult(true, message, ActionName: "Allow");
     }
 
-    private async Task<(ProfileScanAlertRecord? Alert, ReviewActionResult? Error)> FetchAlertAsync(
-        long alertId, CancellationToken ct)
+    private async Task<FetchResult<ProfileScanAlertRecord>> FetchAlertAsync(long alertId, CancellationToken ct)
     {
         var alert = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
         if (alert == null)
-            return (null, new ReviewActionResult(false, $"Profile scan alert {alertId} not found"));
+            return FetchResult<ProfileScanAlertRecord>.Fail($"Profile scan alert {alertId} not found");
 
-        if (alert.ReviewedAt.HasValue)
-        {
-            var handledBy = alert.ReviewedByEmail ?? "another admin";
-            var action = alert.ActionTaken ?? "unknown";
-            var time = alert.ReviewedAt.Value.UtcDateTime.ToString("g");
-            return (null, new ReviewActionResult(false,
-                $"Already handled by {handledBy} ({action}) at {time} UTC"));
-        }
+        var alreadyHandled = ReportStatusHelper.CheckAlreadyHandled(
+            alert.ReviewedByEmail, alert.ActionTaken, alert.ReviewedAt);
+        if (alreadyHandled != null)
+            return FetchResult<ProfileScanAlertRecord>.Handled(alreadyHandled.Message);
 
-        return (alert, null);
-    }
-
-    private async Task<ReviewActionResult?> UpdateStatusAtomicallyAsync(
-        long alertId, ReportStatus status, Actor executor, string actionTaken, string notes, CancellationToken ct)
-    {
-        var updated = await reportsRepository.TryUpdateStatusAsync(
-            alertId, status, executor.GetDisplayText(), actionTaken, notes, ct);
-
-        if (updated) return null;
-
-        // Race condition: re-fetch for attribution
-        var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
-        if (current?.ReviewedAt.HasValue == true)
-        {
-            var handledBy = current.ReviewedByEmail ?? "another admin";
-            var action = current.ActionTaken ?? "unknown";
-            var time = current.ReviewedAt.Value.UtcDateTime.ToString("g");
-            return new ReviewActionResult(false,
-                $"Already handled by {handledBy} ({action}) at {time} UTC");
-        }
-
-        return new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+        return FetchResult<ProfileScanAlertRecord>.Ok(alert);
     }
 
     private async Task CleanupSiblingAlertsAsync(ProfileScanAlertRecord alert, string actionName, CancellationToken ct)

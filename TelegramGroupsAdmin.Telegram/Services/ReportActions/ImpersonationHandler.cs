@@ -22,13 +22,16 @@ internal sealed class ImpersonationHandler(
 {
     public async Task<ReviewActionResult> ConfirmAsync(long alertId, Actor executor, CancellationToken ct)
     {
-        var (alert, error) = await FetchAlertAsync(alertId, ct);
-        if (error != null) return error;
+        var fetch = await FetchAlertAsync(alertId, ct);
+        if (!fetch.Success)
+            return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
+
+        var alert = fetch.Value!;
 
         var result = await moderationService.BanUserAsync(
             new BanIntent
             {
-                User = alert!.SuspectedUser,
+                User = alert.SuspectedUser,
                 Executor = executor,
                 Reason = $"Impersonation alert #{alertId} confirmed - impersonating {alert.TargetUser.DisplayName}",
                 Chat = alert.Chat
@@ -38,9 +41,17 @@ internal sealed class ImpersonationHandler(
         if (!result.Success)
             return new ReviewActionResult(false, $"Ban failed: {result.ErrorMessage}");
 
-        var statusResult = await UpdateStatusAtomicallyAsync(
-            alertId, ReportStatus.Reviewed, executor, "confirm",
-            $"Confirmed impersonation, banned from {result.ChatsAffected} chats", ct);
+        var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
+            reportsRepository, alertId, ReportStatus.Reviewed, executor, "confirm",
+            $"Confirmed impersonation, banned from {result.ChatsAffected} chats",
+            async () =>
+            {
+                var current = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
+                return current?.ReviewedAt.HasValue == true
+                    ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.Verdict?.ToString(), current.ReviewedAt)
+                    : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+            },
+            ct);
         if (statusResult != null) return statusResult;
 
         logger.LogInformation("Impersonation alert {AlertId}: User {User} banned as scammer by {Executor}",
@@ -55,12 +66,21 @@ internal sealed class ImpersonationHandler(
 
     public async Task<ReviewActionResult> DismissAsync(long alertId, Actor executor, CancellationToken ct)
     {
-        var (alert, error) = await FetchAlertAsync(alertId, ct);
-        if (error != null) return error;
+        var fetch = await FetchAlertAsync(alertId, ct);
+        if (!fetch.Success)
+            return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
-        var statusResult = await UpdateStatusAtomicallyAsync(
-            alertId, ReportStatus.Dismissed, executor, "dismiss",
-            "Dismissed as false positive", ct);
+        var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
+            reportsRepository, alertId, ReportStatus.Dismissed, executor, "dismiss",
+            "Dismissed as false positive",
+            async () =>
+            {
+                var current = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
+                return current?.ReviewedAt.HasValue == true
+                    ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.Verdict?.ToString(), current.ReviewedAt)
+                    : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+            },
+            ct);
         if (statusResult != null) return statusResult;
 
         logger.LogInformation("Impersonation alert {AlertId} dismissed by {Executor}",
@@ -73,13 +93,16 @@ internal sealed class ImpersonationHandler(
 
     public async Task<ReviewActionResult> TrustAsync(long alertId, Actor executor, CancellationToken ct)
     {
-        var (alert, error) = await FetchAlertAsync(alertId, ct);
-        if (error != null) return error;
+        var fetch = await FetchAlertAsync(alertId, ct);
+        if (!fetch.Success)
+            return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
+
+        var alert = fetch.Value!;
 
         var result = await moderationService.TrustUserAsync(
             new TrustIntent
             {
-                User = alert!.SuspectedUser,
+                User = alert.SuspectedUser,
                 Executor = executor,
                 Reason = $"Trusted after impersonation review #{alertId}"
             },
@@ -88,9 +111,17 @@ internal sealed class ImpersonationHandler(
         if (!result.Success)
             return new ReviewActionResult(false, $"Trust failed: {result.ErrorMessage}");
 
-        var statusResult = await UpdateStatusAtomicallyAsync(
-            alertId, ReportStatus.Dismissed, executor, "trust",
-            "User trusted - not impersonation", ct);
+        var statusResult = await ReportStatusHelper.TryUpdateStatusAsync(
+            reportsRepository, alertId, ReportStatus.Dismissed, executor, "trust",
+            "User trusted - not impersonation",
+            async () =>
+            {
+                var current = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
+                return current?.ReviewedAt.HasValue == true
+                    ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.Verdict?.ToString(), current.ReviewedAt)
+                    : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+            },
+            ct);
         if (statusResult != null) return statusResult;
 
         logger.LogInformation("Impersonation alert {AlertId}: User {User} trusted by {Executor}",
@@ -103,44 +134,17 @@ internal sealed class ImpersonationHandler(
             ActionName: "Trust");
     }
 
-    private async Task<(ImpersonationAlertRecord? Alert, ReviewActionResult? Error)> FetchAlertAsync(
-        long alertId, CancellationToken ct)
+    private async Task<FetchResult<ImpersonationAlertRecord>> FetchAlertAsync(long alertId, CancellationToken ct)
     {
         var alert = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
         if (alert == null)
-            return (null, new ReviewActionResult(false, $"Impersonation alert {alertId} not found"));
+            return FetchResult<ImpersonationAlertRecord>.Fail($"Impersonation alert {alertId} not found");
 
-        if (alert.ReviewedAt.HasValue)
-        {
-            var handledBy = alert.ReviewedByEmail ?? "another admin";
-            var verdict = alert.Verdict?.ToString() ?? "unknown";
-            var time = alert.ReviewedAt.Value.UtcDateTime.ToString("g");
-            return (null, new ReviewActionResult(false,
-                $"Already handled by {handledBy} ({verdict}) at {time} UTC"));
-        }
+        var alreadyHandled = ReportStatusHelper.CheckAlreadyHandled(
+            alert.ReviewedByEmail, alert.Verdict?.ToString(), alert.ReviewedAt);
+        if (alreadyHandled != null)
+            return FetchResult<ImpersonationAlertRecord>.Handled(alreadyHandled.Message);
 
-        return (alert, null);
-    }
-
-    private async Task<ReviewActionResult?> UpdateStatusAtomicallyAsync(
-        long alertId, ReportStatus status, Actor executor, string actionTaken, string notes, CancellationToken ct)
-    {
-        var updated = await reportsRepository.TryUpdateStatusAsync(
-            alertId, status, executor.GetDisplayText(), actionTaken, notes, ct);
-
-        if (updated) return null;
-
-        // Race condition: re-fetch for attribution
-        var current = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
-        if (current?.ReviewedAt.HasValue == true)
-        {
-            var handledBy = current.ReviewedByEmail ?? "another admin";
-            var verdict = current.Verdict?.ToString() ?? "unknown";
-            var time = current.ReviewedAt.Value.UtcDateTime.ToString("g");
-            return new ReviewActionResult(false,
-                $"Already handled by {handledBy} ({verdict}) at {time} UTC");
-        }
-
-        return new ReviewActionResult(false, $"Alert {alertId} could not be updated");
+        return FetchResult<ImpersonationAlertRecord>.Ok(alert);
     }
 }

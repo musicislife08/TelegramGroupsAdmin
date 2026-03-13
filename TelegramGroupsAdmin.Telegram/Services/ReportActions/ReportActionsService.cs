@@ -91,6 +91,7 @@ internal sealed class ReportActionsService(
         finally
         {
             semaphore.Release();
+            _reportLocks.TryRemove(reportId, out _);
         }
     }
 }

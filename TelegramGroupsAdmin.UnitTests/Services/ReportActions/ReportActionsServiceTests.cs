@@ -129,12 +129,15 @@ public class ReportActionsServiceTests
     public async Task SameReportId_ExecutesSerially()
     {
         var callOrder = new List<int>();
+        var banEntered = new TaskCompletionSource();
         var tcs1 = new TaskCompletionSource();
+        var spamEntered = new SemaphoreSlim(0, 1);
 
         _mockContentHandler.BanAsync(1L, TestExecutor, Arg.Any<CancellationToken>())
             .Returns(async ci =>
             {
                 callOrder.Add(1);
+                banEntered.SetResult();
                 await tcs1.Task;
                 return new ReviewActionResult(true, "Ban done");
             });
@@ -143,17 +146,22 @@ public class ReportActionsServiceTests
             .Returns(ci =>
             {
                 callOrder.Add(2);
+                spamEntered.Release();
                 return Task.FromResult(new ReviewActionResult(true, "Spam done"));
             });
 
         // Start ban (will block on tcs1)
         var banTask = _service.HandleContentBanAsync(1L, TestExecutor, CancellationToken.None);
 
-        // Start spam (same report ID — should block)
+        // Wait for ban handler to enter
+        await banEntered.Task;
+
+        // Start spam (same report ID — should block on semaphore)
         var spamTask = _service.HandleContentSpamAsync(1L, TestExecutor, CancellationToken.None);
 
-        // Give spam a chance to start (if it could)
-        await Task.Delay(50);
+        // Spam should NOT have entered (semaphore held by ban)
+        var spamStarted = await spamEntered.WaitAsync(TimeSpan.FromMilliseconds(50));
+        Assert.That(spamStarted, Is.False, "Spam handler should not start while ban holds the semaphore");
 
         // Only ban should have started
         Assert.That(callOrder, Is.EqualTo(new[] { 1 }));
@@ -170,41 +178,55 @@ public class ReportActionsServiceTests
     [Test]
     public async Task DifferentReportIds_ExecuteConcurrently()
     {
-        var tcs1 = new TaskCompletionSource();
-        var tcs2 = new TaskCompletionSource();
-        var started = new List<long>();
+        var entered1 = new TaskCompletionSource();
+        var entered2 = new TaskCompletionSource();
+        var release1 = new TaskCompletionSource();
+        var release2 = new TaskCompletionSource();
 
         _mockContentHandler.BanAsync(1L, TestExecutor, Arg.Any<CancellationToken>())
             .Returns(async ci =>
             {
-                lock (started) started.Add(1L);
-                await tcs1.Task;
+                entered1.SetResult();
+                await release1.Task;
                 return new ReviewActionResult(true, "Done 1");
             });
 
         _mockContentHandler.BanAsync(2L, TestExecutor, Arg.Any<CancellationToken>())
             .Returns(async ci =>
             {
-                lock (started) started.Add(2L);
-                await tcs2.Task;
+                entered2.SetResult();
+                await release2.Task;
                 return new ReviewActionResult(true, "Done 2");
             });
 
         var task1 = _service.HandleContentBanAsync(1L, TestExecutor, CancellationToken.None);
         var task2 = _service.HandleContentBanAsync(2L, TestExecutor, CancellationToken.None);
 
-        await Task.Delay(50);
+        // Both handlers should enter concurrently (different IDs, no blocking)
+        await Task.WhenAll(entered1.Task, entered2.Task);
 
-        // Both should have started (different IDs, no blocking)
-        lock (started)
-        {
-            Assert.That(started, Has.Count.EqualTo(2));
-        }
-
-        tcs1.SetResult();
-        tcs2.SetResult();
+        release1.SetResult();
+        release2.SetResult();
         await task1;
         await task2;
+    }
+
+    [Test]
+    public async Task SameReportId_AfterException_SemaphoreIsReleased()
+    {
+        // First call throws
+        _mockContentHandler.BanAsync(1L, TestExecutor, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("boom"));
+
+        await _service.HandleContentBanAsync(1L, TestExecutor, CancellationToken.None);
+
+        // Second call with same ID should succeed (semaphore released)
+        _mockContentHandler.BanAsync(1L, TestExecutor, Arg.Any<CancellationToken>())
+            .Returns(new ReviewActionResult(true, "Done"));
+
+        var result = await _service.HandleContentBanAsync(1L, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.True);
     }
 
     #endregion
