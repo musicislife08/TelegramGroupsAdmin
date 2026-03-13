@@ -166,15 +166,6 @@ public static class ServiceCollectionExtensions
             // Runtime logging configuration service (Phase 4.7)
             services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
 
-            // Similarity hash backfill service (one-time migration for SimHash deduplication)
-            services.AddScoped<SimilarityHashBackfillService>();
-
-            // Ban celebration GIF hash backfill service (one-time migration for duplicate detection)
-            services.AddScoped<BanCelebrationHashBackfillService>();
-
-            // V1 detection record cleanup (one-time removal of obsolete CAS/SeoScraping records)
-            services.AddScoped<V1DetectionCleanupService>();
-
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
             services.AddHostedService<Services.Docs.DocumentationStartupService>();

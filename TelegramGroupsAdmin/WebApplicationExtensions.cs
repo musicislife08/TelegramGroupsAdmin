@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Endpoints;
@@ -128,17 +127,6 @@ public static class WebApplicationExtensions
 
             app.Logger.LogInformation("PostgreSQL database migration complete");
 
-            // One-time backfill: Populate similarity_hash columns for SimHash deduplication
-            try
-            {
-                var hashBackfill = scope.ServiceProvider.GetRequiredService<SimilarityHashBackfillService>();
-                await hashBackfill.BackfillAsync();
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex, "Failed to backfill similarity hashes (non-fatal)");
-            }
-
             // Seed default ban celebration captions if empty
             try
             {
@@ -148,28 +136,6 @@ public static class WebApplicationExtensions
             catch (Exception ex)
             {
                 app.Logger.LogWarning(ex, "Failed to seed default ban celebration captions (non-fatal)");
-            }
-
-            // One-time backfill: Populate photo_hash columns for ban celebration GIF duplicate detection
-            try
-            {
-                var gifHashBackfill = scope.ServiceProvider.GetRequiredService<BanCelebrationHashBackfillService>();
-                await gifHashBackfill.BackfillAsync();
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex, "Failed to backfill ban celebration GIF hashes (non-fatal)");
-            }
-
-            // One-time cleanup: Remove historical V1 detection records (CAS, SeoScraping)
-            try
-            {
-                var v1Cleanup = scope.ServiceProvider.GetRequiredService<V1DetectionCleanupService>();
-                await v1Cleanup.CleanupAsync();
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogWarning(ex, "Failed to clean up V1 detection records (non-fatal)");
             }
 
         }
