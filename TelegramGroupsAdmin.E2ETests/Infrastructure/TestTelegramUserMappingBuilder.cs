@@ -119,6 +119,7 @@ public class TestTelegramUserMappingBuilder
             IsBot: false,
             IsTrusted: false,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: now,
             LastSeenAt: now,

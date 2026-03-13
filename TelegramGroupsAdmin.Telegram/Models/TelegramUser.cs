@@ -17,6 +17,7 @@ public record TelegramUser(
     bool IsBot,
     bool IsTrusted,
     bool IsBanned,
+    int KickCount,
     bool BotDmEnabled,
     DateTimeOffset FirstSeenAt,
     DateTimeOffset LastSeenAt,

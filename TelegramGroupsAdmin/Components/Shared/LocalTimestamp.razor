@@ -1,0 +1,9 @@
+<span class="local-timestamp" data-utc="@Value.ToString("o")">@Value.ToLocalTime().ToString(Format)</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public DateTimeOffset Value { get; set; }
+
+    [Parameter]
+    public string Format { get; set; } = "MMM d, yyyy h:mm tt";
+}

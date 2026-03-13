@@ -39,7 +39,7 @@ public interface IAuditHandler
 
     /// <summary>
     /// Log kick to audit trail.
-    /// Called when user is kicked from a specific chat (ban then immediate unban).
+    /// Called when user is kicked from a specific chat (temporary ban with auto-expiry).
     /// </summary>
     Task LogKickAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default);
 }

@@ -100,6 +100,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Configure composite primary keys
         modelBuilder.Entity<MessageRecordDto>().HasKey(m => new { m.MessageId, m.ChatId });
         modelBuilder.Entity<MessageRecordDto>().Property(m => m.MessageId).ValueGeneratedNever();
+        modelBuilder.Entity<ManagedChatRecordDto>().Property(mc => mc.ChatId).ValueGeneratedNever();
+        modelBuilder.Entity<TelegramLinkTokenRecordDto>().Property(t => t.Token).ValueGeneratedNever();
+        modelBuilder.Entity<InviteRecordDto>().Property(i => i.Token).ValueGeneratedNever();
         modelBuilder.Entity<TrainingLabelDto>().HasKey(tl => new { tl.MessageId, tl.ChatId });
 
         // Configure relationships
@@ -592,6 +595,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(tu => tu.IsActive)
             .HasFilter("is_active = false")
             .HasDatabaseName("ix_telegram_users_is_active"); // Partial index for inactive users (UI filtering)
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.BannedAt)
+            .HasFilter("is_banned = true")
+            .HasDatabaseName("ix_telegram_users_banned_at"); // Partial index for Banned tab sort/pagination
         modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.ProfileScannedAt)
             .HasDatabaseName("ix_telegram_users_profile_scanned_at"); // Background re-scan job ordering

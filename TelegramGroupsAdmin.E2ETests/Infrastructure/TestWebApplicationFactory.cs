@@ -182,6 +182,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _mockBotModerationService.WarnUserAsync(
                 Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>())
             .Returns(successResult);
+        _mockBotModerationService.TrustUserAsync(
+                Arg.Any<TrustIntent>(), Arg.Any<CancellationToken>())
+            .Returns(successResult);
+        _mockBotModerationService.UntrustUserAsync(
+                Arg.Any<UntrustIntent>(), Arg.Any<CancellationToken>())
+            .Returns(successResult);
 
         // Mock IJobScheduler - returns predictable job IDs and tracks cancellations
         _mockJobScheduler = Substitute.For<IJobScheduler>();

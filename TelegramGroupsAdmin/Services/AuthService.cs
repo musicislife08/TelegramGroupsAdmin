@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Email;
+using TelegramGroupsAdmin.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
@@ -46,7 +47,7 @@ public class AuthService(
         // SECURITY-6: Check if account is locked
         if (user.IsLocked)
         {
-            var timeRemaining = user.LockedUntil!.Value - DateTimeOffset.UtcNow;
+            var timeRemaining = (user.LockedUntil ?? throw new InvalidOperationException("User is locked but LockedUntil is null")) - DateTimeOffset.UtcNow;
             logger.LogWarning("Login attempt for locked account: {User}, locked until {LockedUntil}",
                 user.WebUser.ToLogDebug(), user.LockedUntil);
 
@@ -158,19 +159,19 @@ public class AuthService(
             {
                 // Admin enabled TOTP but user needs to set it up (forced setup)
                 // TotpEnabled=true, RequiresTotp=false → Login.razor redirects to setup
-                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.PermissionLevelInt, true, false, null);
+                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, true, false, null);
             }
             else
             {
                 // Normal 2FA verification required
                 // TotpEnabled=true, RequiresTotp=true → Login.razor redirects to verify
-                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.PermissionLevelInt, true, true, null);
+                return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, true, true, null);
             }
         }
 
         // TOTP disabled (either never set up or admin disabled for bypass)
         // TotpEnabled=false, RequiresTotp=false → Normal login
-        return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.PermissionLevelInt, false, false, null);
+        return new AuthResult(true, user.WebUser.Id, user.WebUser.Email, user.WebUser.PermissionLevel, false, false, null);
     }
 
     public async Task<AuthResult> VerifyTotpAsync(WebUserIdentity user, string code, CancellationToken cancellationToken = default)
@@ -188,7 +189,7 @@ public class AuthService(
         }
 
         await userRepository.UpdateLastLoginAsync(user.Id, cancellationToken);
-        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.PermissionLevelInt, true, false, null);
+        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.WebUser.PermissionLevel, true, false, null);
     }
 
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
@@ -303,27 +304,27 @@ public class AuthService(
         return new RegisterResult(true, userId, null);
     }
 
-    private async Task<(bool IsValid, string? ErrorMessage, string? InvitedBy, PermissionLevel PermissionLevel)> ValidateInviteTokenAsync(
+    private async Task<InviteValidationResult> ValidateInviteTokenAsync(
         string? inviteToken,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(inviteToken))
         {
-            return (false, "Invite token is required", null, default);
+            return new InviteValidationResult(false, "Invite token is required", null, default);
         }
 
         var invite = await userRepository.GetInviteByTokenAsync(inviteToken, cancellationToken);
         if (invite == null)
         {
-            return (false, "Invalid invite token", null, default);
+            return new InviteValidationResult(false, "Invalid invite token", null, default);
         }
 
         switch (invite.Status)
         {
             case InviteStatus.Used:
-                return (false, "Invite token already used", null, default);
+                return new InviteValidationResult(false, "Invite token already used", null, default);
             case InviteStatus.Revoked:
-                return (false, "Invite token has been revoked", null, default);
+                return new InviteValidationResult(false, "Invite token has been revoked", null, default);
             case InviteStatus.Pending:
                 break;
             default:
@@ -332,10 +333,10 @@ public class AuthService(
 
         if (invite.ExpiresAt < DateTimeOffset.UtcNow)
         {
-            return (false, "Invite token expired", null, default);
+            return new InviteValidationResult(false, "Invite token expired", null, default);
         }
 
-        return (true, null, invite.CreatedBy, invite.PermissionLevel);
+        return new InviteValidationResult(true, null, invite.CreatedBy, invite.PermissionLevel);
     }
 
     public async Task<TotpSetupResult> EnableTotpAsync(WebUserIdentity user, CancellationToken cancellationToken = default)
@@ -391,7 +392,7 @@ public class AuthService(
 
         await userRepository.UpdateLastLoginAsync(user.Id, cancellationToken);
 
-        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.PermissionLevelInt, true, false, null);
+        return new AuthResult(true, dbUser.WebUser.Id, dbUser.WebUser.Email, dbUser.WebUser.PermissionLevel, true, false, null);
     }
 
     public async Task AuditLogoutAsync(WebUserIdentity user, CancellationToken cancellationToken = default)

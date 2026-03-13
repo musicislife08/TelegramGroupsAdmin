@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -70,15 +71,18 @@ public class LoginVerifyPage
     /// </summary>
     public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
     {
+        var errorLocator = _page.Locator(ErrorAlert);
+
         try
         {
-            await _page.WaitForSelectorAsync(ErrorAlert, new PageWaitForSelectorOptions
+            await errorLocator.WaitForAsync(new LocatorWaitForOptions
             {
+                State = WaitForSelectorState.Visible,
                 Timeout = timeoutMs
             });
-            return await _page.TextContentAsync(ErrorAlert);
+            return await errorLocator.TextContentAsync();
         }
-        catch (TimeoutException)
+        catch (PlaywrightException)
         {
             return null;
         }
@@ -127,8 +131,7 @@ public class LoginVerifyPage
     public async Task ClickUseRecoveryCodeAsync()
     {
         await _page.ClickAsync(UseRecoveryCodeLink);
-        // Small delay for navigation to complete
-        await Task.Delay(500);
+        await Expect(_page.Locator(RecoveryCodeInput)).ToBeVisibleAsync();
     }
 
     /// <summary>
@@ -190,7 +193,6 @@ public class LoginVerifyPage
     public async Task LoginWithRecoveryCodeAsync(string recoveryCode)
     {
         await ClickUseRecoveryCodeAsync();
-        await WaitForRecoveryCodeFormAsync();
         await VerifyWithRecoveryCodeAsync(recoveryCode);
     }
 

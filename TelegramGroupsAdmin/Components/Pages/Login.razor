@@ -178,7 +178,7 @@
                 new(ClaimTypes.NameIdentifier, result.UserId!),
                 new(ClaimTypes.Email, result.Email!),
                 new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
-                new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
+                new(CustomClaimTypes.PermissionLevel, ((int)result.PermissionLevel.Value).ToString())
             };
 
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -205,11 +205,11 @@
         }
     }
 
-    private static string GetRoleName(int permissionLevel) => permissionLevel switch
+    private static string GetRoleName(PermissionLevel permissionLevel) => permissionLevel switch
     {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
+        PermissionLevel.Admin => "Admin",
+        PermissionLevel.GlobalAdmin => "GlobalAdmin",
+        PermissionLevel.Owner => "Owner",
         _ => "Admin"
     };
 

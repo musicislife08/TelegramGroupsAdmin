@@ -291,6 +291,8 @@ else
     // Backup browser reference
     private BackupBrowser? _backupBrowser;
 
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     // Backup configuration state
     private BackgroundJobConfig? _backupConfig;
     private bool _isSavingConfig;
@@ -361,7 +363,7 @@ else
 
             _currentBackupDirectory = _backupConfig.ScheduledBackup.BackupDirectory ?? "/data/backups";
 
-            await JobConfigService.UpdateJobConfigAsync(BackgroundJobNames.ScheduledBackup, _backupConfig);
+            await JobConfigService.UpdateJobConfigAsync(BackgroundJobNames.ScheduledBackup, _backupConfig, WebUser);
 
             Snackbar.Add("Backup configuration saved successfully", Severity.Success);
         }

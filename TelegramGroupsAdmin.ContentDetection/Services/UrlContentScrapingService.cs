@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -166,13 +167,14 @@ public partial class UrlContentScrapingService(
         var previewBuilder = new StringBuilder();
         var successfulScrapes = 0;
 
-        foreach (var (url, preview) in results)
+        foreach (var scrapeResult in results)
         {
-            if (preview == null)
+            if (scrapeResult.Preview == null)
                 continue;
 
             successfulScrapes++;
-            previewBuilder.AppendLine(url);
+            previewBuilder.AppendLine(scrapeResult.Url);
+            var preview = scrapeResult.Preview;
 
             // Deduplicate content - collect unique non-empty values
             // Priority order: og:description > description > og:title > title
@@ -210,8 +212,8 @@ public partial class UrlContentScrapingService(
     /// <summary>
     /// Scrapes a single URL for SEO metadata.
     /// </summary>
-    /// <returns>Tuple of (url, preview) where preview is null if scraping failed</returns>
-    private async Task<(string url, SeoPreview? preview)> ScrapeUrlAsync(string url, CancellationToken cancellationToken)
+    /// <returns><see cref="ScrapeResult"/> where Preview is null if scraping failed</returns>
+    private async Task<ScrapeResult> ScrapeUrlAsync(string url, CancellationToken cancellationToken)
     {
         try
         {
@@ -221,14 +223,14 @@ public partial class UrlContentScrapingService(
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogDebug("Failed to scrape {Url}: HTTP {StatusCode}", url, response.StatusCode);
-                return (url, null);
+                return new ScrapeResult(url, null);
             }
 
             var contentType = response.Content.Headers.ContentType?.MediaType;
             if (!contentType?.Contains("html", StringComparison.OrdinalIgnoreCase) == true)
             {
                 logger.LogDebug("Skipping {Url}: Non-HTML content type {ContentType}", url, contentType);
-                return (url, null);
+                return new ScrapeResult(url, null);
             }
 
             var html = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -241,17 +243,17 @@ public partial class UrlContentScrapingService(
                 OgDescription = ExtractMetaContent(html, "og:description")
             };
 
-            return (url, preview);
+            return new ScrapeResult(url, preview);
         }
         catch (TaskCanceledException)
         {
             logger.LogDebug("Timeout scraping {Url}", url);
-            return (url, null);
+            return new ScrapeResult(url, null);
         }
         catch (Exception ex)
         {
             logger.LogDebug(ex, "Failed to scrape {Url}", url);
-            return (url, null);
+            return new ScrapeResult(url, null);
         }
     }
 

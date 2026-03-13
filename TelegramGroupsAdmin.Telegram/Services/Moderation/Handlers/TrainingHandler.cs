@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -55,21 +56,21 @@ public class TrainingHandler : ITrainingHandler
             return;
         }
 
-        // Create detection result for history (NOT for training - use training_labels instead)
-        // Guard: skip insert if a detection record already exists (e.g., from the automated pipeline)
+        // Create detection result for history — only for manual moderator actions.
+        // Auto-detected spam already has a detection_result from the content detection pipeline;
+        // inserting a second "manual" entry would corrupt the notification reason and timeline.
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
-        var existingDetections = await _detectionResultsRepository.GetByMessageIdAsync(messageId, chat.Id, cancellationToken);
-        if (existingDetections.Count == 0)
+        if (executor.Type != ActorType.System)
         {
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = messageId,
                 ChatId = chat.Id,
                 DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "manual",
-                DetectionMethod = "Manual",
+                DetectionSource = SpamDetectionConstants.ManualDetectionSource,
+                DetectionMethod = SpamDetectionConstants.ManualDetectionMethod,
                 Score = 5.0,
-                Reason = "Marked as spam by moderator",
+                Reason = SpamDetectionConstants.ManualSpamReason,
                 AddedBy = executor,
                 UserId = message.User.Id,
                 UsedForTraining = false, // History only - training handled by training_labels table
@@ -80,22 +81,20 @@ public class TrainingHandler : ITrainingHandler
 
             await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
         }
-        else
-        {
-            _logger.LogDebug(
-                "Detection record already exists for message {MessageId}, skipping insert",
-                messageId);
-        }
 
         // Create explicit training label for ML (spam)
         if (hasText)
         {
+            var labelReason = executor.Type == ActorType.System
+                ? SpamDetectionConstants.AutoDetectedSpamReason
+                : SpamDetectionConstants.ManualSpamReason;
+
             await _trainingLabelsRepository.UpsertLabelAsync(
                 messageId,
                 chat.Id,
                 label: TrainingLabel.Spam,
                 labeledByUserId: executor.GetTelegramUserId(), // Null if executor is web user or system
-                reason: "Marked as spam by moderator",
+                reason: labelReason,
                 auditLogId: null,
                 cancellationToken: cancellationToken);
 
@@ -118,7 +117,7 @@ public class TrainingHandler : ITrainingHandler
         else
         {
             _logger.LogInformation(
-                "Created detection result for message {MessageId} marked as spam by {Executor} (no text, skipped training)",
+                "Message {MessageId} has no text; skipped training label for {Executor}",
                 messageId, executor.GetDisplayText());
         }
 

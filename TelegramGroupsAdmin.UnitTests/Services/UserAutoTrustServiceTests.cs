@@ -170,7 +170,7 @@ public class UserAutoTrustServiceTests
         await _userActionsRepo.Received(1).InsertAsync(
             Arg.Is<UserActionRecord>(r => r.ActionType == UserActionType.Trust && r.UserId == TestUserId),
             Arg.Any<CancellationToken>());
-        await _userRepo.Received(1).UpdateTrustStatusAsync(TestUserId, true, Arg.Any<CancellationToken>());
+        await _userRepo.Received(1).TrustUserAsync(TestUserId, Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -241,6 +241,7 @@ public class UserAutoTrustServiceTests
             IsBot: false,
             IsTrusted: false,
             IsBanned: false,
+            KickCount: 0,
             BotDmEnabled: false,
             FirstSeenAt: now.AddHours(-firstSeenHoursAgo),
             LastSeenAt: now,

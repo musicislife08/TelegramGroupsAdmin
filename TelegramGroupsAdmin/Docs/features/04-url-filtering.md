@@ -24,9 +24,9 @@ flowchart TD
     B --> C{In Whitelist?}
     C -->|Yes| D[ALLOW - Whitelist Override]
     C -->|No| E{In Hard Block?}
-    E -->|Yes| F[BLOCK - Confidence 100%]
+    E -->|Yes| F[BLOCK - Immediate Rejection]
     E -->|No| G{In Soft Block?}
-    G -->|Yes| H[FLAG - Moderate Confidence]
+    G -->|Yes| H[FLAG - 2.0 Points]
     G -->|No| I[PASS - Domain Clean]
 
     style D fill:#6bcf7f
@@ -117,7 +117,7 @@ The Whitelist contains domains that should **always be allowed**, even if they a
 - URL shorteners your group uses (bit.ly, tinyurl.com)
 - GitHub, Wikipedia, official documentation sites
 
-**Effect**: Whitelisted domains bypass ALL blocklists with 0% spam confidence.
+**Effect**: Whitelisted domains bypass ALL blocklists (URL check abstains with 0.0 points).
 
 ### How to Whitelist Domains
 
@@ -199,8 +199,8 @@ Check out this site: https://phishing-example.com/login
 ```
 3. Click **Test Content**
 4. Review results:
-   - **URL/File Content** algorithm should flag it
-   - Confidence should be 85%+ if on blocklist
+   - **URL Blocklist** check should flag it
+   - Score should be 2.0 points if domain is on a soft-block list
    - Check which blocklist matched
 
 ### Test Scenarios
@@ -208,25 +208,25 @@ Check out this site: https://phishing-example.com/login
 **Test blocked domain**:
 ```
 Visit http://known-phishing-site.com for more info
-Expected: 100% confidence, URL Content algorithm flags it
+Expected: 2.0 points from URL Blocklist check (soft block match)
 ```
 
 **Test whitelisted domain**:
 ```
 More info at https://github.com/yourproject
-Expected: 0% confidence from URL filter (whitelisted)
+Expected: 0.0 points, abstained (whitelisted)
 ```
 
 **Test wildcard block**:
 ```
 Join our group: http://spam.evil-network.com
-Expected: 100% if *.evil-network.com is blocked
+Expected: 2.0 points if *.evil-network.com is on soft-block list
 ```
 
 **Test wildcard whitelist**:
 ```
 Read docs: https://docs.microsoft.com/article
-Expected: 0% if *.microsoft.com is whitelisted
+Expected: 0.0 points, abstained if *.microsoft.com is whitelisted
 ```
 
 [Screenshot: Content Tester showing URL filtering results]
@@ -237,46 +237,43 @@ Expected: 0% if *.microsoft.com is whitelisted
 
 ### Per-Chat URL Filtering
 
-**Future feature** (not yet implemented):
-- Different URL rules per chat
-- Some groups allow referrals, others don't
-- Chat-specific whitelists
+URL filtering supports **per-chat rules** in addition to global rules. Each chat can have its own blocklists and whitelists. When evaluating a message, the system checks both global filters (ChatId = 0) and filters specific to that chat, so you can:
 
-**Current workaround**: Global rules apply to all chats.
+- Set different URL rules per chat
+- Allow referrals in some groups but not others
+- Maintain chat-specific whitelists alongside global ones
 
-### URL Confidence Scoring
+Configure per-chat filters from the URL Filtering settings page by selecting the target chat.
 
-URL/File Content algorithm returns confidence based on:
+### URL Scoring (V2 Additive Points)
 
-**100% confidence**:
-- Domain on Phishing, Scam, Malware, Ransomware lists
-- Known high-risk domains
+The URL blocklist check uses the V2 additive scoring system (0.0-5.0 points per check). Scores from all checks are summed to produce a total score, which is compared against configurable thresholds for auto-ban and review queue.
 
-**75-85% confidence**:
-- Domain on Fraud, Abuse lists
-- Moderately suspicious
+**2.0 points** (soft block match):
+- Domain found on a soft-block list (blocklist subscription or manual filter)
+- This is the score returned by the URL blocklist check for any match
 
-**50-70% confidence**:
-- Domain on Ads, Tracking lists
-- URL shorteners (if enabled)
+**0.0 points (abstain)**:
+- No URLs in message
+- No domains matched any soft-block list
+- Whitelisted domains (bypass all filters)
+- Errors during check execution
 
-**0% confidence**:
-- Whitelisted domains
-- Clean domains
+**Hard blocks** (domains on hard-block lists) are handled separately by the URL pre-filter service *before* spam scoring. Hard-blocked domains result in immediate rejection without going through the scoring pipeline.
 
-### Combining with Other Algorithms
+### Combining with Other Checks
 
-URL filtering is just one of 11 algorithms. Example combined detection:
+URL filtering is one of 14 content detection checks. Each check contributes an additive score (0.0-5.0 points), and the total is compared against your configured thresholds. Example combined detection:
 
 ```
 Message: "Join my crypto signals group! https://bit.ly/scam123"
 
 Detection breakdown:
-  Stop Words: 85% (matched "crypto signals")
-  URL Content: 100% (bit.ly → redirect list, resolves to blocked domain)
-  Naive Bayes: 78% (similar to known spam)
-
-Final confidence: 92% → AUTO-BAN
+  Stop Words:    2.0 pts  (matched "crypto signals" — severe)
+  URL Blocklist: 2.0 pts  (bit.ly on soft-block list)
+  Bayes:         3.5 pts  (95%+ spam probability)
+  ─────────────────────
+  Total:         7.5 pts  → exceeds auto-ban threshold
 ```
 
 ---
@@ -507,10 +504,9 @@ approved-partner-2.com
 
 ## Related Documentation
 
-- **[Spam Detection Guide](03-spam-detection.md)** - How URL filtering integrates
+- **[Spam Detection Guide](03-spam-detection.md)** - How URL filtering integrates, file scanning, and malware detection
 - **[Content Tester](05-content-tester.md)** - Test URL filters
 - **[First Configuration](../getting-started/02-first-configuration.md)** - Initial URL filter setup
-- **[File Scanning](https://future-docs/file-scanning.md)** - Malware detection
 
 ---
 

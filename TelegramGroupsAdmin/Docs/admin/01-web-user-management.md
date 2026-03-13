@@ -41,10 +41,11 @@ TelegramGroupsAdmin has a **hierarchical permission system** with three levels:
 - Reports from all chats
 - Analytics page
 - Users management
+- Admin Accounts
 - Audit logs (read-only)
 
 **Cannot access**:
-- Settings → System (General, Security, Admin Accounts, External Services, Backup)
+- Settings → System (General, Security, AI Providers, Email, ClamAV, VirusTotal, Backup)
 - Settings → Telegram (Bot Configuration)
 - Cannot invite new admins
 - Cannot change other users' permissions
@@ -280,7 +281,7 @@ Navigate to **Settings** → **System** → **Admin Accounts**:
 ### Monitor Audit Logs
 
 **Regularly check**:
-- Settings → Audit Log
+- Audit Log (top-level sidebar item)
 - Filter by actor to see what each admin did
 - Look for suspicious activity:
   - Bulk deletions
@@ -403,7 +404,7 @@ All admin account changes are logged:
 - User re-enabled
 
 **View in Audit Log**:
-1. Settings → Audit Log → Web Admin Log tab
+1. Audit Log (top-level sidebar item) → Web Admin Log tab
 2. Filter by action type: "User Management"
 3. See who did what, when
 
@@ -436,8 +437,9 @@ All admin account changes are logged:
 **Default**: 7 days
 
 **To change**:
-- Currently hardcoded
-- Future feature: Configurable in Security Settings
+1. Navigate to **Settings** → **System** → **Admin Accounts**
+2. Click **Invite New Admin**
+3. Set the **Invite valid for (days)** field (1–365 days)
 
 ### Email Verification Requirement
 
@@ -453,8 +455,6 @@ All admin account changes are logged:
 ## Related Documentation
 
 - **[Profile & Security](../user/01-profile-security.md)** - User profile settings, 2FA
-- **[Audit Log](https://future-docs/audit-log.md)** - Viewing admin actions
-- **[Security Settings](https://future-docs/security-settings.md)** - Password policy, rate limiting
 
 ---
 

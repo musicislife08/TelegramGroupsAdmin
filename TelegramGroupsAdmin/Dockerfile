@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Download FFmpeg static build (architecture-specific) with checksum validation
 # Uses TARGETPLATFORM to download correct binary during cross-compilation
 # Example: TARGETPLATFORM=linux/arm64 downloads arm64 binary on amd64 host
-# Currently pinned to: version 7.0.2 (via release channel with MD5 validation)
+# Uses rolling "release" channel — always downloads latest stable version
 # Security: MD5 validation ensures binary integrity and reproducible builds
 RUN case "$TARGETPLATFORM" in \
         "linux/amd64") FFMPEG_ARCH="amd64" ;; \
@@ -259,9 +259,6 @@ ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
 # Multi-architecture build (uses BuildKit cross-compilation):
 # docker buildx build --platform linux/amd64,linux/arm64 -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
 #
-# Build with specific FFmpeg version:
-# docker build --build-arg FFMPEG_VERSION=7.0.1 -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
-#
 # Build with custom user/group ID:
 # docker build --build-arg PUID=1000 --build-arg PGID=1000 -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
 #
@@ -290,5 +287,5 @@ ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
 # - Read-only filesystem (except /app/data volume)
 # - Diagnostics disabled in production
 # - Single HTTP port exposure (HTTPS via reverse proxy)
-# - FFmpeg version pinned (7.0.2 default, override via build arg)
+# - FFmpeg uses rolling release channel with MD5 integrity validation
 # =============================================================================

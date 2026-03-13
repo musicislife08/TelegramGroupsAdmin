@@ -187,25 +187,3 @@ public class FileScanningHandler
         return null;
     }
 }
-
-/// <summary>
-/// Result of scannable file detection (pure metadata extraction)
-/// </summary>
-public record FileDetectionResult(
-    string FileId,
-    long FileSize,
-    string? FileName,
-    string? ContentType
-);
-
-/// <summary>
-/// Result of file scan scheduling (detection + background job scheduling)
-/// </summary>
-public record FileScanSchedulingResult(
-    string FileId,
-    long FileSize,
-    string? FileName,
-    string? ContentType,
-    bool Scheduled,
-    string? SkipReason = null
-);

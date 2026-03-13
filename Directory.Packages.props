@@ -6,15 +6,15 @@
     <!-- UI / Web -->
     <PackageVersion Include="AngleSharp" Version="1.4.0" />
     <PackageVersion Include="Blazor-ApexCharts" Version="6.1.0" />
-    <PackageVersion Include="bunit" Version="2.5.3" />
+    <PackageVersion Include="bunit" Version="2.6.2" />
     <PackageVersion Include="MudBlazor" Version="9.1.0" />
 
     <!-- Markdown -->
-    <PackageVersion Include="Markdig" Version="1.0.0" />
+    <PackageVersion Include="Markdig" Version="1.1.1" />
     <PackageVersion Include="Markdown.ColorCode" Version="3.0.1" />
 
     <!-- Database -->
-    <PackageVersion Include="Dapper" Version="2.1.66" />
+    <PackageVersion Include="Dapper" Version="2.1.72" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
     <PackageVersion Include="Npgsql" Version="10.0.1" />
@@ -39,22 +39,22 @@
 
     <!-- AI / ML -->
     <PackageVersion Include="Microsoft.ML" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.SemanticKernel" Version="1.72.0" />
-    <PackageVersion Include="Microsoft.SemanticKernel.Abstractions" Version="1.72.0" />
+    <PackageVersion Include="Microsoft.SemanticKernel" Version="1.73.0" />
+    <PackageVersion Include="Microsoft.SemanticKernel.Abstractions" Version="1.73.0" />
 
     <!-- Telegram -->
-    <PackageVersion Include="Telegram.Bot" Version="22.9.0" />
-    <PackageVersion Include="WTelegramClient" Version="4.4.1" />
+    <PackageVersion Include="Telegram.Bot" Version="22.9.5.3" />
+    <PackageVersion Include="WTelegramClient" Version="4.4.2" />
 
     <!-- Background Jobs -->
     <PackageVersion Include="AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL" Version="0.5.1" />
     <PackageVersion Include="HumanCron" Version="0.5.0" />
     <PackageVersion Include="HumanCron.Quartz" Version="0.5.0" />
-    <PackageVersion Include="Quartz" Version="3.15.1" />
-    <PackageVersion Include="Quartz.AspNetCore" Version="3.15.1" />
-    <PackageVersion Include="Quartz.Extensions.DependencyInjection" Version="3.15.1" />
-    <PackageVersion Include="Quartz.Extensions.Hosting" Version="3.15.1" />
-    <PackageVersion Include="Quartz.Serialization.SystemTextJson" Version="3.15.1" />
+    <PackageVersion Include="Quartz" Version="3.16.1" />
+    <PackageVersion Include="Quartz.AspNetCore" Version="3.16.1" />
+    <PackageVersion Include="Quartz.Extensions.DependencyInjection" Version="3.16.1" />
+    <PackageVersion Include="Quartz.Extensions.Hosting" Version="3.16.1" />
+    <PackageVersion Include="Quartz.Serialization.SystemTextJson" Version="3.16.1" />
 
     <!-- Observability -->
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
@@ -72,8 +72,8 @@
     <PackageVersion Include="ByteSize" Version="2.1.2" />
     <PackageVersion Include="CsvHelper" Version="33.1.0" />
     <PackageVersion Include="DiffPlex" Version="1.9.0" />
-    <PackageVersion Include="Humanizer" Version="3.0.1" />
-    <PackageVersion Include="Humanizer.Core" Version="3.0.1" />
+    <PackageVersion Include="Humanizer" Version="3.0.10" />
+    <PackageVersion Include="Humanizer.Core" Version="3.0.10" />
     <PackageVersion Include="Lib.Net.Http.WebPush" Version="3.3.1" />
     <PackageVersion Include="nClam" Version="9.0.0" />
     <PackageVersion Include="Otp.NET" Version="1.4.1" />
@@ -87,12 +87,12 @@
 
     <!-- Testing -->
     <PackageVersion Include="coverlet.collector" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.58.0" />
     <PackageVersion Include="Microsoft.Playwright.NUnit" Version="1.58.0" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
-    <PackageVersion Include="NUnit" Version="4.5.0" />
-    <PackageVersion Include="NUnit.Analyzers" Version="4.11.2" />
+    <PackageVersion Include="NUnit" Version="4.5.1" />
+    <PackageVersion Include="NUnit.Analyzers" Version="4.12.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.1.0" />
     <PackageVersion Include="Testably.Abstractions.Testing" Version="5.3.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.10.0" />

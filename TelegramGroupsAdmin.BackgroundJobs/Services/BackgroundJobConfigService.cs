@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using HumanCron.Quartz.Abstractions;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Data;
@@ -85,7 +86,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         }
     }
 
-    public async Task UpdateJobConfigAsync(string jobName, BackgroundJobConfig config, CancellationToken cancellationToken = default)
+    public async Task UpdateJobConfigAsync(string jobName, BackgroundJobConfig config, WebUserIdentity? changedBy = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -123,14 +124,15 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             if (scheduleChanged)
             {
                 config.NextRunAt = null; // Clear scheduled time - will be recalculated on next scheduler run
-                _logger.LogInformation("Schedule changed for {JobName}, clearing NextRunAt for immediate reschedule", jobName);
+                _logger.LogInformation("Schedule changed for {JobName} by {User}, clearing NextRunAt for immediate reschedule",
+                    jobName, changedBy?.ToLogInfo() ?? "system");
                 requiresResync = true;
             }
 
             if (enabledChanged)
             {
-                _logger.LogInformation("Enabled status changed for {JobName} from {Old} to {New}",
-                    jobName, existingJob.Enabled, config.Enabled);
+                _logger.LogInformation("Enabled status changed for {JobName} from {Old} to {New} by {User}",
+                    jobName, existingJob.Enabled, config.Enabled, changedBy?.ToLogInfo() ?? "system");
                 requiresResync = true;
             }
         }
@@ -150,12 +152,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Updated background job config for {JobName}", jobName);
+        _logger.LogDebug("Updated background job config for {JobName}", jobName);
 
         // Only trigger re-sync if Schedule or Enabled changed (not for timestamp updates)
         if (requiresResync)
         {
-            _logger.LogInformation("Triggering Quartz re-sync for {JobName} due to config change", jobName);
+            _logger.LogDebug("Triggering Quartz re-sync for {JobName} due to config change", jobName);
             _syncService?.TriggerResync();
         }
 
@@ -190,7 +192,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         config.NextRunAt = nextRunAt;
         config.LastError = error;
 
-        await UpdateJobConfigAsync(jobName, config, cancellationToken);
+        await UpdateJobConfigAsync(jobName, config, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -420,16 +422,14 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         foreach (var (jobName, defaultConfig) in defaults)
         {
-            if (!existing.ContainsKey(jobName))
+            if (!existing.TryGetValue(jobName, out var existingConfig))
             {
                 // Create new config if doesn't exist
-                await UpdateJobConfigAsync(jobName, defaultConfig, cancellationToken);
+                await UpdateJobConfigAsync(jobName, defaultConfig, cancellationToken: cancellationToken);
                 _logger.LogInformation("Created default config for {JobName}", jobName);
             }
             else
             {
-                // Validate and repair existing config
-                var existingConfig = existing[jobName];
                 var needsRepair = false;
 
                 // Check for invalid schedule configuration
@@ -459,7 +459,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 // Save repaired config
                 if (needsRepair)
                 {
-                    await UpdateJobConfigAsync(jobName, existingConfig, cancellationToken);
+                    await UpdateJobConfigAsync(jobName, existingConfig, cancellationToken: cancellationToken);
                     _logger.LogInformation("Repaired config for {JobName}", jobName);
                 }
             }

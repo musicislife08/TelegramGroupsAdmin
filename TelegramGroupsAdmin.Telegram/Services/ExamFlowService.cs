@@ -770,7 +770,7 @@ public class ExamFlowService : IExamFlowService
             }
 
             // 4. Mark user as active
-            await telegramUserRepo.SetActiveAsync(user.Id, true, cancellationToken);
+            await telegramUserRepo.ActivateAsync(user.Id, cancellationToken);
 
             // 5. Send success DM with deeplink to return to chat
             await SendExamApprovalDmAsync(user, chat, chatName, isManualApproval, cancellationToken);

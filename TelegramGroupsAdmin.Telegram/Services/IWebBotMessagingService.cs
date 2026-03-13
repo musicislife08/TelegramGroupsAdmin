@@ -1,4 +1,3 @@
-using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -38,20 +37,3 @@ public interface IWebBotMessagingService
         string text,
         CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// Result of feature availability check
-/// </summary>
-public record WebBotFeatureAvailability(
-    bool IsAvailable,
-    long? BotUserId,
-    string? LinkedUsername,
-    string? UnavailableReason);
-
-/// <summary>
-/// Result of send/edit message operation
-/// </summary>
-public record WebBotMessageResult(
-    bool Success,
-    Message? Message,
-    string? ErrorMessage);

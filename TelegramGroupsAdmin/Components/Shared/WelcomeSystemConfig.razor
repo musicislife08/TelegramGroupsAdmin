@@ -203,6 +203,14 @@
                                      HelperText="Time before auto-kicking non-responsive users (10-300s)" />
                 </MudItem>
 
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_config.MaxKicksBeforeBan"
+                                     Label="Max Kicks Before Auto-Ban"
+                                     Min="0"
+                                     Max="10"
+                                     HelperText="Auto-ban after this many kicks (all-time, across all chats, 0 = disabled)" />
+                </MudItem>
+
                 @* DM Chat Teaser - Shown for DmWelcome and EntranceExam modes - appears FIRST because it's shown first in actual flow *@
                 @if (_config.Mode is WelcomeMode.DmWelcome or WelcomeMode.EntranceExam)
                 {
@@ -471,6 +479,7 @@
                 _config.Enabled = config.Enabled;
                 _config.Mode = config.Mode;
                 _config.TimeoutSeconds = config.TimeoutSeconds;
+                _config.MaxKicksBeforeBan = config.MaxKicksBeforeBan;
                 _config.AcceptButtonText = !string.IsNullOrEmpty(config.AcceptButtonText)
                     ? config.AcceptButtonText
                     : _config.AcceptButtonText;

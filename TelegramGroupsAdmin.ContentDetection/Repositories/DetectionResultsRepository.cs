@@ -330,19 +330,13 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Note: Per CLAUDE.md, detection_results should be permanent
-        // This method exists for completeness but should rarely be used
-        var toDelete = await context.DetectionResults
-            .Where(dr => dr.DetectedAt < timestamp)
-            .ToListAsync(cancellationToken);
 
-        var deleted = toDelete.Count;
+        var deleted = await context.DetectionResults
+            .Where(dr => dr.DetectedAt < timestamp)
+            .ExecuteDeleteAsync(cancellationToken);
 
         if (deleted > 0)
         {
-            context.DetectionResults.RemoveRange(toDelete);
-            await context.SaveChangesAsync(cancellationToken);
-
             _logger.LogWarning(
                 "Deleted {Count} old detection results (timestamp < {Timestamp})",
                 deleted,
@@ -396,7 +390,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
     }
 
-    public async Task UpdateDetectionResultAsync(long id, bool isSpam, bool usedForTraining, CancellationToken cancellationToken = default)
+    public async Task ExcludeFromTrainingAsync(long id, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.DetectionResults.FindAsync([id], cancellationToken);
@@ -405,14 +399,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             throw new InvalidOperationException($"Detection result {id} not found");
         }
 
-        // IsSpam is computed from net_score, so update that instead
-        entity.NetScore = isSpam ? 5.0 : -5.0;
-        entity.UsedForTraining = usedForTraining;
+        entity.UsedForTraining = false;
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
-            "Updated detection result {Id}: IsSpam={IsSpam} (net_score={NetScore}), UsedForTraining={UsedForTraining}",
-            id, isSpam, entity.NetScore, usedForTraining);
+        _logger.LogInformation("Excluded detection result {Id} from training data", id);
     }
 
     public async Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default)
@@ -634,7 +624,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         // Calculate per-algorithm statistics
         var algorithmStats = actualVetoes
-            .SelectMany(v => v!.Checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam).Select(c => c.CheckName.ToString()))
+            .SelectMany(v => v?.Checks.Where(c => c.CheckName != CheckName.OpenAI && c.IsSpam).Select(c => c.CheckName.ToString()) ?? [])
             .GroupBy(name => name)
             .Select(g => new AlgorithmVetoStats
             {
@@ -671,15 +661,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             }
         }
 
-        // Recalculate veto rates with actual totals
-        foreach (var stat in algorithmStats)
-        {
-            if (totalSpamFlagsByAlgorithm.TryGetValue(stat.AlgorithmName, out var total) && total > 0)
-            {
-                stat.VetoRate = (decimal)stat.VetoedCount / total * 100;
-                stat.SpamFlagsCount = total;
-            }
-        }
+        // Recalculate veto rates with actual totals (immutable — creates new records via with)
+        algorithmStats = algorithmStats.Select(stat =>
+            totalSpamFlagsByAlgorithm.TryGetValue(stat.AlgorithmName, out var total) && total > 0
+                ? stat with { SpamFlagsCount = total, VetoRate = (decimal)stat.VetoedCount / total * 100 }
+                : stat
+        ).ToList();
 
         var totalDetections = allDetections.Count;
         var vetoedCount = actualVetoes.Count;

@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -177,16 +178,16 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             }
 
             // Check photo similarity (50 points)
-            var (isPhotoMatch, photoSim) = await ComparePhotosAsync(photoPath, admin.UserPhotoPath, userPhotoHash);
-            photoSimilarity = photoSim;
+            var photoResult = await ComparePhotosAsync(photoPath, admin.UserPhotoPath, userPhotoHash);
+            photoSimilarity = photoResult.Similarity;
 
-            if (isPhotoMatch)
+            if (photoResult.IsMatch)
             {
                 photoMatch = true;
                 score += 50;
                 _logger.LogDebug(
                     "Photo match detected: {User} vs Admin {Admin} (similarity: {Similarity:F2})",
-                    user.ToLogDebug(), admin.ToLogDebug(), photoSim);
+                    user.ToLogDebug(), admin.ToLogDebug(), photoResult.Similarity);
             }
 
             // Track highest scoring match
@@ -458,16 +459,16 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
             // Check photo similarity against entity photo (50 points) - channels only
             // Uses pre-computed userPhotoHash to avoid N+1 hash computations
-            var (isPhotoMatch, photoSim) = ComparePhotoHashes(userPhotoHash, entity.PhotoHash);
-            photoSimilarity = photoSim;
+            var photoResult = ComparePhotoHashes(userPhotoHash, entity.PhotoHash);
+            photoSimilarity = photoResult.Similarity;
 
-            if (isPhotoMatch)
+            if (photoResult.IsMatch)
             {
                 photoMatch = true;
                 score += 50;
                 _logger.LogDebug(
                     "Photo match detected: {User} vs {EntityType} ({EntityId}) (similarity: {Similarity:F2})",
-                    user.ToLogDebug(), entity.Type, entity.Id, photoSim);
+                    user.ToLogDebug(), entity.Type, entity.Id, photoResult.Similarity);
             }
 
             // Track highest scoring match
@@ -511,14 +512,13 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     /// <param name="userPhotoPath">Path to the user's photo</param>
     /// <param name="targetPhotoPath">Path to the target's photo</param>
     /// <param name="precomputedUserHash">Optional pre-computed user hash to avoid N+1</param>
-    /// <returns>Tuple of (isMatch, similarity score)</returns>
-    private async Task<(bool isMatch, double? similarity)> ComparePhotosAsync(
+    private async Task<PhotoComparisonResult> ComparePhotosAsync(
         string? userPhotoPath,
         string? targetPhotoPath,
         byte[]? precomputedUserHash = null)
     {
         if (string.IsNullOrWhiteSpace(userPhotoPath) || string.IsNullOrWhiteSpace(targetPhotoPath))
-            return (false, null);
+            return new PhotoComparisonResult(false, null);
 
         try
         {
@@ -526,27 +526,27 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             var targetHash = await _photoHashService.ComputePhotoHashAsync(targetPhotoPath);
 
             if (userHash == null || targetHash == null)
-                return (false, null);
+                return new PhotoComparisonResult(false, null);
 
             var similarity = _photoHashService.CompareHashes(userHash, targetHash);
-            return (similarity >= PhotoSimilarityThreshold, similarity);
+            return new PhotoComparisonResult(similarity >= PhotoSimilarityThreshold, similarity);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to compare photos: {UserPhoto} vs {TargetPhoto}", userPhotoPath, targetPhotoPath);
-            return (false, null);
+            return new PhotoComparisonResult(false, null);
         }
     }
 
     /// <summary>
     /// Compare a pre-computed user hash against an entity's stored hash.
     /// </summary>
-    private (bool isMatch, double? similarity) ComparePhotoHashes(byte[]? userHash, byte[]? entityHash)
+    private PhotoComparisonResult ComparePhotoHashes(byte[]? userHash, byte[]? entityHash)
     {
         if (userHash == null || entityHash == null)
-            return (false, null);
+            return new PhotoComparisonResult(false, null);
 
         var similarity = _photoHashService.CompareHashes(userHash, entityHash);
-        return (similarity >= PhotoSimilarityThreshold, similarity);
+        return new PhotoComparisonResult(similarity >= PhotoSimilarityThreshold, similarity);
     }
 }

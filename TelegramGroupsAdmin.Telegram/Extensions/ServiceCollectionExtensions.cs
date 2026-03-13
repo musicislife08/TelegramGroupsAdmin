@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
@@ -136,6 +137,13 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IWelcomeAdmissionHandler, WelcomeAdmissionHandler>(); // Dual-gate admission (profile scan + welcome)
             services.AddSingleton<IBanCallbackService, BanCallbackService>(); // Ban user selection callbacks
             services.AddSingleton<IReportCallbackService, ReportCallbackService>(); // Report moderation action callbacks
+
+            // Unified report actions service (Singleton orchestrator + Scoped handlers)
+            services.AddSingleton<IReportActionsService, TelegramGroupsAdmin.Telegram.Services.ReportActions.ReportActionsService>();
+            services.AddScoped<IContentReportHandler, ContentReportHandler>();
+            services.AddScoped<IProfileScanHandler, ProfileScanHandler>();
+            services.AddScoped<IImpersonationHandler, ImpersonationHandler>();
+            services.AddScoped<IExamHandler, ExamHandler>();
             services.AddScoped<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
             services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature

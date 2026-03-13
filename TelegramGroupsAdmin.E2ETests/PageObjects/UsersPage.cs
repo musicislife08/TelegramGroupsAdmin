@@ -13,10 +13,7 @@ public class UsersPage
 
     // Selectors - Layout
     private const string PageTitle = ".mud-typography-h4";
-    private const string LoadingIndicator = ".mud-progress-linear";
     private const string SearchInput = ".mud-input input[placeholder*='Search']";
-    private const string TotalChip = ".mud-chip:has-text('Total:')";
-    private const string FilteredChip = ".mud-chip:has-text('Filtered:')";
 
     // Selectors - Tabs
     private const string TabContainer = ".mud-tabs";
@@ -63,15 +60,11 @@ public class UsersPage
         // Wait for Blazor SignalR circuit to be established (required for interactivity)
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Wait for loading indicator to disappear
-        await _page.Locator(LoadingIndicator).WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Hidden,
-            Timeout = timeoutMs
-        });
-
         // Wait for tabs to be visible
         await Expect(_page.Locator(TabContainer)).ToBeVisibleAsync(new() { Timeout = timeoutMs });
+
+        // Wait for the first table to render (ServerData loads lazily)
+        await Expect(_page.Locator(UserTable).First).ToBeVisibleAsync(new() { Timeout = timeoutMs });
     }
 
     /// <summary>
@@ -162,26 +155,28 @@ public class UsersPage
     }
 
     /// <summary>
-    /// Gets the total user count from the chip display.
+    /// Gets the total user count from the Active tab's badge or table row count.
+    /// With server-side pagination, uses the table pager info if available,
+    /// otherwise counts visible rows.
     /// </summary>
     public async Task<int> GetTotalUserCountAsync()
     {
-        var chipText = await _page.Locator(TotalChip).TextContentAsync();
-        if (string.IsNullOrEmpty(chipText)) return 0;
+        // MudTable pager shows "1-25 of 42" — extract the total from pager text
+        var pagerInfo = _page.Locator(".mud-table-pagination-information");
+        if (await pagerInfo.IsVisibleAsync())
+        {
+            var text = await pagerInfo.TextContentAsync();
+            if (!string.IsNullOrEmpty(text))
+            {
+                // Parse "1-25 of 42" format
+                var ofIndex = text.IndexOf("of", StringComparison.OrdinalIgnoreCase);
+                if (ofIndex >= 0 && int.TryParse(text[(ofIndex + 2)..].Trim(), out var total))
+                    return total;
+            }
+        }
 
-        // Extract number from "Total: 123"
-        var parts = chipText.Split(':');
-        if (parts.Length > 1 && int.TryParse(parts[1].Trim(), out var count))
-            return count;
-        return 0;
-    }
-
-    /// <summary>
-    /// Checks if the filtered count chip is visible.
-    /// </summary>
-    public async Task<bool> IsFilteredChipVisibleAsync()
-    {
-        return await _page.Locator(FilteredChip).IsVisibleAsync();
+        // Fallback: count visible rows
+        return await _page.Locator(TableRow).CountAsync();
     }
 
     /// <summary>

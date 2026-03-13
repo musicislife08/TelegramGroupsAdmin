@@ -30,16 +30,42 @@ public interface ITelegramUserRepository
     Task UpdateUserPhotoPathAsync(long telegramUserId, string? photoPath, string? photoHash = null, CancellationToken cancellationToken = default);
     Task UpdatePhotoFileUniqueIdAsync(long telegramUserId, string? fileUniqueId, string? photoPath, CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUser>> GetActiveUsersAsync(int days, CancellationToken cancellationToken = default);
-    Task UpdateTrustStatusAsync(long telegramUserId, bool isTrusted, CancellationToken cancellationToken = default);
-    Task SetBotDmEnabledAsync(long telegramUserId, bool enabled, CancellationToken cancellationToken = default);
+    Task TrustUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task UntrustUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task EnableBotDmAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task DisableBotDmAsync(long telegramUserId, CancellationToken cancellationToken = default);
     Task<List<long>> GetTrustedUserIdsAsync(CancellationToken cancellationToken = default);
     Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(List<long> chatIds, CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetBannedUsersAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken cancellationToken = default);
-    Task<List<UiModels.TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken cancellationToken = default);
     Task<UiModels.ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default);
+
+    // ============================================================================
+    // Paginated Methods (server-side pagination for Users page)
+    // ============================================================================
+
+    /// <summary>
+    /// Get a page of users filtered by tab, search text, and accessible chats.
+    /// Stats (ChatCount, WarningCount, etc.) are enriched only for the returned page.
+    /// </summary>
+    Task<(List<UiModels.TelegramUserListItem> Items, int TotalCount)> GetPagedUsersAsync(
+        UiModels.UserListFilter filter, int skip, int take,
+        string? searchText, List<long>? chatIds,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get a page of banned users with full ban details (date, issuer, reason, expiry).
+    /// </summary>
+    Task<(List<UiModels.BannedUserListItem> Items, int TotalCount)> GetPagedBannedUsersWithDetailsAsync(
+        int skip, int take, string? searchText,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get counts for all user tabs in a single round-trip (5 parallel COUNT queries).
+    /// </summary>
+    Task<UiModels.UserTabCounts> GetUserTabCountsAsync(
+        List<long>? chatIds, string? searchText,
+        CancellationToken cancellationToken = default);
     Task<UiModels.TelegramUserDetail?> GetUserDetailAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     // ============================================================================
@@ -75,6 +101,17 @@ public interface ITelegramUserRepository
     /// </summary>
     Task<bool> IsTrustedAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Increment user's all-time kick count by 1. Returns rows affected (0 = unknown user, 1 = success).
+    /// Source of truth for kick escalation logic (not derived from audit log).
+    /// </summary>
+    Task<int> IncrementKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get user's all-time kick count for escalation decisions.
+    /// </summary>
+    Task<int> GetKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
     // ============================================================================
     // IsActive Methods (Phase: /ban @username support)
     // ============================================================================
@@ -86,22 +123,15 @@ public interface ITelegramUserRepository
     Task<UiModels.TelegramUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Set user's active status.
-    /// Active = user has completed welcome flow OR sent a message.
+    /// Mark user as active (completed welcome flow or sent a message).
     /// </summary>
-    Task SetActiveAsync(long telegramUserId, bool isActive, CancellationToken cancellationToken = default);
+    Task ActivateAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Search users by name (fuzzy contains match on combined "first last" and username).
     /// Searches ALL users (active and inactive) - used by ban command to find timeout users.
     /// </summary>
     Task<List<UiModels.TelegramUser>> SearchByNameAsync(string searchText, int limit = 10, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get inactive users (users who joined but never engaged).
-    /// Used by the Inactive Users UI tab.
-    /// </summary>
-    Task<List<UiModels.TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default);
 
     // ============================================================================
     // Profile Scan Methods
@@ -115,11 +145,16 @@ public interface ITelegramUserRepository
     Task<ChatIdentity?> GetFirstChatForUserAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Set whether a user is excluded from automatic profile re-scans.
+    /// Exclude a user from automatic profile re-scans.
     /// Set when the user cannot be resolved via Telegram API (likely deleted account).
+    /// </summary>
+    Task ExcludeFromProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Include a user in automatic profile re-scans.
     /// Cleared when a manual rescan successfully resolves the user.
     /// </summary>
-    Task SetProfileScanExcludedAsync(long telegramUserId, bool excluded, CancellationToken cancellationToken = default);
+    Task IncludeInProfileScanAsync(long telegramUserId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get user IDs eligible for periodic profile re-scanning.

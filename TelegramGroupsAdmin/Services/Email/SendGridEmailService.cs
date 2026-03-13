@@ -1,6 +1,7 @@
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Models;
 
 namespace TelegramGroupsAdmin.Services.Email;
 
@@ -21,12 +22,12 @@ public class SendGridEmailService : IEmailService
         _logger = logger;
     }
 
-    public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
+    public async Task SendEmailAsync(string to, string subject, string body, CancellationToken cancellationToken = default)
     {
-        await SendEmailAsync([to], subject, body, isHtml, cancellationToken);
+        await SendEmailAsync([to], subject, body, cancellationToken);
     }
 
-    public async Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken cancellationToken = default)
+    public async Task SendEmailAsync(IEnumerable<string> to, string subject, string body, CancellationToken cancellationToken = default)
     {
         // Load configuration from database (supports hot-reload)
         var sendGridConfig = await _configRepo.GetSendGridConfigAsync(cancellationToken);
@@ -63,8 +64,8 @@ public class SendGridEmailService : IEmailService
                 from,
                 recipients,
                 subject,
-                isHtml ? null : body,  // Plain text
-                isHtml ? body : null   // HTML
+                null,  // Plain text
+                body   // HTML
             );
 
             // Create client with API key from database
@@ -96,8 +97,8 @@ public class SendGridEmailService : IEmailService
 
     public async Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken cancellationToken = default)
     {
-        var (subject, body) = GetTemplate(template, parameters);
-        await SendEmailAsync(to, subject, body, isHtml: true, cancellationToken);
+        var templateContent = GetTemplate(template, parameters);
+        await SendEmailAsync(to, templateContent.Subject, templateContent.Body, cancellationToken);
     }
 
     public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)
@@ -139,7 +140,7 @@ public class SendGridEmailService : IEmailService
         }
     }
 
-    private (string Subject, string Body) GetTemplate(EmailTemplate template, Dictionary<string, string> parameters)
+    private EmailTemplateContent GetTemplate(EmailTemplate template, Dictionary<string, string> parameters)
     {
         return template switch
         {
@@ -154,7 +155,7 @@ public class SendGridEmailService : IEmailService
         };
     }
 
-    private (string Subject, string Body) GetPasswordResetTemplate(Dictionary<string, string> parameters)
+    private EmailTemplateContent GetPasswordResetTemplate(Dictionary<string, string> parameters)
     {
         var resetLink = parameters.GetValueOrDefault("resetLink", "#");
         var expiryMinutes = parameters.GetValueOrDefault("expiryMinutes", "15");
@@ -178,10 +179,10 @@ public class SendGridEmailService : IEmailService
             </html>
             """;
 
-        return (subject, body);
+        return new EmailTemplateContent(subject, body);
     }
 
-    private (string Subject, string Body) GetEmailVerificationTemplate(Dictionary<string, string> parameters)
+    private EmailTemplateContent GetEmailVerificationTemplate(Dictionary<string, string> parameters)
     {
         var verificationToken = parameters.GetValueOrDefault("VerificationToken", "");
         var baseUrl = parameters.GetValueOrDefault("BaseUrl", "http://localhost:5161");
@@ -205,10 +206,10 @@ public class SendGridEmailService : IEmailService
             </html>
             """;
 
-        return (subject, body);
+        return new EmailTemplateContent(subject, body);
     }
 
-    private (string Subject, string Body) GetWelcomeEmailTemplate(Dictionary<string, string> parameters)
+    private EmailTemplateContent GetWelcomeEmailTemplate(Dictionary<string, string> parameters)
     {
         var email = parameters.GetValueOrDefault("email", "");
         var loginUrl = parameters.GetValueOrDefault("loginUrl", "#");
@@ -232,10 +233,10 @@ public class SendGridEmailService : IEmailService
             </html>
             """;
 
-        return (subject, body);
+        return new EmailTemplateContent(subject, body);
     }
 
-    private (string Subject, string Body) GetInviteCreatedTemplate(Dictionary<string, string> parameters)
+    private EmailTemplateContent GetInviteCreatedTemplate(Dictionary<string, string> parameters)
     {
         var inviteLink = parameters.GetValueOrDefault("inviteLink", "#");
         var invitedBy = parameters.GetValueOrDefault("invitedBy", "an administrator");
@@ -259,10 +260,10 @@ public class SendGridEmailService : IEmailService
             </html>
             """;
 
-        return (subject, body);
+        return new EmailTemplateContent(subject, body);
     }
 
-    private (string Subject, string Body) GetAccountDisabledTemplate(Dictionary<string, string> parameters)
+    private EmailTemplateContent GetAccountDisabledTemplate(Dictionary<string, string> parameters)
     {
         var email = parameters.GetValueOrDefault("email", "");
         var reason = parameters.GetValueOrDefault("reason", "administrative action");
@@ -280,10 +281,10 @@ public class SendGridEmailService : IEmailService
             </html>
             """;
 
-        return (subject, body);
+        return new EmailTemplateContent(subject, body);
     }
 
-    private (string Subject, string Body) GetAccountLockedTemplate(Dictionary<string, string> parameters)
+    private EmailTemplateContent GetAccountLockedTemplate(Dictionary<string, string> parameters)
     {
         var email = parameters.GetValueOrDefault("email", "");
         var lockedUntil = parameters.GetValueOrDefault("lockedUntil", "");
@@ -310,10 +311,10 @@ public class SendGridEmailService : IEmailService
             </html>
             """;
 
-        return (subject, body);
+        return new EmailTemplateContent(subject, body);
     }
 
-    private (string Subject, string Body) GetAccountUnlockedTemplate(Dictionary<string, string> parameters)
+    private EmailTemplateContent GetAccountUnlockedTemplate(Dictionary<string, string> parameters)
     {
         var email = parameters.GetValueOrDefault("email", "");
 
@@ -336,6 +337,6 @@ public class SendGridEmailService : IEmailService
             </html>
             """;
 
-        return (subject, body);
+        return new EmailTemplateContent(subject, body);
     }
 }

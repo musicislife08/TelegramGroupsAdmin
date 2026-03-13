@@ -107,7 +107,7 @@ public class StopWordRecommendationService : IStopWordRecommendationService
     /// <summary>
     /// Validate that we have sufficient data for analysis
     /// </summary>
-    private async Task<(int SpamSampleCount, int LegitMessageCount, int DetectionResultCount, string? ValidationMessage)>
+    private async Task<DataAvailabilityResult>
         ValidateDataAvailabilityAsync(DateTimeOffset since, CancellationToken cancellationToken)
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -138,17 +138,17 @@ public class StopWordRecommendationService : IStopWordRecommendationService
         // Validate minimum requirements
         if (spamSampleCount < MLConstants.MinimumSpamSamples)
         {
-            return (spamSampleCount, legitMessageCount, detectionResultCount,
+            return new DataAvailabilityResult(spamSampleCount, legitMessageCount, detectionResultCount,
                 $"Insufficient spam samples: {spamSampleCount} found, need at least {MLConstants.MinimumSpamSamples}");
         }
 
         if (legitMessageCount < MLConstants.MinimumLegitMessages)
         {
-            return (spamSampleCount, legitMessageCount, detectionResultCount,
+            return new DataAvailabilityResult(spamSampleCount, legitMessageCount, detectionResultCount,
                 $"Insufficient legitimate messages: {legitMessageCount} found, need at least {MLConstants.MinimumLegitMessages}");
         }
 
-        return (spamSampleCount, legitMessageCount, detectionResultCount, null);
+        return new DataAvailabilityResult(spamSampleCount, legitMessageCount, detectionResultCount, null);
     }
 
     /// <summary>

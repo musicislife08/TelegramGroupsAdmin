@@ -122,8 +122,8 @@ public class UsersTests : SharedAuthenticatedTestBase
                 "Should have 'Trusted' tab");
             Assert.That(tabNames.Any(t => t.Contains("BANNED", StringComparison.OrdinalIgnoreCase)),
                 "Should have 'Banned' tab");
-            Assert.That(tabNames.Any(t => t.Contains("INACTIVE", StringComparison.OrdinalIgnoreCase)),
-                "Should have 'Inactive' tab");
+            Assert.That(tabNames.Any(t => t.Contains("KICKED", StringComparison.OrdinalIgnoreCase)),
+                "Should have 'Kicked' tab");
         }
     }
 
@@ -232,9 +232,9 @@ public class UsersTests : SharedAuthenticatedTestBase
         // Search for "Developer"
         await _usersPage.SearchUsersAsync("Developer");
 
-        // Wait for the filtered chip to appear (Blazor re-renders asynchronously)
-        var filteredChip = Page.Locator(".mud-chip:has-text('Filtered:')");
-        await Expect(filteredChip).ToBeVisibleAsync(new() { Timeout = 5000 });
+        // Wait for the filtered user to appear in the table (server-side search with debounce)
+        var developerRow = Page.Locator(".mud-table-body tr:has-text('Developer')");
+        await Expect(developerRow).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         var displayedNames = await _usersPage.GetUserDisplayNamesAsync();
         Assert.That(displayedNames.Any(n => n.Contains("Developer")), Is.True,
@@ -285,18 +285,20 @@ public class UsersTests : SharedAuthenticatedTestBase
 
         // Search and then clear
         await _usersPage.SearchUsersAsync("Alpha");
+
+        // Wait for search results to load
+        var alphaRow = Page.Locator(".mud-table-body tr:has-text('Alpha')");
+        await Expect(alphaRow).ToBeVisibleAsync(new() { Timeout = 10000 });
+
         await _usersPage.ClearSearchAsync();
+
+        // Wait for table to reload with all users
+        await _usersPage.WaitForLoadAsync();
 
         // Assert - all users visible again
         var finalCount = await _usersPage.GetTotalUserCountAsync();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(finalCount, Is.EqualTo(initialCount),
-                      "Should show all users when search is cleared");
-
-            Assert.That(await _usersPage.IsFilteredChipVisibleAsync(), Is.False,
-                "Filtered chip should not be visible when search is cleared");
-        }
+        Assert.That(finalCount, Is.EqualTo(initialCount),
+            "Should show all users when search is cleared");
     }
 
     [Test]
@@ -320,7 +322,7 @@ public class UsersTests : SharedAuthenticatedTestBase
     }
 
     [Test]
-    public async Task Users_CanSwitchToInactiveTab()
+    public async Task Users_CanSwitchToKickedTab()
     {
         // Arrange
         await LoginAsOwnerAsync();
@@ -329,13 +331,13 @@ public class UsersTests : SharedAuthenticatedTestBase
         await _usersPage.NavigateAsync();
         await _usersPage.WaitForLoadAsync();
 
-        // Switch to Inactive tab
-        await _usersPage.SelectTabAsync("Inactive");
+        // Switch to Kicked tab
+        await _usersPage.SelectTabAsync("Kicked");
 
-        // Assert - Inactive tab displays (may be empty)
+        // Assert - Kicked tab displays (may be empty)
         var displayedCount = await _usersPage.GetDisplayedUserCountAsync();
         Assert.That(displayedCount, Is.GreaterThanOrEqualTo(0),
-            "Inactive tab should display user list (may be empty)");
+            "Kicked tab should display user list (may be empty)");
     }
 
     [Test]

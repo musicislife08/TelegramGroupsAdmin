@@ -118,9 +118,9 @@ public class AIContentCheckV2(
             // Use GetOrCreateAsync for cache-aside with stampede protection
             // Cache by content hash to avoid reprocessing identical messages
             var cacheKey = $"ai_check_{GetMessageHash(effectiveText)}";
-            var (result, fromCache) = await GetOrFetchAIResultAsync(cacheKey, req);
+            var cacheResult = await GetOrFetchAIResultAsync(cacheKey, req);
 
-            return ParseAIResponse(result, fromCache, startTimestamp);
+            return ParseAIResponse(cacheResult.Result, cacheResult.FromCache, startTimestamp);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("AI service"))
         {
@@ -164,12 +164,12 @@ public class AIContentCheckV2(
 
     /// <summary>
     /// Get cached AI result or fetch from API with stampede protection.
-    /// Returns tuple of (result, fromCache) to preserve cache hit logging.
+    /// Returns <see cref="AICacheResult"/> to preserve cache hit logging.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Thrown when AI service returns null. Prevents HybridCache from caching transient errors.
     /// </exception>
-    private async Task<(ChatCompletionResult Result, bool FromCache)> GetOrFetchAIResultAsync(
+    private async Task<AICacheResult> GetOrFetchAIResultAsync(
         string cacheKey, AIVetoCheckRequest req)
     {
         // Track whether this was a cache hit for logging
@@ -213,7 +213,7 @@ public class AIContentCheckV2(
             logger.LogDebug("AI V2 check for {User}: Using cached result", req.User.ToLogDebug());
         }
 
-        return (result, wasCacheHit);
+        return new AICacheResult(result, wasCacheHit);
     }
 
     /// <summary>

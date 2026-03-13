@@ -2019,11 +2019,8 @@ namespace TelegramGroupsAdmin.Data.Migrations
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", b =>
                 {
                     b.Property<long>("ChatId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
                         .HasColumnName("chat_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ChatId"));
 
                     b.Property<DateTimeOffset>("AddedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2910,6 +2907,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ban_expires_at");
 
+                    b.Property<DateTimeOffset?>("BannedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("banned_at");
+
                     b.Property<string>("Bio")
                         .HasColumnType("text")
                         .HasColumnName("bio");
@@ -2976,6 +2977,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_verified");
+
+                    b.Property<int>("KickCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("kick_count");
 
                     b.Property<string>("LastName")
                         .HasMaxLength(64)
@@ -3053,6 +3058,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("username");
 
                     b.HasKey("TelegramUserId");
+
+                    b.HasIndex("BannedAt")
+                        .HasDatabaseName("ix_telegram_users_banned_at")
+                        .HasFilter("is_banned = true");
 
                     b.HasIndex("IsActive")
                         .HasDatabaseName("ix_telegram_users_is_active")
@@ -3835,8 +3844,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                             b1.Property<bool>("FirstMessageOnly");
 
                             b1.Property<int>("FirstMessagesCount");
-
-                            b1.Property<double>("MaxConfidenceVetoThreshold");
 
                             b1.Property<int>("MinMessageLength");
 

@@ -57,16 +57,6 @@ public interface IVideoFrameExtractionService
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Metadata for an extracted video frame
-/// </summary>
-public record ExtractedFrame(
-    string FramePath,
-    double PositionPercent,
-    double Brightness,
-    bool IsBlackFrame
-);
-
 public class VideoFrameExtractionService : IVideoFrameExtractionService
 {
     private readonly ILogger<VideoFrameExtractionService> _logger;

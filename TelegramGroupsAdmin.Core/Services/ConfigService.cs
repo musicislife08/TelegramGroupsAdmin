@@ -426,6 +426,7 @@ public class ConfigService(
 
         // Serialize merged dictionary back to T
         var mergedJson = JsonSerializer.Serialize(merged, JsonOptions);
-        return JsonSerializer.Deserialize<T>(mergedJson, JsonOptions)!;
+        return JsonSerializer.Deserialize<T>(mergedJson, JsonOptions)
+            ?? throw new InvalidOperationException($"Failed to deserialize merged config to {typeof(T).Name}");
     }
 }

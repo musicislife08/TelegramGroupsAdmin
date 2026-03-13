@@ -249,10 +249,7 @@
             _processing = true;
             try
             {
-                await DetectionResultsRepository.UpdateDetectionResultAsync(
-                    sample.Id,
-                    sample.IsSpam,
-                    usedForTraining: false);
+                await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
 
                 Snackbar.Add("Sample removed from training data", Severity.Success);
 
@@ -286,10 +283,7 @@
                 var removed = 0;
                 foreach (var sample in group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id))
                 {
-                    await DetectionResultsRepository.UpdateDetectionResultAsync(
-                        sample.Id,
-                        sample.IsSpam,
-                        usedForTraining: false);
+                    await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
                     removed++;
                 }
 
@@ -329,10 +323,7 @@
                 {
                     foreach (var sample in group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id))
                     {
-                        await DetectionResultsRepository.UpdateDetectionResultAsync(
-                            sample.Id,
-                            sample.IsSpam,
-                            usedForTraining: false);
+                        await DetectionResultsRepository.ExcludeFromTrainingAsync(sample.Id);
                         removed++;
                     }
                 }

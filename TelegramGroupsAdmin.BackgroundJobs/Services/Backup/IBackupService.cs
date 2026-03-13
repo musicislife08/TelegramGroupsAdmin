@@ -74,12 +74,3 @@ public interface IBackupService
         RetentionConfig retentionConfig,
         CancellationToken cancellationToken);
 }
-
-/// <summary>
-/// Result of creating a backup with retention cleanup
-/// </summary>
-public record BackupResult(
-    string Filename,
-    string FilePath,
-    long SizeBytes,
-    int DeletedCount);

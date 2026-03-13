@@ -68,7 +68,7 @@ Each chat displays a health indicator showing bot status:
 **Common errors**:
 - "Bot not found in chat" → Add bot back to group
 - "Bot not admin" → Promote bot to admin with required permissions
-- "Authentication failed" → Verify TELEGRAM__BOTTOKEN is correct
+- "Authentication failed" → Verify bot token in Settings → Telegram → Bot Configuration → General
 
 [Screenshot: Health status indicators with details]
 
@@ -136,13 +136,16 @@ TelegramGroupsAdmin supports **per-chat configuration overrides**:
 - Detection algorithms (enable/disable per chat)
 - Thresholds (stricter/lenient per chat)
 - Welcome system settings (per chat)
-- First message checks (per chat)
+- Join security checks (CAS, impersonation detection, profile scanning per chat)
+- Service message deletion (per chat)
+- Ban celebration (per chat)
+- Kick escalation (per chat)
 
 **Cannot override** (global only):
 - Stop words library
 - URL blocklists
 - File scanning rules
-- OpenAI API keys
+- API keys (OpenAI, VirusTotal, etc.)
 
 **Use when**: Different groups have different needs
 
@@ -167,38 +170,69 @@ Chat B (Professional): Strict thresholds, blocks all crypto terms
 
 ### Configuration Tabs
 
-#### General Tab
+#### Health & Status Tab
 
-**Chat-specific settings**:
-- **Spam Detection Enabled** - Toggle spam detection on/off for this chat
-- **Use Global Config** - Use global settings or override
-- **Auto-Ban Threshold** - Override global threshold (0-100)
-- **Review Queue Threshold** - Override global threshold (0-100)
-- **First Message Only** - Check only first N messages from new users
+**Bot health and permissions overview**:
+- Overall health status (Healthy / Warning / Error)
+- Bot permissions checklist (admin, delete messages, ban users, invite users)
+- Warnings list for issues requiring attention
+- Cached invite link management (view, clear to force refresh)
+
+#### Spam Detection Tab
+
+**Per-chat content detection configuration**:
+- **Configuration Mode** - Choose between Global Configuration or Custom Configuration for this chat
+- When "Use Custom Configuration" is selected, the full detection overview appears with all 14 detection algorithms
+- **Auto-Ban Threshold** - Override global threshold (default: 4.0 points)
+- **Review Queue Threshold** - Override global threshold (default: 2.5 points)
+- Enable/disable individual algorithms per chat
+- Configure per-algorithm settings (thresholds, sensitivity)
+
+Scoring uses additive points: each algorithm returns 0.0-5.0 points, scores are summed across all enabled algorithms.
 
 **Example**:
 ```
-Global: 85 auto-ban, 70 review
-Chat A Override: 90 auto-ban, 75 review (more lenient)
+Global: 4.0 auto-ban, 2.5 review
+Chat A Override: 4.5 auto-ban, 3.0 review (more lenient)
 Chat B: Use Global (no override)
 ```
+
+[Screenshot: Spam Detection tab with custom configuration enabled]
 
 #### Welcome System Tab
 
 **Per-chat welcome configuration** (explained in detail below)
 
-#### Algorithms Tab (Future Feature)
+#### Service Messages Tab
 
-**Per-chat algorithm enables**:
-- Enable/disable specific algorithms for this chat
-- Override algorithm thresholds
-- Chat-specific URL whitelist
+**Per-chat service message deletion**:
+- Configure which Telegram service messages (join/leave notifications, pinned messages, etc.) are automatically deleted
+- Choose Global or Custom Configuration per chat
+
+#### Ban Celebration Tab
+
+**Per-chat ban celebration configuration**:
+- Enable/disable celebratory GIF + caption posting when spammers are banned
+- Configure triggers: auto-ban (spam detection) and/or manual ban (admin `/ban` command)
+- Option to send celebration to banned user via DM
+- GIFs and captions are selected randomly from the global library managed in **Settings → Moderation → Ban Celebration**
+
+See **[Ban Celebration](../features/09-ban-celebration.md)** for full details.
+
+[Screenshot: Ban Celebration tab with triggers configured]
+
+#### Admins Tab
+
+**Chat admin information**:
+- List of all cached Telegram admins for this chat
+- Username, Telegram ID, role (Creator/Admin), and active status
+- Web app user linkage status (shows linked email if account is connected)
 
 ---
 
 ## Welcome System (Per-Chat)
 
-The Welcome System greets new members and can challenge them to verify they're human.
+The Welcome System greets new members, verifies they are human, and runs security checks on join.
 
 ### Welcome System Settings
 
@@ -207,58 +241,106 @@ Navigate to Chat Management → Configure → Welcome System tab:
 **Enable Welcome** ✓/✗
 - Toggle welcome messages on/off for this chat
 
+**Welcome Mode** (three options):
+- **DM Welcome** - Rules sent privately via bot DM. Clean group chat, forces users to interact with bot privately. Shows a "Read Rules" button in chat.
+- **Chat Accept/Deny** - Rules shown in group with Accept/Deny buttons. Faster onboarding, rules visible to all.
+- **Entrance Exam** - User must pass a quiz to join. Strongest protection against spam. Multiple choice questions and/or AI-evaluated open-ended response.
+
 **Welcome Message**
 - Custom message sent to new members
 - Supports Markdown formatting
-- Variables: `{username}`, `{chatname}`
+- Variables: `{username}`, `{chat_name}`, `{timeout}`
+- Live preview shows how the message will appear
 
-**Challenge Enabled** ✓/✗
-- Require new members to answer challenge
+**DM Chat Teaser** (DM Welcome and Entrance Exam modes only)
+- Short message shown in group chat when user joins
+- Prompts user to click button to open DM
 
-**Challenge Type**
-- Text question (e.g., "What is 2+2?")
-- Emoji reaction (click specific emoji)
-
-**Challenge Timeout**
-- How long to wait for answer (seconds)
+**Timeout (seconds)**
+- How long to wait for response before auto-kicking (10-300 seconds)
 - Default: 60 seconds
 
-**Timeout Action**
-- Ban user if timeout
-- OR Just remove welcome message
+**Max Kicks Before Auto-Ban**
+- After this many kicks (all-time, across all chats), the next kick escalates to a permanent ban
+- Set to 0 to disable kick escalation
+- See **[Kick Escalation](../features/07-kick-escalation.md)** for full details
 
-**Skip for Admins** ✓/✗
-- Don't challenge existing admins
+**Button Customization**
+- Accept button text, Deny button text, DM button text
 
-**Skip for Trusted Users** ✓/✗
-- Don't challenge users with 10+ messages in other monitored chats
+[Screenshot: Welcome System configuration with mode selection]
 
-[Screenshot: Welcome System configuration]
+---
+
+### Join Security (Per-Chat)
+
+Security checks run for **all new members regardless of whether the welcome system is enabled**. Users are muted during verification. Configure under Chat Management → Configure → Welcome System tab → Security on Join section.
+
+#### CAS (Combot Anti-Spam)
+
+- Automatically bans users listed in the Combot Anti-Spam database (known spammers)
+- Configurable API URL, timeout, and user agent
+- Enable/disable per chat
+
+#### Impersonation Detection
+
+- Detects users trying to impersonate chat admins by comparing names and profile photos
+- Auto-bans high-confidence matches (score 5.0), flags medium-confidence for review (score 2.5-5.0)
+- Enable/disable per chat
+
+#### Profile Scanning (User API)
+
+AI-powered profile scanning that analyzes user profiles via the Telegram User API on join.
+
+**How to configure**:
+1. Navigate to Chat Management → Configure → Welcome System tab
+2. Expand **Security on Join → Profile Scan**
+3. Toggle **Enabled** on/off
+4. Set thresholds:
+   - **Auto-Ban Threshold** - Score at which users are auto-banned (default: 4.0, range 1.0-5.0)
+   - **Admin Notify Threshold** - Score at which admins are notified for review (default: 2.0, range 0.5-5.0)
+5. Toggle scan triggers:
+   - **Scan on Join** - Scan when user first joins the chat
+   - **Scan on Profile Change** - Re-scan when user's name or username changes
+
+**What it detects**:
+- Spam signals in bios and about sections
+- Suspicious personal channels
+- Pinned stories with spam content
+- Requires an active User API session
+
+See **[Profile Scanning](../features/08-profile-scanning.md)** for full details.
+
+[Screenshot: Profile Scan configuration with thresholds]
+
+---
 
 ### Example Welcome Configurations
 
-**Example 1: Simple Welcome**
+**Example 1: Chat Accept/Deny (Simple)**
 ```
-Welcome Message: "Welcome {username} to {chatname}! Please read our rules."
-Challenge: Disabled
-```
-
-**Example 2: Challenge with Text**
-```
-Welcome Message: "Welcome! Please answer: What is 2+2?"
-Challenge: Enabled (Text)
-Expected Answer: "4"
+Mode: Chat Accept/Deny
+Welcome Message: "Welcome {username} to {chat_name}! Please read and accept our rules within {timeout}."
 Timeout: 60 seconds
-Timeout Action: Ban
+Max Kicks Before Ban: 3
 ```
 
-**Example 3: Emoji Challenge**
+**Example 2: DM Welcome (Private Rules)**
 ```
-Welcome Message: "Welcome! Click the ✅ to verify you're human"
-Challenge: Enabled (Emoji)
-Expected Emoji: ✅
-Timeout: 30 seconds
-Timeout Action: Ban
+Mode: DM Welcome
+DM Teaser: "Welcome {username}! Click the button below to read the {chat_name} guidelines."
+Main Message: "Welcome to our community! Here are our rules..."
+Timeout: 120 seconds
+```
+
+**Example 3: Entrance Exam (High Security)**
+```
+Mode: Entrance Exam
+DM Teaser: "Welcome! Click below to take the entrance exam."
+Rules: "Read these guidelines carefully before answering..."
+Exam: Multiple choice + open-ended AI-evaluated question
+Timeout: 300 seconds
+Max Kicks Before Ban: 2
 ```
 
 ---
@@ -347,8 +429,8 @@ In Chat Management → View Details:
    - Select your bot
    - Bot Settings → Group Privacy → **OFF**
 3. **Check bot token**:
-   - Settings → Telegram → Bot Configuration
-   - Verify TELEGRAM__BOTTOKEN is correct
+   - Navigate to **Settings → Telegram → Bot Configuration → General**
+   - Verify the bot token is correct
 4. **Restart bot**:
    - Restart application
    - Bot will reconnect and start polling
@@ -412,8 +494,9 @@ In Chat Management → View Details:
 3. **Check server load**:
    - High CPU/memory may delay health checks
    - Optimize or upgrade server
-4. **Increase timeout**:
-   - Future feature: Configurable health check timeout
+4. **Check health check schedule**:
+   - Settings → Background Jobs
+   - Health check interval is configurable via the background jobs dashboard
 
 ---
 
@@ -443,10 +526,10 @@ To stop monitoring a chat:
 4. Bot will detect removal and stop polling
 5. Chat remains in database but shows "Disconnected"
 
-**Option 2: Delete from database** (future feature):
-- Currently not exposed in UI
-- Chat data preserved indefinitely
-- Future: Manual chat deletion with data purge option
+**Option 2: Database cleanup**:
+- Chat data is preserved in the database after bot removal
+- Chat shows as "Disconnected" in the Chat Management table
+- Data retention is managed by the automatic cleanup background job (configurable in Settings → Background Jobs)
 
 ---
 
@@ -471,10 +554,12 @@ View analytics for specific chats:
 
 ## Related Documentation
 
-- **[Welcome System](https://future-docs/welcome-system.md)** - Detailed welcome configuration
 - **[First Configuration](../getting-started/02-first-configuration.md)** - Initial bot setup
 - **[Messages Tab](../features/01-messages.md)** - Browsing chat messages
-- **[Dashboard](https://future-docs/dashboard.md)** - Health overview
+- **[Spam Detection](../features/03-spam-detection.md)** - Content detection algorithms
+- **[Profile Scanning](../features/08-profile-scanning.md)** - AI-powered join security
+- **[Kick Escalation](../features/07-kick-escalation.md)** - Exponential backoff on kicks
+- **[Ban Celebration](../features/09-ban-celebration.md)** - GIF + caption on ban
 
 ---
 

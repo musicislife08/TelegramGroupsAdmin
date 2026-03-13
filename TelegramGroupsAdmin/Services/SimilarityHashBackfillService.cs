@@ -32,7 +32,7 @@ public class SimilarityHashBackfillService(
 
         if (!messagesNeedBackfill && !translationsNeedBackfill)
         {
-            logger.LogInformation("Similarity hash backfill already complete, skipping");
+            logger.LogDebug("Similarity hash backfill already complete, skipping");
             return;
         }
 

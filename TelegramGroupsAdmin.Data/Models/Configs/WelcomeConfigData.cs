@@ -23,6 +23,11 @@ public class WelcomeConfigData
     public double TimeoutSeconds { get; set; }
 
     /// <summary>
+    /// Maximum kicks before auto-ban (0 = disabled)
+    /// </summary>
+    public int MaxKicksBeforeBan { get; set; }
+
+    /// <summary>
     /// Security checks that run when a user joins.
     /// Includes CAS check and impersonation detection.
     /// </summary>

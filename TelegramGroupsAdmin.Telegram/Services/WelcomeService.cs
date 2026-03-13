@@ -356,7 +356,7 @@ public class WelcomeService(
                 if (admissionResult == AdmissionResult.Admitted)
                 {
                     // Mark user as active (security passed, no welcome flow)
-                    await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
+                    await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
 
                     // Delete verifying message
                     await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
@@ -844,19 +844,19 @@ public class WelcomeService(
 
         // Step 3: Try to send rules via DM (or fallback to chat)
         // Always attempt this - previous DM sent via /start may have been deleted by user
-        var (dmSent, dmFallback) = await SendRulesAsync(chat, user, config, cancellationToken);
+        var dmResult = await SendRulesAsync(chat, user, config, cancellationToken);
 
         logger.LogDebug(
             "Rules delivery for {User}: DM sent: {DmSent}, Fallback: {DmFallback}",
             user.ToLogDebug(),
-            dmSent,
-            dmFallback);
+            dmResult.DmSent,
+            dmResult.FallbackUsed);
 
         // Step 4: Update or create response record (MUST happen before admission check —
         // TryAdmitUserAsync checks the welcome gate, which reads this record)
         if (existingResponse != null)
         {
-            await welcomeResponsesRepository.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Accepted, dmSent, dmFallback, cancellationToken);
+            await welcomeResponsesRepository.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Accepted, dmResult.DmSent, dmResult.FallbackUsed, cancellationToken);
         }
         else
         {
@@ -869,8 +869,8 @@ public class WelcomeService(
                 WelcomeMessageId: welcomeMessageId,
                 Response: WelcomeResponseType.Accepted,
                 RespondedAt: DateTimeOffset.UtcNow,
-                DmSent: dmSent,
-                DmFallback: dmFallback,
+                DmSent: dmResult.DmSent,
+                DmFallback: dmResult.FallbackUsed,
                 CreatedAt: DateTimeOffset.UtcNow,
                 TimeoutJobId: null
             );
@@ -887,7 +887,7 @@ public class WelcomeService(
 
         if (admissionResult == AdmissionResult.Admitted)
         {
-            await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
+            await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
             await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
         }
         else
@@ -1025,7 +1025,7 @@ public class WelcomeService(
 
         if (admissionResult == AdmissionResult.Admitted)
         {
-            await telegramUserRepository.SetActiveAsync(user.Id, true, cancellationToken);
+            await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
             await TryDeleteMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, cancellationToken);
         }
         else
@@ -1095,7 +1095,7 @@ public class WelcomeService(
         // No need to explicitly cancel - Quartz.NET job checks database state first
     }
 
-    private async Task<(bool DmSent, bool DmFallback)> SendRulesAsync(
+    private async Task<DmDeliveryResult> SendRulesAsync(
         Chat chat,
         User user,
         WelcomeConfig config,
@@ -1121,7 +1121,7 @@ public class WelcomeService(
             result.DmSent,
             result.FallbackUsed);
 
-        return (DmSent: result.DmSent, DmFallback: result.FallbackUsed);
+        return result;
     }
 
     private async Task HandleUserLeftAsync(Chat chat, User user, CancellationToken cancellationToken = default)

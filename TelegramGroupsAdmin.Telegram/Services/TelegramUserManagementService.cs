@@ -34,51 +34,36 @@ public class TelegramUserManagementService : ITelegramUserManagementService
     }
 
     /// <inheritdoc/>
-    public Task<List<TelegramUserListItem>> GetAllUsersAsync(List<long> chatIds, CancellationToken cancellationToken = default)
-    {
-        // Empty list means all chats (GlobalAdmin/Owner)
-        if (chatIds.Count == 0)
-        {
-            return _userRepository.GetAllWithStatsAsync(cancellationToken);
-        }
-
-        return _userRepository.GetAllWithStatsAsync(chatIds, cancellationToken);
-    }
-
-    /// <inheritdoc/>
-    public Task<List<TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken cancellationToken = default)
-    {
-        return _userRepository.GetTaggedUsersAsync(cancellationToken);
-    }
-
-    /// <inheritdoc/>
-    public Task<List<TelegramUserListItem>> GetBannedUsersAsync(CancellationToken cancellationToken = default)
-    {
-        return _userRepository.GetBannedUsersAsync(cancellationToken);
-    }
-
-    /// <inheritdoc/>
-    public Task<List<BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken cancellationToken = default)
-    {
-        return _userRepository.GetBannedUsersWithDetailsAsync(cancellationToken);
-    }
-
-    /// <inheritdoc/>
-    public Task<List<TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken cancellationToken = default)
-    {
-        return _userRepository.GetTrustedUsersAsync(cancellationToken);
-    }
-
-    /// <inheritdoc/>
-    public Task<List<TelegramUserListItem>> GetInactiveUsersAsync(CancellationToken cancellationToken = default)
-    {
-        return _userRepository.GetInactiveUsersAsync(cancellationToken);
-    }
-
-    /// <inheritdoc/>
     public Task<ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken cancellationToken = default)
     {
         return _userRepository.GetModerationQueueStatsAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<(List<TelegramUserListItem> Items, int TotalCount)> GetPagedUsersAsync(
+        UserListFilter filter, int skip, int take,
+        string? searchText, List<long>? chatIds,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default)
+    {
+        return _userRepository.GetPagedUsersAsync(filter, skip, take, searchText, chatIds, sortLabel, sortDescending, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<(List<BannedUserListItem> Items, int TotalCount)> GetPagedBannedUsersWithDetailsAsync(
+        int skip, int take, string? searchText,
+        string? sortLabel, bool sortDescending,
+        CancellationToken cancellationToken = default)
+    {
+        return _userRepository.GetPagedBannedUsersWithDetailsAsync(skip, take, searchText, sortLabel, sortDescending, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<UserTabCounts> GetUserTabCountsAsync(
+        List<long>? chatIds, string? searchText,
+        CancellationToken cancellationToken = default)
+    {
+        return _userRepository.GetUserTabCountsAsync(chatIds, searchText, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -98,11 +83,8 @@ public class TelegramUserManagementService : ITelegramUserManagementService
             return false;
         }
 
-        // Toggle trust status
-        var newTrustStatus = !user.IsTrusted;
-
         // Protect Telegram system accounts - cannot remove trust
-        if (TelegramConstants.IsSystemUser(telegramUserId) && !newTrustStatus)
+        if (TelegramConstants.IsSystemUser(telegramUserId) && user.IsTrusted)
         {
             _logger.LogWarning(
                 "Blocked attempt to remove trust from Telegram system account ({User}). " +
@@ -110,27 +92,11 @@ public class TelegramUserManagementService : ITelegramUserManagementService
                 user.ToLogDebug());
             return false;
         }
-        await _userRepository.UpdateTrustStatusAsync(telegramUserId, newTrustStatus, cancellationToken);
 
-        if (newTrustStatus)
+        if (user.IsTrusted)
         {
-            // Create trust action record
-            var userAction = new UserActionRecord(
-                Id: 0, // Will be set by database
-                UserId: telegramUserId,
-                ActionType: UserActionType.Trust,
-                MessageId: null, // No specific message associated
-                ChatId: null,
-                IssuedBy: modifiedBy,
-                IssuedAt: DateTimeOffset.UtcNow,
-                ExpiresAt: null, // Trust doesn't expire
-                Reason: "User manually trusted"
-            );
+            await _userRepository.UntrustUserAsync(telegramUserId, cancellationToken);
 
-            await _userActionsRepository.InsertAsync(userAction);
-        }
-        else
-        {
             // Expire all active trusts
             await _userActionsRepository.ExpireTrustsForUserAsync(telegramUserId);
 
@@ -149,11 +115,32 @@ public class TelegramUserManagementService : ITelegramUserManagementService
 
             await _userActionsRepository.InsertAsync(untrustAction);
         }
+        else
+        {
+            await _userRepository.TrustUserAsync(telegramUserId, cancellationToken);
+
+            // Create trust action record
+            var userAction = new UserActionRecord(
+                Id: 0, // Will be set by database
+                UserId: telegramUserId,
+                ActionType: UserActionType.Trust,
+                MessageId: null, // No specific message associated
+                ChatId: null,
+                IssuedBy: modifiedBy,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: null, // Trust doesn't expire
+                Reason: "User manually trusted"
+            );
+
+            await _userActionsRepository.InsertAsync(userAction);
+        }
+
+        user = user with { IsTrusted = !user.IsTrusted };
 
         _logger.LogInformation(
             "{User} trust toggled to {IsTrusted} by {ModifiedBy}",
             user.ToLogInfo(),
-            newTrustStatus,
+            user.IsTrusted,
             modifiedBy);
 
         return true;
