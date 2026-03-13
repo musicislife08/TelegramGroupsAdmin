@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
@@ -22,8 +21,7 @@ internal class NotMappedPropertiesIgnoringResolver : DefaultJsonTypeInfoResolver
 
             foreach (var property in jsonTypeInfo.Properties)
             {
-                var propertyInfo = type.GetProperty(property.Name);
-                if (propertyInfo?.GetCustomAttribute<NotMappedAttribute>() != null)
+                if (property.AttributeProvider?.GetCustomAttributes(typeof(NotMappedAttribute), inherit: true).Length > 0)
                 {
                     propertiesToRemove.Add(property);
                 }
