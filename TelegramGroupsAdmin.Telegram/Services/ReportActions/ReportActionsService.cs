@@ -13,7 +13,13 @@ internal sealed class ReportActionsService(
     IServiceScopeFactory scopeFactory,
     ILogger<ReportActionsService> logger) : IReportActionsService
 {
-    private readonly ConcurrentDictionary<long, SemaphoreSlim> _reportLocks = new();
+    private sealed class ReportLock
+    {
+        public SemaphoreSlim Semaphore { get; } = new(1, 1);
+        public int ReferenceCount;
+    }
+
+    private readonly ConcurrentDictionary<long, ReportLock> _reportLocks = new();
 
     // Content report actions
     public Task<ReviewActionResult> HandleContentSpamAsync(long reportId, Actor executor, CancellationToken ct)
@@ -76,11 +82,15 @@ internal sealed class ReportActionsService(
         Func<IServiceScope, Task<ReviewActionResult>> action,
         CancellationToken ct)
     {
-        var semaphore = _reportLocks.GetOrAdd(reportId, _ => new SemaphoreSlim(1, 1));
-        await semaphore.WaitAsync(ct);
+        var entry = _reportLocks.GetOrAdd(reportId, _ => new ReportLock());
+        Interlocked.Increment(ref entry.ReferenceCount);
+        var acquired = false;
         try
         {
-            using var scope = scopeFactory.CreateScope();
+            await entry.Semaphore.WaitAsync(ct);
+            acquired = true;
+
+            await using var scope = scopeFactory.CreateAsyncScope();
             return await action(scope);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -90,8 +100,10 @@ internal sealed class ReportActionsService(
         }
         finally
         {
-            semaphore.Release();
-            _reportLocks.TryRemove(reportId, out _);
+            if (acquired)
+                entry.Semaphore.Release();
+            if (Interlocked.Decrement(ref entry.ReferenceCount) == 0)
+                _reportLocks.TryRemove(new KeyValuePair<long, ReportLock>(reportId, entry));
         }
     }
 }

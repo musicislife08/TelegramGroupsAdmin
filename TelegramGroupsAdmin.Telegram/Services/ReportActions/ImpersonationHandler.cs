@@ -47,7 +47,7 @@ internal sealed class ImpersonationHandler(
             async () =>
             {
                 var current = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.Verdict?.ToString(), current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
@@ -76,7 +76,7 @@ internal sealed class ImpersonationHandler(
             async () =>
             {
                 var current = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.Verdict?.ToString(), current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
@@ -117,7 +117,7 @@ internal sealed class ImpersonationHandler(
             async () =>
             {
                 var current = await reportsRepository.GetImpersonationAlertAsync(alertId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.Verdict?.ToString(), current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },

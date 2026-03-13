@@ -293,6 +293,22 @@ public class ReportCallbackServiceTests
             .HandleImpersonationTrustAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
     }
 
+    [TestCase(-1)]
+    [TestCase(3)]
+    [TestCase(99)]
+    public async Task HandleCallbackAsync_ImpersonationInvalidAction_ReturnsInvalidAction(int invalidAction)
+    {
+        SetupContext(ReportType.ImpersonationAlert);
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:{invalidAction}"));
+
+        await _mockDmService.Received(1).EditDmTextAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s.Contains("Invalid action")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region Exam Routing Tests
@@ -336,6 +352,22 @@ public class ReportCallbackServiceTests
             .HandleExamDenyAndBanAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
     }
 
+    [TestCase(-1)]
+    [TestCase(3)]
+    [TestCase(99)]
+    public async Task HandleCallbackAsync_ExamInvalidAction_ReturnsInvalidAction(int invalidAction)
+    {
+        SetupContext(ReportType.ExamFailure);
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:{invalidAction}"));
+
+        await _mockDmService.Received(1).EditDmTextAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s.Contains("Invalid action")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
+    }
+
     #endregion
 
     #region Profile Scan Routing Tests
@@ -377,6 +409,22 @@ public class ReportCallbackServiceTests
 
         await _mockReportActionsService.Received(1)
             .HandleProfileScanKickAsync(TestReportId, Arg.Any<Actor>(), Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(-1)]
+    [TestCase(3)]
+    [TestCase(99)]
+    public async Task HandleCallbackAsync_ProfileScanInvalidAction_ReturnsInvalidAction(int invalidAction)
+    {
+        SetupContext(ReportType.ProfileScanAlert);
+
+        await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:{invalidAction}"));
+
+        await _mockDmService.Received(1).EditDmTextAsync(
+            TestDmChatId, TestDmMessageId,
+            Arg.Is<string>(s => s.Contains("Invalid action")),
+            replyMarkup: null,
+            cancellationToken: Arg.Any<CancellationToken>());
     }
 
     #endregion

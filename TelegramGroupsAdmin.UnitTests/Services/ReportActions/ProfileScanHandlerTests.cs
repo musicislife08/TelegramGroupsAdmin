@@ -194,6 +194,35 @@ public class ProfileScanHandlerTests
     }
 
     [Test]
+    public async Task KickAsync_Success_AutoClosesSiblingAlerts()
+    {
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _mockModerationService.KickUserFromChatAsync(
+                Arg.Any<KickIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
+        var siblingAlert = new ProfileScanAlertRecord
+        {
+            Id = 301L,
+            User = new UserIdentity(TestUserId, "Test", null, "testuser"),
+            Chat = new ChatIdentity(-100999L, "Other Chat"),
+            Score = 3.5m
+        };
+        _mockReportsRepo.GetPendingProfileScanAlertsForUserAsync(
+                TestUserId, Arg.Any<CancellationToken>())
+            .Returns(new List<ProfileScanAlertRecord> { siblingAlert });
+
+        await _handler.KickAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        // Sibling alert auto-closed
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
+            301L, ReportStatus.Reviewed, Arg.Any<string>(),
+            "Auto-Kick", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task KickAsync_AlreadyHandled_ReturnsFailure()
     {
         var alert = CreateTestAlert(reviewed: true);
@@ -276,6 +305,38 @@ public class ProfileScanHandlerTests
         await _mockAdmissionHandler.DidNotReceive().TryAdmitUserAsync(
             Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AllowAsync_Success_AutoClosesSiblingAlerts()
+    {
+        var alert = CreateTestAlert();
+        _mockReportsRepo.GetProfileScanAlertAsync(TestAlertId, Arg.Any<CancellationToken>())
+            .Returns(alert);
+        _mockWelcomeRepo.GetByUserAndChatAsync(TestUserId, TestChatId, Arg.Any<CancellationToken>())
+            .Returns((WelcomeResponse?)null);
+        _mockAdmissionHandler.TryAdmitUserAsync(
+                Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<Actor>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(AdmissionResult.Admitted);
+
+        var siblingAlert = new ProfileScanAlertRecord
+        {
+            Id = 301L,
+            User = new UserIdentity(TestUserId, "Test", null, "testuser"),
+            Chat = new ChatIdentity(-100999L, "Other Chat"),
+            Score = 3.5m
+        };
+        _mockReportsRepo.GetPendingProfileScanAlertsForUserAsync(
+                TestUserId, Arg.Any<CancellationToken>())
+            .Returns(new List<ProfileScanAlertRecord> { siblingAlert });
+
+        await _handler.AllowAsync(TestAlertId, TestExecutor, CancellationToken.None);
+
+        // Sibling alert auto-closed
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
+            301L, ReportStatus.Reviewed, Arg.Any<string>(),
+            "Auto-Allow", Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Test]

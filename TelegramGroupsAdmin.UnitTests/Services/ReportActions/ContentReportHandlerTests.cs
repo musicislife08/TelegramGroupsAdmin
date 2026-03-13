@@ -355,7 +355,7 @@ public class ContentReportHandlerTests
         await _mockBotMessageService.Received(1).SendAndSaveMessageAsync(
             TestChatId,
             Arg.Is<string>(s => s.Contains("reviewed") && s.Contains("no action")),
-            parseMode: ParseMode.Markdown,
+            parseMode: ParseMode.None,
             replyParameters: Arg.Is<ReplyParameters>(r => r.MessageId == TestMessageId),
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -518,6 +518,44 @@ public class ContentReportHandlerTests
         Assert.That(result.Success, Is.False);
         Assert.That(result.Message, Does.Contain("Already handled by RacingAdmin"));
         Assert.That(result.Message, Does.Contain("(dismiss)"));
+        Assert.That(result.IsAlreadyHandled, Is.True);
+    }
+
+    [Test]
+    public async Task WarnAsync_RaceCondition_TryUpdateFails_ReturnsFailureWithAttribution()
+    {
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.WarnUserAsync(
+                Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, WarningCount = 1 });
+
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var handledReport = new Report(
+            Id: TestReportId, MessageId: TestMessageId,
+            Chat: new ChatIdentity(TestChatId, "TestChat"),
+            ReportCommandMessageId: null,
+            ReportedByUserId: 11111L, ReportedByUserName: "reporter",
+            ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status: ReportStatus.Reviewed, ReviewedBy: "RacingAdmin",
+            ReviewedAt: DateTimeOffset.UtcNow, ActionTaken: "warn",
+            AdminNotes: null);
+
+        // First call returns pending, second (re-fetch in race handler) returns handled
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report, handledReport);
+
+        var result = await _handler.WarnAsync(TestReportId, TestExecutor, CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Message, Does.Contain("Already handled by RacingAdmin"));
+        Assert.That(result.Message, Does.Contain("(warn)"));
         Assert.That(result.IsAlreadyHandled, Is.True);
     }
 

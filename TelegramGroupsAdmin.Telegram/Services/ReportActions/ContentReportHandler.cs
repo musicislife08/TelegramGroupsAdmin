@@ -270,7 +270,7 @@ internal sealed class ContentReportHandler(
                 await botMessageService.SendAndSaveMessageAsync(
                     report.Chat.Id,
                     "\u2713 This message was reviewed and no action was taken",
-                    parseMode: ParseMode.Markdown,
+                    parseMode: ParseMode.None,
                     replyParameters: new ReplyParameters { MessageId = report.MessageId },
                     cancellationToken: ct);
             }

@@ -37,7 +37,7 @@ internal sealed class ExamHandler(
             async () =>
             {
                 var current = await reportsRepository.GetExamFailureAsync(examId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Exam failure {examId} could not be updated");
             },
@@ -74,7 +74,7 @@ internal sealed class ExamHandler(
             async () =>
             {
                 var current = await reportsRepository.GetExamFailureAsync(examId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Exam failure {examId} could not be updated");
             },
@@ -111,7 +111,7 @@ internal sealed class ExamHandler(
             async () =>
             {
                 var current = await reportsRepository.GetExamFailureAsync(examId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Exam failure {examId} could not be updated");
             },

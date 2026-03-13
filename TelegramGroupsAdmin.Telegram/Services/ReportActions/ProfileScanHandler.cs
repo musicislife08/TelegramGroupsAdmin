@@ -50,7 +50,7 @@ internal sealed class ProfileScanHandler(
             async () =>
             {
                 var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
@@ -102,7 +102,7 @@ internal sealed class ProfileScanHandler(
             async () =>
             {
                 var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
@@ -162,7 +162,7 @@ internal sealed class ProfileScanHandler(
             async () =>
             {
                 var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
-                return current?.ReviewedAt.HasValue == true
+                return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
