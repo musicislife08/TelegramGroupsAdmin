@@ -22,72 +22,85 @@ internal sealed class ReportActionsService(
     private readonly ConcurrentDictionary<long, ReportLock> _reportLocks = new();
 
     // Content report actions
-    public Task<ReviewActionResult> HandleContentSpamAsync(long reportId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleContentSpamAsync(long reportId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(reportId, scope =>
-            scope.ServiceProvider.GetRequiredService<IContentReportHandler>().SpamAsync(reportId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
+                .SpamAsync(reportId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleContentBanAsync(long reportId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleContentBanAsync(long reportId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(reportId, scope =>
-            scope.ServiceProvider.GetRequiredService<IContentReportHandler>().BanAsync(reportId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
+                .BanAsync(reportId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleContentWarnAsync(long reportId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleContentWarnAsync(long reportId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(reportId, scope =>
-            scope.ServiceProvider.GetRequiredService<IContentReportHandler>().WarnAsync(reportId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
+                .WarnAsync(reportId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleContentDismissAsync(long reportId, Actor executor, string? reason, CancellationToken ct)
+    public Task<ReviewActionResult> HandleContentDismissAsync(long reportId, Actor executor, string? reason, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(reportId, scope =>
-            scope.ServiceProvider.GetRequiredService<IContentReportHandler>().DismissAsync(reportId, executor, reason, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IContentReportHandler>()
+                .DismissAsync(reportId, executor, reason, cancellationToken: cancellationToken), cancellationToken);
 
     // Profile scan actions
-    public Task<ReviewActionResult> HandleProfileScanBanAsync(long alertId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleProfileScanBanAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, scope =>
-            scope.ServiceProvider.GetRequiredService<IProfileScanHandler>().BanAsync(alertId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IProfileScanHandler>()
+                .BanAsync(alertId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleProfileScanKickAsync(long alertId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleProfileScanKickAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, scope =>
-            scope.ServiceProvider.GetRequiredService<IProfileScanHandler>().KickAsync(alertId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IProfileScanHandler>()
+                .KickAsync(alertId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleProfileScanAllowAsync(long alertId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleProfileScanAllowAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, scope =>
-            scope.ServiceProvider.GetRequiredService<IProfileScanHandler>().AllowAsync(alertId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IProfileScanHandler>()
+                .AllowAsync(alertId, executor, cancellationToken: cancellationToken), cancellationToken);
 
     // Impersonation actions
-    public Task<ReviewActionResult> HandleImpersonationConfirmAsync(long alertId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleImpersonationConfirmAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, scope =>
-            scope.ServiceProvider.GetRequiredService<IImpersonationHandler>().ConfirmAsync(alertId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IImpersonationHandler>()
+                .ConfirmAsync(alertId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleImpersonationDismissAsync(long alertId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleImpersonationDismissAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, scope =>
-            scope.ServiceProvider.GetRequiredService<IImpersonationHandler>().DismissAsync(alertId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IImpersonationHandler>()
+                .DismissAsync(alertId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleImpersonationTrustAsync(long alertId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleImpersonationTrustAsync(long alertId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(alertId, scope =>
-            scope.ServiceProvider.GetRequiredService<IImpersonationHandler>().TrustAsync(alertId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IImpersonationHandler>()
+                .TrustAsync(alertId, executor, cancellationToken: cancellationToken), cancellationToken);
 
     // Exam actions
-    public Task<ReviewActionResult> HandleExamApproveAsync(long examId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleExamApproveAsync(long examId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(examId, scope =>
-            scope.ServiceProvider.GetRequiredService<IExamHandler>().ApproveAsync(examId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IExamHandler>()
+                .ApproveAsync(examId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleExamDenyAsync(long examId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleExamDenyAsync(long examId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(examId, scope =>
-            scope.ServiceProvider.GetRequiredService<IExamHandler>().DenyAsync(examId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IExamHandler>()
+                .DenyAsync(examId, executor, cancellationToken: cancellationToken), cancellationToken);
 
-    public Task<ReviewActionResult> HandleExamDenyAndBanAsync(long examId, Actor executor, CancellationToken ct)
+    public Task<ReviewActionResult> HandleExamDenyAndBanAsync(long examId, Actor executor, CancellationToken cancellationToken)
         => ExecuteWithLockAsync(examId, scope =>
-            scope.ServiceProvider.GetRequiredService<IExamHandler>().DenyAndBanAsync(examId, executor, ct), ct);
+            scope.ServiceProvider.GetRequiredService<IExamHandler>()
+                .DenyAndBanAsync(examId, executor, cancellationToken: cancellationToken), cancellationToken);
 
     private async Task<ReviewActionResult> ExecuteWithLockAsync(
         long reportId,
         Func<IServiceScope, Task<ReviewActionResult>> action,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var entry = _reportLocks.GetOrAdd(reportId, _ => new ReportLock());
         Interlocked.Increment(ref entry.ReferenceCount);
         var acquired = false;
         try
         {
-            await entry.Semaphore.WaitAsync(ct);
+            await entry.Semaphore.WaitAsync(cancellationToken);
             acquired = true;
 
             await using var scope = scopeFactory.CreateAsyncScope();

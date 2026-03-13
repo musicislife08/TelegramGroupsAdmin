@@ -23,9 +23,9 @@ internal sealed class ProfileScanHandler(
     IReportCallbackContextRepository callbackContextRepo,
     ILogger<ProfileScanHandler> logger) : IProfileScanHandler
 {
-    public async Task<ReviewActionResult> BanAsync(long alertId, Actor executor, CancellationToken ct)
+    public async Task<ReviewActionResult> BanAsync(long alertId, Actor executor, CancellationToken cancellationToken)
     {
-        var fetch = await FetchAlertAsync(alertId, ct);
+        var fetch = await FetchAlertAsync(alertId, cancellationToken);
         if (!fetch.Success)
             return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
@@ -39,7 +39,7 @@ internal sealed class ProfileScanHandler(
                 Reason = $"Profile scan alert #{alertId} confirmed \u2014 score {alert.Score:F1}",
                 Chat = alert.Chat
             },
-            ct);
+            cancellationToken);
 
         if (!result.Success)
             return new ReviewActionResult(false, $"Ban failed: {result.ErrorMessage}");
@@ -49,28 +49,28 @@ internal sealed class ProfileScanHandler(
             $"Banned after profile scan review (affected {result.ChatsAffected} chats)",
             async () =>
             {
-                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
+                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
-            ct);
+            cancellationToken);
         if (statusResult != null) return statusResult;
 
         logger.LogInformation("Profile scan alert {AlertId}: User {User} banned by {Executor}",
             alertId, alert.User.ToLogInfo(), executor.DisplayName);
 
-        await CleanupSiblingAlertsAsync(alert, "Ban", ct);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, ct);
+        await CleanupSiblingAlertsAsync(alert, "Ban", cancellationToken);
+        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         return new ReviewActionResult(true,
             $"User banned from {result.ChatsAffected} chat(s)",
             ActionName: "Ban");
     }
 
-    public async Task<ReviewActionResult> KickAsync(long alertId, Actor executor, CancellationToken ct)
+    public async Task<ReviewActionResult> KickAsync(long alertId, Actor executor, CancellationToken cancellationToken)
     {
-        var fetch = await FetchAlertAsync(alertId, ct);
+        var fetch = await FetchAlertAsync(alertId, cancellationToken);
         if (!fetch.Success)
             return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
@@ -87,7 +87,7 @@ internal sealed class ProfileScanHandler(
                     Reason = $"Profile scan alert #{alertId} \u2014 kicked after review",
                     RevokeMessages = false
                 },
-                ct);
+                cancellationToken);
 
             if (!result.Success)
                 return new ReviewActionResult(false, $"Kick failed: {result.ErrorMessage}");
@@ -101,19 +101,19 @@ internal sealed class ProfileScanHandler(
             reportsRepository, alertId, ReportStatus.Reviewed, executor, "kick", notes,
             async () =>
             {
-                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
+                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
-            ct);
+            cancellationToken);
         if (statusResult != null) return statusResult;
 
         logger.LogInformation("Profile scan alert {AlertId}: User {User} kicked by {Executor}",
             alertId, alert.User.ToLogInfo(), executor.DisplayName);
 
-        await CleanupSiblingAlertsAsync(alert, "Kick", ct);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, ct);
+        await CleanupSiblingAlertsAsync(alert, "Kick", cancellationToken);
+        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         var message = alert.Chat.Id == 0
             ? "Alert resolved (no chat to kick from)"
@@ -121,9 +121,9 @@ internal sealed class ProfileScanHandler(
         return new ReviewActionResult(true, message, ActionName: "Kick");
     }
 
-    public async Task<ReviewActionResult> AllowAsync(long alertId, Actor executor, CancellationToken ct)
+    public async Task<ReviewActionResult> AllowAsync(long alertId, Actor executor, CancellationToken cancellationToken)
     {
-        var fetch = await FetchAlertAsync(alertId, ct);
+        var fetch = await FetchAlertAsync(alertId, cancellationToken);
         if (!fetch.Success)
             return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
@@ -131,7 +131,7 @@ internal sealed class ProfileScanHandler(
 
         // If user was kicked by welcome timeout, just close the report
         var welcomeResponse = await welcomeResponsesRepository.GetByUserAndChatAsync(
-            alert.User.Id, alert.Chat.Id, ct);
+            alert.User.Id, alert.Chat.Id, cancellationToken);
 
         string message;
         if (welcomeResponse is { Response: Models.WelcomeResponseType.Timeout })
@@ -146,7 +146,7 @@ internal sealed class ProfileScanHandler(
             var admissionResult = await welcomeAdmissionHandler.TryAdmitUserAsync(
                 alert.User, alert.Chat, executor,
                 $"Profile scan alert #{alertId} allowed by admin",
-                ct);
+                cancellationToken);
 
             logger.LogInformation("Profile scan alert {AlertId}: User {User} allowed by {Executor} (admission: {Result})",
                 alertId, alert.User.ToLogInfo(), executor.DisplayName, admissionResult);
@@ -161,23 +161,23 @@ internal sealed class ProfileScanHandler(
             "User allowed after profile scan review",
             async () =>
             {
-                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
+                var current = await reportsRepository.GetProfileScanAlertAsync(alertId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedByEmail, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Alert {alertId} could not be updated");
             },
-            ct);
+            cancellationToken);
         if (statusResult != null) return statusResult;
 
-        await CleanupSiblingAlertsAsync(alert, "Allow", ct);
-        await callbackContextRepo.DeleteByReportIdAsync(alertId, ct);
+        await CleanupSiblingAlertsAsync(alert, "Allow", cancellationToken);
+        await callbackContextRepo.DeleteByReportIdAsync(alertId, cancellationToken);
 
         return new ReviewActionResult(true, message, ActionName: "Allow");
     }
 
-    private async Task<FetchResult<ProfileScanAlertRecord>> FetchAlertAsync(long alertId, CancellationToken ct)
+    private async Task<FetchResult<ProfileScanAlertRecord>> FetchAlertAsync(long alertId, CancellationToken cancellationToken)
     {
-        var alert = await reportsRepository.GetProfileScanAlertAsync(alertId, ct);
+        var alert = await reportsRepository.GetProfileScanAlertAsync(alertId, cancellationToken);
         if (alert == null)
             return FetchResult<ProfileScanAlertRecord>.Fail($"Profile scan alert {alertId} not found");
 
@@ -189,9 +189,9 @@ internal sealed class ProfileScanHandler(
         return FetchResult<ProfileScanAlertRecord>.Ok(alert);
     }
 
-    private async Task CleanupSiblingAlertsAsync(ProfileScanAlertRecord alert, string actionName, CancellationToken ct)
+    private async Task CleanupSiblingAlertsAsync(ProfileScanAlertRecord alert, string actionName, CancellationToken cancellationToken)
     {
-        var siblingAlerts = await reportsRepository.GetPendingProfileScanAlertsForUserAsync(alert.User.Id, ct);
+        var siblingAlerts = await reportsRepository.GetPendingProfileScanAlertsForUserAsync(alert.User.Id, cancellationToken);
         if (siblingAlerts.Count == 0) return;
 
         var note = $"Auto-resolved: user {actionName.ToLowerInvariant()} via profile scan alert #{alert.Id}";
@@ -202,7 +202,7 @@ internal sealed class ProfileScanHandler(
                 sibling.Id, ReportStatus.Reviewed,
                 Actor.ProfileScan.GetDisplayText(),
                 $"Auto-{actionName}",
-                note, ct);
+                note, cancellationToken);
 
             logger.LogDebug("Auto-closed sibling profile scan alert #{SiblingId} for {User}",
                 sibling.Id, alert.User.ToLogDebug());

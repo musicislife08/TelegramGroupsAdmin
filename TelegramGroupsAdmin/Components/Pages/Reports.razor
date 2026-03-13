@@ -162,7 +162,7 @@
     private int _pendingImpersonationCount;
     private int _pendingExamCount;
     private int _pendingProfileScanCount;
-    private readonly CancellationTokenSource _cts = new();
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -187,7 +187,7 @@
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 WebUser!.Id,
                 WebUser.PermissionLevel,
-                cancellationToken: _cts.Token);
+                cancellationToken: _cancellationTokenSource.Token);
             var accessibleChatIds = accessibleChats.Select(c => c.Identity.Id).ToHashSet();
 
             // GlobalAdmin/Owner can see reports with sentinel chat_id=0 (e.g., background profile scan alerts)
@@ -203,7 +203,7 @@
                 chatId: null,
                 status: null,
                 limit: 100,
-                cancellationToken: _cts.Token);
+                cancellationToken: _cancellationTokenSource.Token);
 
             foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.Chat.Id) || (isElevated && r.Chat.Id == 0)))
             {
@@ -224,7 +224,7 @@
 
             // Load all impersonation alerts (filter by status is done client-side in ApplyFilters)
             var alerts = await ReportsRepository.GetImpersonationAlertsAsync(
-                pendingOnly: false, cancellationToken: _cts.Token);
+                pendingOnly: false, cancellationToken: _cancellationTokenSource.Token);
             foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -244,7 +244,7 @@
 
             // Load all exam failures (filter by status is done client-side in ApplyFilters)
             var examFailures = await ReportsRepository.GetExamFailuresAsync(
-                pendingOnly: false, cancellationToken: _cts.Token);
+                pendingOnly: false, cancellationToken: _cancellationTokenSource.Token);
             foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.Chat.Id) || (isElevated && e.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -264,7 +264,7 @@
 
             // Load all profile scan alerts
             var profileScanAlerts = await ReportsRepository.GetProfileScanAlertsAsync(
-                pendingOnly: false, cancellationToken: _cts.Token);
+                pendingOnly: false, cancellationToken: _cancellationTokenSource.Token);
             foreach (var alert in profileScanAlerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -391,9 +391,9 @@
         var executor = WebUser!.ToActor();
         var result = args.Action switch
         {
-            ProfileScanAction.Ban => await ReportActionsService.HandleProfileScanBanAsync(args.Alert.Id, executor, _cts.Token),
-            ProfileScanAction.Kick => await ReportActionsService.HandleProfileScanKickAsync(args.Alert.Id, executor, _cts.Token),
-            ProfileScanAction.Allow => await ReportActionsService.HandleProfileScanAllowAsync(args.Alert.Id, executor, _cts.Token),
+            ProfileScanAction.Ban => await ReportActionsService.HandleProfileScanBanAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ProfileScanAction.Kick => await ReportActionsService.HandleProfileScanKickAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ProfileScanAction.Allow => await ReportActionsService.HandleProfileScanAllowAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
         var severity = result.Success ? Severity.Success
@@ -408,10 +408,10 @@
         var executor = WebUser!.ToActor();
         var result = args.Action switch
         {
-            ReportAction.Spam => await ReportActionsService.HandleContentSpamAsync(args.Report.Id, executor, _cts.Token),
-            ReportAction.Ban => await ReportActionsService.HandleContentBanAsync(args.Report.Id, executor, _cts.Token),
-            ReportAction.Warn => await ReportActionsService.HandleContentWarnAsync(args.Report.Id, executor, _cts.Token),
-            ReportAction.Dismiss => await ReportActionsService.HandleContentDismissAsync(args.Report.Id, executor, ct: _cts.Token),
+            ReportAction.Spam => await ReportActionsService.HandleContentSpamAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ReportAction.Ban => await ReportActionsService.HandleContentBanAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ReportAction.Warn => await ReportActionsService.HandleContentWarnAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ReportAction.Dismiss => await ReportActionsService.HandleContentDismissAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
         var severity = result.Success ? Severity.Success
@@ -426,9 +426,9 @@
         var executor = WebUser!.ToActor();
         var result = args.Action switch
         {
-            ImpersonationAction.Confirm => await ReportActionsService.HandleImpersonationConfirmAsync(args.Alert.Id, executor, _cts.Token),
-            ImpersonationAction.Dismiss => await ReportActionsService.HandleImpersonationDismissAsync(args.Alert.Id, executor, _cts.Token),
-            ImpersonationAction.Trust => await ReportActionsService.HandleImpersonationTrustAsync(args.Alert.Id, executor, _cts.Token),
+            ImpersonationAction.Confirm => await ReportActionsService.HandleImpersonationConfirmAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ImpersonationAction.Dismiss => await ReportActionsService.HandleImpersonationDismissAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ImpersonationAction.Trust => await ReportActionsService.HandleImpersonationTrustAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
         var severity = result.Success ? Severity.Success
@@ -443,9 +443,9 @@
         var executor = WebUser!.ToActor();
         var result = args.Action switch
         {
-            ExamAction.Approve => await ReportActionsService.HandleExamApproveAsync(args.ExamFailure.Id, executor, _cts.Token),
-            ExamAction.Deny => await ReportActionsService.HandleExamDenyAsync(args.ExamFailure.Id, executor, _cts.Token),
-            ExamAction.DenyAndBan => await ReportActionsService.HandleExamDenyAndBanAsync(args.ExamFailure.Id, executor, _cts.Token),
+            ExamAction.Approve => await ReportActionsService.HandleExamApproveAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.Deny => await ReportActionsService.HandleExamDenyAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.DenyAndBan => await ReportActionsService.HandleExamDenyAndBanAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
             _ => new ReviewActionResult(false, "Unknown action")
         };
         var severity = result.Success ? Severity.Success
@@ -457,7 +457,7 @@
 
     public void Dispose()
     {
-        _cts.Cancel();
-        _cts.Dispose();
+        _cancellationTokenSource.Cancel();
+        _cancellationTokenSource.Dispose();
     }
 }

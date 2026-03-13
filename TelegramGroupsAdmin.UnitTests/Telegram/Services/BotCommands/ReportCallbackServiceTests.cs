@@ -224,13 +224,13 @@ public class ReportCallbackServiceTests
     public async Task HandleCallbackAsync_ContentDismiss_RoutesToHandleContentDismissAsync()
     {
         SetupContext(ReportType.ContentReport);
-        _mockReportActionsService.HandleContentDismissAsync(TestReportId, Arg.Any<Actor>(), ct: Arg.Any<CancellationToken>())
+        _mockReportActionsService.HandleContentDismissAsync(TestReportId, Arg.Any<Actor>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new ReviewActionResult(true, "Dismissed", "Dismiss"));
 
         await _service.HandleCallbackAsync(CreateCallbackQuery(data: $"rev:{TestContextId}:3"));
 
         await _mockReportActionsService.Received(1)
-            .HandleContentDismissAsync(TestReportId, Arg.Any<Actor>(), ct: Arg.Any<CancellationToken>());
+            .HandleContentDismissAsync(TestReportId, Arg.Any<Actor>(), cancellationToken: Arg.Any<CancellationToken>());
     }
 
     [TestCase(-1)]

@@ -28,9 +28,9 @@ internal sealed class ContentReportHandler(
 {
     private sealed record ContentFetchData(Report Report, MessageRecord Message);
 
-    public async Task<ReviewActionResult> SpamAsync(long reportId, Actor executor, CancellationToken ct)
+    public async Task<ReviewActionResult> SpamAsync(long reportId, Actor executor, CancellationToken cancellationToken)
     {
-        var fetch = await FetchReportAndMessageAsync(reportId, ct);
+        var fetch = await FetchReportAndMessageAsync(reportId, cancellationToken);
         if (!fetch.Success)
             return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
@@ -46,7 +46,7 @@ internal sealed class ContentReportHandler(
                 Executor = executor,
                 Reason = $"Report #{reportId} - spam/abuse"
             },
-            ct);
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -59,28 +59,28 @@ internal sealed class ContentReportHandler(
             $"User banned from {result.ChatsAffected} chats, message deleted",
             async () =>
             {
-                var current = await reportsRepository.GetContentReportAsync(reportId, ct);
+                var current = await reportsRepository.GetContentReportAsync(reportId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Report {reportId} could not be updated");
             },
-            ct);
+            cancellationToken);
         if (statusResult != null) return statusResult;
 
         await auditService.LogEventAsync(
             AuditEventType.ReportReviewed, executor, Actor.FromUserIdentity(message.User),
-            $"Marked as spam (report #{reportId}, affected {result.ChatsAffected} chats)", ct);
+            $"Marked as spam (report #{reportId}, affected {result.ChatsAffected} chats)", cancellationToken);
 
-        await CleanupContentReportAsync(report, ReportAction.Spam, ct);
+        await CleanupContentReportAsync(report, ReportAction.Spam, cancellationToken);
 
         return new ReviewActionResult(true,
             $"Marked as spam - user banned from {result.ChatsAffected} chat(s)",
             ActionName: "Spam");
     }
 
-    public async Task<ReviewActionResult> BanAsync(long reportId, Actor executor, CancellationToken ct)
+    public async Task<ReviewActionResult> BanAsync(long reportId, Actor executor, CancellationToken cancellationToken)
     {
-        var fetch = await FetchReportAndMessageAsync(reportId, ct);
+        var fetch = await FetchReportAndMessageAsync(reportId, cancellationToken);
         if (!fetch.Success)
             return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
@@ -96,7 +96,7 @@ internal sealed class ContentReportHandler(
                 MessageId = report.MessageId,
                 Chat = message.Chat
             },
-            ct);
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -109,7 +109,7 @@ internal sealed class ContentReportHandler(
         {
             await botMessageService.DeleteAndMarkMessageAsync(
                 report.Chat.Id, report.MessageId,
-                deletionSource: "ban_action", cancellationToken: ct);
+                deletionSource: "ban_action", cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -121,28 +121,28 @@ internal sealed class ContentReportHandler(
             $"User banned from {result.ChatsAffected} chats",
             async () =>
             {
-                var current = await reportsRepository.GetContentReportAsync(reportId, ct);
+                var current = await reportsRepository.GetContentReportAsync(reportId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Report {reportId} could not be updated");
             },
-            ct);
+            cancellationToken);
         if (statusResult != null) return statusResult;
 
         await auditService.LogEventAsync(
             AuditEventType.ReportReviewed, executor, Actor.FromUserIdentity(message.User),
-            $"Banned user (report #{reportId}, affected {result.ChatsAffected} chats)", ct);
+            $"Banned user (report #{reportId}, affected {result.ChatsAffected} chats)", cancellationToken);
 
-        await CleanupContentReportAsync(report, ReportAction.Ban, ct);
+        await CleanupContentReportAsync(report, ReportAction.Ban, cancellationToken);
 
         return new ReviewActionResult(true,
             $"User banned from {result.ChatsAffected} chat(s)",
             ActionName: "Ban");
     }
 
-    public async Task<ReviewActionResult> WarnAsync(long reportId, Actor executor, CancellationToken ct)
+    public async Task<ReviewActionResult> WarnAsync(long reportId, Actor executor, CancellationToken cancellationToken)
     {
-        var fetch = await FetchReportAndMessageAsync(reportId, ct);
+        var fetch = await FetchReportAndMessageAsync(reportId, cancellationToken);
         if (!fetch.Success)
             return new ReviewActionResult(false, fetch.ErrorMessage!, IsAlreadyHandled: fetch.Status == FetchStatus.AlreadyHandled);
 
@@ -158,7 +158,7 @@ internal sealed class ContentReportHandler(
                 Reason = $"Report #{reportId} - inappropriate behavior",
                 MessageId = report.MessageId
             },
-            ct);
+            cancellationToken);
 
         if (!result.Success)
         {
@@ -171,28 +171,28 @@ internal sealed class ContentReportHandler(
             $"User {message.User.DisplayName} warned",
             async () =>
             {
-                var current = await reportsRepository.GetContentReportAsync(reportId, ct);
+                var current = await reportsRepository.GetContentReportAsync(reportId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Report {reportId} could not be updated");
             },
-            ct);
+            cancellationToken);
         if (statusResult != null) return statusResult;
 
         await auditService.LogEventAsync(
             AuditEventType.ReportReviewed, executor, Actor.FromUserIdentity(message.User),
-            $"Warned user (report #{reportId}, {result.WarningCount} warnings total)", ct);
+            $"Warned user (report #{reportId}, {result.WarningCount} warnings total)", cancellationToken);
 
-        await CleanupContentReportAsync(report, ReportAction.Warn, ct);
+        await CleanupContentReportAsync(report, ReportAction.Warn, cancellationToken);
 
         return new ReviewActionResult(true,
             $"Warning issued (warning #{result.WarningCount})",
             ActionName: "Warn");
     }
 
-    public async Task<ReviewActionResult> DismissAsync(long reportId, Actor executor, string? reason, CancellationToken ct)
+    public async Task<ReviewActionResult> DismissAsync(long reportId, Actor executor, string? reason, CancellationToken cancellationToken)
     {
-        var report = await reportsRepository.GetContentReportAsync(reportId, ct);
+        var report = await reportsRepository.GetContentReportAsync(reportId, cancellationToken);
         if (report == null)
             return new ReviewActionResult(false, $"Report {reportId} not found");
 
@@ -205,19 +205,19 @@ internal sealed class ContentReportHandler(
             reason ?? "No action needed",
             async () =>
             {
-                var current = await reportsRepository.GetContentReportAsync(reportId, ct);
+                var current = await reportsRepository.GetContentReportAsync(reportId, cancellationToken);
                 return current != null
                     ? ReportStatusHelper.CheckAlreadyHandled(current.ReviewedBy, current.ActionTaken, current.ReviewedAt)
                     : new ReviewActionResult(false, $"Report {reportId} could not be updated");
             },
-            ct);
+            cancellationToken);
         if (statusResult != null) return statusResult;
 
         await auditService.LogEventAsync(
             AuditEventType.ReportReviewed, executor, null,
-            $"Dismissed report #{reportId} ({reason ?? "no action taken"})", ct);
+            $"Dismissed report #{reportId} ({reason ?? "no action taken"})", cancellationToken);
 
-        await CleanupContentReportAsync(report, ReportAction.Dismiss, ct);
+        await CleanupContentReportAsync(report, ReportAction.Dismiss, cancellationToken);
 
         logger.LogInformation("Dismissed report {ReportId} (reason: {Reason})", reportId, reason ?? "none");
 
@@ -225,9 +225,9 @@ internal sealed class ContentReportHandler(
     }
 
     private async Task<FetchResult<ContentFetchData>> FetchReportAndMessageAsync(
-        long reportId, CancellationToken ct)
+        long reportId, CancellationToken cancellationToken)
     {
-        var report = await reportsRepository.GetContentReportAsync(reportId, ct);
+        var report = await reportsRepository.GetContentReportAsync(reportId, cancellationToken);
         if (report == null)
             return FetchResult<ContentFetchData>.Fail($"Report {reportId} not found");
 
@@ -237,14 +237,14 @@ internal sealed class ContentReportHandler(
         if (alreadyHandled != null)
             return FetchResult<ContentFetchData>.Handled(alreadyHandled.Message);
 
-        var message = await messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, ct);
+        var message = await messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (message == null)
             return FetchResult<ContentFetchData>.Fail($"Message {report.MessageId} not found");
 
         return FetchResult<ContentFetchData>.Ok(new ContentFetchData(report, message));
     }
 
-    private async Task CleanupContentReportAsync(Report report, ReportAction action, CancellationToken ct)
+    private async Task CleanupContentReportAsync(Report report, ReportAction action, CancellationToken cancellationToken)
     {
         // Delete /report command message
         if (report.ReportCommandMessageId.HasValue)
@@ -253,7 +253,7 @@ internal sealed class ContentReportHandler(
             {
                 await botMessageService.DeleteAndMarkMessageAsync(
                     report.Chat.Id, report.ReportCommandMessageId.Value,
-                    deletionSource: "report_reviewed", cancellationToken: ct);
+                    deletionSource: "report_reviewed", cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
@@ -272,7 +272,7 @@ internal sealed class ContentReportHandler(
                     "\u2713 This message was reviewed and no action was taken",
                     parseMode: ParseMode.None,
                     replyParameters: new ReplyParameters { MessageId = report.MessageId },
-                    cancellationToken: ct);
+                    cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
@@ -281,7 +281,7 @@ internal sealed class ContentReportHandler(
         }
 
         // Cleanup stale DM callback contexts
-        await callbackContextRepo.DeleteByReportIdAsync(report.Id, ct);
+        await callbackContextRepo.DeleteByReportIdAsync(report.Id, cancellationToken);
     }
 
 }

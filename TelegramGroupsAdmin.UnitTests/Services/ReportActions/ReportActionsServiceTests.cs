@@ -37,6 +37,7 @@ public class ReportActionsServiceTests
 
         _mockScope.ServiceProvider.Returns(_mockServiceProvider);
         _mockScopeFactory.CreateScope().Returns(_mockScope);
+        _mockScopeFactory.CreateAsyncScope().Returns(new AsyncServiceScope(_mockScope));
 
         _mockServiceProvider.GetService(typeof(IContentReportHandler)).Returns(_mockContentHandler);
         _mockServiceProvider.GetService(typeof(IProfileScanHandler)).Returns(_mockProfileScanHandler);
@@ -117,7 +118,7 @@ public class ReportActionsServiceTests
 
         await _service.HandleContentSpamAsync(1L, TestExecutor, CancellationToken.None);
 
-        _mockScopeFactory.Received(1).CreateScope();
+        _mockScopeFactory.Received(1).CreateAsyncScope();
         _mockScope.Received(1).Dispose();
     }
 

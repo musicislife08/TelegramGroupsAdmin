@@ -87,75 +87,75 @@ public sealed class ReportCallbackService(
     }
 
     private async Task<ReviewActionResult> RouteToServiceAsync(
-        ReportType reportType, long reviewId, int actionInt, Actor executor, CancellationToken ct)
+        ReportType reportType, long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
         return reportType switch
         {
-            ReportType.ContentReport => await RouteContentReportAsync(reviewId, actionInt, executor, ct),
-            ReportType.ImpersonationAlert => await RouteImpersonationAsync(reviewId, actionInt, executor, ct),
-            ReportType.ExamFailure => await RouteExamAsync(reviewId, actionInt, executor, ct),
-            ReportType.ProfileScanAlert => await RouteProfileScanAsync(reviewId, actionInt, executor, ct),
+            ReportType.ContentReport => await RouteContentReportAsync(reviewId, actionInt, executor, cancellationToken),
+            ReportType.ImpersonationAlert => await RouteImpersonationAsync(reviewId, actionInt, executor, cancellationToken),
+            ReportType.ExamFailure => await RouteExamAsync(reviewId, actionInt, executor, cancellationToken),
+            ReportType.ProfileScanAlert => await RouteProfileScanAsync(reviewId, actionInt, executor, cancellationToken),
             _ => new ReviewActionResult(false, $"Unknown review type: {reportType}")
         };
     }
 
     private async Task<ReviewActionResult> RouteContentReportAsync(
-        long reviewId, int actionInt, Actor executor, CancellationToken ct)
+        long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
         if (actionInt < 0 || actionInt > (int)ReportAction.Dismiss)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ReportAction)actionInt switch
         {
-            ReportAction.Spam => await reportActionsService.HandleContentSpamAsync(reviewId, executor, ct),
-            ReportAction.Ban => await reportActionsService.HandleContentBanAsync(reviewId, executor, ct),
-            ReportAction.Warn => await reportActionsService.HandleContentWarnAsync(reviewId, executor, ct),
-            ReportAction.Dismiss => await reportActionsService.HandleContentDismissAsync(reviewId, executor, ct: ct),
+            ReportAction.Spam => await reportActionsService.HandleContentSpamAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ReportAction.Ban => await reportActionsService.HandleContentBanAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ReportAction.Warn => await reportActionsService.HandleContentWarnAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ReportAction.Dismiss => await reportActionsService.HandleContentDismissAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }
 
     private async Task<ReviewActionResult> RouteImpersonationAsync(
-        long reviewId, int actionInt, Actor executor, CancellationToken ct)
+        long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
         if (actionInt < 0 || actionInt > (int)ImpersonationAction.Trust)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ImpersonationAction)actionInt switch
         {
-            ImpersonationAction.Confirm => await reportActionsService.HandleImpersonationConfirmAsync(reviewId, executor, ct),
-            ImpersonationAction.Dismiss => await reportActionsService.HandleImpersonationDismissAsync(reviewId, executor, ct),
-            ImpersonationAction.Trust => await reportActionsService.HandleImpersonationTrustAsync(reviewId, executor, ct),
+            ImpersonationAction.Confirm => await reportActionsService.HandleImpersonationConfirmAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ImpersonationAction.Dismiss => await reportActionsService.HandleImpersonationDismissAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ImpersonationAction.Trust => await reportActionsService.HandleImpersonationTrustAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }
 
     private async Task<ReviewActionResult> RouteExamAsync(
-        long reviewId, int actionInt, Actor executor, CancellationToken ct)
+        long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
         if (actionInt < 0 || actionInt > (int)ExamAction.DenyAndBan)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ExamAction)actionInt switch
         {
-            ExamAction.Approve => await reportActionsService.HandleExamApproveAsync(reviewId, executor, ct),
-            ExamAction.Deny => await reportActionsService.HandleExamDenyAsync(reviewId, executor, ct),
-            ExamAction.DenyAndBan => await reportActionsService.HandleExamDenyAndBanAsync(reviewId, executor, ct),
+            ExamAction.Approve => await reportActionsService.HandleExamApproveAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ExamAction.Deny => await reportActionsService.HandleExamDenyAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ExamAction.DenyAndBan => await reportActionsService.HandleExamDenyAndBanAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }
 
     private async Task<ReviewActionResult> RouteProfileScanAsync(
-        long reviewId, int actionInt, Actor executor, CancellationToken ct)
+        long reviewId, int actionInt, Actor executor, CancellationToken cancellationToken)
     {
         if (actionInt < 0 || actionInt > (int)ProfileScanAction.Kick)
             return new ReviewActionResult(false, "Invalid action");
 
         return (ProfileScanAction)actionInt switch
         {
-            ProfileScanAction.Allow => await reportActionsService.HandleProfileScanAllowAsync(reviewId, executor, ct),
-            ProfileScanAction.Ban => await reportActionsService.HandleProfileScanBanAsync(reviewId, executor, ct),
-            ProfileScanAction.Kick => await reportActionsService.HandleProfileScanKickAsync(reviewId, executor, ct),
+            ProfileScanAction.Allow => await reportActionsService.HandleProfileScanAllowAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ProfileScanAction.Ban => await reportActionsService.HandleProfileScanBanAsync(reviewId, executor, cancellationToken: cancellationToken),
+            ProfileScanAction.Kick => await reportActionsService.HandleProfileScanKickAsync(reviewId, executor, cancellationToken: cancellationToken),
             _ => new ReviewActionResult(false, "Unknown action")
         };
     }
