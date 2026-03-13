@@ -28,7 +28,8 @@ on:
       - 'LICENSE'
       - '.gitignore'
       - '.gitattributes'
-      - '.github/workflows/claude*.yml'
+      - '.github/workflows/**'  # CI-only changes don't need new Docker images
+      - 'GitVersion.yml'
   release:
     types: [published]  # Production releases - tag already exists, GitVersion picks it up
 
