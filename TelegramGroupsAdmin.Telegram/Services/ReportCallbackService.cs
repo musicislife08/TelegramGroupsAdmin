@@ -123,7 +123,7 @@ public class ReportCallbackService(
                 ReportType.ContentReport => await HandleReportActionAsync(
                     moderationService, report, userIdentity, chatIdentity, actionInt, executor, cancellationToken),
                 ReportType.ImpersonationAlert => await HandleImpersonationActionAsync(
-                    moderationService, report, userIdentity, actionInt, executor, cancellationToken),
+                    moderationService, report, userIdentity, chatIdentity, actionInt, executor, cancellationToken),
                 ReportType.ExamFailure => await HandleExamActionAsync(
                     examFlowService, report, userIdentity, chatIdentity, actionInt, executor, cancellationToken),
                 ReportType.ProfileScanAlert => await HandleProfileScanActionAsync(
@@ -339,6 +339,7 @@ public class ReportCallbackService(
         IBotModerationService moderationService,
         ReportBase report,
         UserIdentity user,
+        ChatIdentity chat,
         int actionInt,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
@@ -355,7 +356,7 @@ public class ReportCallbackService(
         return action switch
         {
             ImpersonationAction.Confirm => await HandleConfirmAsync(
-                moderationService, report, user, executor, cancellationToken),
+                moderationService, report, user, chat, executor, cancellationToken),
             ImpersonationAction.Dismiss => HandleImpersonationDismissAction(report.Id, executor),
             ImpersonationAction.Trust => await HandleTrustActionAsync(
                 moderationService, report, user, executor, cancellationToken),
@@ -367,6 +368,7 @@ public class ReportCallbackService(
         IBotModerationService moderationService,
         ReportBase report,
         UserIdentity user,
+        ChatIdentity chat,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
@@ -376,7 +378,8 @@ public class ReportCallbackService(
             {
                 User = user,
                 Executor = executor,
-                Reason = "Confirmed impersonation scam"
+                Reason = "Confirmed impersonation scam",
+                Chat = chat
             },
             cancellationToken);
 
@@ -583,7 +586,7 @@ public class ReportCallbackService(
             ProfileScanAction.Allow => await HandleProfileAllowAsync(
                 report, user, chat, executor, cancellationToken),
             ProfileScanAction.Ban => await HandleProfileBanAsync(
-                moderationService, report, user, executor, cancellationToken),
+                moderationService, report, user, chat, executor, cancellationToken),
             ProfileScanAction.Kick => await HandleProfileKickAsync(
                 moderationService, report, user, chat, executor, cancellationToken),
             _ => new ReviewActionResult(Success: false, Message: "Unknown action")
@@ -634,6 +637,7 @@ public class ReportCallbackService(
         IBotModerationService moderationService,
         ReportBase report,
         UserIdentity user,
+        ChatIdentity chat,
         Core.Models.Actor executor,
         CancellationToken cancellationToken)
     {
@@ -642,7 +646,8 @@ public class ReportCallbackService(
             {
                 User = user,
                 Executor = executor,
-                Reason = $"Profile scan alert #{report.Id} — banned by admin"
+                Reason = $"Profile scan alert #{report.Id} — banned by admin",
+                Chat = chat
             },
             cancellationToken);
 

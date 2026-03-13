@@ -45,6 +45,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
+        ThrowIfAlreadyHandled(report);
+
         var message = await _messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (message == null)
         {
@@ -69,8 +71,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Failed to execute spam action: {result.ErrorMessage}");
         }
 
-        // Update report status
-        await _reportsRepository.UpdateStatusAsync(
+        // Atomically update report status (race condition protection)
+        await UpdateStatusAtomicallyAsync(
             reportId,
             ReportStatus.Reviewed,
             executor.GetDisplayText(),
@@ -101,6 +103,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
+        ThrowIfAlreadyHandled(report);
+
         var message = await _messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (message == null)
         {
@@ -114,7 +118,8 @@ public class ReportActionsService : IReportActionsService
                 User = message.User,
                 Executor = executor,
                 Reason = $"Report #{reportId} - spam/abuse",
-                MessageId = report.MessageId
+                MessageId = report.MessageId,
+                Chat = message.Chat
             },
             cancellationToken);
 
@@ -140,8 +145,8 @@ public class ReportActionsService : IReportActionsService
                 report.MessageId);
         }
 
-        // Update report status
-        await _reportsRepository.UpdateStatusAsync(
+        // Atomically update report status (race condition protection)
+        await UpdateStatusAtomicallyAsync(
             reportId,
             ReportStatus.Reviewed,
             executor.GetDisplayText(),
@@ -172,6 +177,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
+        ThrowIfAlreadyHandled(report);
+
         var message = await _messageRepository.GetMessageAsync(report.MessageId, report.Chat.Id, cancellationToken);
         if (message == null)
         {
@@ -196,8 +203,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Failed to execute warn action: {result.ErrorMessage}");
         }
 
-        // Update report status
-        await _reportsRepository.UpdateStatusAsync(
+        // Atomically update report status (race condition protection)
+        await UpdateStatusAtomicallyAsync(
             reportId,
             ReportStatus.Reviewed,
             executor.GetDisplayText(),
@@ -228,8 +235,10 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
-        // Update report status
-        await _reportsRepository.UpdateStatusAsync(
+        ThrowIfAlreadyHandled(report);
+
+        // Atomically update report status (race condition protection)
+        await UpdateStatusAtomicallyAsync(
             reportId,
             ReportStatus.Dismissed,
             executor.GetDisplayText(),
@@ -258,6 +267,49 @@ public class ReportActionsService : IReportActionsService
             "Dismissed report {ReportId} (reason: {Reason})",
             reportId,
             reason ?? "none");
+    }
+
+    /// <summary>
+    /// Checks if the report has already been handled and throws with attribution details.
+    /// Prevents double-actions when a report is resolved via Telegram callback while the web UI is stale.
+    /// </summary>
+    private static void ThrowIfAlreadyHandled(Report report)
+    {
+        if (report.Status == ReportStatus.Pending)
+            return;
+
+        var handledBy = report.ReviewedBy ?? "another admin";
+        var action = report.ActionTaken ?? "unknown";
+        var time = report.ReviewedAt?.UtcDateTime.ToString("g") ?? "unknown time";
+        throw new InvalidOperationException(
+            $"Already handled by {handledBy} ({action}) at {time} UTC");
+    }
+
+    /// <summary>
+    /// Atomically updates report status only if still pending.
+    /// Re-fetches and throws with attribution if another admin handled the report between
+    /// our initial status check and this update (TOCTOU race window).
+    /// </summary>
+    private async Task UpdateStatusAtomicallyAsync(
+        long reportId,
+        ReportStatus status,
+        string reviewedBy,
+        string actionTaken,
+        string notes,
+        CancellationToken cancellationToken)
+    {
+        var updated = await _reportsRepository.TryUpdateStatusAsync(
+            reportId, status, reviewedBy, actionTaken, notes, cancellationToken);
+
+        if (!updated)
+        {
+            // Race condition: another admin handled it between our check and this update
+            var current = await _reportsRepository.GetContentReportAsync(reportId, cancellationToken);
+            if (current != null)
+                ThrowIfAlreadyHandled(current);
+
+            throw new InvalidOperationException($"Report {reportId} could not be updated");
+        }
     }
 
     /// <summary>
