@@ -19,7 +19,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BackgroundJobConfigService> _logger;
     private readonly IQuartzScheduleConverter _scheduleConverter;
-    private QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
+    private volatile QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
 
     /// <summary>
     /// Event fired when a job's NextRunAt is updated (for UI refresh via SignalR)
@@ -71,18 +71,18 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         if (config?.BackgroundJobsConfig == null)
         {
             _logger.LogDebug("No background jobs config found, returning empty dictionary");
-            return new Dictionary<string, BackgroundJobConfig>();
+            return [];
         }
 
         try
         {
             var jobsConfig = JsonSerializer.Deserialize<BackgroundJobsConfig>(config.BackgroundJobsConfig, JsonOptions);
-            return jobsConfig?.Jobs ?? new Dictionary<string, BackgroundJobConfig>();
+            return jobsConfig?.Jobs ?? [];
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Failed to deserialize background jobs config");
-            return new Dictionary<string, BackgroundJobConfig>();
+            return [];
         }
     }
 

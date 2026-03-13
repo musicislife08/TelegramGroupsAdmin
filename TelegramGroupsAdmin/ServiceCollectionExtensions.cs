@@ -38,10 +38,6 @@ public static class ServiceCollectionExtensions
         }
 
         /// <summary>
-        /// Adds API data services (Message history repository only - no identity)
-        /// </summary>
-
-        /// <summary>
         /// Adds Blazor Server and MudBlazor services
         /// </summary>
         public IServiceCollection AddBlazorServices()
