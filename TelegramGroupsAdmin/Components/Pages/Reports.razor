@@ -1,24 +1,20 @@
 @page "/reports"
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Data.Models
-@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Services
-@using TelegramGroupsAdmin.Telegram.Services.Bot
+@using TelegramGroupsAdmin.Telegram.Constants
+@using TelegramGroupsAdmin.Telegram.Services.ReportActions
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Reports
-@using TelegramGroupsAdmin.Telegram.Constants
 @using TelegramGroupsAdmin.Core.Repositories
 @inject IReportsRepository ReportsRepository
 @inject IReportActionsService ReportActionsService
 @inject IManagedChatsRepository ManagedChatsRepository
-@inject IBotModerationService ModerationOrchestrator
 @inject ISnackbar Snackbar
 @inject ILogger<Reports> Logger
-@inject IExamFlowService ExamFlowService
 @attribute [Authorize]
 
 <PageTitle>Reports Queue - TelegramGroupsAdmin</PageTitle>
@@ -166,7 +162,7 @@
     private int _pendingImpersonationCount;
     private int _pendingExamCount;
     private int _pendingProfileScanCount;
-    private readonly CancellationTokenSource _cts = new();
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -191,7 +187,7 @@
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 WebUser!.Id,
                 WebUser.PermissionLevel,
-                cancellationToken: _cts.Token);
+                cancellationToken: _cancellationTokenSource.Token);
             var accessibleChatIds = accessibleChats.Select(c => c.Identity.Id).ToHashSet();
 
             // GlobalAdmin/Owner can see reports with sentinel chat_id=0 (e.g., background profile scan alerts)
@@ -207,7 +203,7 @@
                 chatId: null,
                 status: null,
                 limit: 100,
-                cancellationToken: _cts.Token);
+                cancellationToken: _cancellationTokenSource.Token);
 
             foreach (var report in reports.Where(r => accessibleChatIds.Contains(r.Chat.Id) || (isElevated && r.Chat.Id == 0)))
             {
@@ -228,7 +224,7 @@
 
             // Load all impersonation alerts (filter by status is done client-side in ApplyFilters)
             var alerts = await ReportsRepository.GetImpersonationAlertsAsync(
-                pendingOnly: false, cancellationToken: _cts.Token);
+                pendingOnly: false, cancellationToken: _cancellationTokenSource.Token);
             foreach (var alert in alerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -248,7 +244,7 @@
 
             // Load all exam failures (filter by status is done client-side in ApplyFilters)
             var examFailures = await ReportsRepository.GetExamFailuresAsync(
-                pendingOnly: false, cancellationToken: _cts.Token);
+                pendingOnly: false, cancellationToken: _cancellationTokenSource.Token);
             foreach (var examFailure in examFailures.Where(e => accessibleChatIds.Contains(e.Chat.Id) || (isElevated && e.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -268,7 +264,7 @@
 
             // Load all profile scan alerts
             var profileScanAlerts = await ReportsRepository.GetProfileScanAlertsAsync(
-                pendingOnly: false, cancellationToken: _cts.Token);
+                pendingOnly: false, cancellationToken: _cancellationTokenSource.Token);
             foreach (var alert in profileScanAlerts.Where(a => accessibleChatIds.Contains(a.Chat.Id) || (isElevated && a.Chat.Id == 0)))
             {
                 unifiedQueue.Add(new ReportQueueItem
@@ -392,346 +388,76 @@
 
     private async Task HandleProfileScanAction((ProfileScanAlertRecord Alert, ProfileScanAction Action) args)
     {
-        try
+        var executor = WebUser!.ToActor();
+        var result = args.Action switch
         {
-            // Guard: check if already handled by another admin (stale UI)
-            if (args.Alert.ReviewedAt.HasValue)
-            {
-                var handledBy = args.Alert.ReviewedByEmail ?? "another admin";
-                var action = args.Alert.ActionTaken ?? "unknown";
-                var time = args.Alert.ReviewedAt.Value.UtcDateTime.ToString("g");
-                Snackbar.Add($"Already handled by {handledBy} ({action}) at {time} UTC", Severity.Warning);
-                await LoadReportsAsync();
-                return;
-            }
-
-            var executor = WebUser!.ToActor();
-
-            switch (args.Action)
-            {
-                case ProfileScanAction.Allow:
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.Alert.Id, ReportStatus.Dismissed, WebUser!.DisplayName,
-                            "allow", "User allowed after profile scan review"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.Alert.Id);
-                        return;
-                    }
-                    Snackbar.Add("User allowed", Severity.Success);
-                    break;
-
-                case ProfileScanAction.Ban:
-                    await ModerationOrchestrator.BanUserAsync(
-                        new BanIntent
-                        {
-                            User = args.Alert.User,
-                            Executor = executor,
-                            Reason = $"Profile scan alert #{args.Alert.Id} confirmed — score {args.Alert.Score:F1}",
-                            Chat = args.Alert.Chat
-                        });
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.Alert.Id, ReportStatus.Reviewed, WebUser!.DisplayName,
-                            "ban", "Banned after profile scan review"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.Alert.Id);
-                        return;
-                    }
-                    Snackbar.Add("User banned globally", Severity.Success);
-                    break;
-
-                case ProfileScanAction.Kick:
-                    if (args.Alert.Chat.Id != 0)
-                    {
-                        await ModerationOrchestrator.KickUserFromChatAsync(
-                            new KickIntent
-                            {
-                                User = args.Alert.User,
-                                Chat = args.Alert.Chat,
-                                Executor = executor,
-                                Reason = $"Profile scan alert #{args.Alert.Id} — kicked after review",
-                                RevokeMessages = false
-                            });
-                    }
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.Alert.Id, ReportStatus.Reviewed, WebUser!.DisplayName,
-                            "kick", args.Alert.Chat.Id == 0 ? "Kick not applicable (global alert)" : "Kicked from chat after review"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.Alert.Id);
-                        return;
-                    }
-                    Snackbar.Add(args.Alert.Chat.Id == 0 ? "Alert resolved (no chat to kick from)" : "User kicked from chat", Severity.Warning);
-                    break;
-            }
-
-            await LoadReportsAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error handling profile scan action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
-            Snackbar.Add("An error occurred processing this action", Severity.Error);
-        }
+            ProfileScanAction.Ban => await ReportActionsService.HandleProfileScanBanAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ProfileScanAction.Kick => await ReportActionsService.HandleProfileScanKickAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ProfileScanAction.Allow => await ReportActionsService.HandleProfileScanAllowAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            _ => new ReviewActionResult(false, "Unknown action")
+        };
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
+        await LoadReportsAsync();
     }
 
     private async Task HandleSpamAction((Report Report, ReportAction Action) args)
     {
-        try
+        var executor = WebUser!.ToActor();
+        var result = args.Action switch
         {
-            var executor = WebUser!.ToActor();
-
-            switch (args.Action)
-            {
-                case ReportAction.Spam:
-                    await ReportActionsService.HandleSpamActionAsync(args.Report.Id, executor);
-                    Snackbar.Add($"Report #{args.Report.Id} processed: Message deleted as spam", Severity.Success);
-                    break;
-
-                case ReportAction.Ban:
-                    await ReportActionsService.HandleBanActionAsync(args.Report.Id, executor);
-                    Snackbar.Add($"Report #{args.Report.Id} processed: User banned", Severity.Success);
-                    break;
-
-                case ReportAction.Warn:
-                    await ReportActionsService.HandleWarnActionAsync(args.Report.Id, executor);
-                    Snackbar.Add($"Report #{args.Report.Id} processed: Warning issued", Severity.Success);
-                    break;
-
-                case ReportAction.Dismiss:
-                    await ReportActionsService.HandleDismissActionAsync(args.Report.Id, executor);
-                    Snackbar.Add($"Report #{args.Report.Id} dismissed", Severity.Info);
-                    break;
-            }
-
-            await LoadReportsAsync();
-        }
-        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Already handled"))
-        {
-            Logger.LogInformation(ex, "Report {ReportId} was already handled when web UI attempted action", args.Report.Id);
-            Snackbar.Add(ex.Message, Severity.Warning);
-            await LoadReportsAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error handling spam action {Action} for report {ReportId}", args.Action, args.Report.Id);
-            Snackbar.Add("An error occurred processing this action", Severity.Error);
-        }
+            ReportAction.Spam => await ReportActionsService.HandleContentSpamAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ReportAction.Ban => await ReportActionsService.HandleContentBanAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ReportAction.Warn => await ReportActionsService.HandleContentWarnAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ReportAction.Dismiss => await ReportActionsService.HandleContentDismissAsync(args.Report.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            _ => new ReviewActionResult(false, "Unknown action")
+        };
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
+        await LoadReportsAsync();
     }
 
     private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, ImpersonationAction Action) args)
     {
-        try
+        var executor = WebUser!.ToActor();
+        var result = args.Action switch
         {
-            // Guard: check if already handled by another admin (stale UI)
-            if (args.Alert.ReviewedAt.HasValue)
-            {
-                var handledBy = args.Alert.ReviewedByEmail ?? "another admin";
-                var verdict = args.Alert.Verdict?.ToString() ?? "unknown";
-                var time = args.Alert.ReviewedAt.Value.UtcDateTime.ToString("g");
-                Snackbar.Add($"Already handled by {handledBy} ({verdict}) at {time} UTC", Severity.Warning);
-                await LoadReportsAsync();
-                return;
-            }
-
-            var executor = WebUser!.ToActor();
-
-            switch (args.Action)
-            {
-                case ImpersonationAction.Confirm:
-                    // Ban the suspected impersonator globally
-                    var banResult = await ModerationOrchestrator.BanUserAsync(
-                        new BanIntent
-                        {
-                            User = args.Alert.SuspectedUser,
-                            Executor = executor,
-                            Reason = $"Impersonation alert #{args.Alert.Id} confirmed - impersonating {args.Alert.TargetUser.DisplayName}",
-                            Chat = args.Alert.Chat
-                        });
-
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.Alert.Id, ReportStatus.Reviewed, WebUser!.DisplayName,
-                            "confirm", $"Confirmed impersonation, banned from {banResult.ChatsAffected} chats"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.Alert.Id);
-                        return;
-                    }
-
-                    Snackbar.Add($"Impersonation confirmed: User banned from {banResult.ChatsAffected} chats", Severity.Success);
-                    break;
-
-                case ImpersonationAction.Dismiss:
-                    // Mark as false positive
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.Alert.Id, ReportStatus.Dismissed, WebUser!.DisplayName,
-                            "dismiss", "Dismissed as false positive"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.Alert.Id);
-                        return;
-                    }
-
-                    Snackbar.Add("Alert dismissed", Severity.Info);
-                    break;
-
-                case ImpersonationAction.Trust:
-                    // Trust the suspected user (they're legitimate)
-                    await ModerationOrchestrator.TrustUserAsync(
-                        new TrustIntent
-                        {
-                            User = args.Alert.SuspectedUser,
-                            Executor = executor,
-                            Reason = $"Trusted after impersonation review #{args.Alert.Id}"
-                        });
-
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.Alert.Id, ReportStatus.Dismissed, WebUser!.DisplayName,
-                            "trust", "User trusted - not impersonation"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.Alert.Id);
-                        return;
-                    }
-
-                    Snackbar.Add("User marked as trusted", Severity.Success);
-                    break;
-            }
-
-            await LoadReportsAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error handling impersonation action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
-            Snackbar.Add("An error occurred processing this action", Severity.Error);
-        }
+            ImpersonationAction.Confirm => await ReportActionsService.HandleImpersonationConfirmAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ImpersonationAction.Dismiss => await ReportActionsService.HandleImpersonationDismissAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ImpersonationAction.Trust => await ReportActionsService.HandleImpersonationTrustAsync(args.Alert.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            _ => new ReviewActionResult(false, "Unknown action")
+        };
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
+        await LoadReportsAsync();
     }
 
     private async Task HandleExamAction((ExamFailureRecord ExamFailure, ExamAction Action) args)
     {
-        Logger.LogInformation("HandleExamAction called: Action={Action}, ExamFailureId={Id}, UserId={UserId}",
-            args.Action, args.ExamFailure.Id, args.ExamFailure.User.Id);
-
-        try
+        var executor = WebUser!.ToActor();
+        var result = args.Action switch
         {
-            // Guard: check if already handled by another admin (stale UI)
-            if (args.ExamFailure.ReviewedAt.HasValue)
-            {
-                var handledBy = args.ExamFailure.ReviewedBy ?? "another admin";
-                var action = args.ExamFailure.ActionTaken ?? "unknown";
-                var time = args.ExamFailure.ReviewedAt.Value.UtcDateTime.ToString("g");
-                Snackbar.Add($"Already handled by {handledBy} ({action}) at {time} UTC", Severity.Warning);
-                await LoadReportsAsync();
-                return;
-            }
-
-            var executor = WebUser!.ToActor();
-
-            switch (args.Action)
-            {
-                case ExamAction.Approve:
-                    // Approve via service (restores permissions, deletes teaser, updates welcome response)
-                    var approveResult = await ExamFlowService.ApproveExamFailureAsync(
-                        args.ExamFailure.User,
-                        args.ExamFailure.Chat,
-                        args.ExamFailure.Id,
-                        executor);
-
-                    if (!approveResult.Success)
-                    {
-                        Snackbar.Add($"Failed to approve: {approveResult.ErrorMessage}", Severity.Error);
-                        return;
-                    }
-
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.ExamFailure.Id,
-                            ReportStatus.Reviewed,
-                            WebUser!.DisplayName,
-                            "approve",
-                            "Manually approved after exam failure"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.ExamFailure.Id);
-                        return;
-                    }
-
-                    Snackbar.Add("User approved - permissions restored", Severity.Success);
-                    break;
-
-                case ExamAction.Deny:
-                    // Deny via service (deletes teaser, updates welcome response, kicks user, sends DM)
-                    var denyResult = await ExamFlowService.DenyExamFailureAsync(
-                        args.ExamFailure.User,
-                        args.ExamFailure.Chat,
-                        executor);
-
-                    if (!denyResult.Success)
-                    {
-                        Snackbar.Add($"Failed to deny: {denyResult.ErrorMessage}", Severity.Error);
-                        return;
-                    }
-
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.ExamFailure.Id,
-                            ReportStatus.Reviewed,
-                            WebUser!.DisplayName,
-                            "deny",
-                            "Denied entry after exam review"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.ExamFailure.Id);
-                        return;
-                    }
-
-                    Snackbar.Add("User denied - they can re-join to try again", Severity.Warning);
-                    break;
-
-                case ExamAction.DenyAndBan:
-                    // Deny and ban via service (deletes teaser, updates welcome response, bans globally, sends DM)
-                    var denyBanResult = await ExamFlowService.DenyAndBanExamFailureAsync(
-                        args.ExamFailure.User,
-                        args.ExamFailure.Chat,
-                        executor);
-
-                    if (!denyBanResult.Success)
-                    {
-                        Snackbar.Add($"Failed to deny and ban: {denyBanResult.ErrorMessage}", Severity.Error);
-                        return;
-                    }
-
-                    if (!await ReportsRepository.TryUpdateStatusAsync(
-                            args.ExamFailure.Id,
-                            ReportStatus.Reviewed,
-                            WebUser!.DisplayName,
-                            "deny_ban",
-                            "Denied and banned after exam review"))
-                    {
-                        await ShowAlreadyHandledSnackbarAsync(args.ExamFailure.Id);
-                        return;
-                    }
-
-                    Snackbar.Add("User denied and banned globally", Severity.Error);
-                    break;
-            }
-
-            await LoadReportsAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error handling exam action {Action} for exam failure {ExamId}", args.Action, args.ExamFailure.Id);
-            Snackbar.Add("An error occurred processing this action", Severity.Error);
-        }
-    }
-
-    /// <summary>
-    /// Re-fetches a report by ID and shows a snackbar with attribution details
-    /// about which admin already handled it. Used when TryUpdateStatusAsync returns false.
-    /// </summary>
-    private async Task ShowAlreadyHandledSnackbarAsync(long reportId)
-    {
-        var current = await ReportsRepository.GetByIdAsync(reportId, _cts.Token);
-        var handledBy = current?.ReviewedBy ?? "another admin";
-        var action = current?.ActionTaken ?? "unknown";
-        var time = current?.ReviewedAt?.UtcDateTime.ToString("g") ?? "unknown time";
-        Snackbar.Add($"Already handled by {handledBy} ({action}) at {time} UTC", Severity.Warning);
+            ExamAction.Approve => await ReportActionsService.HandleExamApproveAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.Deny => await ReportActionsService.HandleExamDenyAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            ExamAction.DenyAndBan => await ReportActionsService.HandleExamDenyAndBanAsync(args.ExamFailure.Id, executor, cancellationToken: _cancellationTokenSource.Token),
+            _ => new ReviewActionResult(false, "Unknown action")
+        };
+        var severity = result.Success ? Severity.Success
+            : result.IsAlreadyHandled ? Severity.Warning
+            : Severity.Error;
+        Snackbar.Add(result.Message, severity);
         await LoadReportsAsync();
     }
 
     public void Dispose()
     {
-        _cts.Cancel();
-        _cts.Dispose();
+        _cancellationTokenSource.Cancel();
+        _cancellationTokenSource.Dispose();
     }
 }
