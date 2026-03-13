@@ -7,7 +7,7 @@ branches:
   main:
     # Main branch = stable releases (e.g., 1.2.3)
     mode: ContinuousDelivery
-    tag: ''
+    label: ''
     increment: Patch
     is-release-branch: true
     track-merge-target: false
@@ -15,7 +15,7 @@ branches:
   master:
     # Alias for main (GitHub uses 'master' as default branch name)
     mode: ContinuousDelivery
-    tag: ''
+    label: ''
     increment: Patch
     is-release-branch: true
     track-merge-target: false
@@ -23,14 +23,14 @@ branches:
   develop:
     # Develop branch = beta/prerelease (e.g., 1.3.0-beta.5)
     mode: ContinuousDeployment
-    tag: beta
+    label: beta
     increment: Minor
     is-release-branch: false
     track-merge-target: false
 
   feature:
     # Feature branches inherit from parent branch
-    tag: useBranchName
+    label: useBranchName
     increment: Inherit
     is-release-branch: false
 
