@@ -19,7 +19,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BackgroundJobConfigService> _logger;
     private readonly IQuartzScheduleConverter _scheduleConverter;
-    private QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
+    private volatile QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
 
     /// <summary>
     /// Event fired when a job's NextRunAt is updated (for UI refresh via SignalR)
@@ -71,18 +71,18 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         if (config?.BackgroundJobsConfig == null)
         {
             _logger.LogDebug("No background jobs config found, returning empty dictionary");
-            return new Dictionary<string, BackgroundJobConfig>();
+            return [];
         }
 
         try
         {
             var jobsConfig = JsonSerializer.Deserialize<BackgroundJobsConfig>(config.BackgroundJobsConfig, JsonOptions);
-            return jobsConfig?.Jobs ?? new Dictionary<string, BackgroundJobConfig>();
+            return jobsConfig?.Jobs ?? [];
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Failed to deserialize background jobs config");
-            return new Dictionary<string, BackgroundJobConfig>();
+            return [];
         }
     }
 
@@ -195,226 +195,8 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         await UpdateJobConfigAsync(jobName, config, cancellationToken: cancellationToken);
     }
 
-    /// <summary>
-    /// Migrates old Settings dictionary format to new typed properties.
-    /// This handles upgrades from the pre-typed settings format where all job settings
-    /// were stored in a Dictionary&lt;string, object&gt; called "Settings".
-    /// </summary>
-    private async Task MigrateOldSettingsFormatAsync(CancellationToken cancellationToken)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var configRecord = await context.Configs
-            .Where(c => c.ChatId == 0)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (string.IsNullOrEmpty(configRecord?.BackgroundJobsConfig))
-            return;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(configRecord.BackgroundJobsConfig);
-
-            if (!doc.RootElement.TryGetProperty("Jobs", out var jobsElement))
-                return;
-
-            var needsMigration = false;
-
-            // Check if any job has old "Settings" property but no typed settings
-            foreach (var jobProp in jobsElement.EnumerateObject())
-            {
-                var job = jobProp.Value;
-                if (job.TryGetProperty("Settings", out _))
-                {
-                    // Has old format - check if missing new typed properties
-                    var hasTypedSettings = job.TryGetProperty("DataCleanup", out _) ||
-                                          job.TryGetProperty("ScheduledBackup", out _) ||
-                                          job.TryGetProperty("DatabaseMaintenance", out _) ||
-                                          job.TryGetProperty("UserPhotoRefresh", out _);
-
-                    if (!hasTypedSettings)
-                    {
-                        needsMigration = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!needsMigration)
-                return;
-
-            _logger.LogInformation("Migrating background job settings from old Dictionary format to typed properties");
-
-            // Deserialize with a temporary class that has both old and new format
-            var oldConfig = JsonSerializer.Deserialize<OldBackgroundJobsConfig>(configRecord.BackgroundJobsConfig, JsonOptions);
-            if (oldConfig?.Jobs == null)
-                return;
-
-            var migratedCount = 0;
-            foreach (var (jobName, job) in oldConfig.Jobs)
-            {
-                if (job.Settings == null || job.Settings.Count == 0)
-                    continue;
-
-                // Migrate based on job type
-                switch (jobName)
-                {
-                    case BackgroundJobNames.DataCleanup when job.DataCleanup == null:
-                        job.DataCleanup = new DataCleanupSettings
-                        {
-                            MessageRetention = GetSettingString(job.Settings, "MessageRetention", DataCleanupSettings.DefaultMessageRetentionString) ?? DataCleanupSettings.DefaultMessageRetentionString,
-                            ReportRetention = GetSettingString(job.Settings, "ReportRetention", "30d") ?? "30d",
-                            CallbackContextRetention = GetSettingString(job.Settings, "CallbackContextRetention", "7d") ?? "7d",
-                            WebNotificationRetention = GetSettingString(job.Settings, "WebNotificationRetention", "7d") ?? "7d"
-                        };
-                        job.Settings = null;
-                        migratedCount++;
-                        break;
-
-                    case BackgroundJobNames.ScheduledBackup when job.ScheduledBackup == null:
-                        job.ScheduledBackup = new ScheduledBackupSettings
-                        {
-                            RetainHourlyBackups = GetSettingInt(job.Settings, "RetainHourlyBackups", 24),
-                            RetainDailyBackups = GetSettingInt(job.Settings, "RetainDailyBackups", 7),
-                            RetainWeeklyBackups = GetSettingInt(job.Settings, "RetainWeeklyBackups", 4),
-                            RetainMonthlyBackups = GetSettingInt(job.Settings, "RetainMonthlyBackups", 12),
-                            RetainYearlyBackups = GetSettingInt(job.Settings, "RetainYearlyBackups", 3),
-                            BackupDirectory = GetSettingString(job.Settings, "BackupDirectory", null)
-                        };
-                        job.Settings = null;
-                        migratedCount++;
-                        break;
-
-                    case BackgroundJobNames.DatabaseMaintenance when job.DatabaseMaintenance == null:
-                        job.DatabaseMaintenance = new DatabaseMaintenanceSettings
-                        {
-                            RunVacuum = GetSettingBool(job.Settings, "RunVacuum", true),
-                            RunAnalyze = GetSettingBool(job.Settings, "RunAnalyze", true)
-                        };
-                        job.Settings = null;
-                        migratedCount++;
-                        break;
-
-                    case BackgroundJobNames.UserPhotoRefresh when job.UserPhotoRefresh == null:
-                        job.UserPhotoRefresh = new UserPhotoRefreshSettings
-                        {
-                            DaysBack = GetSettingInt(job.Settings, "DaysBack", 7)
-                        };
-                        job.Settings = null;
-                        migratedCount++;
-                        break;
-                }
-            }
-
-            if (migratedCount > 0)
-            {
-                // Save migrated config (serialize without the Settings property since it's null)
-                var newJobsConfig = new BackgroundJobsConfig
-                {
-                    Jobs = oldConfig.Jobs.ToDictionary(
-                        kvp => kvp.Key,
-                        kvp => new BackgroundJobConfig
-                        {
-                            JobName = kvp.Value.JobName,
-                            DisplayName = kvp.Value.DisplayName,
-                            Description = kvp.Value.Description,
-                            Enabled = kvp.Value.Enabled,
-                            Schedule = kvp.Value.Schedule,
-                            LastRunAt = kvp.Value.LastRunAt,
-                            NextRunAt = kvp.Value.NextRunAt,
-                            LastError = kvp.Value.LastError,
-                            DataCleanup = kvp.Value.DataCleanup,
-                            ScheduledBackup = kvp.Value.ScheduledBackup,
-                            DatabaseMaintenance = kvp.Value.DatabaseMaintenance,
-                            UserPhotoRefresh = kvp.Value.UserPhotoRefresh
-                        })
-                };
-
-                configRecord.BackgroundJobsConfig = JsonSerializer.Serialize(newJobsConfig, JsonOptions);
-                configRecord.UpdatedAt = DateTimeOffset.UtcNow;
-                await context.SaveChangesAsync(cancellationToken);
-
-                _logger.LogInformation("Successfully migrated {Count} job(s) from old Settings format to typed properties", migratedCount);
-            }
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse background jobs config for migration check - will use defaults");
-        }
-    }
-
-    private static string? GetSettingString(Dictionary<string, object> settings, string key, string? defaultValue)
-    {
-        if (!settings.TryGetValue(key, out var value))
-            return defaultValue;
-
-        return value switch
-        {
-            JsonElement je => je.GetString() ?? defaultValue,
-            string s => s,
-            _ => value?.ToString() ?? defaultValue
-        };
-    }
-
-    private static int GetSettingInt(Dictionary<string, object> settings, string key, int defaultValue)
-    {
-        if (!settings.TryGetValue(key, out var value))
-            return defaultValue;
-
-        return value switch
-        {
-            JsonElement je when je.ValueKind == JsonValueKind.Number => je.GetInt32(),
-            int i => i,
-            _ => int.TryParse(value?.ToString(), out var parsed) ? parsed : defaultValue
-        };
-    }
-
-    private static bool GetSettingBool(Dictionary<string, object> settings, string key, bool defaultValue)
-    {
-        if (!settings.TryGetValue(key, out var value))
-            return defaultValue;
-
-        return value switch
-        {
-            JsonElement je when je.ValueKind == JsonValueKind.True => true,
-            JsonElement je when je.ValueKind == JsonValueKind.False => false,
-            bool b => b,
-            _ => bool.TryParse(value?.ToString(), out var parsed) ? parsed : defaultValue
-        };
-    }
-
-    /// <summary>
-    /// Temporary class for deserializing old format that had Settings dictionary.
-    /// Used only during migration.
-    /// </summary>
-    private class OldBackgroundJobsConfig
-    {
-        public Dictionary<string, OldBackgroundJobConfig> Jobs { get; set; } = new();
-    }
-
-    private class OldBackgroundJobConfig
-    {
-        public required string JobName { get; set; }
-        public required string DisplayName { get; set; }
-        public required string Description { get; set; }
-        public bool Enabled { get; set; }
-        public required string Schedule { get; set; }
-        public DateTimeOffset? LastRunAt { get; set; }
-        public DateTimeOffset? NextRunAt { get; set; }
-        public string? LastError { get; set; }
-        public Dictionary<string, object>? Settings { get; set; }
-        // New typed properties (may be populated if partially migrated)
-        public DataCleanupSettings? DataCleanup { get; set; }
-        public ScheduledBackupSettings? ScheduledBackup { get; set; }
-        public DatabaseMaintenanceSettings? DatabaseMaintenance { get; set; }
-        public UserPhotoRefreshSettings? UserPhotoRefresh { get; set; }
-    }
-
     public async Task EnsureDefaultConfigsAsync(CancellationToken cancellationToken = default)
     {
-        // Migrate old Settings dictionary format to new typed properties
-        await MigrateOldSettingsFormatAsync(cancellationToken);
-
         var existing = await GetAllJobsAsync(cancellationToken);
 
         // Define default job configurations

@@ -4,7 +4,7 @@ namespace TelegramGroupsAdmin.UnitTests.Configuration;
 
 /// <summary>
 /// Unit tests for ApiKeysConfig model
-/// Tests migration logic, dictionary operations, and HasAnyKey() validation
+/// Tests dictionary operations and HasAnyKey() validation
 /// </summary>
 [TestFixture]
 public class ApiKeysConfigTests
@@ -20,211 +20,6 @@ public class ApiKeysConfigTests
         // Assert
         Assert.That(config.AIConnectionKeys, Is.Not.Null);
         Assert.That(config.AIConnectionKeys, Is.Empty);
-    }
-
-    #endregion
-
-    #region MigrateLegacyKeys Tests
-
-    [Test]
-    public void MigrateLegacyKeys_WithOpenAI_MigratesAndClearsLegacy()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            OpenAI = "sk-test-openai-key"
-        };
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(migrated, Is.True);
-            Assert.That(config.AIConnectionKeys.ContainsKey("openai"), Is.True);
-            Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-test-openai-key"));
-            Assert.That(config.OpenAI, Is.Null);
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_WithAzureOpenAI_MigratesAndClearsLegacy()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            AzureOpenAI = "azure-test-key"
-        };
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(migrated, Is.True);
-            Assert.That(config.AIConnectionKeys.ContainsKey("azure-openai"), Is.True);
-            Assert.That(config.AIConnectionKeys["azure-openai"], Is.EqualTo("azure-test-key"));
-            Assert.That(config.AzureOpenAI, Is.Null);
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_WithLocalAI_MigratesAndClearsLegacy()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            LocalAI = "local-test-key"
-        };
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(migrated, Is.True);
-            Assert.That(config.AIConnectionKeys.ContainsKey("local-ai"), Is.True);
-            Assert.That(config.AIConnectionKeys["local-ai"], Is.EqualTo("local-test-key"));
-            Assert.That(config.LocalAI, Is.Null);
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_WithAllThreeLegacyKeys_MigratesAll()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            OpenAI = "sk-openai",
-            AzureOpenAI = "azure-key",
-            LocalAI = "local-key"
-        };
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(migrated, Is.True);
-            Assert.That(config.AIConnectionKeys.Count, Is.EqualTo(3));
-            Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-openai"));
-            Assert.That(config.AIConnectionKeys["azure-openai"], Is.EqualTo("azure-key"));
-            Assert.That(config.AIConnectionKeys["local-ai"], Is.EqualTo("local-key"));
-            Assert.That(config.OpenAI, Is.Null);
-            Assert.That(config.AzureOpenAI, Is.Null);
-            Assert.That(config.LocalAI, Is.Null);
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_WhenNoLegacyKeys_ReturnsFalse()
-    {
-        // Arrange
-        var config = new ApiKeysConfig();
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        using (Assert.EnterMultipleScope())
-        {
-            // Assert
-            Assert.That(migrated, Is.False);
-            Assert.That(config.AIConnectionKeys, Is.Empty);
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_WhenAlreadyMigrated_DoesNotOverwrite()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            OpenAI = "sk-old-key",
-            AIConnectionKeys = new Dictionary<string, string>
-            {
-                ["openai"] = "sk-new-key"
-            }
-        };
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(migrated, Is.False, "Should not migrate when key already exists");
-            Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-new-key"), "Should preserve existing key");
-            Assert.That(config.OpenAI, Is.EqualTo("sk-old-key"), "Should not clear legacy key if not migrated");
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_IsIdempotent()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            OpenAI = "sk-test-key"
-        };
-
-        // Act - Migrate twice
-        var firstMigration = config.MigrateLegacyKeys();
-        var secondMigration = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(firstMigration, Is.True, "First migration should return true");
-            Assert.That(secondMigration, Is.False, "Second migration should return false");
-            Assert.That(config.AIConnectionKeys["openai"], Is.EqualTo("sk-test-key"));
-            Assert.That(config.AIConnectionKeys.Count, Is.EqualTo(1));
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_WithEmptyString_DoesNotMigrate()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            OpenAI = ""
-        };
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(migrated, Is.False);
-            Assert.That(config.AIConnectionKeys.ContainsKey("openai"), Is.False);
-        }
-    }
-
-    [Test]
-    public void MigrateLegacyKeys_WithWhitespace_DoesNotMigrate()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            OpenAI = "   ",
-            AzureOpenAI = "\t",
-            LocalAI = "  \n  "
-        };
-
-        // Act
-        var migrated = config.MigrateLegacyKeys();
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(migrated, Is.False);
-            Assert.That(config.AIConnectionKeys, Is.Empty);
-        }
     }
 
     #endregion
@@ -436,45 +231,6 @@ public class ApiKeysConfigTests
     }
 
     [Test]
-    public void HasAnyKey_WithLegacyOpenAI_ReturnsTrue()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            OpenAI = "sk-legacy-key"
-        };
-
-        // Act & Assert
-        Assert.That(config.HasAnyKey(), Is.True);
-    }
-
-    [Test]
-    public void HasAnyKey_WithLegacyAzureOpenAI_ReturnsTrue()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            AzureOpenAI = "azure-legacy-key"
-        };
-
-        // Act & Assert
-        Assert.That(config.HasAnyKey(), Is.True);
-    }
-
-    [Test]
-    public void HasAnyKey_WithLegacyLocalAI_ReturnsTrue()
-    {
-        // Arrange
-        var config = new ApiKeysConfig
-        {
-            LocalAI = "local-legacy-key"
-        };
-
-        // Act & Assert
-        Assert.That(config.HasAnyKey(), Is.True);
-    }
-
-    [Test]
     public void HasAnyKey_WithNoKeys_ReturnsFalse()
     {
         // Arrange
@@ -491,8 +247,7 @@ public class ApiKeysConfigTests
         var config = new ApiKeysConfig
         {
             VirusTotal = "   ",
-            SendGrid = "\t",
-            OpenAI = "  \n  "
+            SendGrid = "\t"
         };
 
         // Act & Assert
@@ -506,8 +261,7 @@ public class ApiKeysConfigTests
         var config = new ApiKeysConfig
         {
             VirusTotal = "",
-            SendGrid = "",
-            OpenAI = ""
+            SendGrid = ""
         };
 
         // Act & Assert
