@@ -55,6 +55,12 @@ public class ReportActionsServiceTests
         _mockCallbackContextRepo = Substitute.For<IReportCallbackContextRepository>();
         _mockLogger = Substitute.For<ILogger<ReportActionsService>>();
 
+        // Default: TryUpdateStatusAsync succeeds (report still pending at update time)
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
         _service = new ReportActionsService(
             _mockReportsRepo,
             _mockMessageRepo,
@@ -92,7 +98,7 @@ public class ReportActionsServiceTests
                 i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
-        await _mockReportsRepo.Received(1).UpdateStatusAsync(
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
             TestReviewerEmail,
@@ -265,7 +271,7 @@ public class ReportActionsServiceTests
         await _service.HandleBanActionAsync(TestReportId, TestExecutor);
 
         // Assert - report status still updated
-        await _mockReportsRepo.Received(1).UpdateStatusAsync(
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
             TestReviewerEmail,
@@ -303,7 +309,7 @@ public class ReportActionsServiceTests
                 i.Reason.Contains($"Report #{TestReportId}")),
             Arg.Any<CancellationToken>());
 
-        await _mockReportsRepo.Received(1).UpdateStatusAsync(
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Reviewed,
             TestReviewerEmail,
@@ -378,7 +384,7 @@ public class ReportActionsServiceTests
             .WarnUserAsync(Arg.Any<WarnIntent>(), Arg.Any<CancellationToken>());
 
         // Report updated to dismissed
-        await _mockReportsRepo.Received(1).UpdateStatusAsync(
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
             TestReviewerEmail,
@@ -399,7 +405,7 @@ public class ReportActionsServiceTests
         await _service.HandleDismissActionAsync(TestReportId, TestExecutor, null);
 
         // Assert
-        await _mockReportsRepo.Received(1).UpdateStatusAsync(
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
             TestReviewerEmail,
@@ -469,13 +475,122 @@ public class ReportActionsServiceTests
         await _service.HandleDismissActionAsync(TestReportId, TestExecutor);
 
         // Assert - report status still updated
-        await _mockReportsRepo.Received(1).UpdateStatusAsync(
+        await _mockReportsRepo.Received(1).TryUpdateStatusAsync(
             TestReportId,
             ReportStatus.Dismissed,
             TestReviewerEmail,
             "dismiss",
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Status Guard Tests
+
+    [Test]
+    public void HandleBanActionAsync_ReportAlreadyHandled_ThrowsWithAttribution()
+    {
+        // Arrange
+        var report = new Report(
+            Id: TestReportId,
+            MessageId: TestMessageId,
+            Chat: new ChatIdentity(TestChatId, "TestChat"),
+            ReportCommandMessageId: null,
+            ReportedByUserId: 11111L,
+            ReportedByUserName: "reporter",
+            ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status: ReportStatus.Reviewed,
+            ReviewedBy: "OtherAdmin",
+            ReviewedAt: DateTimeOffset.UtcNow.AddMinutes(-5),
+            ActionTaken: "ban",
+            AdminNotes: null);
+
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await _service.HandleBanActionAsync(TestReportId, TestExecutor));
+        Assert.That(ex!.Message, Does.Contain("Already handled by OtherAdmin"));
+        Assert.That(ex.Message, Does.Contain("(ban)"));
+    }
+
+    [Test]
+    public void HandleSpamActionAsync_ReportAlreadyDismissed_ThrowsWithAttribution()
+    {
+        // Arrange
+        var report = new Report(
+            Id: TestReportId,
+            MessageId: TestMessageId,
+            Chat: new ChatIdentity(TestChatId, "TestChat"),
+            ReportCommandMessageId: null,
+            ReportedByUserId: 11111L,
+            ReportedByUserName: "reporter",
+            ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status: ReportStatus.Dismissed,
+            ReviewedBy: "AdminX",
+            ReviewedAt: DateTimeOffset.UtcNow.AddMinutes(-3),
+            ActionTaken: "dismiss",
+            AdminNotes: null);
+
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await _service.HandleSpamActionAsync(TestReportId, TestExecutor));
+        Assert.That(ex!.Message, Does.Contain("Already handled by AdminX"));
+        Assert.That(ex.Message, Does.Contain("(dismiss)"));
+
+        // No moderation action should be attempted
+        _mockModerationService.DidNotReceive().MarkAsSpamAndBanAsync(
+            Arg.Any<SpamBanIntent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public void HandleBanActionAsync_RaceCondition_TryUpdateFails_ThrowsWithAttribution()
+    {
+        // Arrange - report is pending at initial check, but TryUpdateStatusAsync fails (race)
+        var report = CreateTestReport();
+        var message = CreateTestMessage();
+        SetupReportAndMessage(report, message);
+
+        _mockModerationService.BanUserAsync(
+                Arg.Any<BanIntent>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true, ChatsAffected = 3 });
+
+        // TryUpdateStatusAsync fails — another admin handled it between our check and update
+        _mockReportsRepo.TryUpdateStatusAsync(
+                Arg.Any<long>(), Arg.Any<ReportStatus>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        // Re-fetch returns the now-handled report
+        var handledReport = new Report(
+            Id: TestReportId,
+            MessageId: TestMessageId,
+            Chat: new ChatIdentity(TestChatId, "TestChat"),
+            ReportCommandMessageId: null,
+            ReportedByUserId: 11111L,
+            ReportedByUserName: "reporter",
+            ReportedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status: ReportStatus.Reviewed,
+            ReviewedBy: "RacingAdmin",
+            ReviewedAt: DateTimeOffset.UtcNow,
+            ActionTaken: "spam",
+            AdminNotes: null);
+
+        // GetContentReportAsync is called twice: once for initial fetch, once for re-fetch after race
+        _mockReportsRepo.GetContentReportAsync(TestReportId, Arg.Any<CancellationToken>())
+            .Returns(report, handledReport);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await _service.HandleBanActionAsync(TestReportId, TestExecutor));
+        Assert.That(ex!.Message, Does.Contain("Already handled by RacingAdmin"));
+        Assert.That(ex.Message, Does.Contain("(spam)"));
     }
 
     #endregion
