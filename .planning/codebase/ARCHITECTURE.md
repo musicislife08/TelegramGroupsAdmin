@@ -40,7 +40,7 @@
 - Key Services: `ContentCheckCoordinator` (orchestrates detection), handlers chain, moderation services
 
 **Content Detection Layer (`TelegramGroupsAdmin.ContentDetection`):**
-- Purpose: 9 independent content detection algorithms (ML, Bayes, OCR, ClamAV, VirusTotal, URL filtering, impersonation, etc.)
+- Purpose: 9 independent content detection algorithms (ML, Bayes, AI vision/OCR/translate, ClamAV, VirusTotal, URL filtering, impersonation, etc.)
 - Location: `TelegramGroupsAdmin.ContentDetection/`
 - Contains: Checks (algorithm implementations), Services (ClamAV, VirusTotal, blocklists), ML (text/image classifiers)
 - Depends on: Data, Core
@@ -104,7 +104,7 @@
 4. Job accesses payload via `context.MergedJobDataMap` (for on-demand jobs), or reads config
 5. Job performs work (e.g., retraining ML model, scanning files, cleaning old data)
 6. Job re-throws exceptions for retry logic
-7. Results persisted to database or external systems (S3 backups, etc.)
+7. Results persisted to database or local filesystem (encrypted backups to /data)
 
 **Moderation Flow:**
 
@@ -224,7 +224,7 @@
 - **Background Jobs**: Re-throw exceptions immediately (Quartz catches for retry logic), don't swallow errors
 - **API Endpoints**: Catch exceptions, return 500 with generic error message, log full details with context
 - **UI Components**: Wrap in try-catch, display user-friendly error messages via MudBlazor snackbars
-- **Validation**: Use `FluentValidation` or custom guards at service entry points, reject invalid state early
+- **Validation**: Custom guards at service entry points, reject invalid state early
 
 **Logging Context:**
 
@@ -239,12 +239,12 @@
 - Framework: Serilog with dynamic log level switching (loaded from database)
 - Sinks: Console (always), Seq (optional via `SEQ_URL` env var), OpenTelemetry (optional via `OTEL_EXPORTER_OTLP_ENDPOINT`)
 - Structured Logging: Serilog.Extensions.Logging enriches with LogContext properties
-- Configuration File: `appsettings.json` minimal, real config via database
+- Configuration: All real config stored in database, editable via Settings UI without restart
 
 **Validation:**
 - At service entry points (controllers, endpoints, handlers)
 - Custom guards: `if (param == null) throw new ArgumentNullException(...)`
-- FluentValidation for complex objects (auth requests, settings updates)
+- Custom validation logic for complex objects (auth requests, settings updates)
 - Database-level: Check constraints for exclusive arcs, unique indexes for state-dependent constraints
 
 **Authentication:**
@@ -275,7 +275,7 @@
 - L1 In-Memory: `HybridCache` registered in `AddHttpClients()` (optional, can be disabled)
 - L2 None: No Redis or distributed cache (single instance, in-memory sufficient)
 - Invalidation: Handled per-service (e.g., `BanCelebrationCache.Invalidate()` when settings change)
-- Database Config Cache: Settings fetched once at startup, refreshed via admin UI (requires restart)
+- Database Config Cache: Settings fetched and cached, refreshed live via admin UI (no restart required)
 
 ---
 

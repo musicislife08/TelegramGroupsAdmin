@@ -113,7 +113,7 @@ TelegramGroupsAdmin/ (root)
 │   ├── Checks/                           # Algorithm implementations
 │   │   ├── SpamCheckV2.cs                # ML.NET spam classifier
 │   │   ├── BayesClassifierCheck.cs       # Naive Bayes classifier
-│   │   ├── OCRCheck.cs                   # Tesseract OCR
+│   │   ├── OCRCheck.cs                   # OpenAI Vision (OCR + translate + classify in single call)
 │   │   ├── LanguageDetectionCheck.cs
 │   │   ├── ImpersonationAlertCheck.cs    # Impersonation detection
 │   │   ├── VedisCheckV2.cs               # ClamAV file scanner integration
@@ -218,7 +218,7 @@ TelegramGroupsAdmin/ (root)
 │   ├── data-test/                        # Test data volume
 │   └── db-test/                          # Test database volume
 │
-├── tessdata/                             # Tesseract OCR language data
+├── tessdata/                             # DEAD - Tesseract OCR data, no longer used (cleanup needed)
 │
 ├── .planning/                            # GSD planning documents
 │   └── codebase/                         # Architecture & structure docs
@@ -304,7 +304,7 @@ TelegramGroupsAdmin/ (root)
 
 **Directories:**
 - PascalCase: `Components/`, `Handlers/`, `Services/`, `Repositories/`
-- Lowercase context: `lang-models/` (language models), `tessdata/` (OCR data)
+- Lowercase context: `lang-models/` (language models)
 - Suffixes for grouping: `Services/Bot/`, `Services/Moderation/`, `Services/BackgroundServices/`
 
 **Types:**
@@ -356,15 +356,16 @@ TelegramGroupsAdmin/ (root)
 - Committed: Yes (compose file), No (database/data volumes)
 
 **tessdata/:**
-- Purpose: Tesseract OCR language data files
+- Purpose: DEAD — was Tesseract OCR language data, no longer used (OCR now via OpenAI Vision)
+- Cleanup needed: Remove directory from repo AND from Dockerfile (downloads eng.traineddata at build time, ~14.7MB dead weight in image)
 - Generated: No
-- Committed: Yes (part of repo for OCR support)
+- Committed: Yes (should be removed)
 
 **Migrations (TelegramGroupsAdmin.Data/Migrations/):**
 - Purpose: EF Core migration history
 - Generated: Yes (`dotnet ef migrations add MigrationName`)
 - Committed: Yes (part of source control)
-- Notes: Never edit manually; revert with `dotnet ef migrations remove` and regenerate if wrong
+- Notes: Prefer code-first via Fluent API wherever possible; manual edits sometimes unavoidable for PostgreSQL features EF Core doesn't support. Revert with `dotnet ef migrations remove` and regenerate if wrong
 
 ---
 

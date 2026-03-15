@@ -87,24 +87,16 @@ TelegramGroupsAdmin.IntegrationTests/
 [TestFixture]
 public class PassphraseGeneratorTests
 {
-    #region Generate - Basic Tests
-
     [Test]
     public void Generate_Default_Returns6Words()
     {
         // Arrange
         var passphrase = PassphraseGenerator.Generate();
 
-        // Act (implicit in Arrange above)
-
         // Assert
         var words = passphrase.Split('-');
         Assert.That(words.Length, Is.EqualTo(6));
     }
-
-    #endregion
-
-    #region Generate - Randomness Tests
 
     [Test]
     public void Generate_MultipleGenerated_AllDifferent()
@@ -119,8 +111,6 @@ public class PassphraseGeneratorTests
 
         Assert.That(passphrases.Count, Is.EqualTo(100));
     }
-
-    #endregion
 }
 ```
 
@@ -248,18 +238,7 @@ public static class GoldenDataset
 
 ## Coverage
 
-**Requirements:** Not explicitly enforced - no coverage thresholds configured
-
-**View Coverage:**
-```bash
-# Generate coverage report
-dotnet test /p:CollectCoverage=true /p:CoverageFormat=opencover
-
-# Coverage files generated to: obj/Release/coverage.opencover.xml (or similar per project)
-# View in IDE or upload to coverage service (CodeCov, etc.)
-```
-
-**Tool:** Coverlet.Collector (included in test projects via NuGet)
+**Requirements:** No coverage thresholds enforced. Coverlet is referenced in test projects but not functional — coverage is tracked informally via IDE tooling (Rider/VS).
 
 ## Test Types
 
@@ -270,41 +249,33 @@ dotnet test /p:CollectCoverage=true /p:CoverageFormat=opencover
   - `PassphraseGeneratorTests` - Tests `Generate()` and `CalculateEntropy()` functions
   - `ContentDetectionConfigMappingsTests` - Tests model mapping conversions
   - `UrlUtilitiesTests` - Tests utility functions
-- **Speed:** Fast (~2 seconds total)
+- **Speed:** ~2 seconds
 - **Dependencies:** Mocked via NSubstitute (no database, no I/O)
-- **Run without special flags:** `dotnet test TelegramGroupsAdmin.UnitTests/TelegramGroupsAdmin.UnitTests.csproj`
+
+**Component Tests:**
+- **Project:** `TelegramGroupsAdmin.ComponentTests`
+- **Scope:** Blazor component rendering, interaction, and behavior
+- **Speed:** ~1-2 minutes
+- **Dependencies:** bUnit for component rendering, NSubstitute for service mocks
+- **Examples:** Settings dialogs, backup/restore components, notification preferences
 
 **Integration Tests:**
 - **Project:** `TelegramGroupsAdmin.IntegrationTests`
 - **Scope:** Database operations with real PostgreSQL 18 via Testcontainers
-- **Examples:**
-  - `InfrastructureTests` - Verifies migrations apply, database isolation
-  - `CascadeBehaviorTests` - Tests cascade delete rules
-  - `DataIntegrityTests` - Tests constraints and data validation
-- **Speed:** Slow (~20 minutes total) - includes container startup/teardown
+- **Speed:** ~4-6 minutes (includes container startup/teardown)
 - **Database:** Real PostgreSQL via `Testcontainers.PostgreSql`
 - **Setup:** `MigrationTestHelper` creates unique database per test
-  ```csharp
-  [Test]
-  public async Task ShouldCreateDatabaseAndApplyMigrations()
-  {
-      using var helper = new MigrationTestHelper();
-      await helper.CreateDatabaseAndApplyMigrationsAsync();
-
-      var tableCount = await helper.ExecuteScalarAsync(
-          "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'");
-
-      Assert.That(Convert.ToInt32(tableCount), Is.GreaterThan(0));
-  }
-  ```
+- **Examples:** `InfrastructureTests`, `CascadeBehaviorTests`, `DataIntegrityTests`
 
 **E2E Tests:**
 - **Project:** `TelegramGroupsAdmin.E2ETests`
-- **Framework:** Playwright Browser automation
+- **Framework:** Playwright browser automation
 - **Scope:** Full application flows (Blazor UI → API → Database)
-- **Speed:** Very slow (requires running full app + browser)
+- **Speed:** ~10 minutes (full app + browser)
 - **Setup:** Uses `WebApplicationFactory` with `.UseKestrel()` for real HTTP server
 - **Note:** See [E2E_TESTING.md](E2E_TESTING.md) in repo for full documentation
+
+**Total suite:** ~20 minutes for all test projects combined
 
 ## Common Patterns
 

@@ -119,7 +119,7 @@
   - 2FA via TOTP (Otp.NET 1.4.1)
   - Recovery codes for account lockout
   - Account lockout after failed attempts
-  - Configurable session expiration (7 days by default)
+  - 30-day session expiration with sliding window (resets on activity)
 - Cookie settings:
   - Name: `TgSpam.Auth`
   - HttpOnly: true
@@ -193,7 +193,7 @@
 - Base image: mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra
   - Ubuntu Chiseled runtime (minimal, no shell)
   - Non-root user (UID 1654)
-  - FFmpeg, Tesseract OCR pre-installed
+  - FFmpeg pre-installed, Tesseract OCR still in image (DEAD — cleanup needed, OCR now via OpenAI Vision)
 
 **CI Pipeline:**
 - GitHub Actions (inferred from CLAUDE.md)
@@ -203,8 +203,8 @@
 
 **Build Configuration:**
 - Dockerfile: Multi-stage optimized build
-  - Stage 1: Dependencies (FFmpeg, Tesseract, FastText model)
-  - Stage 2: Tesseract environment
+  - Stage 1: Dependencies (FFmpeg, Tesseract [DEAD — cleanup needed], FastText model)
+  - Stage 2: Tesseract environment [DEAD — cleanup needed]
   - Stage 3: NuGet restore (cached)
   - Stage 4: Build & publish (cross-compilation)
   - Stage 5: Runtime (Chiseled image)
@@ -238,7 +238,7 @@
 
 **Optional Feature Flags:**
 - `SKIP_ML_TRAINING` - Skip ML training on startup (tests: `true`)
-- `TESSDATA_PREFIX` - Tesseract data path (default: `/tessdata`)
+- `TESSDATA_PREFIX` - DEAD — Tesseract data path, no longer used (OCR now via OpenAI Vision, cleanup needed)
 
 **Database Configuration:**
 - Host: Configurable

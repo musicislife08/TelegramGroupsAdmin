@@ -105,7 +105,6 @@
 - `OTEL_EXPORTER_OTLP_ENDPOINT` - OpenTelemetry collector endpoint (e.g., Aspire Dashboard)
 - `OTEL_SERVICE_NAME` - Service identifier for traces/metrics (default: `TelegramGroupsAdmin`)
 - `SKIP_ML_TRAINING` - Skip ML classifier training on startup (tests only: `true` or unset)
-- `TESSDATA_PREFIX` - Path to Tesseract language data files (default: `/tessdata`)
 - `TZ` - Timezone (default: `UTC`)
 
 **Database Configuration:**

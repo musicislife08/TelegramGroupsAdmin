@@ -24,7 +24,7 @@
 - camelCase for local variables and parameters (e.g., `wordCount`, `passphrase`, `userId`, `cancellationToken`)
 - Private fields use camelCase with leading underscore (e.g., `_logger`, `_telegramUserRepository`, `_context`)
 - Readonly static fields use PascalCase with readonly modifier (e.g., `private static readonly Lazy<string[]> Wordlist`)
-- Constants use UPPER_SNAKE_CASE in `*Constants.cs` files but PascalCase as const fields on classes (e.g., `private const int MinimumWords`)
+- Constants follow standard .NET convention: PascalCase for `const` fields (e.g., `private const int MinimumWords`)
 - Named parameters at call sites use camelCase: `wordCount: 6`, `separator: "-"`, `cancellationToken: cancellationToken`
 
 **Types:**
@@ -106,14 +106,14 @@
       messageText[..50]);
   ```
 - Identity logging extensions on types:
-  - `user.ToLogInfo()` - For Info+ levels (name only)
-  - `user.ToLogDebug()` - For Debug/Warning/Error (name + ID)
+  - `user.ToLogInfo()` - For Information level (name only)
+  - `user.ToLogDebug()` - For Debug, Warning, and Error levels (name + ID)
   - Log extensions live in `Core/Extensions/CoreLoggingExtensions.cs` and `Telegram/Extensions/TelegramLoggingExtensions.cs`
 
 ## Comments
 
 **When to Comment:**
-- Document XML summary comments on public types and methods (required):
+- Document XML summary comments on public types and methods (aspirational, not enforced):
   ```csharp
   /// <summary>
   /// Generates a secure, memorable passphrase using the EFF Large Wordlist.
@@ -134,18 +134,6 @@
   // TODO: EF Core generates DROP+CREATE instead of RENAME - manually fix in migrations
   ```
 
-**JSDoc/TSDoc:**
-- Not applicable (C# project - uses XML documentation)
-- C# uses `///` for XML documentation comments
-- Remarks sections provide additional context:
-  ```csharp
-  /// <remarks>
-  /// Entropy by word count:
-  /// - 5 words = 64.6 bits (minimum)
-  /// - 6 words = 77.5 bits (recommended)
-  /// </remarks>
-  ```
-
 ## Function Design
 
 **Size:**
@@ -164,6 +152,7 @@
   await helper.CreateDatabase(true, false);
   ```
 - CancellationToken always named `cancellationToken` (not `ct`), placed at end of parameter list
+- Prefer descriptive names over abbreviations everywhere — readability over brevity (e.g., `cancellationToken` not `ct`, `userId` not `uid`)
 - Default parameter values used for optional behavior (e.g., `wordCount = RecommendedWords`)
 
 **Return Values:**
