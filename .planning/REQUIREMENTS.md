@@ -24,17 +24,17 @@ Requirements for this cleanup. Each maps to roadmap phases.
 - [x] **FILE-13**: Remove Telegram/Models/ReportActionResult.cs (zero references)
 - [x] **FILE-14**: Remove Telegram/Services/Media/IMediaNotificationService.cs + MediaNotificationService.cs (registered but never injected)
 - [x] **FILE-15**: Remove Telegram/Services/Moderation/Events/ModerationActionType.cs (superseded by UserActionType)
-- [ ] **FILE-16**: Remove TelegramGroupsAdmin/SeoPreviewScraper.cs + SeoPreviewResult.cs (registered but never injected)
-- [ ] **FILE-17**: Remove Models/Dialogs/AddSpamSampleData.cs (superseded by AddTrainingSampleData)
-- [ ] **FILE-18**: Remove Models/Dialogs/EditSpamSampleData.cs (superseded by EditTrainingSampleData)
-- [ ] **FILE-19**: Remove Components/Shared/TelegramPreview.razor (has tests but never rendered)
-- [ ] **FILE-20**: Remove Components/Shared/TelegramBotMessage.razor (has tests but never rendered)
-- [ ] **FILE-21**: Remove Components/Shared/TelegramUserMessage.razor (has tests but never rendered)
-- [ ] **FILE-22**: Remove Components/Shared/TelegramReturnButton.razor (has tests but never rendered)
+- [x] **FILE-16**: Remove TelegramGroupsAdmin/SeoPreviewScraper.cs + SeoPreviewResult.cs (registered but never injected)
+- [x] **FILE-17**: Remove Models/Dialogs/AddSpamSampleData.cs (superseded by AddTrainingSampleData)
+- [x] **FILE-18**: Remove Models/Dialogs/EditSpamSampleData.cs (superseded by EditTrainingSampleData)
+- [x] **FILE-19**: Remove Components/Shared/TelegramPreview.razor (has tests but never rendered)
+- [x] **FILE-20**: Remove Components/Shared/TelegramBotMessage.razor (has tests but never rendered)
+- [x] **FILE-21**: Remove Components/Shared/TelegramUserMessage.razor (has tests but never rendered)
+- [x] **FILE-22**: Remove Components/Shared/TelegramReturnButton.razor (has tests but never rendered)
 - [x] **FILE-23**: Remove Repositories/Mappings/DetectionAccuracyMappings.cs + Models/Analytics/DetectionAccuracyRecord.cs (repo constructs inline)
 - [x] **FILE-24**: Remove Repositories/Mappings/HourlyDetectionStatsMappings.cs + Models/Analytics/HourlyDetectionStats.cs (repo constructs inline)
 - [x] **FILE-25**: Remove Repositories/Mappings/WelcomeResponseSummaryMappings.cs + Models/Analytics/WelcomeResponseSummary.cs (repo constructs inline)
-- [ ] **FILE-26**: Remove test-backup.tar.gz (unreferenced test artifact)
+- [x] **FILE-26**: Remove test-backup.tar.gz (unreferenced test artifact)
 - [ ] **FILE-27**: Remove ContentDetection/Services/AdvancedTokenizerService.cs (DI registers simpler TokenizerService)
 - [ ] **FILE-28**: Remove ContentDetection/Services/MessageContextProvider.cs (replaced by MessageContextAdapter)
 - [ ] **FILE-29**: Remove ContentDetection/Models/DetectionStats.cs (only returned by dead GetStatsAsync)
@@ -42,7 +42,7 @@ Requirements for this cleanup. Each maps to roadmap phases.
 ### DI Registrations
 
 - [x] **DI-01**: Remove IMediaNotificationService -> MediaNotificationService registration from ServiceCollectionExtensions
-- [ ] **DI-02**: Remove unused AddHttpClient registration from ServiceCollectionExtensions
+- [x] **DI-02**: Remove unused AddHttpClient registration from ServiceCollectionExtensions
 
 ### Dead Methods
 
@@ -78,7 +78,7 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### Stale Comments
 
-- [ ] **CMNT-01**: Remove misleading "Deprecated" comment on TranslationConfig.cs:34 (property is actively used)
+- [x] **CMNT-01**: Remove misleading "Deprecated" comment on TranslationConfig.cs:34 (property is actively used)
 - [x] **CMNT-02**: Remove transition comment in ConfigurationExtensions.cs:20
 
 ### Orphaned Tests
@@ -142,16 +142,16 @@ None — this is a one-shot cleanup milestone.
 | TEST-02 | Phase 3 | Complete |
 | TEST-03 | Phase 3 | Complete |
 | TEST-04 | Phase 3 | Complete |
-| FILE-16 | Phase 4 | Pending |
-| FILE-17 | Phase 4 | Pending |
-| FILE-18 | Phase 4 | Pending |
-| FILE-19 | Phase 4 | Pending |
-| FILE-20 | Phase 4 | Pending |
-| FILE-21 | Phase 4 | Pending |
-| FILE-22 | Phase 4 | Pending |
-| FILE-26 | Phase 4 | Pending |
-| DI-02 | Phase 4 | Pending |
-| CMNT-01 | Phase 4 | Pending |
+| FILE-16 | Phase 4 | Complete |
+| FILE-17 | Phase 4 | Complete |
+| FILE-18 | Phase 4 | Complete |
+| FILE-19 | Phase 4 | Complete |
+| FILE-20 | Phase 4 | Complete |
+| FILE-21 | Phase 4 | Complete |
+| FILE-22 | Phase 4 | Complete |
+| FILE-26 | Phase 4 | Complete |
+| DI-02 | Phase 4 | Complete |
+| CMNT-01 | Phase 4 | Complete |
 | TEST-01 | Phase 4 | Pending |
 | FILE-27 | Phase 5 | Pending |
 | FILE-28 | Phase 5 | Pending |
