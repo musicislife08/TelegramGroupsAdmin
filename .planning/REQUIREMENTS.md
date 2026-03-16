@@ -14,7 +14,7 @@ Requirements for this cleanup. Each maps to roadmap phases.
 - [x] **FILE-03**: Remove Configuration/OpenAIOptions.cs (superseded by database config)
 - [x] **FILE-04**: Remove Configuration/SendGridOptions.cs (superseded by database config)
 - [x] **FILE-05**: Remove Configuration/EmailOptions.cs (never registered in DI)
-- [ ] **FILE-06**: Remove Data/Models/StopWordWithEmailDto.cs (query DTO never used)
+- [x] **FILE-06**: Remove Data/Models/StopWordWithEmailDto.cs (query DTO never used)
 - [ ] **FILE-07**: Remove Telegram/Constants/NotificationConstants.cs (dead copy)
 - [ ] **FILE-08**: Remove Telegram/Services/Welcome/WelcomeChatPermissions.cs (predefined permissions never referenced)
 - [ ] **FILE-09**: Remove Telegram/Models/BotPermissionsTest.cs (replaced by Chat Health)
@@ -31,9 +31,9 @@ Requirements for this cleanup. Each maps to roadmap phases.
 - [ ] **FILE-20**: Remove Components/Shared/TelegramBotMessage.razor (has tests but never rendered)
 - [ ] **FILE-21**: Remove Components/Shared/TelegramUserMessage.razor (has tests but never rendered)
 - [ ] **FILE-22**: Remove Components/Shared/TelegramReturnButton.razor (has tests but never rendered)
-- [ ] **FILE-23**: Remove Repositories/Mappings/DetectionAccuracyMappings.cs + Models/Analytics/DetectionAccuracyRecord.cs (repo constructs inline)
-- [ ] **FILE-24**: Remove Repositories/Mappings/HourlyDetectionStatsMappings.cs + Models/Analytics/HourlyDetectionStats.cs (repo constructs inline)
-- [ ] **FILE-25**: Remove Repositories/Mappings/WelcomeResponseSummaryMappings.cs + Models/Analytics/WelcomeResponseSummary.cs (repo constructs inline)
+- [x] **FILE-23**: Remove Repositories/Mappings/DetectionAccuracyMappings.cs + Models/Analytics/DetectionAccuracyRecord.cs (repo constructs inline)
+- [x] **FILE-24**: Remove Repositories/Mappings/HourlyDetectionStatsMappings.cs + Models/Analytics/HourlyDetectionStats.cs (repo constructs inline)
+- [x] **FILE-25**: Remove Repositories/Mappings/WelcomeResponseSummaryMappings.cs + Models/Analytics/WelcomeResponseSummary.cs (repo constructs inline)
 - [ ] **FILE-26**: Remove test-backup.tar.gz (unreferenced test artifact)
 - [ ] **FILE-27**: Remove ContentDetection/Services/AdvancedTokenizerService.cs (DI registers simpler TokenizerService)
 - [ ] **FILE-28**: Remove ContentDetection/Services/MessageContextProvider.cs (replaced by MessageContextAdapter)
@@ -114,10 +114,10 @@ None — this is a one-shot cleanup milestone.
 | FILE-04 | Phase 1 | Complete |
 | FILE-05 | Phase 1 | Complete |
 | CMNT-02 | Phase 1 | Complete |
-| FILE-06 | Phase 2 | Pending |
-| FILE-23 | Phase 2 | Pending |
-| FILE-24 | Phase 2 | Pending |
-| FILE-25 | Phase 2 | Pending |
+| FILE-06 | Phase 2 | Complete |
+| FILE-23 | Phase 2 | Complete |
+| FILE-24 | Phase 2 | Complete |
+| FILE-25 | Phase 2 | Complete |
 | FILE-07 | Phase 3 | Pending |
 | FILE-08 | Phase 3 | Pending |
 | FILE-09 | Phase 3 | Pending |
