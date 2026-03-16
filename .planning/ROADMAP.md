@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Core and Configuration** - Delete dead files and fix stale comment in Core and Configuration projects (completed 2026-03-16)
 - [x] **Phase 2: Data and Mapping Models** - Delete dead Data model and dead main-app mapping records/files (completed 2026-03-16)
-- [ ] **Phase 3: Telegram Project** - Delete dead Telegram files, remove dead DI registration, remove dead interface methods and orphaned tests
+- [x] **Phase 3: Telegram Project** - Delete dead Telegram files, remove dead DI registration, remove dead interface methods and orphaned tests (completed 2026-03-16)
 - [ ] **Phase 4: Main Application** - Delete dead main-app files, DI registration, stale comment, and orphaned component tests
 - [ ] **Phase 5: ContentDetection Project** - Delete dead ContentDetection services/models, dead interface methods, dead properties, dead enum value, and orphaned mapping test
 
@@ -58,7 +58,7 @@ Plans:
   3. `IMediaNotificationService` and its implementation are gone and the DI registration for it is removed from `ServiceCollectionExtensions`
   4. `IMessageQueryService`, `IJobTriggerService`, `IJobScheduler`, `IBotMediaService`, `TelegramLoggingExtensions`, and `JobPayloadHelper` no longer declare or implement the removed methods
   5. Test classes for `GetRequiredPayload`, `DownloadFileAsBytesAsync`, and the dead `IMessageQueryService` methods no longer exist and the test project compiles cleanly
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 03-01-PLAN.md — Delete 10 dead Telegram files and remove IMediaNotificationService DI registration
@@ -99,6 +99,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Core and Configuration | 0/1 | Complete    | 2026-03-16 |
 | 2. Data and Mapping Models | 0/1 | Complete    | 2026-03-16 |
-| 3. Telegram Project | 0/2 | Not started | - |
+| 3. Telegram Project | 0/2 | Complete    | 2026-03-16 |
 | 4. Main Application | 0/TBD | Not started | - |
 | 5. ContentDetection Project | 0/TBD | Not started | - |
