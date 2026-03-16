@@ -13,7 +13,7 @@ Remove all 62 confirmed dead code items from the TelegramGroupsAdmin solution in
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Core and Configuration** - Delete dead files and fix stale comment in Core and Configuration projects (completed 2026-03-16)
-- [ ] **Phase 2: Data and Mapping Models** - Delete dead Data model and dead main-app mapping records/files
+- [x] **Phase 2: Data and Mapping Models** - Delete dead Data model and dead main-app mapping records/files (completed 2026-03-16)
 - [ ] **Phase 3: Telegram Project** - Delete dead Telegram files, remove dead DI registration, remove dead interface methods and orphaned tests
 - [ ] **Phase 4: Main Application** - Delete dead main-app files, DI registration, stale comment, and orphaned component tests
 - [ ] **Phase 5: ContentDetection Project** - Delete dead ContentDetection services/models, dead interface methods, dead properties, dead enum value, and orphaned mapping test
@@ -43,7 +43,7 @@ Plans:
   2. `Data/Models/StopWordWithEmailDto.cs` no longer exists
   3. The three dead mapping file pairs (DetectionAccuracyMappings + DetectionAccuracyRecord, HourlyDetectionStatsMappings + HourlyDetectionStats, WelcomeResponseSummaryMappings + WelcomeResponseSummary) no longer exist
   4. Repositories that formerly referenced those mapping files still compile and return data correctly (inline construction preserved)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 02-01-PLAN.md — Delete 7 dead files (1 Data DTO + 3 mapping pairs)
@@ -94,7 +94,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core and Configuration | 0/1 | Complete    | 2026-03-16 |
-| 2. Data and Mapping Models | 0/1 | Not started | - |
+| 2. Data and Mapping Models | 0/1 | Complete    | 2026-03-16 |
 | 3. Telegram Project | 0/TBD | Not started | - |
 | 4. Main Application | 0/TBD | Not started | - |
 | 5. ContentDetection Project | 0/TBD | Not started | - |
