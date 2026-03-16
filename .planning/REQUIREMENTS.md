@@ -46,17 +46,17 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### Dead Methods
 
-- [ ] **MTD-01**: Remove IMessageQueryService.GetMessagesBeforeAsync + implementation
-- [ ] **MTD-02**: Remove IMessageQueryService.GetMessagesByDateRangeAsync + implementation
-- [ ] **MTD-03**: Remove IMessageQueryService.GetDistinctUserNamesAsync + implementation
-- [ ] **MTD-04**: Remove IMessageQueryService.GetDistinctChatNamesAsync + implementation
-- [ ] **MTD-05**: Remove IJobTriggerService.ScheduleOnceAsync + implementation
-- [ ] **MTD-06**: Remove IJobTriggerService.CancelScheduledJobAsync + implementation
-- [ ] **MTD-07**: Remove IJobScheduler.IsScheduledAsync + implementation
-- [ ] **MTD-08**: Remove IBotMediaService.DownloadFileAsBytesAsync + implementation
-- [ ] **MTD-09**: Remove TelegramLoggingExtensions.GetUserLogDisplayAsync
-- [ ] **MTD-10**: Remove TelegramLoggingExtensions.GetChatLogDisplayAsync
-- [ ] **MTD-11**: Remove JobPayloadHelper.GetRequiredPayload()
+- [x] **MTD-01**: Remove IMessageQueryService.GetMessagesBeforeAsync + implementation
+- [x] **MTD-02**: Remove IMessageQueryService.GetMessagesByDateRangeAsync + implementation
+- [x] **MTD-03**: Remove IMessageQueryService.GetDistinctUserNamesAsync + implementation
+- [x] **MTD-04**: Remove IMessageQueryService.GetDistinctChatNamesAsync + implementation
+- [x] **MTD-05**: Remove IJobTriggerService.ScheduleOnceAsync + implementation
+- [x] **MTD-06**: Remove IJobTriggerService.CancelScheduledJobAsync + implementation
+- [x] **MTD-07**: Remove IJobScheduler.IsScheduledAsync + implementation
+- [x] **MTD-08**: Remove IBotMediaService.DownloadFileAsBytesAsync + implementation
+- [x] **MTD-09**: Remove TelegramLoggingExtensions.GetUserLogDisplayAsync
+- [x] **MTD-10**: Remove TelegramLoggingExtensions.GetChatLogDisplayAsync
+- [x] **MTD-11**: Remove JobPayloadHelper.GetRequiredPayload()
 - [ ] **MTD-12**: Remove IDetectionResultsRepository.GetRecentAsync + implementation
 - [ ] **MTD-13**: Remove IDetectionResultsRepository.GetStatsAsync + implementation
 - [ ] **MTD-14**: Remove IDetectionResultsRepository.DeleteOlderThanAsync + implementation
@@ -84,9 +84,9 @@ Requirements for this cleanup. Each maps to roadmap phases.
 ### Orphaned Tests
 
 - [ ] **TEST-01**: Remove component tests for 4 Telegram preview components (FILE-19 through FILE-22)
-- [ ] **TEST-02**: Remove unit tests for GetRequiredPayload (MTD-11)
-- [ ] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (MTD-08)
-- [ ] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (MTD-01 through MTD-04)
+- [x] **TEST-02**: Remove unit tests for GetRequiredPayload (MTD-11)
+- [x] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (MTD-08)
+- [x] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (MTD-01 through MTD-04)
 - [ ] **TEST-05**: Remove orphaned mapping round-trip tests in ContentDetectionConfigMappingsTests.cs
 
 ## v2 Requirements
@@ -128,20 +128,20 @@ None — this is a one-shot cleanup milestone.
 | FILE-14 | Phase 3 | Complete |
 | FILE-15 | Phase 3 | Complete |
 | DI-01 | Phase 3 | Complete |
-| MTD-01 | Phase 3 | Pending |
-| MTD-02 | Phase 3 | Pending |
-| MTD-03 | Phase 3 | Pending |
-| MTD-04 | Phase 3 | Pending |
-| MTD-05 | Phase 3 | Pending |
-| MTD-06 | Phase 3 | Pending |
-| MTD-07 | Phase 3 | Pending |
-| MTD-08 | Phase 3 | Pending |
-| MTD-09 | Phase 3 | Pending |
-| MTD-10 | Phase 3 | Pending |
-| MTD-11 | Phase 3 | Pending |
-| TEST-02 | Phase 3 | Pending |
-| TEST-03 | Phase 3 | Pending |
-| TEST-04 | Phase 3 | Pending |
+| MTD-01 | Phase 3 | Complete |
+| MTD-02 | Phase 3 | Complete |
+| MTD-03 | Phase 3 | Complete |
+| MTD-04 | Phase 3 | Complete |
+| MTD-05 | Phase 3 | Complete |
+| MTD-06 | Phase 3 | Complete |
+| MTD-07 | Phase 3 | Complete |
+| MTD-08 | Phase 3 | Complete |
+| MTD-09 | Phase 3 | Complete |
+| MTD-10 | Phase 3 | Complete |
+| MTD-11 | Phase 3 | Complete |
+| TEST-02 | Phase 3 | Complete |
+| TEST-03 | Phase 3 | Complete |
+| TEST-04 | Phase 3 | Complete |
 | FILE-16 | Phase 4 | Pending |
 | FILE-17 | Phase 4 | Pending |
 | FILE-18 | Phase 4 | Pending |
