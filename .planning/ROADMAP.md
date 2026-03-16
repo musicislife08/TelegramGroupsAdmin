@@ -75,7 +75,11 @@ Plans:
   4. `test-backup.tar.gz` no longer exists in the repository
   5. The misleading "Deprecated" comment on `TranslationConfig.cs:34` is removed and the property is visibly undeprecated
   6. Test classes for the four deleted Razor components no longer exist and the test project compiles cleanly
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Delete 9 dead files, remove SeoPreviewScraper DI registration, clean up dead constant, fix misleading comment
+- [ ] 04-02-PLAN.md — Delete 4 orphaned component test files and verify full solution build
 
 ### Phase 5: ContentDetection Project
 **Goal**: All dead code in the ContentDetection project is removed — dead service files, dead interface methods with implementations, dead properties on check request types, the dead enum value, and the orphaned mapping round-trip test
@@ -100,5 +104,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Core and Configuration | 0/1 | Complete    | 2026-03-16 |
 | 2. Data and Mapping Models | 0/1 | Complete    | 2026-03-16 |
 | 3. Telegram Project | 0/2 | Complete    | 2026-03-16 |
-| 4. Main Application | 0/TBD | Not started | - |
+| 4. Main Application | 0/2 | Not started | - |
 | 5. ContentDetection Project | 0/TBD | Not started | - |
