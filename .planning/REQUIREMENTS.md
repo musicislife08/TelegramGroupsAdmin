@@ -46,24 +46,24 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### Dead Methods
 
-- [ ] **METH-01**: Remove IMessageQueryService.GetMessagesBeforeAsync + implementation
-- [ ] **METH-02**: Remove IMessageQueryService.GetMessagesByDateRangeAsync + implementation
-- [ ] **METH-03**: Remove IMessageQueryService.GetDistinctUserNamesAsync + implementation
-- [ ] **METH-04**: Remove IMessageQueryService.GetDistinctChatNamesAsync + implementation
-- [ ] **METH-05**: Remove IJobTriggerService.ScheduleOnceAsync + implementation
-- [ ] **METH-06**: Remove IJobTriggerService.CancelScheduledJobAsync + implementation
-- [ ] **METH-07**: Remove IJobScheduler.IsScheduledAsync + implementation
-- [ ] **METH-08**: Remove IBotMediaService.DownloadFileAsBytesAsync + implementation
-- [ ] **METH-09**: Remove TelegramLoggingExtensions.GetUserLogDisplayAsync
-- [ ] **METH-10**: Remove TelegramLoggingExtensions.GetChatLogDisplayAsync
-- [ ] **METH-11**: Remove JobPayloadHelper.GetRequiredPayload()
-- [ ] **METH-12**: Remove IDetectionResultsRepository.GetRecentAsync + implementation
-- [ ] **METH-13**: Remove IDetectionResultsRepository.GetStatsAsync + implementation
-- [ ] **METH-14**: Remove IDetectionResultsRepository.DeleteOlderThanAsync + implementation
-- [ ] **METH-15**: Remove IDetectionResultsRepository.GetHamSamplesForSimilarityAsync + implementation
-- [ ] **METH-16**: Remove IFileScanQuotaRepository.GetCurrentQuotaAsync, CleanupExpiredQuotasAsync, GetServiceQuotasAsync, ResetQuotaAsync + implementations
-- [ ] **METH-17**: Remove ITokenizerService.GetWordFrequencies, IsStopWord + implementations in TokenizerService
-- [ ] **METH-18**: Remove ModelMappings.FileScanQuotaModel.ToDto()
+- [ ] **MTD-01**: Remove IMessageQueryService.GetMessagesBeforeAsync + implementation
+- [ ] **MTD-02**: Remove IMessageQueryService.GetMessagesByDateRangeAsync + implementation
+- [ ] **MTD-03**: Remove IMessageQueryService.GetDistinctUserNamesAsync + implementation
+- [ ] **MTD-04**: Remove IMessageQueryService.GetDistinctChatNamesAsync + implementation
+- [ ] **MTD-05**: Remove IJobTriggerService.ScheduleOnceAsync + implementation
+- [ ] **MTD-06**: Remove IJobTriggerService.CancelScheduledJobAsync + implementation
+- [ ] **MTD-07**: Remove IJobScheduler.IsScheduledAsync + implementation
+- [ ] **MTD-08**: Remove IBotMediaService.DownloadFileAsBytesAsync + implementation
+- [ ] **MTD-09**: Remove TelegramLoggingExtensions.GetUserLogDisplayAsync
+- [ ] **MTD-10**: Remove TelegramLoggingExtensions.GetChatLogDisplayAsync
+- [ ] **MTD-11**: Remove JobPayloadHelper.GetRequiredPayload()
+- [ ] **MTD-12**: Remove IDetectionResultsRepository.GetRecentAsync + implementation
+- [ ] **MTD-13**: Remove IDetectionResultsRepository.GetStatsAsync + implementation
+- [ ] **MTD-14**: Remove IDetectionResultsRepository.DeleteOlderThanAsync + implementation
+- [ ] **MTD-15**: Remove IDetectionResultsRepository.GetHamSamplesForSimilarityAsync + implementation
+- [ ] **MTD-16**: Remove IFileScanQuotaRepository.GetCurrentQuotaAsync, CleanupExpiredQuotasAsync, GetServiceQuotasAsync, ResetQuotaAsync + implementations
+- [ ] **MTD-17**: Remove ITokenizerService.GetWordFrequencies, IsStopWord + implementations in TokenizerService
+- [ ] **MTD-18**: Remove ModelMappings.FileScanQuotaModel.ToDto()
 
 ### Dead Properties
 
@@ -84,9 +84,9 @@ Requirements for this cleanup. Each maps to roadmap phases.
 ### Orphaned Tests
 
 - [ ] **TEST-01**: Remove component tests for 4 Telegram preview components (FILE-19 through FILE-22)
-- [ ] **TEST-02**: Remove unit tests for GetRequiredPayload (METH-11)
-- [ ] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (METH-08)
-- [ ] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (METH-01 through METH-04)
+- [ ] **TEST-02**: Remove unit tests for GetRequiredPayload (MTD-11)
+- [ ] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (MTD-08)
+- [ ] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (MTD-01 through MTD-04)
 - [ ] **TEST-05**: Remove orphaned mapping round-trip tests in ContentDetectionConfigMappingsTests.cs
 
 ## v2 Requirements
@@ -108,13 +108,75 @@ None — this is a one-shot cleanup milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated during roadmap creation) | | |
+| FILE-01 | Phase 1 | Pending |
+| FILE-02 | Phase 1 | Pending |
+| FILE-03 | Phase 1 | Pending |
+| FILE-04 | Phase 1 | Pending |
+| FILE-05 | Phase 1 | Pending |
+| CMNT-02 | Phase 1 | Pending |
+| FILE-06 | Phase 2 | Pending |
+| FILE-23 | Phase 2 | Pending |
+| FILE-24 | Phase 2 | Pending |
+| FILE-25 | Phase 2 | Pending |
+| FILE-07 | Phase 3 | Pending |
+| FILE-08 | Phase 3 | Pending |
+| FILE-09 | Phase 3 | Pending |
+| FILE-10 | Phase 3 | Pending |
+| FILE-11 | Phase 3 | Pending |
+| FILE-12 | Phase 3 | Pending |
+| FILE-13 | Phase 3 | Pending |
+| FILE-14 | Phase 3 | Pending |
+| FILE-15 | Phase 3 | Pending |
+| DI-01 | Phase 3 | Pending |
+| MTD-01 | Phase 3 | Pending |
+| MTD-02 | Phase 3 | Pending |
+| MTD-03 | Phase 3 | Pending |
+| MTD-04 | Phase 3 | Pending |
+| MTD-05 | Phase 3 | Pending |
+| MTD-06 | Phase 3 | Pending |
+| MTD-07 | Phase 3 | Pending |
+| MTD-08 | Phase 3 | Pending |
+| MTD-09 | Phase 3 | Pending |
+| MTD-10 | Phase 3 | Pending |
+| MTD-11 | Phase 3 | Pending |
+| TEST-02 | Phase 3 | Pending |
+| TEST-03 | Phase 3 | Pending |
+| TEST-04 | Phase 3 | Pending |
+| FILE-16 | Phase 4 | Pending |
+| FILE-17 | Phase 4 | Pending |
+| FILE-18 | Phase 4 | Pending |
+| FILE-19 | Phase 4 | Pending |
+| FILE-20 | Phase 4 | Pending |
+| FILE-21 | Phase 4 | Pending |
+| FILE-22 | Phase 4 | Pending |
+| FILE-26 | Phase 4 | Pending |
+| DI-02 | Phase 4 | Pending |
+| CMNT-01 | Phase 4 | Pending |
+| TEST-01 | Phase 4 | Pending |
+| FILE-27 | Phase 5 | Pending |
+| FILE-28 | Phase 5 | Pending |
+| FILE-29 | Phase 5 | Pending |
+| MTD-12 | Phase 5 | Pending |
+| MTD-13 | Phase 5 | Pending |
+| MTD-14 | Phase 5 | Pending |
+| MTD-15 | Phase 5 | Pending |
+| MTD-16 | Phase 5 | Pending |
+| MTD-17 | Phase 5 | Pending |
+| MTD-18 | Phase 5 | Pending |
+| PROP-01 | Phase 5 | Pending |
+| PROP-02 | Phase 5 | Pending |
+| PROP-03 | Phase 5 | Pending |
+| PROP-04 | Phase 5 | Pending |
+| ENUM-01 | Phase 5 | Pending |
+| TEST-05 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 47 total
-- Mapped to phases: 0
-- Unmapped: 47
+- v1 requirements: 61 total (FILE-01..29=29, DI-01..02=2, MTD-01..18=18, PROP-01..04=4, ENUM-01=1, CMNT-01..02=2, TEST-01..05=5)
+- Mapped to phases: 61
+- Unmapped: 0
+
+Note: Requirements header previously read "47 total" — actual count is 61 requirement IDs as listed above.
 
 ---
 *Requirements defined: 2026-03-16*
-*Last updated: 2026-03-16 after initial definition*
+*Last updated: 2026-03-16 after roadmap creation (traceability populated)*
