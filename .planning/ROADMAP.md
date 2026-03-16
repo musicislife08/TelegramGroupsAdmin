@@ -29,7 +29,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `Core/Extensions/EnumExtensions.cs` no longer exists in the repository
   3. All four dead Configuration options files (TelegramOptions, OpenAIOptions, SendGridOptions, EmailOptions) no longer exist
   4. The transition comment block in `ConfigurationExtensions.cs` line 20 is gone; the surrounding code is intact and compiles
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Delete 5 dead files and remove stale transition comment
 
 ### Phase 2: Data and Mapping Models
 **Goal**: Dead Data model and the three dead main-app analytics mapping pairs (model + mapping file) are deleted
@@ -87,7 +90,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core and Configuration | 0/TBD | Not started | - |
+| 1. Core and Configuration | 0/1 | Planned | - |
 | 2. Data and Mapping Models | 0/TBD | Not started | - |
 | 3. Telegram Project | 0/TBD | Not started | - |
 | 4. Main Application | 0/TBD | Not started | - |
