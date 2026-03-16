@@ -67,14 +67,14 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### Dead Properties
 
-- [ ] **PROP-01**: Remove ContentCheckRequest.CheckOnly
-- [ ] **PROP-02**: Remove ContentCheckRequest.ImageFileName
-- [ ] **PROP-03**: Remove ContentCheckRequest.PhotoUrl
-- [ ] **PROP-04**: Remove ImageCheckRequest.PhotoUrl
+- [x] **PROP-01**: Remove ContentCheckRequest.CheckOnly
+- [x] **PROP-02**: Remove ContentCheckRequest.ImageFileName
+- [x] **PROP-03**: Remove ContentCheckRequest.PhotoUrl
+- [x] **PROP-04**: Remove ImageCheckRequest.PhotoUrl
 
 ### Dead Enum Value
 
-- [ ] **ENUM-01**: Remove ScanResultType.Suspicious
+- [x] **ENUM-01**: Remove ScanResultType.Suspicious
 
 ### Stale Comments
 
@@ -87,7 +87,7 @@ Requirements for this cleanup. Each maps to roadmap phases.
 - [x] **TEST-02**: Remove unit tests for GetRequiredPayload (MTD-11)
 - [x] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (MTD-08)
 - [x] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (MTD-01 through MTD-04)
-- [ ] **TEST-05**: Remove orphaned mapping round-trip tests in ContentDetectionConfigMappingsTests.cs
+- [x] **TEST-05**: Remove orphaned mapping round-trip tests in ContentDetectionConfigMappingsTests.cs
 
 ## v2 Requirements
 
@@ -163,12 +163,12 @@ None — this is a one-shot cleanup milestone.
 | MTD-16 | Phase 5 | Pending |
 | MTD-17 | Phase 5 | Pending |
 | MTD-18 | Phase 5 | Pending |
-| PROP-01 | Phase 5 | Pending |
-| PROP-02 | Phase 5 | Pending |
-| PROP-03 | Phase 5 | Pending |
-| PROP-04 | Phase 5 | Pending |
-| ENUM-01 | Phase 5 | Pending |
-| TEST-05 | Phase 5 | Pending |
+| PROP-01 | Phase 5 | Complete |
+| PROP-02 | Phase 5 | Complete |
+| PROP-03 | Phase 5 | Complete |
+| PROP-04 | Phase 5 | Complete |
+| ENUM-01 | Phase 5 | Complete |
+| TEST-05 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 61 total (FILE-01..29=29, DI-01..02=2, MTD-01..18=18, PROP-01..04=4, ENUM-01=1, CMNT-01..02=2, TEST-01..05=5)
