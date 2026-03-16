@@ -92,7 +92,11 @@ Plans:
   4. `ContentCheckRequest` no longer has `CheckOnly`, `ImageFileName`, or `PhotoUrl`; `ImageCheckRequest` no longer has `PhotoUrl`; all call sites compile
   5. `ScanResultType.Suspicious` no longer exists and all switch expressions / pattern matches over `ScanResultType` still compile
   6. The orphaned round-trip tests in `ContentDetectionConfigMappingsTests.cs` are removed and the test project compiles and all remaining tests pass
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Delete 3 dead files and remove 11 dead methods from interfaces/implementations plus 1 dead mapping extension
+- [ ] 05-02-PLAN.md — Remove 4 dead properties, dead enum value, and orphaned CasConfig tests
 
 ## Progress
 
@@ -105,4 +109,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Data and Mapping Models | 0/1 | Complete    | 2026-03-16 |
 | 3. Telegram Project | 0/2 | Complete    | 2026-03-16 |
 | 4. Main Application | 0/2 | Complete    | 2026-03-16 |
-| 5. ContentDetection Project | 0/TBD | Not started | - |
+| 5. ContentDetection Project | 0/2 | Not started | - |
