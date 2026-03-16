@@ -29,11 +29,6 @@ public interface IDetectionResultsRepository
     Task<Dictionary<int, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get recent detection results with limit
-    /// </summary>
-    Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Get spam training samples for Bayes classifier
     /// Bounded query: all manual samples + recent 10k auto samples
     /// </summary>
@@ -44,13 +39,6 @@ public interface IDetectionResultsRepository
     /// Returns only spam messages (is_spam=true)
     /// </summary>
     Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get ham (non-spam) samples for similarity check
-    /// Returns only ham messages (is_spam=false)
-    /// Used for deduplicating new ham training samples at insert time
-    /// </summary>
-    Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
 
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
@@ -64,17 +52,6 @@ public interface IDetectionResultsRepository
     /// <param name="minMessageLength">Only count messages with at least this many characters (prevents trust gaming)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get detection statistics
-    /// </summary>
-    Task<DetectionStats> GetStatsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Delete detection results older than specified date
-    /// (Used for cleanup - though per CLAUDE.md, detection_results are permanent)
-    /// </summary>
-    Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default);
 
     // ====================================================================================
     // Training Data Management Methods (for TrainingData.razor UI)
