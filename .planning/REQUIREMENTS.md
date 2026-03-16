@@ -83,7 +83,7 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### Orphaned Tests
 
-- [ ] **TEST-01**: Remove component tests for 4 Telegram preview components (FILE-19 through FILE-22)
+- [x] **TEST-01**: Remove component tests for 4 Telegram preview components (FILE-19 through FILE-22)
 - [x] **TEST-02**: Remove unit tests for GetRequiredPayload (MTD-11)
 - [x] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (MTD-08)
 - [x] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (MTD-01 through MTD-04)
@@ -152,7 +152,7 @@ None — this is a one-shot cleanup milestone.
 | FILE-26 | Phase 4 | Complete |
 | DI-02 | Phase 4 | Complete |
 | CMNT-01 | Phase 4 | Complete |
-| TEST-01 | Phase 4 | Pending |
+| TEST-01 | Phase 4 | Complete |
 | FILE-27 | Phase 5 | Pending |
 | FILE-28 | Phase 5 | Pending |
 | FILE-29 | Phase 5 | Pending |

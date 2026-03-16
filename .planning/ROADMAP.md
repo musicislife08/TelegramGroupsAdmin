@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Core and Configuration** - Delete dead files and fix stale comment in Core and Configuration projects (completed 2026-03-16)
 - [x] **Phase 2: Data and Mapping Models** - Delete dead Data model and dead main-app mapping records/files (completed 2026-03-16)
 - [x] **Phase 3: Telegram Project** - Delete dead Telegram files, remove dead DI registration, remove dead interface methods and orphaned tests (completed 2026-03-16)
-- [ ] **Phase 4: Main Application** - Delete dead main-app files, DI registration, stale comment, and orphaned component tests
+- [x] **Phase 4: Main Application** - Delete dead main-app files, DI registration, stale comment, and orphaned component tests (completed 2026-03-16)
 - [ ] **Phase 5: ContentDetection Project** - Delete dead ContentDetection services/models, dead interface methods, dead properties, dead enum value, and orphaned mapping test
 
 ## Phase Details
@@ -75,7 +75,7 @@ Plans:
   4. `test-backup.tar.gz` no longer exists in the repository
   5. The misleading "Deprecated" comment on `TranslationConfig.cs:34` is removed and the property is visibly undeprecated
   6. Test classes for the four deleted Razor components no longer exist and the test project compiles cleanly
-**Plans:** 2 plans
+**Plans:** 1/2 plans complete
 
 Plans:
 - [ ] 04-01-PLAN.md — Delete 9 dead files, remove SeoPreviewScraper DI registration, clean up dead constant, fix misleading comment
@@ -104,5 +104,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Core and Configuration | 0/1 | Complete    | 2026-03-16 |
 | 2. Data and Mapping Models | 0/1 | Complete    | 2026-03-16 |
 | 3. Telegram Project | 0/2 | Complete    | 2026-03-16 |
-| 4. Main Application | 0/2 | Not started | - |
+| 4. Main Application | 0/2 | Complete    | 2026-03-16 |
 | 5. ContentDetection Project | 0/TBD | Not started | - |
