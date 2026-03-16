@@ -9,11 +9,11 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### File Deletions
 
-- [ ] **FILE-01**: Remove Core/Extensions/EnumExtensions.cs (unused generic GetDisplayName)
-- [ ] **FILE-02**: Remove Configuration/TelegramOptions.cs (self-documents as no longer used)
-- [ ] **FILE-03**: Remove Configuration/OpenAIOptions.cs (superseded by database config)
-- [ ] **FILE-04**: Remove Configuration/SendGridOptions.cs (superseded by database config)
-- [ ] **FILE-05**: Remove Configuration/EmailOptions.cs (never registered in DI)
+- [x] **FILE-01**: Remove Core/Extensions/EnumExtensions.cs (unused generic GetDisplayName)
+- [x] **FILE-02**: Remove Configuration/TelegramOptions.cs (self-documents as no longer used)
+- [x] **FILE-03**: Remove Configuration/OpenAIOptions.cs (superseded by database config)
+- [x] **FILE-04**: Remove Configuration/SendGridOptions.cs (superseded by database config)
+- [x] **FILE-05**: Remove Configuration/EmailOptions.cs (never registered in DI)
 - [ ] **FILE-06**: Remove Data/Models/StopWordWithEmailDto.cs (query DTO never used)
 - [ ] **FILE-07**: Remove Telegram/Constants/NotificationConstants.cs (dead copy)
 - [ ] **FILE-08**: Remove Telegram/Services/Welcome/WelcomeChatPermissions.cs (predefined permissions never referenced)
@@ -79,7 +79,7 @@ Requirements for this cleanup. Each maps to roadmap phases.
 ### Stale Comments
 
 - [ ] **CMNT-01**: Remove misleading "Deprecated" comment on TranslationConfig.cs:34 (property is actively used)
-- [ ] **CMNT-02**: Remove transition comment in ConfigurationExtensions.cs:20
+- [x] **CMNT-02**: Remove transition comment in ConfigurationExtensions.cs:20
 
 ### Orphaned Tests
 
@@ -108,12 +108,12 @@ None — this is a one-shot cleanup milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FILE-01 | Phase 1 | Pending |
-| FILE-02 | Phase 1 | Pending |
-| FILE-03 | Phase 1 | Pending |
-| FILE-04 | Phase 1 | Pending |
-| FILE-05 | Phase 1 | Pending |
-| CMNT-02 | Phase 1 | Pending |
+| FILE-01 | Phase 1 | Complete |
+| FILE-02 | Phase 1 | Complete |
+| FILE-03 | Phase 1 | Complete |
+| FILE-04 | Phase 1 | Complete |
+| FILE-05 | Phase 1 | Complete |
+| CMNT-02 | Phase 1 | Complete |
 | FILE-06 | Phase 2 | Pending |
 | FILE-23 | Phase 2 | Pending |
 | FILE-24 | Phase 2 | Pending |
