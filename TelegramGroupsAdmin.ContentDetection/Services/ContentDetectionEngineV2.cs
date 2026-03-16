@@ -376,7 +376,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
                 PhotoFileId = originalRequest.PhotoFileId ?? "",
-                PhotoUrl = originalRequest.PhotoUrl,
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
                 CustomPrompt = null,
                 CancellationToken = cancellationToken

@@ -353,15 +353,13 @@ public class VideoContentCheckV2(
                 Chat = req.Chat,
                 // Use defaults for properties not on VideoCheckRequest
                 Metadata = new ContentCheckMetadata(),
-                CheckOnly = false,
                 HasSpamFlags = false,
                 IsUserTrusted = false,
                 IsUserAdmin = false,
                 ImageData = null,
                 PhotoFileId = null,
-                PhotoUrl = null,
                 PhotoLocalPath = null,
-                VideoLocalPath = null,  // ← Key: No video = VideoSpamCheck won't run
+                VideoLocalPath = null,  // Key: No video = VideoSpamCheck won't run
                 Urls = []
             };
 

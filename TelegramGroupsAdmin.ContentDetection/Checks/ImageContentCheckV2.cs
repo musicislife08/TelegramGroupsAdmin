@@ -185,13 +185,11 @@ public class ImageContentCheckV2(
                     User = req.User,
                     Chat = req.Chat,
                     Metadata = new ContentCheckMetadata(),
-                    CheckOnly = false,
                     HasSpamFlags = false,
                     IsUserTrusted = false,
                     IsUserAdmin = false,
-                    ImageData = null,  // ← Key: No image = ImageSpamCheck won't run
+                    ImageData = null,  // Key: No image = ImageSpamCheck won't run
                     PhotoFileId = null,
-                    PhotoUrl = null,
                     PhotoLocalPath = null,
                     Urls = []
                 };
