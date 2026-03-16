@@ -180,13 +180,6 @@ public static class ServiceCollectionExtensions
                 options.MaximumPayloadBytes = HttpConstants.HybridCacheMaxPayloadBytes;
             });
 
-            // HTTP clients
-            services.AddHttpClient<SeoPreviewScraper>(client =>
-            {
-                client.Timeout = HttpConstants.SeoScraperTimeout;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SeoPreviewScraper/1.0)");
-            });
-
             // VirusTotal rate limiter (4 requests/minute free tier)
             // Queue up to 10 requests to handle burst during file upload + analysis polling
             var limiter = PartitionedRateLimiter.Create<HttpRequestMessage, string>(_ =>

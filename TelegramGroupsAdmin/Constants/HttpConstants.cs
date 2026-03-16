@@ -6,11 +6,6 @@ namespace TelegramGroupsAdmin.Constants;
 public static class HttpConstants
 {
     /// <summary>
-    /// SEO preview scraper timeout (5 seconds).
-    /// </summary>
-    public static readonly TimeSpan SeoScraperTimeout = TimeSpan.FromSeconds(5);
-
-    /// <summary>
     /// VirusTotal API rate limit (4 requests per minute for free tier).
     /// </summary>
     public const int VirusTotalPermitLimit = 4;
