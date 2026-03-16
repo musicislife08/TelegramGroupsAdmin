@@ -94,8 +94,6 @@ public class BackupServiceTests
             .Returns(_ => Task.FromResult($"test_job_{Guid.NewGuid():N}"));
         mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
-        mockJobScheduler.IsScheduledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(false);
         services.AddSingleton(mockJobScheduler);
 
         // Add backup services (using shared extension method from BackgroundJobs library)

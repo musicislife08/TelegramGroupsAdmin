@@ -2,7 +2,6 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Extensions;
 
@@ -138,49 +137,4 @@ public static class TelegramLoggingExtensions
                 : $"Message {message.MessageId} in {message.Chat.ChatName ?? "unknown"} ({message.Chat.Id}) from {message.User.DisplayName}";
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Repository Async Extensions (for cases where only ID is available)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    extension(ITelegramUserRepository repo)
-    {
-        /// <summary>
-        /// Get user display name for logging. Looks up user from database.
-        /// </summary>
-        /// <param name="userId">Telegram user ID to look up</param>
-        /// <param name="includeId">If true, uses Debug format (name + ID). If false, uses Info format (name only).</param>
-        /// <param name="ct">Cancellation token</param>
-        /// <returns>Formatted display name for logging</returns>
-        public async Task<string> GetUserLogDisplayAsync(
-            long userId,
-            bool includeId,
-            CancellationToken ct = default)
-        {
-            var user = await repo.GetByTelegramIdAsync(userId, ct);
-            return includeId
-                ? LogDisplayName.UserDebug(user?.FirstName, user?.LastName, user?.Username, userId)
-                : LogDisplayName.UserInfo(user?.FirstName, user?.LastName, user?.Username, userId);
-        }
-    }
-
-    extension(IManagedChatsRepository repo)
-    {
-        /// <summary>
-        /// Get chat display name for logging. Looks up chat from database.
-        /// </summary>
-        /// <param name="chatId">Telegram chat ID to look up</param>
-        /// <param name="includeId">If true, uses Debug format (name + ID). If false, uses Info format (name only).</param>
-        /// <param name="ct">Cancellation token</param>
-        /// <returns>Formatted display name for logging</returns>
-        public async Task<string> GetChatLogDisplayAsync(
-            long chatId,
-            bool includeId,
-            CancellationToken ct = default)
-        {
-            var chat = await repo.GetByChatIdAsync(chatId, ct);
-            return includeId
-                ? LogDisplayName.ChatDebug(chat?.Identity.ChatName, chatId)
-                : LogDisplayName.ChatInfo(chat?.Identity.ChatName, chatId);
-        }
-    }
 }
