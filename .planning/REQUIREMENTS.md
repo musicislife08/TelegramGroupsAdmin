@@ -35,9 +35,9 @@ Requirements for this cleanup. Each maps to roadmap phases.
 - [x] **FILE-24**: Remove Repositories/Mappings/HourlyDetectionStatsMappings.cs + Models/Analytics/HourlyDetectionStats.cs (repo constructs inline)
 - [x] **FILE-25**: Remove Repositories/Mappings/WelcomeResponseSummaryMappings.cs + Models/Analytics/WelcomeResponseSummary.cs (repo constructs inline)
 - [x] **FILE-26**: Remove test-backup.tar.gz (unreferenced test artifact)
-- [ ] **FILE-27**: Remove ContentDetection/Services/AdvancedTokenizerService.cs (DI registers simpler TokenizerService)
-- [ ] **FILE-28**: Remove ContentDetection/Services/MessageContextProvider.cs (replaced by MessageContextAdapter)
-- [ ] **FILE-29**: Remove ContentDetection/Models/DetectionStats.cs (only returned by dead GetStatsAsync)
+- [x] **FILE-27**: Remove ContentDetection/Services/AdvancedTokenizerService.cs (DI registers simpler TokenizerService)
+- [x] **FILE-28**: Remove ContentDetection/Services/MessageContextProvider.cs (replaced by MessageContextAdapter)
+- [x] **FILE-29**: Remove ContentDetection/Models/DetectionStats.cs (only returned by dead GetStatsAsync)
 
 ### DI Registrations
 
@@ -57,13 +57,13 @@ Requirements for this cleanup. Each maps to roadmap phases.
 - [x] **MTD-09**: Remove TelegramLoggingExtensions.GetUserLogDisplayAsync
 - [x] **MTD-10**: Remove TelegramLoggingExtensions.GetChatLogDisplayAsync
 - [x] **MTD-11**: Remove JobPayloadHelper.GetRequiredPayload()
-- [ ] **MTD-12**: Remove IDetectionResultsRepository.GetRecentAsync + implementation
-- [ ] **MTD-13**: Remove IDetectionResultsRepository.GetStatsAsync + implementation
-- [ ] **MTD-14**: Remove IDetectionResultsRepository.DeleteOlderThanAsync + implementation
-- [ ] **MTD-15**: Remove IDetectionResultsRepository.GetHamSamplesForSimilarityAsync + implementation
-- [ ] **MTD-16**: Remove IFileScanQuotaRepository.GetCurrentQuotaAsync, CleanupExpiredQuotasAsync, GetServiceQuotasAsync, ResetQuotaAsync + implementations
-- [ ] **MTD-17**: Remove ITokenizerService.GetWordFrequencies, IsStopWord + implementations in TokenizerService
-- [ ] **MTD-18**: Remove ModelMappings.FileScanQuotaModel.ToDto()
+- [x] **MTD-12**: Remove IDetectionResultsRepository.GetRecentAsync + implementation
+- [x] **MTD-13**: Remove IDetectionResultsRepository.GetStatsAsync + implementation
+- [x] **MTD-14**: Remove IDetectionResultsRepository.DeleteOlderThanAsync + implementation
+- [x] **MTD-15**: Remove IDetectionResultsRepository.GetHamSamplesForSimilarityAsync + implementation
+- [x] **MTD-16**: Remove IFileScanQuotaRepository.GetCurrentQuotaAsync, CleanupExpiredQuotasAsync, GetServiceQuotasAsync, ResetQuotaAsync + implementations
+- [x] **MTD-17**: Remove ITokenizerService.GetWordFrequencies, IsStopWord + implementations in TokenizerService
+- [x] **MTD-18**: Remove ModelMappings.FileScanQuotaModel.ToDto()
 
 ### Dead Properties
 
@@ -153,16 +153,16 @@ None — this is a one-shot cleanup milestone.
 | DI-02 | Phase 4 | Complete |
 | CMNT-01 | Phase 4 | Complete |
 | TEST-01 | Phase 4 | Complete |
-| FILE-27 | Phase 5 | Pending |
-| FILE-28 | Phase 5 | Pending |
-| FILE-29 | Phase 5 | Pending |
-| MTD-12 | Phase 5 | Pending |
-| MTD-13 | Phase 5 | Pending |
-| MTD-14 | Phase 5 | Pending |
-| MTD-15 | Phase 5 | Pending |
-| MTD-16 | Phase 5 | Pending |
-| MTD-17 | Phase 5 | Pending |
-| MTD-18 | Phase 5 | Pending |
+| FILE-27 | Phase 5 | Complete |
+| FILE-28 | Phase 5 | Complete |
+| FILE-29 | Phase 5 | Complete |
+| MTD-12 | Phase 5 | Complete |
+| MTD-13 | Phase 5 | Complete |
+| MTD-14 | Phase 5 | Complete |
+| MTD-15 | Phase 5 | Complete |
+| MTD-16 | Phase 5 | Complete |
+| MTD-17 | Phase 5 | Complete |
+| MTD-18 | Phase 5 | Complete |
 | PROP-01 | Phase 5 | Complete |
 | PROP-02 | Phase 5 | Complete |
 | PROP-03 | Phase 5 | Complete |
