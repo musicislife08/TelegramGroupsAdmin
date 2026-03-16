@@ -43,7 +43,10 @@ Plans:
   2. `Data/Models/StopWordWithEmailDto.cs` no longer exists
   3. The three dead mapping file pairs (DetectionAccuracyMappings + DetectionAccuracyRecord, HourlyDetectionStatsMappings + HourlyDetectionStats, WelcomeResponseSummaryMappings + WelcomeResponseSummary) no longer exist
   4. Repositories that formerly referenced those mapping files still compile and return data correctly (inline construction preserved)
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Delete 7 dead files (1 Data DTO + 3 mapping pairs)
 
 ### Phase 3: Telegram Project
 **Goal**: All dead code within the Telegram project is removed — dead files, one dead DI registration, 11 dead interface methods with their implementations, and three groups of orphaned tests
@@ -91,7 +94,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core and Configuration | 0/1 | Complete    | 2026-03-16 |
-| 2. Data and Mapping Models | 0/TBD | Not started | - |
+| 2. Data and Mapping Models | 0/1 | Not started | - |
 | 3. Telegram Project | 0/TBD | Not started | - |
 | 4. Main Application | 0/TBD | Not started | - |
 | 5. ContentDetection Project | 0/TBD | Not started | - |
