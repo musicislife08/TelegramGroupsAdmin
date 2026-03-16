@@ -58,7 +58,11 @@ Plans:
   3. `IMediaNotificationService` and its implementation are gone and the DI registration for it is removed from `ServiceCollectionExtensions`
   4. `IMessageQueryService`, `IJobTriggerService`, `IJobScheduler`, `IBotMediaService`, `TelegramLoggingExtensions`, and `JobPayloadHelper` no longer declare or implement the removed methods
   5. Test classes for `GetRequiredPayload`, `DownloadFileAsBytesAsync`, and the dead `IMessageQueryService` methods no longer exist and the test project compiles cleanly
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Delete 10 dead Telegram files and remove IMediaNotificationService DI registration
+- [ ] 03-02-PLAN.md — Remove 11 dead methods from interfaces/implementations and delete orphaned tests
 
 ### Phase 4: Main Application
 **Goal**: All dead code in the main TelegramGroupsAdmin project is removed — dead service files, dead DI registration, dead dialog models, dead Blazor components, a stale comment, and the orphaned component tests
@@ -95,6 +99,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Core and Configuration | 0/1 | Complete    | 2026-03-16 |
 | 2. Data and Mapping Models | 0/1 | Complete    | 2026-03-16 |
-| 3. Telegram Project | 0/TBD | Not started | - |
+| 3. Telegram Project | 0/2 | Not started | - |
 | 4. Main Application | 0/TBD | Not started | - |
 | 5. ContentDetection Project | 0/TBD | Not started | - |
