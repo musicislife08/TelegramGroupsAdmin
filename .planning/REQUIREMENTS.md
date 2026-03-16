@@ -15,15 +15,15 @@ Requirements for this cleanup. Each maps to roadmap phases.
 - [x] **FILE-04**: Remove Configuration/SendGridOptions.cs (superseded by database config)
 - [x] **FILE-05**: Remove Configuration/EmailOptions.cs (never registered in DI)
 - [x] **FILE-06**: Remove Data/Models/StopWordWithEmailDto.cs (query DTO never used)
-- [ ] **FILE-07**: Remove Telegram/Constants/NotificationConstants.cs (dead copy)
-- [ ] **FILE-08**: Remove Telegram/Services/Welcome/WelcomeChatPermissions.cs (predefined permissions never referenced)
-- [ ] **FILE-09**: Remove Telegram/Models/BotPermissionsTest.cs (replaced by Chat Health)
-- [ ] **FILE-10**: Remove Telegram/Models/BotProtectionStats.cs (replaced by analytics views)
-- [ ] **FILE-11**: Remove Telegram/Models/FalsePositiveStats.cs (replaced by DetectionAccuracyStats)
-- [ ] **FILE-12**: Remove Telegram/Models/DailyFalsePositive.cs (only referenced by dead FalsePositiveStats)
-- [ ] **FILE-13**: Remove Telegram/Models/ReportActionResult.cs (zero references)
-- [ ] **FILE-14**: Remove Telegram/Services/Media/IMediaNotificationService.cs + MediaNotificationService.cs (registered but never injected)
-- [ ] **FILE-15**: Remove Telegram/Services/Moderation/Events/ModerationActionType.cs (superseded by UserActionType)
+- [x] **FILE-07**: Remove Telegram/Constants/NotificationConstants.cs (dead copy)
+- [x] **FILE-08**: Remove Telegram/Services/Welcome/WelcomeChatPermissions.cs (predefined permissions never referenced)
+- [x] **FILE-09**: Remove Telegram/Models/BotPermissionsTest.cs (replaced by Chat Health)
+- [x] **FILE-10**: Remove Telegram/Models/BotProtectionStats.cs (replaced by analytics views)
+- [x] **FILE-11**: Remove Telegram/Models/FalsePositiveStats.cs (replaced by DetectionAccuracyStats)
+- [x] **FILE-12**: Remove Telegram/Models/DailyFalsePositive.cs (only referenced by dead FalsePositiveStats)
+- [x] **FILE-13**: Remove Telegram/Models/ReportActionResult.cs (zero references)
+- [x] **FILE-14**: Remove Telegram/Services/Media/IMediaNotificationService.cs + MediaNotificationService.cs (registered but never injected)
+- [x] **FILE-15**: Remove Telegram/Services/Moderation/Events/ModerationActionType.cs (superseded by UserActionType)
 - [ ] **FILE-16**: Remove TelegramGroupsAdmin/SeoPreviewScraper.cs + SeoPreviewResult.cs (registered but never injected)
 - [ ] **FILE-17**: Remove Models/Dialogs/AddSpamSampleData.cs (superseded by AddTrainingSampleData)
 - [ ] **FILE-18**: Remove Models/Dialogs/EditSpamSampleData.cs (superseded by EditTrainingSampleData)
@@ -41,7 +41,7 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### DI Registrations
 
-- [ ] **DI-01**: Remove IMediaNotificationService -> MediaNotificationService registration from ServiceCollectionExtensions
+- [x] **DI-01**: Remove IMediaNotificationService -> MediaNotificationService registration from ServiceCollectionExtensions
 - [ ] **DI-02**: Remove unused AddHttpClient registration from ServiceCollectionExtensions
 
 ### Dead Methods
@@ -118,16 +118,16 @@ None — this is a one-shot cleanup milestone.
 | FILE-23 | Phase 2 | Complete |
 | FILE-24 | Phase 2 | Complete |
 | FILE-25 | Phase 2 | Complete |
-| FILE-07 | Phase 3 | Pending |
-| FILE-08 | Phase 3 | Pending |
-| FILE-09 | Phase 3 | Pending |
-| FILE-10 | Phase 3 | Pending |
-| FILE-11 | Phase 3 | Pending |
-| FILE-12 | Phase 3 | Pending |
-| FILE-13 | Phase 3 | Pending |
-| FILE-14 | Phase 3 | Pending |
-| FILE-15 | Phase 3 | Pending |
-| DI-01 | Phase 3 | Pending |
+| FILE-07 | Phase 3 | Complete |
+| FILE-08 | Phase 3 | Complete |
+| FILE-09 | Phase 3 | Complete |
+| FILE-10 | Phase 3 | Complete |
+| FILE-11 | Phase 3 | Complete |
+| FILE-12 | Phase 3 | Complete |
+| FILE-13 | Phase 3 | Complete |
+| FILE-14 | Phase 3 | Complete |
+| FILE-15 | Phase 3 | Complete |
+| DI-01 | Phase 3 | Complete |
 | MTD-01 | Phase 3 | Pending |
 | MTD-02 | Phase 3 | Pending |
 | MTD-03 | Phase 3 | Pending |
