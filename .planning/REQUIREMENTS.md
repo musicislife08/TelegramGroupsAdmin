@@ -9,8 +9,8 @@ Requirements for bug fix milestone. Each maps to roadmap phases.
 
 ### Data Layer
 
-- [ ] **DATA-01**: All repositories use IDbContextFactory instead of scoped AppDbContext (#326)
-- [ ] **DATA-02**: TelegramUserRepository.UpsertAsync handles concurrent upserts without race conditions (#204)
+- [x] **DATA-01**: All repositories use IDbContextFactory instead of scoped AppDbContext (#326)
+- [x] **DATA-02**: TelegramUserRepository.UpsertAsync handles concurrent upserts without race conditions (#204)
 
 ### Backend Services
 
@@ -49,8 +49,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 6 | Pending |
-| DATA-02 | Phase 6 | Pending |
+| DATA-01 | Phase 6 | Complete |
+| DATA-02 | Phase 6 | Complete |
 | BACK-01 | Phase 7 | Pending |
 | BACK-02 | Phase 7 | Pending |
 | BACK-03 | Phase 7 | Pending |
