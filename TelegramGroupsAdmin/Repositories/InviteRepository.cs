@@ -119,12 +119,12 @@ public class InviteRepository : IInviteRepository
         return expiredInvites.Count;
     }
 
-    public async Task<List<InviteRecord>> GetAllAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default)
+    public async Task<List<InviteRecord>> GetAllAsync(InviteFilter filter = InviteFilter.Pending, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var query = context.Invites.AsNoTracking();
 
-        if (filter != DataModels.InviteFilter.All)
+        if (filter != InviteFilter.All)
         {
             var status = (DataModels.InviteStatus)(int)filter;
             query = query.Where(i => i.Status == status);
@@ -134,7 +134,7 @@ public class InviteRepository : IInviteRepository
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default)
+    public async Task<List<InviteWithCreator>> GetAllWithCreatorEmailAsync(InviteFilter filter = InviteFilter.Pending, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var query = context.Invites
@@ -157,7 +157,7 @@ public class InviteRepository : IInviteRepository
                     UsedByEmail = usedByUsers.Select(u => u.Email).FirstOrDefault()
                 });
 
-        if (filter != DataModels.InviteFilter.All)
+        if (filter != InviteFilter.All)
         {
             var status = (DataModels.InviteStatus)(int)filter;
             query = query.Where(x => x.Invite.Status == status);

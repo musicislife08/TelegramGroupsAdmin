@@ -1,5 +1,3 @@
-using DataModels = TelegramGroupsAdmin.Data.Models;
-
 namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>
@@ -40,12 +38,12 @@ public interface IInviteRepository
     /// <summary>
     /// Get all invites filtered by status
     /// </summary>
-    Task<List<InviteRecord>> GetAllAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default);
+    Task<List<InviteRecord>> GetAllAsync(InviteFilter filter = InviteFilter.Pending, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all invites with creator and used-by email addresses, filtered by status
     /// </summary>
-    Task<List<InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken cancellationToken = default);
+    Task<List<InviteWithCreator>> GetAllWithCreatorEmailAsync(InviteFilter filter = InviteFilter.Pending, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Revoke a pending invite and return true if successful
