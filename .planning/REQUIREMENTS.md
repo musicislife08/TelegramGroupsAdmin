@@ -21,7 +21,7 @@ Requirements for bug fix milestone. Each maps to roadmap phases.
 ### Frontend
 
 - [x] **FRONT-01**: Analytics overview card percentages recalculate when time range selection changes (#384)
-- [ ] **FRONT-02**: Timezone detection JS interop handles Blazor prerendering without errors (#203)
+- [x] **FRONT-02**: Timezone detection JS interop handles Blazor prerendering without errors (#203)
 
 ## Future Requirements
 
@@ -55,7 +55,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BACK-02 | Phase 7 | Pending |
 | BACK-03 | Phase 7 | Pending |
 | FRONT-01 | Phase 8 | Complete |
-| FRONT-02 | Phase 8 | Pending |
+| FRONT-02 | Phase 8 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 7 total
