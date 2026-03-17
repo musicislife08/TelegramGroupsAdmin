@@ -90,7 +90,7 @@ Plans:
 
 </details>
 
-### 🚧 v1.1 Bug Fix Sweep (In Progress)
+### v1.1 Bug Fix Sweep (In Progress)
 
 **Milestone Goal:** Fix 7 known correctness bugs across data layer, backend services, and Blazor frontend.
 
@@ -104,10 +104,11 @@ Plans:
   3. Running TelegramUserRepository.UpsertAsync concurrently for the same user produces exactly one record with no duplicate key violation
   4. Integration tests in `TelegramGroupsAdmin.IntegrationTests` cover DATA-01 (repository behavior with a real Testcontainers PostgreSQL instance confirms no ObjectDisposedException) and DATA-02 (concurrent UpsertAsync calls for the same user confirm exactly one resulting row with no duplicate key violation)
   5. `dotnet build` passes and all tests pass after the changes
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md — Migrate 7 repos to IDbContextFactory and rewrite UpsertAsync with ON CONFLICT
+- [ ] 06-02-PLAN.md — Integration tests for IDbContextFactory migration and concurrent upsert
 
 #### Phase 7: Backend Service Fixes
 **Goal**: Background services behave correctly at runtime — health orchestrator methods are invoked, startup and runtime logs are clean, and marking a message as spam populates image training samples
@@ -151,6 +152,6 @@ Phases execute in numeric order: 6 → 7 → 8
 | 3. Telegram Project | v1.0 | 2/2 | Complete | 2026-03-16 |
 | 4. Main Application | v1.0 | 2/2 | Complete | 2026-03-16 |
 | 5. ContentDetection Project | v1.0 | 2/2 | Complete | 2026-03-17 |
-| 6. Data Layer Fixes | v1.1 | 0/? | Not started | - |
+| 6. Data Layer Fixes | v1.1 | 0/2 | Not started | - |
 | 7. Backend Service Fixes | v1.1 | 0/? | Not started | - |
 | 8. Frontend Fixes | v1.1 | 0/? | Not started | - |
