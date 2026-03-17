@@ -48,8 +48,12 @@ public class MessageStatsServiceTests
 
     /// <summary>
     /// Seeds messages across two weeks and a managed chat for per-chat breakdown.
-    /// Previous week: 5 messages (days 8-14 ago relative to Now)
-    /// Current week: 10 messages (days 0-6 ago relative to Now)
+    /// Previous week: 5 messages (days 9-13 ago relative to Now — clearly in [endDate-14d, endDate-7d])
+    /// Current week: 10 messages (days 0-6 ago, at exact 12-hour intervals — clearly in [endDate-7d, endDate])
+    ///
+    /// currentWeekStart = Now.AddDays(-7) = Now - 168h
+    /// Timestamps for current week: Now-6h, Now-30h, Now-54h, ... Now-six-at-12h-intervals
+    /// Timestamps for previous week: Now-9*24h, Now-10*24h, ..., Now-13*24h
     /// </summary>
     private void SeedTwoWeeksOfMessages(long chatId = 100L)
     {
@@ -66,28 +70,28 @@ public class MessageStatsServiceTests
             AddedAt = Now.AddDays(-30),
         });
 
-        // Previous week messages (days 8-14 ago)
-        for (var i = 8; i <= 12; i++)
+        // Previous week messages — 5 messages at days 9-13 ago (past the 7-day boundary by at least 2 days)
+        for (var i = 0; i < 5; i++)
         {
             _context.Messages.Add(new MessageRecordDto
             {
-                MessageId = i,
+                MessageId = 10 + i,
                 UserId = 1001L,
                 ChatId = chatId,
-                Timestamp = Now.AddDays(-i),
+                Timestamp = Now.AddDays(-(9 + i)),  // days 9, 10, 11, 12, 13 ago
                 ContentCheckSkipReason = ContentCheckSkipReason.NotSkipped
             });
         }
 
-        // Current week messages (days 0-6 ago)
-        for (var i = 1; i <= 10; i++)
+        // Current week messages — 10 messages spaced 12 hours apart within the last 6 days
+        for (var i = 0; i < 10; i++)
         {
             _context.Messages.Add(new MessageRecordDto
             {
                 MessageId = 100 + i,
                 UserId = 1001L,
                 ChatId = chatId,
-                Timestamp = Now.AddDays(-(i - 1)).AddHours(-1),
+                Timestamp = Now.AddHours(-(6 + i * 12)),  // 6h, 18h, 30h, ..., 114h ago (< 7 days)
                 ContentCheckSkipReason = ContentCheckSkipReason.NotSkipped
             });
         }
