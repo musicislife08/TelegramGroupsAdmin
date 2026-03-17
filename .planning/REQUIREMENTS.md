@@ -9,85 +9,85 @@ Requirements for this cleanup. Each maps to roadmap phases.
 
 ### File Deletions
 
-- [ ] **FILE-01**: Remove Core/Extensions/EnumExtensions.cs (unused generic GetDisplayName)
-- [ ] **FILE-02**: Remove Configuration/TelegramOptions.cs (self-documents as no longer used)
-- [ ] **FILE-03**: Remove Configuration/OpenAIOptions.cs (superseded by database config)
-- [ ] **FILE-04**: Remove Configuration/SendGridOptions.cs (superseded by database config)
-- [ ] **FILE-05**: Remove Configuration/EmailOptions.cs (never registered in DI)
-- [ ] **FILE-06**: Remove Data/Models/StopWordWithEmailDto.cs (query DTO never used)
-- [ ] **FILE-07**: Remove Telegram/Constants/NotificationConstants.cs (dead copy)
-- [ ] **FILE-08**: Remove Telegram/Services/Welcome/WelcomeChatPermissions.cs (predefined permissions never referenced)
-- [ ] **FILE-09**: Remove Telegram/Models/BotPermissionsTest.cs (replaced by Chat Health)
-- [ ] **FILE-10**: Remove Telegram/Models/BotProtectionStats.cs (replaced by analytics views)
-- [ ] **FILE-11**: Remove Telegram/Models/FalsePositiveStats.cs (replaced by DetectionAccuracyStats)
-- [ ] **FILE-12**: Remove Telegram/Models/DailyFalsePositive.cs (only referenced by dead FalsePositiveStats)
-- [ ] **FILE-13**: Remove Telegram/Models/ReportActionResult.cs (zero references)
-- [ ] **FILE-14**: Remove Telegram/Services/Media/IMediaNotificationService.cs + MediaNotificationService.cs (registered but never injected)
-- [ ] **FILE-15**: Remove Telegram/Services/Moderation/Events/ModerationActionType.cs (superseded by UserActionType)
-- [ ] **FILE-16**: Remove TelegramGroupsAdmin/SeoPreviewScraper.cs + SeoPreviewResult.cs (registered but never injected)
-- [ ] **FILE-17**: Remove Models/Dialogs/AddSpamSampleData.cs (superseded by AddTrainingSampleData)
-- [ ] **FILE-18**: Remove Models/Dialogs/EditSpamSampleData.cs (superseded by EditTrainingSampleData)
-- [ ] **FILE-19**: Remove Components/Shared/TelegramPreview.razor (has tests but never rendered)
-- [ ] **FILE-20**: Remove Components/Shared/TelegramBotMessage.razor (has tests but never rendered)
-- [ ] **FILE-21**: Remove Components/Shared/TelegramUserMessage.razor (has tests but never rendered)
-- [ ] **FILE-22**: Remove Components/Shared/TelegramReturnButton.razor (has tests but never rendered)
-- [ ] **FILE-23**: Remove Repositories/Mappings/DetectionAccuracyMappings.cs + Models/Analytics/DetectionAccuracyRecord.cs (repo constructs inline)
-- [ ] **FILE-24**: Remove Repositories/Mappings/HourlyDetectionStatsMappings.cs + Models/Analytics/HourlyDetectionStats.cs (repo constructs inline)
-- [ ] **FILE-25**: Remove Repositories/Mappings/WelcomeResponseSummaryMappings.cs + Models/Analytics/WelcomeResponseSummary.cs (repo constructs inline)
-- [ ] **FILE-26**: Remove test-backup.tar.gz (unreferenced test artifact)
-- [ ] **FILE-27**: Remove ContentDetection/Services/AdvancedTokenizerService.cs (DI registers simpler TokenizerService)
-- [ ] **FILE-28**: Remove ContentDetection/Services/MessageContextProvider.cs (replaced by MessageContextAdapter)
-- [ ] **FILE-29**: Remove ContentDetection/Models/DetectionStats.cs (only returned by dead GetStatsAsync)
+- [x] **FILE-01**: Remove Core/Extensions/EnumExtensions.cs (unused generic GetDisplayName)
+- [x] **FILE-02**: Remove Configuration/TelegramOptions.cs (self-documents as no longer used)
+- [x] **FILE-03**: Remove Configuration/OpenAIOptions.cs (superseded by database config)
+- [x] **FILE-04**: Remove Configuration/SendGridOptions.cs (superseded by database config)
+- [x] **FILE-05**: Remove Configuration/EmailOptions.cs (never registered in DI)
+- [x] **FILE-06**: Remove Data/Models/StopWordWithEmailDto.cs (query DTO never used)
+- [x] **FILE-07**: Remove Telegram/Constants/NotificationConstants.cs (dead copy)
+- [x] **FILE-08**: Remove Telegram/Services/Welcome/WelcomeChatPermissions.cs (predefined permissions never referenced)
+- [x] **FILE-09**: Remove Telegram/Models/BotPermissionsTest.cs (replaced by Chat Health)
+- [x] **FILE-10**: Remove Telegram/Models/BotProtectionStats.cs (replaced by analytics views)
+- [x] **FILE-11**: Remove Telegram/Models/FalsePositiveStats.cs (replaced by DetectionAccuracyStats)
+- [x] **FILE-12**: Remove Telegram/Models/DailyFalsePositive.cs (only referenced by dead FalsePositiveStats)
+- [x] **FILE-13**: Remove Telegram/Models/ReportActionResult.cs (zero references)
+- [x] **FILE-14**: Remove Telegram/Services/Media/IMediaNotificationService.cs + MediaNotificationService.cs (registered but never injected)
+- [x] **FILE-15**: Remove Telegram/Services/Moderation/Events/ModerationActionType.cs (superseded by UserActionType)
+- [x] **FILE-16**: Remove TelegramGroupsAdmin/SeoPreviewScraper.cs + SeoPreviewResult.cs (registered but never injected)
+- [x] **FILE-17**: Remove Models/Dialogs/AddSpamSampleData.cs (superseded by AddTrainingSampleData)
+- [x] **FILE-18**: Remove Models/Dialogs/EditSpamSampleData.cs (superseded by EditTrainingSampleData)
+- [x] **FILE-19**: Remove Components/Shared/TelegramPreview.razor (has tests but never rendered)
+- [x] **FILE-20**: Remove Components/Shared/TelegramBotMessage.razor (has tests but never rendered)
+- [x] **FILE-21**: Remove Components/Shared/TelegramUserMessage.razor (has tests but never rendered)
+- [x] **FILE-22**: Remove Components/Shared/TelegramReturnButton.razor (has tests but never rendered)
+- [x] **FILE-23**: Remove Repositories/Mappings/DetectionAccuracyMappings.cs + Models/Analytics/DetectionAccuracyRecord.cs (repo constructs inline)
+- [x] **FILE-24**: Remove Repositories/Mappings/HourlyDetectionStatsMappings.cs + Models/Analytics/HourlyDetectionStats.cs (repo constructs inline)
+- [x] **FILE-25**: Remove Repositories/Mappings/WelcomeResponseSummaryMappings.cs + Models/Analytics/WelcomeResponseSummary.cs (repo constructs inline)
+- [x] **FILE-26**: Remove test-backup.tar.gz (unreferenced test artifact)
+- [x] **FILE-27**: Remove ContentDetection/Services/AdvancedTokenizerService.cs (DI registers simpler TokenizerService)
+- [x] **FILE-28**: Remove ContentDetection/Services/MessageContextProvider.cs (replaced by MessageContextAdapter)
+- [x] **FILE-29**: Remove ContentDetection/Models/DetectionStats.cs (only returned by dead GetStatsAsync)
 
 ### DI Registrations
 
-- [ ] **DI-01**: Remove IMediaNotificationService -> MediaNotificationService registration from ServiceCollectionExtensions
-- [ ] **DI-02**: Remove unused AddHttpClient registration from ServiceCollectionExtensions
+- [x] **DI-01**: Remove IMediaNotificationService -> MediaNotificationService registration from ServiceCollectionExtensions
+- [x] **DI-02**: Remove unused AddHttpClient registration from ServiceCollectionExtensions
 
 ### Dead Methods
 
-- [ ] **MTD-01**: Remove IMessageQueryService.GetMessagesBeforeAsync + implementation
-- [ ] **MTD-02**: Remove IMessageQueryService.GetMessagesByDateRangeAsync + implementation
-- [ ] **MTD-03**: Remove IMessageQueryService.GetDistinctUserNamesAsync + implementation
-- [ ] **MTD-04**: Remove IMessageQueryService.GetDistinctChatNamesAsync + implementation
-- [ ] **MTD-05**: Remove IJobTriggerService.ScheduleOnceAsync + implementation
-- [ ] **MTD-06**: Remove IJobTriggerService.CancelScheduledJobAsync + implementation
-- [ ] **MTD-07**: Remove IJobScheduler.IsScheduledAsync + implementation
-- [ ] **MTD-08**: Remove IBotMediaService.DownloadFileAsBytesAsync + implementation
-- [ ] **MTD-09**: Remove TelegramLoggingExtensions.GetUserLogDisplayAsync
-- [ ] **MTD-10**: Remove TelegramLoggingExtensions.GetChatLogDisplayAsync
-- [ ] **MTD-11**: Remove JobPayloadHelper.GetRequiredPayload()
-- [ ] **MTD-12**: Remove IDetectionResultsRepository.GetRecentAsync + implementation
-- [ ] **MTD-13**: Remove IDetectionResultsRepository.GetStatsAsync + implementation
-- [ ] **MTD-14**: Remove IDetectionResultsRepository.DeleteOlderThanAsync + implementation
-- [ ] **MTD-15**: Remove IDetectionResultsRepository.GetHamSamplesForSimilarityAsync + implementation
-- [ ] **MTD-16**: Remove IFileScanQuotaRepository.GetCurrentQuotaAsync, CleanupExpiredQuotasAsync, GetServiceQuotasAsync, ResetQuotaAsync + implementations
-- [ ] **MTD-17**: Remove ITokenizerService.GetWordFrequencies, IsStopWord + implementations in TokenizerService
-- [ ] **MTD-18**: Remove ModelMappings.FileScanQuotaModel.ToDto()
+- [x] **MTD-01**: Remove IMessageQueryService.GetMessagesBeforeAsync + implementation
+- [x] **MTD-02**: Remove IMessageQueryService.GetMessagesByDateRangeAsync + implementation
+- [x] **MTD-03**: Remove IMessageQueryService.GetDistinctUserNamesAsync + implementation
+- [x] **MTD-04**: Remove IMessageQueryService.GetDistinctChatNamesAsync + implementation
+- [x] **MTD-05**: Remove IJobTriggerService.ScheduleOnceAsync + implementation
+- [x] **MTD-06**: Remove IJobTriggerService.CancelScheduledJobAsync + implementation
+- [x] **MTD-07**: Remove IJobScheduler.IsScheduledAsync + implementation
+- [x] **MTD-08**: Remove IBotMediaService.DownloadFileAsBytesAsync + implementation
+- [x] **MTD-09**: Remove TelegramLoggingExtensions.GetUserLogDisplayAsync
+- [x] **MTD-10**: Remove TelegramLoggingExtensions.GetChatLogDisplayAsync
+- [x] **MTD-11**: Remove JobPayloadHelper.GetRequiredPayload()
+- [x] **MTD-12**: Remove IDetectionResultsRepository.GetRecentAsync + implementation
+- [x] **MTD-13**: Remove IDetectionResultsRepository.GetStatsAsync + implementation
+- [x] **MTD-14**: Remove IDetectionResultsRepository.DeleteOlderThanAsync + implementation
+- [x] **MTD-15**: Remove IDetectionResultsRepository.GetHamSamplesForSimilarityAsync + implementation
+- [x] **MTD-16**: Remove IFileScanQuotaRepository.GetCurrentQuotaAsync, CleanupExpiredQuotasAsync, GetServiceQuotasAsync, ResetQuotaAsync + implementations
+- [x] **MTD-17**: Remove ITokenizerService.GetWordFrequencies, IsStopWord + implementations in TokenizerService
+- [x] **MTD-18**: Remove ModelMappings.FileScanQuotaModel.ToDto()
 
 ### Dead Properties
 
-- [ ] **PROP-01**: Remove ContentCheckRequest.CheckOnly
-- [ ] **PROP-02**: Remove ContentCheckRequest.ImageFileName
-- [ ] **PROP-03**: Remove ContentCheckRequest.PhotoUrl
-- [ ] **PROP-04**: Remove ImageCheckRequest.PhotoUrl
+- [x] **PROP-01**: Remove ContentCheckRequest.CheckOnly
+- [x] **PROP-02**: Remove ContentCheckRequest.ImageFileName
+- [x] **PROP-03**: Remove ContentCheckRequest.PhotoUrl
+- [x] **PROP-04**: Remove ImageCheckRequest.PhotoUrl
 
 ### Dead Enum Value
 
-- [ ] **ENUM-01**: Remove ScanResultType.Suspicious
+- [x] **ENUM-01**: Remove ScanResultType.Suspicious
 
 ### Stale Comments
 
-- [ ] **CMNT-01**: Remove misleading "Deprecated" comment on TranslationConfig.cs:34 (property is actively used)
-- [ ] **CMNT-02**: Remove transition comment in ConfigurationExtensions.cs:20
+- [x] **CMNT-01**: Remove misleading "Deprecated" comment on TranslationConfig.cs:34 (property is actively used)
+- [x] **CMNT-02**: Remove transition comment in ConfigurationExtensions.cs:20
 
 ### Orphaned Tests
 
-- [ ] **TEST-01**: Remove component tests for 4 Telegram preview components (FILE-19 through FILE-22)
-- [ ] **TEST-02**: Remove unit tests for GetRequiredPayload (MTD-11)
-- [ ] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (MTD-08)
-- [ ] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (MTD-01 through MTD-04)
-- [ ] **TEST-05**: Remove orphaned mapping round-trip tests in ContentDetectionConfigMappingsTests.cs
+- [x] **TEST-01**: Remove component tests for 4 Telegram preview components (FILE-19 through FILE-22)
+- [x] **TEST-02**: Remove unit tests for GetRequiredPayload (MTD-11)
+- [x] **TEST-03**: Remove unit tests for DownloadFileAsBytesAsync (MTD-08)
+- [x] **TEST-04**: Remove integration tests for dead IMessageQueryService methods (MTD-01 through MTD-04)
+- [x] **TEST-05**: Remove orphaned mapping round-trip tests in ContentDetectionConfigMappingsTests.cs
 
 ## v2 Requirements
 
@@ -108,67 +108,67 @@ None — this is a one-shot cleanup milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FILE-01 | Phase 1 | Pending |
-| FILE-02 | Phase 1 | Pending |
-| FILE-03 | Phase 1 | Pending |
-| FILE-04 | Phase 1 | Pending |
-| FILE-05 | Phase 1 | Pending |
-| CMNT-02 | Phase 1 | Pending |
-| FILE-06 | Phase 2 | Pending |
-| FILE-23 | Phase 2 | Pending |
-| FILE-24 | Phase 2 | Pending |
-| FILE-25 | Phase 2 | Pending |
-| FILE-07 | Phase 3 | Pending |
-| FILE-08 | Phase 3 | Pending |
-| FILE-09 | Phase 3 | Pending |
-| FILE-10 | Phase 3 | Pending |
-| FILE-11 | Phase 3 | Pending |
-| FILE-12 | Phase 3 | Pending |
-| FILE-13 | Phase 3 | Pending |
-| FILE-14 | Phase 3 | Pending |
-| FILE-15 | Phase 3 | Pending |
-| DI-01 | Phase 3 | Pending |
-| MTD-01 | Phase 3 | Pending |
-| MTD-02 | Phase 3 | Pending |
-| MTD-03 | Phase 3 | Pending |
-| MTD-04 | Phase 3 | Pending |
-| MTD-05 | Phase 3 | Pending |
-| MTD-06 | Phase 3 | Pending |
-| MTD-07 | Phase 3 | Pending |
-| MTD-08 | Phase 3 | Pending |
-| MTD-09 | Phase 3 | Pending |
-| MTD-10 | Phase 3 | Pending |
-| MTD-11 | Phase 3 | Pending |
-| TEST-02 | Phase 3 | Pending |
-| TEST-03 | Phase 3 | Pending |
-| TEST-04 | Phase 3 | Pending |
-| FILE-16 | Phase 4 | Pending |
-| FILE-17 | Phase 4 | Pending |
-| FILE-18 | Phase 4 | Pending |
-| FILE-19 | Phase 4 | Pending |
-| FILE-20 | Phase 4 | Pending |
-| FILE-21 | Phase 4 | Pending |
-| FILE-22 | Phase 4 | Pending |
-| FILE-26 | Phase 4 | Pending |
-| DI-02 | Phase 4 | Pending |
-| CMNT-01 | Phase 4 | Pending |
-| TEST-01 | Phase 4 | Pending |
-| FILE-27 | Phase 5 | Pending |
-| FILE-28 | Phase 5 | Pending |
-| FILE-29 | Phase 5 | Pending |
-| MTD-12 | Phase 5 | Pending |
-| MTD-13 | Phase 5 | Pending |
-| MTD-14 | Phase 5 | Pending |
-| MTD-15 | Phase 5 | Pending |
-| MTD-16 | Phase 5 | Pending |
-| MTD-17 | Phase 5 | Pending |
-| MTD-18 | Phase 5 | Pending |
-| PROP-01 | Phase 5 | Pending |
-| PROP-02 | Phase 5 | Pending |
-| PROP-03 | Phase 5 | Pending |
-| PROP-04 | Phase 5 | Pending |
-| ENUM-01 | Phase 5 | Pending |
-| TEST-05 | Phase 5 | Pending |
+| FILE-01 | Phase 1 | Complete |
+| FILE-02 | Phase 1 | Complete |
+| FILE-03 | Phase 1 | Complete |
+| FILE-04 | Phase 1 | Complete |
+| FILE-05 | Phase 1 | Complete |
+| CMNT-02 | Phase 1 | Complete |
+| FILE-06 | Phase 2 | Complete |
+| FILE-23 | Phase 2 | Complete |
+| FILE-24 | Phase 2 | Complete |
+| FILE-25 | Phase 2 | Complete |
+| FILE-07 | Phase 3 | Complete |
+| FILE-08 | Phase 3 | Complete |
+| FILE-09 | Phase 3 | Complete |
+| FILE-10 | Phase 3 | Complete |
+| FILE-11 | Phase 3 | Complete |
+| FILE-12 | Phase 3 | Complete |
+| FILE-13 | Phase 3 | Complete |
+| FILE-14 | Phase 3 | Complete |
+| FILE-15 | Phase 3 | Complete |
+| DI-01 | Phase 3 | Complete |
+| MTD-01 | Phase 3 | Complete |
+| MTD-02 | Phase 3 | Complete |
+| MTD-03 | Phase 3 | Complete |
+| MTD-04 | Phase 3 | Complete |
+| MTD-05 | Phase 3 | Complete |
+| MTD-06 | Phase 3 | Complete |
+| MTD-07 | Phase 3 | Complete |
+| MTD-08 | Phase 3 | Complete |
+| MTD-09 | Phase 3 | Complete |
+| MTD-10 | Phase 3 | Complete |
+| MTD-11 | Phase 3 | Complete |
+| TEST-02 | Phase 3 | Complete |
+| TEST-03 | Phase 3 | Complete |
+| TEST-04 | Phase 3 | Complete |
+| FILE-16 | Phase 4 | Complete |
+| FILE-17 | Phase 4 | Complete |
+| FILE-18 | Phase 4 | Complete |
+| FILE-19 | Phase 4 | Complete |
+| FILE-20 | Phase 4 | Complete |
+| FILE-21 | Phase 4 | Complete |
+| FILE-22 | Phase 4 | Complete |
+| FILE-26 | Phase 4 | Complete |
+| DI-02 | Phase 4 | Complete |
+| CMNT-01 | Phase 4 | Complete |
+| TEST-01 | Phase 4 | Complete |
+| FILE-27 | Phase 5 | Complete |
+| FILE-28 | Phase 5 | Complete |
+| FILE-29 | Phase 5 | Complete |
+| MTD-12 | Phase 5 | Complete |
+| MTD-13 | Phase 5 | Complete |
+| MTD-14 | Phase 5 | Complete |
+| MTD-15 | Phase 5 | Complete |
+| MTD-16 | Phase 5 | Complete |
+| MTD-17 | Phase 5 | Complete |
+| MTD-18 | Phase 5 | Complete |
+| PROP-01 | Phase 5 | Complete |
+| PROP-02 | Phase 5 | Complete |
+| PROP-03 | Phase 5 | Complete |
+| PROP-04 | Phase 5 | Complete |
+| ENUM-01 | Phase 5 | Complete |
+| TEST-05 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 61 total (FILE-01..29=29, DI-01..02=2, MTD-01..18=18, PROP-01..04=4, ENUM-01=1, CMNT-01..02=2, TEST-01..05=5)

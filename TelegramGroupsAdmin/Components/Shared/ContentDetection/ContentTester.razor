@@ -576,7 +576,6 @@
                 User = UserIdentity.FromId(string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId)),
                 Chat = ChatIdentity.FromId(_selectedChatId ?? 0), // 0 = global config
                 ImageData = isVideo ? null : imageStream, // Only for images
-                ImageFileName = isVideo ? null : imageFileName,
                 PhotoLocalPath = tempImagePath, // ML-5: Enable OCR + hash similarity layers
                 VideoLocalPath = tempVideoPath, // ML-6: Enable video spam detection
                 Urls = urls

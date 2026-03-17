@@ -12,11 +12,11 @@ Remove all 62 confirmed dead code items from the TelegramGroupsAdmin solution in
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Core and Configuration** - Delete dead files and fix stale comment in Core and Configuration projects
-- [ ] **Phase 2: Data and Mapping Models** - Delete dead Data model and dead main-app mapping records/files
-- [ ] **Phase 3: Telegram Project** - Delete dead Telegram files, remove dead DI registration, remove dead interface methods and orphaned tests
-- [ ] **Phase 4: Main Application** - Delete dead main-app files, DI registration, stale comment, and orphaned component tests
-- [ ] **Phase 5: ContentDetection Project** - Delete dead ContentDetection services/models, dead interface methods, dead properties, dead enum value, and orphaned mapping test
+- [x] **Phase 1: Core and Configuration** - Delete dead files and fix stale comment in Core and Configuration projects (completed 2026-03-16)
+- [x] **Phase 2: Data and Mapping Models** - Delete dead Data model and dead main-app mapping records/files (completed 2026-03-16)
+- [x] **Phase 3: Telegram Project** - Delete dead Telegram files, remove dead DI registration, remove dead interface methods and orphaned tests (completed 2026-03-16)
+- [x] **Phase 4: Main Application** - Delete dead main-app files, DI registration, stale comment, and orphaned component tests (completed 2026-03-16)
+- [x] **Phase 5: ContentDetection Project** - Delete dead ContentDetection services/models, dead interface methods, dead properties, dead enum value, and orphaned mapping test (completed 2026-03-17)
 
 ## Phase Details
 
@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `Core/Extensions/EnumExtensions.cs` no longer exists in the repository
   3. All four dead Configuration options files (TelegramOptions, OpenAIOptions, SendGridOptions, EmailOptions) no longer exist
   4. The transition comment block in `ConfigurationExtensions.cs` line 20 is gone; the surrounding code is intact and compiles
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [ ] 01-01-PLAN.md — Delete 5 dead files and remove stale transition comment
@@ -43,7 +43,10 @@ Plans:
   2. `Data/Models/StopWordWithEmailDto.cs` no longer exists
   3. The three dead mapping file pairs (DetectionAccuracyMappings + DetectionAccuracyRecord, HourlyDetectionStatsMappings + HourlyDetectionStats, WelcomeResponseSummaryMappings + WelcomeResponseSummary) no longer exist
   4. Repositories that formerly referenced those mapping files still compile and return data correctly (inline construction preserved)
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+
+Plans:
+- [ ] 02-01-PLAN.md — Delete 7 dead files (1 Data DTO + 3 mapping pairs)
 
 ### Phase 3: Telegram Project
 **Goal**: All dead code within the Telegram project is removed — dead files, one dead DI registration, 11 dead interface methods with their implementations, and three groups of orphaned tests
@@ -55,7 +58,11 @@ Plans:
   3. `IMediaNotificationService` and its implementation are gone and the DI registration for it is removed from `ServiceCollectionExtensions`
   4. `IMessageQueryService`, `IJobTriggerService`, `IJobScheduler`, `IBotMediaService`, `TelegramLoggingExtensions`, and `JobPayloadHelper` no longer declare or implement the removed methods
   5. Test classes for `GetRequiredPayload`, `DownloadFileAsBytesAsync`, and the dead `IMessageQueryService` methods no longer exist and the test project compiles cleanly
-**Plans**: TBD
+**Plans:** 2/2 plans complete
+
+Plans:
+- [ ] 03-01-PLAN.md — Delete 10 dead Telegram files and remove IMediaNotificationService DI registration
+- [ ] 03-02-PLAN.md — Remove 11 dead methods from interfaces/implementations and delete orphaned tests
 
 ### Phase 4: Main Application
 **Goal**: All dead code in the main TelegramGroupsAdmin project is removed — dead service files, dead DI registration, dead dialog models, dead Blazor components, a stale comment, and the orphaned component tests
@@ -68,7 +75,11 @@ Plans:
   4. `test-backup.tar.gz` no longer exists in the repository
   5. The misleading "Deprecated" comment on `TranslationConfig.cs:34` is removed and the property is visibly undeprecated
   6. Test classes for the four deleted Razor components no longer exist and the test project compiles cleanly
-**Plans**: TBD
+**Plans:** 1/2 plans complete
+
+Plans:
+- [ ] 04-01-PLAN.md — Delete 9 dead files, remove SeoPreviewScraper DI registration, clean up dead constant, fix misleading comment
+- [ ] 04-02-PLAN.md — Delete 4 orphaned component test files and verify full solution build
 
 ### Phase 5: ContentDetection Project
 **Goal**: All dead code in the ContentDetection project is removed — dead service files, dead interface methods with implementations, dead properties on check request types, the dead enum value, and the orphaned mapping round-trip test
@@ -81,7 +92,11 @@ Plans:
   4. `ContentCheckRequest` no longer has `CheckOnly`, `ImageFileName`, or `PhotoUrl`; `ImageCheckRequest` no longer has `PhotoUrl`; all call sites compile
   5. `ScanResultType.Suspicious` no longer exists and all switch expressions / pattern matches over `ScanResultType` still compile
   6. The orphaned round-trip tests in `ContentDetectionConfigMappingsTests.cs` are removed and the test project compiles and all remaining tests pass
-**Plans**: TBD
+**Plans:** 2/2 plans complete
+
+Plans:
+- [ ] 05-01-PLAN.md — Delete 3 dead files and remove 11 dead methods from interfaces/implementations plus 1 dead mapping extension
+- [ ] 05-02-PLAN.md — Remove 4 dead properties, dead enum value, and orphaned CasConfig tests
 
 ## Progress
 
@@ -90,8 +105,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core and Configuration | 0/1 | Planned | - |
-| 2. Data and Mapping Models | 0/TBD | Not started | - |
-| 3. Telegram Project | 0/TBD | Not started | - |
-| 4. Main Application | 0/TBD | Not started | - |
-| 5. ContentDetection Project | 0/TBD | Not started | - |
+| 1. Core and Configuration | 0/1 | Complete    | 2026-03-16 |
+| 2. Data and Mapping Models | 0/1 | Complete    | 2026-03-16 |
+| 3. Telegram Project | 0/2 | Complete    | 2026-03-16 |
+| 4. Main Application | 0/2 | Complete    | 2026-03-16 |
+| 5. ContentDetection Project | 0/2 | Complete    | 2026-03-17 |

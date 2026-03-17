@@ -34,13 +34,4 @@ public interface IJobScheduler
         string jobId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Check if a job is still scheduled (not yet executed or cancelled)
-    /// </summary>
-    /// <param name="jobId">Job ID to check</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if job exists and is scheduled</returns>
-    Task<bool> IsScheduledAsync(
-        string jobId,
-        CancellationToken cancellationToken = default);
 }

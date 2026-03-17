@@ -155,19 +155,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             .ToDictionary(g => g.Key, g => g.ToList());
     }
 
-    public async Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking(),
-                context)
-            .OrderByDescending(x => x.DetectedAt)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
-
-        return results;
-    }
-
     public async Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -221,29 +208,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results!;
     }
 
-    public async Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Mirror of GetSpamSamplesForSimilarityAsync but for ham samples
-        // Use query syntax for EF Core translation compatibility
-        var results = await (
-            from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
-            where dr.IsSpam == false
-                && dr.UsedForTraining == true
-                && m.MessageText != null
-                && m.MessageText != ""
-            orderby dr.DetectedAt descending
-            select m.MessageText
-        ).Take(limit).ToListAsync(cancellationToken);
-
-        _logger.LogDebug(
-            "Retrieved {Count} ham samples for similarity check (used_for_training = true)",
-            results.Count);
-
-        return results!;
-    }
-
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
 
@@ -278,72 +242,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             minMessageLength);
 
         return results;
-    }
-
-    public async Task<DetectionStats> GetStatsAsync(CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // MH1: Single query optimization - calculate all stats in one database round-trip
-        var since24h = DateTimeOffset.UtcNow.AddDays(-1);
-
-        var stats = await context.DetectionResults
-            .AsNoTracking()
-            .GroupBy(dr => 1) // Group all rows together for aggregation
-            .Select(g => new
-            {
-                TotalDetections = g.Count(),
-                SpamDetected = g.Count(dr => dr.IsSpam),
-                AverageScore = g.Average(dr => dr.Score),
-                Last24hDetections = g.Count(dr => dr.DetectedAt >= since24h),
-                Last24hSpam = g.Count(dr => dr.DetectedAt >= since24h && dr.IsSpam)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        // Handle empty table case
-        if (stats == null)
-        {
-            return new DetectionStats
-            {
-                TotalDetections = 0,
-                SpamDetected = 0,
-                SpamPercentage = 0,
-                AverageScore = 0,
-                Last24hDetections = 0,
-                Last24hSpam = 0,
-                Last24hSpamPercentage = 0
-            };
-        }
-
-        return new DetectionStats
-        {
-            TotalDetections = stats.TotalDetections,
-            SpamDetected = stats.SpamDetected,
-            SpamPercentage = stats.TotalDetections > 0 ? (double)stats.SpamDetected / stats.TotalDetections * 100 : 0,
-            AverageScore = stats.AverageScore,
-            Last24hDetections = stats.Last24hDetections,
-            Last24hSpam = stats.Last24hSpam,
-            Last24hSpamPercentage = stats.Last24hDetections > 0 ? (double)stats.Last24hSpam / stats.Last24hDetections * 100 : 0
-        };
-    }
-
-    public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var deleted = await context.DetectionResults
-            .Where(dr => dr.DetectedAt < timestamp)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        if (deleted > 0)
-        {
-            _logger.LogWarning(
-                "Deleted {Count} old detection results (timestamp < {Timestamp})",
-                deleted,
-                timestamp);
-        }
-
-        return deleted;
     }
 
     // ====================================================================================

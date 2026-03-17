@@ -89,14 +89,6 @@ public class QuartzJobScheduler : IJobScheduler
         return deleted;
     }
 
-    public async Task<bool> IsScheduledAsync(string jobId, CancellationToken cancellationToken = default)
-    {
-        var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
-
-        var jobKey = new JobKey(jobId, "AdHoc");
-        return await scheduler.CheckExists(jobKey, cancellationToken);
-    }
-
     /// <summary>
     /// Map job name to IJob implementation type
     /// Uses BackgroundJobNames constants for compile-time safety

@@ -31,7 +31,7 @@ public class TranslationConfig
     /// Latin script threshold for skipping translation (0.0 - 1.0)
     /// If >= this ratio of characters are Latin script, skip expensive translation
     /// Default: 0.8 (80% Latin = likely English/Western European language)
-    /// NOTE: Deprecated in favor of FastText language detection, kept for backward compatibility
+    /// Also used as a fast pre-check before FastText language detection
     /// </summary>
     public double LatinScriptThreshold { get; set; } = 0.8;
 

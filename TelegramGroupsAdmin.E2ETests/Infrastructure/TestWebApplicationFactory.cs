@@ -196,8 +196,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             .Returns(callInfo => Task.FromResult($"job-{Guid.NewGuid():N}"));
         _mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
-        _mockJobScheduler.IsScheduledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
 
         // Mock IExamEvaluationService - default to pass with high confidence
         // Tests can reconfigure via MockExamEvaluation property

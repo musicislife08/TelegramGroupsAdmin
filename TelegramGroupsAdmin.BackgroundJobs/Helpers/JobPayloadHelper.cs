@@ -118,24 +118,4 @@ public static class JobPayloadHelper
         }
     }
 
-    /// <summary>
-    /// Extracts and deserializes a typed payload from the job context.
-    /// Throws if the payload is missing or cannot be deserialized.
-    /// Use this for jobs where missing payload indicates a bug (not stale data).
-    /// </summary>
-    /// <typeparam name="T">The payload type to deserialize to</typeparam>
-    /// <param name="context">The Quartz job execution context</param>
-    /// <param name="jobName">Job name for error messages</param>
-    /// <returns>The deserialized payload</returns>
-    /// <exception cref="InvalidOperationException">Thrown if payload is missing or invalid</exception>
-    public static T GetRequiredPayload<T>(IJobExecutionContext context, string? jobName = null) where T : class
-    {
-        jobName ??= typeof(T).Name.Replace("Payload", "Job");
-
-        var payloadJson = context.MergedJobDataMap.GetString(JobDataKeys.PayloadJson)
-            ?? throw new InvalidOperationException($"{jobName}: payload not found in job data");
-
-        return JsonSerializer.Deserialize<T>(payloadJson)
-            ?? throw new InvalidOperationException($"{jobName}: failed to deserialize payload");
-    }
 }

@@ -47,12 +47,6 @@ public interface IBotMediaService
     Task DownloadFileAsync(string filePath, Stream destination, CancellationToken ct = default);
 
     /// <summary>
-    /// Download a file by ID and return as byte array.
-    /// Convenience method that combines GetFileAsync + DownloadFileAsync.
-    /// </summary>
-    Task<byte[]> DownloadFileAsBytesAsync(string fileId, CancellationToken ct = default);
-
-    /// <summary>
     /// Get user profile photos.
     /// </summary>
     Task<UserProfilePhotos> GetUserProfilePhotosAsync(

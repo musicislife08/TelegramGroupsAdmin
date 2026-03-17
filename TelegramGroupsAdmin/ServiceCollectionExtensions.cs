@@ -155,7 +155,6 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageContextProvider, MessageContextAdapter>();
 
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
-            services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Telegram.Services.Media.MediaNotificationService>();
             services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchQueueService>();
             services.AddHostedService<TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchWorkerService>();
 
@@ -179,13 +178,6 @@ public static class ServiceCollectionExtensions
             services.AddHybridCache(options =>
             {
                 options.MaximumPayloadBytes = HttpConstants.HybridCacheMaxPayloadBytes;
-            });
-
-            // HTTP clients
-            services.AddHttpClient<SeoPreviewScraper>(client =>
-            {
-                client.Timeout = HttpConstants.SeoScraperTimeout;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SeoPreviewScraper/1.0)");
             });
 
             // VirusTotal rate limiter (4 requests/minute free tier)

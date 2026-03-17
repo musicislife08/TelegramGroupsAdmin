@@ -15,14 +15,4 @@ public interface ITokenizerService
     /// Remove emojis from text
     /// </summary>
     string RemoveEmojis(string text);
-
-    /// <summary>
-    /// Get word frequency map for text
-    /// </summary>
-    Dictionary<string, int> GetWordFrequencies(string text);
-
-    /// <summary>
-    /// Check if word is a stop word
-    /// </summary>
-    bool IsStopWord(string word);
 }

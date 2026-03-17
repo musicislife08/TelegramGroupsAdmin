@@ -141,56 +141,6 @@ public class JobPayloadHelperTests
 
     #endregion
 
-    #region GetRequiredPayload Tests
-
-    [Test]
-    public void GetRequiredPayload_ValidPayload_ReturnsDeserializedObject()
-    {
-        // Arrange
-        var payload = new TestPayload("required-test", 100);
-        var payloadJson = System.Text.Json.JsonSerializer.Serialize(payload);
-        var jobDataMap = new JobDataMap { { JobDataKeys.PayloadJson, payloadJson } };
-        _context.MergedJobDataMap.Returns(jobDataMap);
-
-        // Act
-        var result = JobPayloadHelper.GetRequiredPayload<TestPayload>(_context);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.Name, Is.EqualTo("required-test"));
-            Assert.That(result.Value, Is.EqualTo(100));
-        }
-    }
-
-    [Test]
-    public void GetRequiredPayload_MissingPayload_ThrowsKeyNotFoundException()
-    {
-        // Arrange
-        var jobDataMap = new JobDataMap(); // Empty
-        _context.MergedJobDataMap.Returns(jobDataMap);
-
-        // Act & Assert
-        // Quartz's GetString throws KeyNotFoundException when key doesn't exist
-        Assert.Throws<KeyNotFoundException>(() =>
-            JobPayloadHelper.GetRequiredPayload<TestPayload>(_context));
-    }
-
-    [Test]
-    public void GetRequiredPayload_InvalidJson_ThrowsJsonException()
-    {
-        // Arrange
-        var jobDataMap = new JobDataMap { { JobDataKeys.PayloadJson, "invalid json" } };
-        _context.MergedJobDataMap.Returns(jobDataMap);
-
-        // Act & Assert
-        Assert.Throws<System.Text.Json.JsonException>(() =>
-            JobPayloadHelper.GetRequiredPayload<TestPayload>(_context));
-    }
-
-    #endregion
-
     /// <summary>
     /// Test payload record for unit tests
     /// </summary>
