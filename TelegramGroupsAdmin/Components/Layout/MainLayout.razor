@@ -7,40 +7,43 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject INotificationStateService NotificationState
 @inject IHostEnvironment HostEnvironment
+@inject IJSRuntime JsRuntime
 
 <MudThemeProvider Theme="@_currentTheme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudSnackbarProvider />
 
-<CascadingValue Value="_webUser">
-    <MudDialogProvider />
-    <MudLayout>
-        <MudAppBar Elevation="1">
-            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((_) => DrawerToggle())" />
-            <MudText Typo="Typo.h6">Telegram Groups Admin</MudText>
-            @if (_isDevelopment)
-            {
-                <MudChip T="string" Color="Color.Error" Size="Size.Small" Class="ml-3">DEV</MudChip>
-            }
-            <MudSpacer />
-            @if (_isAuthenticated)
-            {
-                <NotificationBell />
-            }
-            @if (!string.IsNullOrEmpty(_userEmail))
-            {
-                <MudText Typo="Typo.body2" Class="mr-4 ml-2">@_userEmail</MudText>
-            }
-        </MudAppBar>
-        <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
-            <NavMenu />
-        </MudDrawer>
-        <MudMainContent>
-            <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
-                @Body
-            </MudContainer>
-        </MudMainContent>
-    </MudLayout>
+<CascadingValue Value="_userTimeZone">
+    <CascadingValue Value="_webUser">
+        <MudDialogProvider />
+        <MudLayout>
+            <MudAppBar Elevation="1">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((_) => DrawerToggle())" />
+                <MudText Typo="Typo.h6">Telegram Groups Admin</MudText>
+                @if (_isDevelopment)
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Class="ml-3">DEV</MudChip>
+                }
+                <MudSpacer />
+                @if (_isAuthenticated)
+                {
+                    <NotificationBell />
+                }
+                @if (!string.IsNullOrEmpty(_userEmail))
+                {
+                    <MudText Typo="Typo.body2" Class="mr-4 ml-2">@_userEmail</MudText>
+                }
+            </MudAppBar>
+            <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+                <NavMenu />
+            </MudDrawer>
+            <MudMainContent>
+                <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="my-4">
+                    @Body
+                </MudContainer>
+            </MudMainContent>
+        </MudLayout>
+    </CascadingValue>
 </CascadingValue>
 
 @code {
@@ -50,6 +53,7 @@
     private bool _isAuthenticated;
     private bool _isDevelopment;
     private WebUserIdentity? _webUser;
+    private TimeZoneInfo? _userTimeZone;
 
     private MudTheme _currentTheme => _isDevelopment ? _devTheme : _prodTheme;
 
@@ -116,6 +120,23 @@
             {
                 await NotificationState.InitializeAsync(_userId);
             }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var tzId = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
+                _userTimeZone = TimeZoneInfo.FindSystemTimeZoneById(tzId);
+            }
+            catch
+            {
+                _userTimeZone = TimeZoneInfo.Utc;
+            }
+            StateHasChanged();
         }
     }
 

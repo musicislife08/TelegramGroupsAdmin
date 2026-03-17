@@ -86,9 +86,9 @@
                     <MudStack Spacing="0">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Analysis Period</MudText>
                         <MudText Typo="Typo.body2">
-                            <span class="local-timestamp" data-utc="@_currentBatch.AnalysisPeriodStart.ToString("o")">@_currentBatch.AnalysisPeriodStart.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <LocalTimestamp Value="@_currentBatch.AnalysisPeriodStart" Format="MMM d, yyyy" />
                             to
-                            <span class="local-timestamp" data-utc="@_currentBatch.AnalysisPeriodEnd.ToString("o")">@_currentBatch.AnalysisPeriodEnd.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <LocalTimestamp Value="@_currentBatch.AnalysisPeriodEnd" Format="MMM d, yyyy" />
                         </MudText>
                     </MudStack>
                     @if (_currentBatch.CurrentAverageExecutionTimeMs.HasValue)
