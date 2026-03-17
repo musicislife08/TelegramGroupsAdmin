@@ -12,16 +12,17 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 /// </summary>
 public class DomainFiltersRepository : IDomainFiltersRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
-    public DomainFiltersRepository(AppDbContext context)
+    public DomainFiltersRepository(IDbContextFactory<AppDbContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task<List<DomainFilter>> GetAllAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
-        var query = _context.DomainFilters
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.DomainFilters
             .AsQueryable();
 
         if (chatId == 0)
@@ -41,7 +42,8 @@ public class DomainFiltersRepository : IDomainFiltersRepository
 
     public async Task<List<DomainFilter>> GetEffectiveAsync(long chatId, DomainFilterType? filterType = null, BlockMode? blockMode = null, CancellationToken cancellationToken = default)
     {
-        var query = _context.DomainFilters
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.DomainFilters
             .Where(df => df.ChatId == 0 || df.ChatId == chatId)  // Global (0) OR chat-specific
             .Where(df => df.Enabled);
 
@@ -61,7 +63,8 @@ public class DomainFiltersRepository : IDomainFiltersRepository
 
     public async Task<DomainFilter?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
-        var dto = await _context.DomainFilters
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.DomainFilters
             .FirstOrDefaultAsync(df => df.Id == id, cancellationToken);
 
         return dto == null ? null : ToModel(dto);
@@ -69,6 +72,7 @@ public class DomainFiltersRepository : IDomainFiltersRepository
 
     public async Task<long> InsertAsync(DomainFilter filter, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var dto = new DomainFilterDto
         {
             ChatId = filter.ChatId,
@@ -83,15 +87,16 @@ public class DomainFiltersRepository : IDomainFiltersRepository
             Notes = filter.Notes
         };
 
-        _context.DomainFilters.Add(dto);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.DomainFilters.Add(dto);
+        await context.SaveChangesAsync(cancellationToken);
 
         return dto.Id;
     }
 
     public async Task UpdateAsync(DomainFilter filter, CancellationToken cancellationToken = default)
     {
-        var dto = await _context.DomainFilters
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.DomainFilters
             .FirstOrDefaultAsync(df => df.Id == filter.Id, cancellationToken);
 
         if (dto == null)
@@ -106,18 +111,19 @@ public class DomainFiltersRepository : IDomainFiltersRepository
         dto.Enabled = filter.Enabled;
         dto.Notes = filter.Notes;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
-        var dto = await _context.DomainFilters
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.DomainFilters
             .FirstOrDefaultAsync(df => df.Id == id, cancellationToken);
 
         if (dto != null)
         {
-            _context.DomainFilters.Remove(dto);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.DomainFilters.Remove(dto);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 

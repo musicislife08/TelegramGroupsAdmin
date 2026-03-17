@@ -12,16 +12,17 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 /// </summary>
 public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
-    public BlocklistSubscriptionsRepository(AppDbContext context)
+    public BlocklistSubscriptionsRepository(IDbContextFactory<AppDbContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task<List<BlocklistSubscription>> GetAllAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
-        var query = _context.BlocklistSubscriptions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.BlocklistSubscriptions
             .AsQueryable();
 
         if (chatId == 0)
@@ -41,7 +42,8 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
 
     public async Task<List<BlocklistSubscription>> GetEffectiveAsync(long chatId, BlockMode? blockMode = null, CancellationToken cancellationToken = default)
     {
-        var query = _context.BlocklistSubscriptions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.BlocklistSubscriptions
             .Where(bs => bs.ChatId == 0 || bs.ChatId == chatId)  // Global (0) OR chat-specific
             .Where(bs => bs.Enabled);
 
@@ -56,7 +58,8 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
 
     public async Task<BlocklistSubscription?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
-        var dto = await _context.BlocklistSubscriptions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.BlocklistSubscriptions
             .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken);
 
         return dto == null ? null : ToModel(dto);
@@ -64,6 +67,7 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
 
     public async Task<long> InsertAsync(BlocklistSubscription subscription, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var dto = new BlocklistSubscriptionDto
         {
             ChatId = subscription.ChatId,
@@ -83,15 +87,16 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
             Notes = subscription.Notes
         };
 
-        _context.BlocklistSubscriptions.Add(dto);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.BlocklistSubscriptions.Add(dto);
+        await context.SaveChangesAsync(cancellationToken);
 
         return dto.Id;
     }
 
     public async Task UpdateAsync(BlocklistSubscription subscription, CancellationToken cancellationToken = default)
     {
-        var dto = await _context.BlocklistSubscriptions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.BlocklistSubscriptions
             .FirstOrDefaultAsync(bs => bs.Id == subscription.Id, cancellationToken);
 
         if (dto == null)
@@ -108,37 +113,40 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
         dto.RefreshIntervalHours = subscription.RefreshIntervalHours;
         dto.Notes = subscription.Notes;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
-        var dto = await _context.BlocklistSubscriptions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.BlocklistSubscriptions
             .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken);
 
         if (dto != null)
         {
-            _context.BlocklistSubscriptions.Remove(dto);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.BlocklistSubscriptions.Remove(dto);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
     public async Task UpdateFetchMetadataAsync(long id, DateTimeOffset lastFetched, int entryCount, CancellationToken cancellationToken = default)
     {
-        var dto = await _context.BlocklistSubscriptions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.BlocklistSubscriptions
             .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken);
 
         if (dto != null)
         {
             dto.LastFetched = lastFetched;
             dto.EntryCount = entryCount;
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
     public async Task<List<BlocklistSubscription>> FindByUrlAsync(string url, long chatId = 0, CancellationToken cancellationToken = default)
     {
-        var query = _context.BlocklistSubscriptions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.BlocklistSubscriptions
             .Where(bs => bs.Url == url);
 
         if (chatId == 0)
