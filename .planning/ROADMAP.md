@@ -136,10 +136,11 @@ Plans:
   3. Users visiting the app for the first time (cold prerender) see no error page or console error from timezone detection
   4. Component tests in `TelegramGroupsAdmin.ComponentTests` cover FRONT-01 (analytics card component recalculates percentage values when a different time range is selected); FRONT-02 may require E2E tests (`TelegramGroupsAdmin.E2ETests`) instead of component tests since bUnit stubs JS interop — evaluate during planning whether bUnit's fake IJSRuntime can adequately simulate the prerender scenario or if a Playwright test is needed
   5. `dotnet build` passes and all tests pass after the changes
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md — Fix analytics growth percentages: decouple from date range, add DailyAverageGrowthPercent, hide on All Time
+- [ ] 08-02-PLAN.md — Move timezone detection to MainLayout cascade, update LocalTimestamp to C# conversion
 
 ## Progress
 
@@ -155,4 +156,4 @@ Phases execute in numeric order: 6 → 7 → 8
 | 5. ContentDetection Project | v1.0 | 2/2 | Complete | 2026-03-17 |
 | 6. Data Layer Fixes | v1.1 | 0/2 | Not started | - |
 | 7. Backend Service Fixes | v1.1 | 2/2 | Complete | 2026-03-17 |
-| 8. Frontend Fixes | v1.1 | 0/? | Not started | - |
+| 8. Frontend Fixes | v1.1 | 0/2 | Not started | - |
