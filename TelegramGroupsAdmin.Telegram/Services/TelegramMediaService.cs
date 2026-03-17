@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class TelegramMediaService(
     ILogger<TelegramMediaService> logger,
     IBotMediaService mediaService,
-    IOptions<AppOptions> appOptions)
+    IOptions<AppOptions> appOptions) : ITelegramMediaService
 {
     // Telegram Bot API file download limit (standard api.telegram.org)
     private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
