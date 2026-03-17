@@ -5,7 +5,6 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @inject IAnalyticsRepository AnalyticsRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JsRuntime
 
 <MudStack Spacing="4">
     @* Date Range Selector *@
@@ -300,12 +299,12 @@
 
 @code {
     [Parameter] public List<long> SelectedChatIds { get; set; } = [];
+    [CascadingParameter] public TimeZoneInfo? UserTimeZone { get; set; }
 
     private bool _loading = true;
     private bool _dataLoaded;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
-    private string _userTimeZone = "UTC"; // Default to UTC until detected
 
     // Analytics data
     private DetectionAccuracyStats? _accuracyStats;
@@ -324,17 +323,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Detect user's timezone from browser
-        try
-        {
-            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Failed to detect timezone, using UTC: {ex.Message}");
-            _userTimeZone = "UTC";
-        }
-
         await LoadLast30Days();
     }
 
@@ -365,14 +353,15 @@
             return;
 
         _loading = true;
+        var timeZoneId = (UserTimeZone ?? TimeZoneInfo.Utc).Id;
         try
         {
             // Load all analytics data in parallel
-            var accuracyTask = AnalyticsRepository.GetDetectionAccuracyStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
-            var responseTimeTask = AnalyticsRepository.GetResponseTimeStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
-            var methodComparisonTask = AnalyticsRepository.GetDetectionMethodComparisonAsync(_startDate.Value, _endDate.Value, _userTimeZone);
-            var dailyTrendsTask = AnalyticsRepository.GetDailyDetectionTrendsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
-            var algorithmPerformanceTask = AnalyticsRepository.GetAlgorithmPerformanceStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
+            var accuracyTask = AnalyticsRepository.GetDetectionAccuracyStatsAsync(_startDate.Value, _endDate.Value, timeZoneId);
+            var responseTimeTask = AnalyticsRepository.GetResponseTimeStatsAsync(_startDate.Value, _endDate.Value, timeZoneId);
+            var methodComparisonTask = AnalyticsRepository.GetDetectionMethodComparisonAsync(_startDate.Value, _endDate.Value, timeZoneId);
+            var dailyTrendsTask = AnalyticsRepository.GetDailyDetectionTrendsAsync(_startDate.Value, _endDate.Value, timeZoneId);
+            var algorithmPerformanceTask = AnalyticsRepository.GetAlgorithmPerformanceStatsAsync(_startDate.Value, _endDate.Value, timeZoneId);
 
             await Task.WhenAll(accuracyTask, responseTimeTask, methodComparisonTask, dailyTrendsTask, algorithmPerformanceTask);
 

@@ -7,7 +7,6 @@
 @inject IManagedChatsRepository ChatsRepository
 @inject IAnalyticsRepository AnalyticsRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JsRuntime
 
 <MudStack Spacing="4">
     @* Chat Filter *@
@@ -364,10 +363,10 @@
     private bool _dataLoaded;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
-    private string _userTimeZone = "UTC"; // Default to UTC until detected
     private string _currentView = "30d"; // "7d", "30d", or "all"
 
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+    [CascadingParameter] public TimeZoneInfo? UserTimeZone { get; set; }
 
     private List<ManagedChatRecord> _accessibleChats = [];
     private long _selectedChatId;
@@ -429,17 +428,6 @@
     {
         if (WebUser is null) return;
 
-        // Detect user's timezone from browser
-        try
-        {
-            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Failed to detect timezone, using UTC: {ex.Message}");
-            _userTimeZone = "UTC";
-        }
-
         // Load accessible chats based on permissions
         _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
             WebUser.Id,
@@ -492,16 +480,18 @@
 
         try
         {
+            var timeZoneId = (UserTimeZone ?? TimeZoneInfo.Utc).Id;
+
             // Load message trends and spam trend comparison in parallel
             var trendsTask = MessageStatsService.GetMessageTrendsAsync(
                 GetSelectedChatIds(),
                 _startDate.Value,
                 _endDate.Value,
-                _userTimeZone,
+                timeZoneId,
                 CancellationToken.None);
 
             var spamTrendsTask = AnalyticsRepository.GetSpamTrendComparisonAsync(
-                _userTimeZone,
+                timeZoneId,
                 CancellationToken.None);
 
             await Task.WhenAll(trendsTask, spamTrendsTask);
