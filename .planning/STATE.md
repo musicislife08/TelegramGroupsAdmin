@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Bug Fix Sweep
 status: planning
-stopped_at: Phase 8 context gathered
-last_updated: "2026-03-17T17:04:14.561Z"
+stopped_at: Completed 08-frontend-fixes-01-PLAN.md
+last_updated: "2026-03-17T18:28:09.124Z"
 last_activity: 2026-03-16 — Roadmap created for v1.1 Bug Fix Sweep
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 2
-  completed_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -46,8 +46,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
-| Phase 07-backend-service-fixes P01 | 11m | 2 tasks | 12 files |
-| Phase 07-backend-service-fixes P02 | 15m | 1 tasks | 4 files |
+| Phase 08-frontend-fixes P01 | 8m | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -56,12 +55,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Init]: Bug-only milestone — clear backlog of correctness issues before adding features
 - [Init]: Skip research phase — all bugs are well-documented in GitHub issues
 - [Roadmap]: 7 bugs grouped into 3 phases by layer (data, backend, frontend) — each phase delivers one coherent layer of correctness
-- [Phase 07 Plan 01]: MediaType.Photo = 8 added to enum so photo refetch flows through EnqueueMediaAsync; worker resolves PhotoFileId branch when MediaType == Photo
-- [Phase 07 Plan 01]: ITelegramMediaService thin interface extracted from TelegramMediaService for DI testability; registered as forwarding factory from scoped instance
-- [Phase 07 Plan 01]: TrainingHandler defensive download placed BEFORE training sample saves; sample repos gracefully return false if file still unavailable after download
-- [Phase 07-backend-service-fixes]: Failure counter stored in IChatHealthCache Singleton (not Scoped orchestrator) — in-memory ConcurrentDictionary survives across scoped lifetimes
-- [Phase 07-backend-service-fixes]: CheckHealthAsync gates PerformHealthCheckAsync as quick reachability check — unreachable chats skip full health check and get Error status directly
-- [Phase 07-backend-service-fixes]: 3-strike threshold: counter resets after MarkInactiveAsync call AND on successful reachability check — transient errors count toward threshold by design
+- [Phase 08-frontend-fixes]: Growth queries run independently from startDate filter — separate DB queries for growth windows, not in-memory filtering of view-bounded data
+- [Phase 08-frontend-fixes]: DailyAverageGrowthPercent = (currentAvg - previousAvg) / previousAvg * 100; architecturally independent from MessageGrowthPercent despite algebraic equivalence in symmetric 7-day window
 
 ### Pending Todos
 
@@ -73,6 +68,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T17:04:14.552Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-frontend-fixes/08-CONTEXT.md
+Last session: 2026-03-17T18:28:09.119Z
+Stopped at: Completed 08-frontend-fixes-01-PLAN.md
+Resume file: None
