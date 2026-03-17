@@ -20,6 +20,7 @@ public class InviteRepositoryTests
 {
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
+    private IServiceScope? _scope;
     private IInviteRepository? _repository;
 
     private const string TestUserId = "test-user-id";
@@ -41,8 +42,8 @@ public class InviteRepositoryTests
         services.AddScoped<IInviteRepository, InviteRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
-        _repository = _serviceProvider.CreateScope()
-            .ServiceProvider.GetRequiredService<IInviteRepository>();
+        _scope = _serviceProvider.CreateScope();
+        _repository = _scope.ServiceProvider.GetRequiredService<IInviteRepository>();
 
         // Seed a user to satisfy FK constraint on invites.created_by
         await SeedTestUserAsync();
@@ -51,6 +52,7 @@ public class InviteRepositoryTests
     [TearDown]
     public void TearDown()
     {
+        _scope?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
         _testHelper?.Dispose();
     }

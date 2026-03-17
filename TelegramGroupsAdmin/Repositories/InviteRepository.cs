@@ -126,6 +126,7 @@ public class InviteRepository : IInviteRepository
 
         if (filter != InviteFilter.All)
         {
+            // InviteFilter values 0-2 intentionally match InviteStatus ordinals; verified by InviteRepositoryTests
             var status = (DataModels.InviteStatus)(int)filter;
             query = query.Where(i => i.Status == status);
         }
@@ -159,6 +160,7 @@ public class InviteRepository : IInviteRepository
 
         if (filter != InviteFilter.All)
         {
+            // InviteFilter values 0-2 intentionally match InviteStatus ordinals; verified by InviteRepositoryTests
             var status = (DataModels.InviteStatus)(int)filter;
             query = query.Where(x => x.Invite.Status == status);
         }
