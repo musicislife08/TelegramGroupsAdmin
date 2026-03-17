@@ -134,6 +134,7 @@ public class TelegramMediaService(
             MediaType.Sticker => ".webp",       // Telegram stickers are WebP
             MediaType.VideoNote => ".mp4",      // Circular videos are MP4
             MediaType.Document => ".bin",       // Unknown document type
+            MediaType.Photo => ".jpg",          // Telegram photos are JPEG
             _ => ".dat"
         };
     }

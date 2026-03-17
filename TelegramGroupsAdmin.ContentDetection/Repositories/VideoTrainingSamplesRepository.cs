@@ -112,7 +112,7 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
 
             if (!File.Exists(message.MediaLocalPath))
             {
-                _logger.LogWarning("Video file not found at {VideoPath} for message {MessageId}, cannot save training sample",
+                _logger.LogDebug("Video file not found at {VideoPath} for message {MessageId}, cannot save training sample",
                     message.MediaLocalPath, messageId);
                 return false;
             }
