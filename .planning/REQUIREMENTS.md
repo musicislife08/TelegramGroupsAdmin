@@ -15,8 +15,8 @@ Requirements for bug fix milestone. Each maps to roadmap phases.
 ### Backend Services
 
 - [x] **BACK-01**: Health orchestrator CheckHealthAsync and MarkInactiveAsync are wired up and invoked (#333)
-- [ ] **BACK-02**: Three spurious startup/runtime log warnings are eliminated (#309)
-- [ ] **BACK-03**: When a message is manually marked as spam, its media is downloaded (if not already cached) to populate image_training_samples (#262)
+- [x] **BACK-02**: Three spurious startup/runtime log warnings are eliminated (#309)
+- [x] **BACK-03**: When a message is manually marked as spam, its media is downloaded (if not already cached) to populate image_training_samples (#262)
 
 ### Frontend
 
@@ -52,8 +52,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-01 | Phase 6 | Pending |
 | DATA-02 | Phase 6 | Pending |
 | BACK-01 | Phase 7 | Complete |
-| BACK-02 | Phase 7 | Pending |
-| BACK-03 | Phase 7 | Pending |
+| BACK-02 | Phase 7 | Complete |
+| BACK-03 | Phase 7 | Complete |
 | FRONT-01 | Phase 8 | Pending |
 | FRONT-02 | Phase 8 | Pending |
 
