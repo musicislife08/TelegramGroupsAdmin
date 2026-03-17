@@ -120,10 +120,11 @@ Plans:
   3. When a moderator marks a message as spam, its media is downloaded and a record appears in image_training_samples (if media was not already cached)
   4. Unit tests in `TelegramGroupsAdmin.UnitTests` cover BACK-01 (verify CheckHealthAsync and MarkInactiveAsync are invoked on the orchestrator via mocked dependencies) and BACK-03 (verify the download-if-not-cached branch executes when media is absent from the local cache); BACK-02 warnings are covered by unit or integration tests depending on each warning's source
   5. `dotnet build` passes and all tests pass after the changes
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-01-PLAN.md — Eliminate spurious warnings and add defensive media download on spam marking
+- [ ] 07-02-PLAN.md — Wire health orchestrator CheckHealthAsync delegation and 3-strike MarkInactiveAsync
 
 #### Phase 8: Frontend Fixes
 **Goal**: Blazor UI renders and responds correctly — analytics percentages update when the time range changes, and timezone detection does not throw during server-side prerendering
@@ -153,5 +154,5 @@ Phases execute in numeric order: 6 → 7 → 8
 | 4. Main Application | v1.0 | 2/2 | Complete | 2026-03-16 |
 | 5. ContentDetection Project | v1.0 | 2/2 | Complete | 2026-03-17 |
 | 6. Data Layer Fixes | 2/2 | Complete   | 2026-03-17 | - |
-| 7. Backend Service Fixes | v1.1 | 0/? | Not started | - |
+| 7. Backend Service Fixes | v1.1 | 0/2 | Planning complete | - |
 | 8. Frontend Fixes | v1.1 | 0/? | Not started | - |
