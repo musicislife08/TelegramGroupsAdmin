@@ -13,6 +13,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
+    private readonly ConcurrentDictionary<long, int> _failureCounts = new();
 
     public event Action<ChatHealthStatus>? OnHealthUpdate;
 
@@ -63,4 +64,10 @@ public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
 
     public IReadOnlyDictionary<long, ChatHealthStatus> GetAllCachedHealth()
         => _healthCache;
+
+    public int IncrementFailureCount(long chatId)
+        => _failureCounts.AddOrUpdate(chatId, 1, (_, current) => current + 1);
+
+    public void ResetFailureCount(long chatId)
+        => _failureCounts.TryRemove(chatId, out _);
 }

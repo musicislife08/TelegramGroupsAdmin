@@ -34,12 +34,46 @@ public class ChatHealthRefreshOrchestrator(
     ILogger<ChatHealthRefreshOrchestrator> logger) : IChatHealthRefreshOrchestrator
 {
     /// <summary>
-    /// Perform health check on a specific chat and update cache
+    /// Perform health check on a specific chat and update cache.
+    /// Uses BotChatService.CheckHealthAsync as a quick reachability gate before the full health check.
+    /// After 3 consecutive reachability failures, ManagedChatsRepository.MarkInactiveAsync is called.
     /// </summary>
     public async Task RefreshHealthForChatAsync(ChatIdentity chat, CancellationToken cancellationToken = default)
     {
         try
         {
+            // Quick reachability gate via BotChatService (delegates to Telegram API)
+            var isReachable = await chatService.CheckHealthAsync(chat, cancellationToken);
+
+            if (!isReachable)
+            {
+                var failureCount = healthCache.IncrementFailureCount(chat.Id);
+                logger.LogDebug("Reachability check failed for {Chat}, consecutive failures: {Count}",
+                    chat.ToLogDebug(), failureCount);
+
+                if (failureCount >= 3)
+                {
+                    logger.LogWarning(
+                        "Chat {Chat} unreachable after {Count} consecutive failures, marking inactive",
+                        chat.ToLogDebug(), failureCount);
+                    await managedChatsRepository.MarkInactiveAsync(chat, cancellationToken);
+                    healthCache.ResetFailureCount(chat.Id);
+                }
+
+                var errorHealth = new ChatHealthStatus
+                {
+                    Chat = chat,
+                    IsReachable = false,
+                    Status = ChatHealthStatusType.Error
+                };
+                errorHealth.Warnings.Add("Chat unreachable - bot may have been removed");
+                healthCache.SetHealth(chat.Id, errorHealth);
+                return;
+            }
+
+            // Reachable — reset failure counter and run detailed health check
+            healthCache.ResetFailureCount(chat.Id);
+
             var health = await PerformHealthCheckAsync(chat, cancellationToken);
             healthCache.SetHealth(chat.Id, health);
 
