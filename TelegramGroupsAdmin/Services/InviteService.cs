@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Repositories;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -133,7 +132,7 @@ public class InviteService : IInviteService
             _ => InviteFilter.Pending
         };
 
-        return await _inviteRepository.GetAllWithCreatorEmailAsync((DataModels.InviteFilter)enumFilter, cancellationToken);
+        return await _inviteRepository.GetAllWithCreatorEmailAsync(enumFilter, cancellationToken: cancellationToken);
     }
 
     public async Task<bool> RevokeInviteAsync(string token, string revokedBy, CancellationToken cancellationToken = default)
