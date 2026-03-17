@@ -72,7 +72,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.Message" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Primary" />
                             <MudText Typo="Typo.h3">@_trendsData.TotalMessages</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Total Messages</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
                                 <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)" Variant="Variant.Text">
                                     @FormatGrowth(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)
@@ -90,10 +90,10 @@
                             <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
                             <MudText Typo="Typo.h3">@_trendsData.DailyAverage.ToString("F0")</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Daily Average</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
-                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)" Variant="Variant.Text">
-                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)
+                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.DailyAverageGrowthPercent)" Variant="Variant.Text">
+                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.DailyAverageGrowthPercent)
                                 </MudChip>
                             }
                         </MudStack>
@@ -108,7 +108,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.People" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Info" />
                             <MudText Typo="Typo.h3">@_trendsData.UniqueUsers</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Active Users</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
                                 <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.UserGrowthPercent)" Variant="Variant.Text">
                                     @FormatGrowth(_trendsData.WeekOverWeekGrowth.UserGrowthPercent)
@@ -126,7 +126,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.Shield" Size="MudBlazor.Size.Large" Color="@(_trendsData.SpamPercentage > 5 ? MudBlazor.Color.Error : MudBlazor.Color.Success)" />
                             <MudText Typo="Typo.h3">@_trendsData.SpamPercentage.ToString("F1")%</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Spam Rate</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
                                 <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(-_trendsData.WeekOverWeekGrowth.SpamGrowthPercent)" Variant="Variant.Text">
                                     @FormatGrowth(_trendsData.WeekOverWeekGrowth.SpamGrowthPercent)
@@ -365,6 +365,7 @@
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
     private string _userTimeZone = "UTC"; // Default to UTC until detected
+    private string _currentView = "30d"; // "7d", "30d", or "all"
 
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
 
@@ -450,6 +451,7 @@
 
     private async Task LoadLast7Days()
     {
+        _currentView = "7d";
         _endDate = DateTimeOffset.UtcNow;
         _startDate = _endDate.Value.AddDays(-7);
         await LoadData();
@@ -457,6 +459,7 @@
 
     private async Task LoadLast30Days()
     {
+        _currentView = "30d";
         _endDate = DateTimeOffset.UtcNow;
         _startDate = _endDate.Value.AddDays(-30);
         await LoadData();
@@ -464,6 +467,7 @@
 
     private async Task LoadAllTime()
     {
+        _currentView = "all";
         _endDate = DateTimeOffset.UtcNow;
         _startDate = DateTimeOffset.MinValue;
         await LoadData();
