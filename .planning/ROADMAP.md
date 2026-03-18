@@ -144,6 +144,16 @@ Plans:
 - [ ] 08-03-PLAN.md — Gap closure: bUnit component tests for overview card chip recalculation (FRONT-01)
 - [ ] 08-04-PLAN.md — Gap closure: Playwright E2E test for timezone prerender safety (FRONT-02)
 
+#### Phase 08.1: Fix review-all critical and suggestions (INSERTED)
+
+**Goal:** Fix 7 /review-all findings -- 2 critical vacuous test assertions, 1 empty catch block, and 4 convention/quality improvements across tests, components, and services
+**Requirements**: REVIEW-FIX-01, REVIEW-FIX-02, REVIEW-FIX-03, REVIEW-FIX-04, REVIEW-FIX-05, REVIEW-FIX-06, REVIEW-FIX-07
+**Depends on:** Phase 8
+**Plans:** 1 plan
+
+Plans:
+- [ ] 08.1-01-PLAN.md — Fix test assertions, add logging, enforce conventions across 12 files
+
 ## Progress
 
 **Execution Order:**
@@ -159,3 +169,4 @@ Phases execute in numeric order: 6 → 7 → 8
 | 6. Data Layer Fixes | v1.1 | 0/2 | Not started | - |
 | 7. Backend Service Fixes | v1.1 | 2/2 | Complete | 2026-03-17 |
 | 8. Frontend Fixes | 4/4 | Complete   | 2026-03-17 | - |
+| 08.1. Fix review-all findings | v1.1 | 0/1 | Planned | - |
