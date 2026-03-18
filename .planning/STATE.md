@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Bug Fix Sweep
 status: planning
-stopped_at: Phase 08.1 context gathered
-last_updated: "2026-03-18T02:28:31.816Z"
+stopped_at: Completed 08.1-01-PLAN.md
+last_updated: "2026-03-18T02:40:20.341Z"
 last_activity: 2026-03-16 — Roadmap created for v1.1 Bug Fix Sweep
 progress:
   total_phases: 9
-  completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  completed_phases: 4
+  total_plans: 9
+  completed_plans: 9
   percent: 0
 ---
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 08-frontend-fixes P02 | 7m | 2 tasks | 6 files |
 | Phase 08-frontend-fixes P04 | 2m | 1 tasks | 1 files |
 | Phase 08-frontend-fixes P03 | 15m | 1 tasks | 1 files |
+| Phase 08.1-01 P01 | 4m | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 08-frontend-fixes]: Use Page.Console event (not Page.PageError) for timezone JSException detection — Console catches all logged errors including Blazor interop warnings
 - [Phase 08-frontend-fixes]: Task.Delay(1000) after NetworkIdle to capture async JS errors that fire when SignalR circuit connects and OnAfterRenderAsync runs
 - [Phase 08-frontend-fixes]: 08-03: Based test branch on fix/08-02-timezone-cascade-fix — 08-01/08-02 production changes not yet merged to develop when tests were written
+- [Phase 08.1-01]: Fire-and-forget notification calls use CancellationToken.None — notifications complete even when parent health check is cancelled
+- [Phase 08.1-01]: LocalTimestamp renders em-dash during prerender (UserTimeZone null) to prevent UTC flash before local time resolves
+- [Phase 08.1-01]: CascadingParameters are private — they receive data from parents, not consumed by external callers
 
 ### Roadmap Evolution
 
@@ -80,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T02:28:31.808Z
-Stopped at: Phase 08.1 context gathered
-Resume file: .planning/phases/08.1-fix-review-all-critical-and-suggestions/08.1-CONTEXT.md
+Last session: 2026-03-18T02:40:20.337Z
+Stopped at: Completed 08.1-01-PLAN.md
+Resume file: None
