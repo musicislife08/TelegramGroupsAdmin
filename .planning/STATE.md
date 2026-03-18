@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Bug Fix Sweep
 status: planning
-stopped_at: Completed 08-frontend-fixes-03-PLAN.md
-last_updated: "2026-03-17T19:30:20.092Z"
+stopped_at: Phase 08.1 context gathered
+last_updated: "2026-03-18T02:28:31.816Z"
 last_activity: 2026-03-16 — Roadmap created for v1.1 Bug Fix Sweep
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 3
   total_plans: 8
   completed_plans: 8
@@ -66,6 +66,10 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 08-frontend-fixes]: Task.Delay(1000) after NetworkIdle to capture async JS errors that fire when SignalR circuit connects and OnAfterRenderAsync runs
 - [Phase 08-frontend-fixes]: 08-03: Based test branch on fix/08-02-timezone-cascade-fix — 08-01/08-02 production changes not yet merged to develop when tests were written
 
+### Roadmap Evolution
+
+- Phase 08.1 inserted after Phase 8: Fix review-all critical and suggestions (URGENT)
+
 ### Pending Todos
 
 None yet.
@@ -76,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-17T19:25:19.487Z
-Stopped at: Completed 08-frontend-fixes-03-PLAN.md
-Resume file: None
+Last session: 2026-03-18T02:28:31.808Z
+Stopped at: Phase 08.1 context gathered
+Resume file: .planning/phases/08.1-fix-review-all-critical-and-suggestions/08.1-CONTEXT.md
