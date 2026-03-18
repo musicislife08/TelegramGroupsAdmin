@@ -33,7 +33,7 @@
 
 **Milestone Goal:** Make TGA deployable by an external hosting orchestrator without adding SaaS-specific code to the open-source codebase. Three independent capabilities: infrastructure env var override for ClamAV, headless owner account bootstrapping, and a lightweight runtime status endpoint.
 
-- [ ] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars
+- [x] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars (completed 2026-03-18)
 - [ ] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern
 - [ ] **Phase 11: GET /healthz/status Endpoint** - API-key-gated runtime status endpoint for hosting provider monitoring
 
@@ -48,7 +48,7 @@
   2. When only one of CLAMAV_HOST or CLAMAV_PORT is set, the DB-stored values are used unchanged (no partial override)
   3. The first scan that uses the env var override writes one INFO log line showing the effective host:port
   4. The ClamAV health check (`GetHealthAsync`) connects to the same host:port that `ScanFileAsync` would use
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 09-01-PLAN.md — TDD: ClamAV env var override (CLAM-01 through CLAM-04)
 
@@ -88,6 +88,6 @@ Plans:
 | 7. Backend Service Fixes | v1.1 | 2/2 | Complete | 2026-03-17 |
 | 8. Frontend Fixes | v1.1 | 4/4 | Complete | 2026-03-17 |
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
-| 9. ClamAV Environment Variable Override | v1.2 | 0/1 | Not started | - |
+| 9. ClamAV Environment Variable Override | 1/1 | Complete   | 2026-03-18 | - |
 | 10. Bootstrap Owner CLI Flag | v1.2 | 0/TBD | Not started | - |
 | 11. GET /healthz/status Endpoint | v1.2 | 0/TBD | Not started | - |

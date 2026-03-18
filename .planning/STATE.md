@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: SaaS Hosting Readiness
 status: planning
-stopped_at: Phase 9 context gathered
-last_updated: "2026-03-18T19:13:41.412Z"
+stopped_at: Completed 09-clamav-environment-variable-override 09-01-PLAN.md
+last_updated: "2026-03-18T19:46:28.386Z"
 last_activity: 2026-03-18 — Roadmap created, 16/16 v1.2 requirements mapped across 3 phases
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
   percent: 0
 ---
 
@@ -46,6 +46,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 *Updated after each plan completion*
+| Phase 09-clamav-environment-variable-override P01 | 15min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -55,6 +56,9 @@ Progress: [░░░░░░░░░░] 0%
 - [v1.2]: Env var override for ClamAV only — infrastructure concern; other settings are app config managed via UI
 - [v1.2]: Status endpoint with STATUS_API_KEY gate — simple JSON polling for hosting providers, not Prometheus firehose
 - [v1.2]: No SaaS-specific code in OSS repo — extensibility via CLI flags, env vars, HTTP endpoints
+- [Phase 09]: Static volatile bool _hasLoggedOverride for one-time override log: Scoped service requires static field for per-process semantic
+- [Phase 09]: GetEffectiveEndpointAsync centralizes env var check — both non-whitespace + valid int required for override to apply
+- [Phase 09]: localhost:1 in tests for fast TCP failure (connection refused); sentinel-throw for CLAM-02 DB-consulted verification without TCP
 
 ### Blockers/Concerns
 
@@ -63,6 +67,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-03-18T19:13:41.403Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-clamav-environment-variable-override/09-CONTEXT.md
+Last session: 2026-03-18T19:46:28.383Z
+Stopped at: Completed 09-clamav-environment-variable-override 09-01-PLAN.md
+Resume file: None

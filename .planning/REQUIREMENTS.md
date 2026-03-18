@@ -19,10 +19,10 @@ Requirements for SaaS hosting readiness. Each maps to roadmap phases.
 
 ### ClamAV Override
 
-- [ ] **CLAM-01**: `CLAMAV_HOST` and `CLAMAV_PORT` env vars override DB-stored ClamAV host and port at scan time (per-scan, not cached at startup)
-- [ ] **CLAM-02**: Both env vars are required for override to activate — if either is missing, DB config is used (no partial override)
-- [ ] **CLAM-03**: When env var override is active, an INFO log records the effective ClamAV host:port on first use
-- [ ] **CLAM-04**: `GetHealthAsync()` uses the same override-aware config path as `ScanFileAsync()`
+- [x] **CLAM-01**: `CLAMAV_HOST` and `CLAMAV_PORT` env vars override DB-stored ClamAV host and port at scan time (per-scan, not cached at startup)
+- [x] **CLAM-02**: Both env vars are required for override to activate — if either is missing, DB config is used (no partial override)
+- [x] **CLAM-03**: When env var override is active, an INFO log records the effective ClamAV host:port on first use
+- [x] **CLAM-04**: `GetHealthAsync()` uses the same override-aware config path as `ScanFileAsync()`
 
 ### Status Endpoint
 
@@ -71,10 +71,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BOOT-05 | Phase 10 | Pending |
 | BOOT-06 | Phase 10 | Pending |
 | BOOT-07 | Phase 10 | Pending |
-| CLAM-01 | Phase 9 | Pending |
-| CLAM-02 | Phase 9 | Pending |
-| CLAM-03 | Phase 9 | Pending |
-| CLAM-04 | Phase 9 | Pending |
+| CLAM-01 | Phase 9 | Complete |
+| CLAM-02 | Phase 9 | Complete |
+| CLAM-03 | Phase 9 | Complete |
+| CLAM-04 | Phase 9 | Complete |
 | STAT-01 | Phase 11 | Pending |
 | STAT-02 | Phase 11 | Pending |
 | STAT-03 | Phase 11 | Pending |
