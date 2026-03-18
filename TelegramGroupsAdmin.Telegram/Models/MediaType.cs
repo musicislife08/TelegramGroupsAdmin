@@ -28,5 +28,8 @@ public enum MediaType
     VideoNote = 6,
 
     /// <summary>Document file (PDF, DOCX, ZIP, etc.)</summary>
-    Document = 7
+    Document = 7,
+
+    /// <summary>Photo image</summary>
+    Photo = 8
 }

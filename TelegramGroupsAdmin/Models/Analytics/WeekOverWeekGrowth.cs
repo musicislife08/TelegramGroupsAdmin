@@ -21,7 +21,13 @@ public record WeekOverWeekGrowth
     public double SpamGrowthPercent { get; init; }
 
     /// <summary>
-    /// Whether there is enough data for a previous period comparison (date range >= 14 days)
+    /// Previous period's daily message average (totalMessages / daysInPeriod).
+    /// Displayed alongside the current DailyAverage for direct comparison.
+    /// </summary>
+    public double PreviousDailyAverage { get; init; }
+
+    /// <summary>
+    /// Whether there is enough data for a previous period comparison (14+ days of data exist relative to endDate)
     /// </summary>
     public bool HasPreviousPeriod { get; init; }
 }

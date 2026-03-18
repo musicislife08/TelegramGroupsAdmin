@@ -10,9 +10,11 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Constants;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services.Media;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -75,8 +77,19 @@ public class ContentDetectionOrchestrator
                 photoFullPath = Path.Combine(appOptions.Value.DataPath, "media", photoLocalPath);
                 if (!File.Exists(photoFullPath))
                 {
-                    _logger.LogWarning("Photo file not found for spam detection: {PhotoPath}", photoFullPath);
+                    _logger.LogDebug("Photo file not found for spam detection: {PhotoPath}", photoFullPath);
                     photoFullPath = null; // Reset if file doesn't exist
+
+                    // Queue missing photo for re-download (non-fatal if enqueue fails)
+                    try
+                    {
+                        var refetchQueue = scope.ServiceProvider.GetRequiredService<IMediaRefetchQueueService>();
+                        await refetchQueue.EnqueueMediaAsync(message.MessageId, message.Chat.Id, MediaType.Photo);
+                    }
+                    catch (Exception refetchEx)
+                    {
+                        _logger.LogDebug(refetchEx, "Failed to enqueue photo refetch for message {MessageId}", message.MessageId);
+                    }
                 }
             }
 

@@ -4,7 +4,6 @@
 @inject IStopWordRecommendationService RecommendationService
 @inject IStopWordsRepository StopWordsRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JsRuntime
 @inject ILogger<StopWordRecommendations> Logger
 
 <MudGrid>
@@ -86,9 +85,9 @@
                     <MudStack Spacing="0">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Analysis Period</MudText>
                         <MudText Typo="Typo.body2">
-                            <span class="local-timestamp" data-utc="@_currentBatch.AnalysisPeriodStart.ToString("o")">@_currentBatch.AnalysisPeriodStart.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <LocalTimestamp Value="@_currentBatch.AnalysisPeriodStart" Format="MMM d, yyyy" />
                             to
-                            <span class="local-timestamp" data-utc="@_currentBatch.AnalysisPeriodEnd.ToString("o")">@_currentBatch.AnalysisPeriodEnd.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            <LocalTimestamp Value="@_currentBatch.AnalysisPeriodEnd" Format="MMM d, yyyy" />
                         </MudText>
                     </MudStack>
                     @if (_currentBatch.CurrentAverageExecutionTimeMs.HasValue)
@@ -262,30 +261,15 @@
     [Parameter]
     public EventCallback OnStopWordsChanged { get; set; }
 
+    [CascadingParameter]
+    private TimeZoneInfo? UserTimeZone { get; set; }
+
     private StopWordRecommendationBatch? _currentBatch;
     private DateTime? _analysisPeriodStart = DateTime.Now.AddDays(-30);
     private bool _isGenerating;
     private bool _isApplying;
     private string _generationMessage = "";
     private Severity _generationMessageSeverity = Severity.Info;
-    private string _userTimeZone = "UTC";
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            // Get user's timezone from browser (must be called after render for JS interop)
-            try
-            {
-                _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Failed to detect user timezone, defaulting to UTC");
-                _userTimeZone = "UTC";
-            }
-        }
-    }
 
     private async Task GenerateRecommendationsAsync()
     {
@@ -301,7 +285,7 @@
         try
         {
             // Convert date picker value (unspecified kind) to UTC based on user's timezone
-            var userTimeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(_userTimeZone);
+            var userTimeZoneInfo = UserTimeZone ?? TimeZoneInfo.Utc;
             var dateInUserTz = DateTime.SpecifyKind(_analysisPeriodStart.Value, DateTimeKind.Unspecified);
             var utcDate = TimeZoneInfo.ConvertTimeToUtc(dateInUserTz, userTimeZoneInfo);
             var since = new DateTimeOffset(utcDate, TimeSpan.Zero);

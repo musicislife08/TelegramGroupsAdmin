@@ -118,64 +118,44 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <summary>
-    /// Upsert (insert or update) Telegram user record.
+    /// Upsert (insert or update) Telegram user record using atomic PostgreSQL ON CONFLICT DO UPDATE.
     /// Used by FetchUserPhotoJob and message processing to maintain user data.
+    /// NOTE: IsTrusted and BotDmEnabled are never updated on conflict — only set by dedicated methods.
+    /// NOTE: IsActive is hardcoded to true on conflict — sending a message definitively makes user active.
     /// </summary>
     public async Task UpsertAsync(UiModels.TelegramUser user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var existing = await context.TelegramUsers
-            .FirstOrDefaultAsync(u => u.TelegramUserId == user.TelegramUserId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var isTrusted = TelegramConstants.IsSystemUser(user.TelegramUserId);
 
-        if (existing != null)
-        {
-            // Update existing record
-            existing.Username = user.Username;
-            existing.FirstName = user.FirstName;
-            existing.LastName = user.LastName;
-            existing.UserPhotoPath = user.UserPhotoPath;
-            existing.PhotoHash = user.PhotoHash;
-            // NOTE: IsTrusted is NOT updated here - it's only set via TrustUserAsync/UntrustUserAsync
-            // to prevent message processing from clearing trust status set by admin/auto-trust
-            // NOTE: BotDmEnabled is NOT updated here - it's only set via EnableBotDmAsync/DisableBotDmAsync
-            // to prevent message processing from resetting DM status after user completes /start
-            // NOTE: IsActive IS updated here - sending a message definitively makes user active
-            // (unlike IsTrusted which is admin-controlled, IsActive is behavior-driven)
-            existing.IsActive = true;
-            existing.LastSeenAt = user.LastSeenAt;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
+        await context.Database.ExecuteSqlAsync($"""
+            INSERT INTO telegram_users (
+                telegram_user_id, username, first_name, last_name,
+                user_photo_path, photo_hash, is_active, is_trusted,
+                is_bot, is_banned, bot_dm_enabled,
+                first_seen_at, last_seen_at, created_at, updated_at
+            ) VALUES (
+                {user.TelegramUserId}, {user.Username}, {user.FirstName}, {user.LastName},
+                {user.UserPhotoPath}, {user.PhotoHash}, {user.IsActive}, {isTrusted},
+                {user.IsBot}, {false}, {false},
+                {now}, {user.LastSeenAt}, {now}, {now}
+            )
+            ON CONFLICT (telegram_user_id) DO UPDATE SET
+                username = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                user_photo_path = EXCLUDED.user_photo_path,
+                photo_hash = EXCLUDED.photo_hash,
+                is_active = true,
+                last_seen_at = EXCLUDED.last_seen_at,
+                updated_at = {now}
+            """, cancellationToken);
 
-            _logger.LogDebug(
-                "Updated Telegram user {TelegramUserId} (@{Username})",
-                user.TelegramUserId,
-                user.Username);
-        }
-        else
-        {
-            // Insert new record
-            var entity = user.ToDto();
-            entity.CreatedAt = DateTimeOffset.UtcNow;
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
-
-            // Always trust Telegram system accounts (channel posts, anonymous admin posts, etc.)
-            if (TelegramConstants.IsSystemUser(user.TelegramUserId))
-            {
-                entity.IsTrusted = true;
-                _logger.LogInformation(
-                    "Created Telegram system account {User} with automatic trust",
-                    user.ToLogInfo());
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "Created Telegram user {User}",
-                    user.ToLogDebug());
-            }
-
-            context.TelegramUsers.Add(entity);
-        }
-
-        await context.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Upserted Telegram user {TelegramUserId} (@{Username})",
+            user.TelegramUserId,
+            user.Username);
     }
 
     /// <summary>

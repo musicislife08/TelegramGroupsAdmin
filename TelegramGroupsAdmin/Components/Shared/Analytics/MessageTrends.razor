@@ -7,7 +7,6 @@
 @inject IManagedChatsRepository ChatsRepository
 @inject IAnalyticsRepository AnalyticsRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JsRuntime
 
 <MudStack Spacing="4">
     @* Chat Filter *@
@@ -72,7 +71,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.Message" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Primary" />
                             <MudText Typo="Typo.h3">@_trendsData.TotalMessages</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Total Messages</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
                                 <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)" Variant="Variant.Text">
                                     @FormatGrowth(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)
@@ -90,11 +89,11 @@
                             <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
                             <MudText Typo="Typo.h3">@_trendsData.DailyAverage.ToString("F0")</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Daily Average</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
-                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)" Variant="Variant.Text">
-                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)
-                                </MudChip>
+                                <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                                    prev: @_trendsData.WeekOverWeekGrowth.PreviousDailyAverage.ToString("F1")/day
+                                </MudText>
                             }
                         </MudStack>
                     </MudCardContent>
@@ -108,7 +107,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.People" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Info" />
                             <MudText Typo="Typo.h3">@_trendsData.UniqueUsers</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Active Users</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
                                 <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.UserGrowthPercent)" Variant="Variant.Text">
                                     @FormatGrowth(_trendsData.WeekOverWeekGrowth.UserGrowthPercent)
@@ -126,7 +125,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.Shield" Size="MudBlazor.Size.Large" Color="@(_trendsData.SpamPercentage > 5 ? MudBlazor.Color.Error : MudBlazor.Color.Success)" />
                             <MudText Typo="Typo.h3">@_trendsData.SpamPercentage.ToString("F1")%</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Spam Rate</MudText>
-                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
                                 <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(-_trendsData.WeekOverWeekGrowth.SpamGrowthPercent)" Variant="Variant.Text">
                                     @FormatGrowth(_trendsData.WeekOverWeekGrowth.SpamGrowthPercent)
@@ -364,9 +363,10 @@
     private bool _dataLoaded;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
-    private string _userTimeZone = "UTC"; // Default to UTC until detected
+    private string _currentView = "30d"; // "7d", "30d", or "all"
 
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+    [CascadingParameter] private TimeZoneInfo? UserTimeZone { get; set; }
 
     private List<ManagedChatRecord> _accessibleChats = [];
     private long _selectedChatId;
@@ -428,17 +428,6 @@
     {
         if (WebUser is null) return;
 
-        // Detect user's timezone from browser
-        try
-        {
-            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Failed to detect timezone, using UTC: {ex.Message}");
-            _userTimeZone = "UTC";
-        }
-
         // Load accessible chats based on permissions
         _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
             WebUser.Id,
@@ -450,6 +439,7 @@
 
     private async Task LoadLast7Days()
     {
+        _currentView = "7d";
         _endDate = DateTimeOffset.UtcNow;
         _startDate = _endDate.Value.AddDays(-7);
         await LoadData();
@@ -457,6 +447,7 @@
 
     private async Task LoadLast30Days()
     {
+        _currentView = "30d";
         _endDate = DateTimeOffset.UtcNow;
         _startDate = _endDate.Value.AddDays(-30);
         await LoadData();
@@ -464,6 +455,7 @@
 
     private async Task LoadAllTime()
     {
+        _currentView = "all";
         _endDate = DateTimeOffset.UtcNow;
         _startDate = DateTimeOffset.MinValue;
         await LoadData();
@@ -488,16 +480,18 @@
 
         try
         {
+            var timeZoneId = (UserTimeZone ?? TimeZoneInfo.Utc).Id;
+
             // Load message trends and spam trend comparison in parallel
             var trendsTask = MessageStatsService.GetMessageTrendsAsync(
                 GetSelectedChatIds(),
                 _startDate.Value,
                 _endDate.Value,
-                _userTimeZone,
+                timeZoneId,
                 CancellationToken.None);
 
             var spamTrendsTask = AnalyticsRepository.GetSpamTrendComparisonAsync(
-                _userTimeZone,
+                timeZoneId,
                 CancellationToken.None);
 
             await Task.WhenAll(trendsTask, spamTrendsTask);

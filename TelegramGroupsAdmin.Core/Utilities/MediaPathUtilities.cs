@@ -14,7 +14,7 @@ public static class MediaPathUtilities
     public static string GetMediaSubdirectory(int mediaType)
     {
         // MediaType enum values:
-        // None = 0, Animation = 1, Video = 2, Audio = 3, Voice = 4, Sticker = 5, VideoNote = 6, Document = 7
+        // None = 0, Animation = 1, Video = 2, Audio = 3, Voice = 4, Sticker = 5, VideoNote = 6, Document = 7, Photo = 8
         return mediaType switch
         {
             1 => "video",    // Animation
@@ -24,6 +24,7 @@ public static class MediaPathUtilities
             4 => "audio",    // Voice
             5 => "sticker",  // Sticker
             7 => "document", // Document
+            8 => "photo",    // Photo
             _ => "other"     // None or unknown
         };
     }

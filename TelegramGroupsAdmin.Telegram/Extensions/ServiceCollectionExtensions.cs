@@ -76,6 +76,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITelegramImageService, TelegramImageService>();
             services.AddScoped<TelegramPhotoService>();
             services.AddScoped<TelegramMediaService>();
+            services.AddScoped<ITelegramMediaService>(sp => sp.GetRequiredService<TelegramMediaService>());
 
             // Message processing handlers (REFACTOR-1: extracted from MessageProcessingService)
             services.AddScoped<Handlers.MediaProcessingHandler>();

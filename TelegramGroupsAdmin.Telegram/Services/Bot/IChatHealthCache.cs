@@ -48,4 +48,16 @@ public interface IChatHealthCache
     /// Get all cached health statuses (for UI display).
     /// </summary>
     IReadOnlyDictionary<long, ChatHealthStatus> GetAllCachedHealth();
+
+    /// <summary>
+    /// Increment the consecutive failure count for a chat and return the new count.
+    /// Thread-safe. Used by ChatHealthRefreshOrchestrator for the 3-strike MarkInactive rule.
+    /// </summary>
+    int IncrementFailureCount(long chatId);
+
+    /// <summary>
+    /// Reset the consecutive failure count for a chat to zero.
+    /// Called on successful reachability check or after MarkInactiveAsync is invoked.
+    /// </summary>
+    void ResetFailureCount(long chatId);
 }

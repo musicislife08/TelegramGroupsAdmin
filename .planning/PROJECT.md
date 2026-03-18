@@ -1,63 +1,78 @@
-# Dead Code Removal (Issue #396)
+# TelegramGroupsAdmin
 
 ## What This Is
 
-A comprehensive dead code cleanup of the TelegramGroupsAdmin solution. 62 confirmed dead items were identified by a multi-agent audit with cross-project verification, then removed across 5 phases.
+A Telegram group administration bot with Blazor Server UI, managing content detection, moderation, user tracking, analytics, and background jobs for Telegram groups. Deployed as a single-instance homelab application with PostgreSQL backend.
 
 ## Core Value
 
-Reduce codebase surface area by removing all confirmed dead code, making the solution easier to maintain and navigate without changing any runtime behavior.
+Reliable, automated Telegram group moderation with a responsive web UI for configuration and monitoring — correctness and operational simplicity above all.
+
+## Current Milestone: v1.1 Bug Fix Sweep
+
+**Goal:** Fix 7 known bugs spanning analytics, health checks, database access patterns, startup warnings, media handling, race conditions, and timezone rendering.
+
+**Target fixes:**
+- #384 — Analytics overview card percentages don't update with time range selection
+- #333 — Health orchestrator missing wiring (CheckHealthAsync and MarkInactiveAsync unused)
+- #326 — Migrate remaining repositories from scoped AppDbContext to IDbContextFactory
+- #309 — Address three spurious warnings in startup/runtime logs
+- #262 — Download media when marking spam to populate image_training_samples
+- #204 — Potential race condition in TelegramUserRepository.UpsertAsync
+- #203 — Timezone detection JS interop fails during Blazor prerendering
 
 ## Requirements
 
 ### Validated
 
-- ✓ Existing Telegram bot polling, Blazor UI, content detection, background jobs, and all runtime features remain fully functional after cleanup
+- ✓ Existing Telegram bot polling, Blazor UI, content detection, background jobs, and all runtime features remain fully functional — v1.0
 - ✓ ~30 dead files removed across Core, Configuration, Data, Telegram, ContentDetection, and main app projects — v1.0
-- ✓ 2 dead DI registrations removed (IMediaNotificationService, AddHttpClient) — v1.0
 - ✓ 22 dead methods removed from live interfaces and their implementations — v1.0
-- ✓ 4 dead properties removed from ContentCheckRequest and ImageCheckRequest — v1.0
 - ✓ Dead enum value ScanResultType.Suspicious removed — v1.0
-- ✓ 2 stale comments fixed (misleading "Deprecated" and transition comment) — v1.0
 - ✓ Orphaned tests removed that only tested deleted code — v1.0
 
 ### Active
 
-(None — milestone complete)
+- [ ] Analytics overview card percentages update correctly when time range changes (#384)
+- [ ] Health orchestrator CheckHealthAsync and MarkInactiveAsync are wired up and functional (#333)
+- [ ] All repositories use IDbContextFactory instead of scoped AppDbContext (#326)
+- [ ] Three spurious startup/runtime warnings are resolved (#309)
+- [ ] Media is downloaded when marking spam to populate image_training_samples (#262)
+- [ ] TelegramUserRepository.UpsertAsync race condition is fixed (#204)
+- [ ] Timezone detection JS interop handles Blazor prerendering gracefully (#203)
 
 ### Out of Scope
 
-- IFileScanResultRepository.CleanupExpiredResultsAsync wiring — #398
-- IBlocklistSubscriptionsRepository.FindByUrlAsync wiring — #399
-- ContentCheckMetadata population — #400
-- FileScanQuotaModel computed properties investigation — #401
-- ConfigRecord.cs + WelcomeConfigMappings.cs design violation — #342
-- Enum columns stored as varchar instead of smallint — #403
+- IFileScanResultRepository.CleanupExpiredResultsAsync wiring — #398 (enhancement, not bug)
+- IBlocklistSubscriptionsRepository.FindByUrlAsync wiring — #399 (enhancement, not bug)
+- ContentCheckMetadata population — #400 (enhancement, not bug)
+- FileScanQuotaModel computed properties investigation — #401 (tech-debt, not bug)
+- ConfigRecord.cs + WelcomeConfigMappings.cs design violation — #342 (refactoring)
+- Enum columns stored as varchar instead of smallint — #403 (refactoring)
+- New features, enhancements, and refactoring — deferred to future milestones
 
 ## Context
 
 - Brownfield: mature codebase with established layered architecture (Data -> Core -> Telegram/ContentDetection -> Main)
-- Dead code was identified by 5 collaborative agents (4 hunters + 1 cross-project verifier) with 10.1% false positive rejection rate
-- All findings independently cross-verified against DI registration, Blazor @inject, Quartz job registration, and reflection-based usage
-- Shipped via PR #402 to develop, issue #396 closed
-- Net result: -636 lines of production/test code, 1747 unit tests passing
+- v1.0 dead code removal completed: -636 lines, 62 items removed, 1747 unit tests passing
+- These 7 bugs were identified during development and tracked as GitHub issues
+- #326 (IDbContextFactory) affects background services where scoped DbContext can cause disposed-context exceptions
+- #204 (race condition) is a data integrity risk in concurrent upsert scenarios
 
 ## Constraints
 
-- **Zero behavior change**: All removals were pure deletions — no functional changes
-- **Build must pass**: Solution compiled and all remaining tests passed after each phase
+- **Zero regression**: All fixes must preserve existing behavior — only fix the reported bug
+- **Build must pass**: Solution compiled and all tests pass after each phase
 - **Git workflow**: Feature branch off develop, PR to develop per project rules
-- **Single PR**: All cleanup in one branch/PR that closed #396
+- **Single instance**: Telegram Bot API enforces one active connection per bot token
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Remove all 62 items in one pass | Issue is well-verified, no partial cleanup needed | ✓ Good |
-| Delete orphaned tests with their dead code | Tests that only test dead code are themselves dead | ✓ Good |
-| Exclude 5 related issues | Those require wiring/design work, not just deletion | ✓ Good |
-| Auto-fix cascading build breaks | Dead method removal cascades to mock setups and set-sites | ✓ Good — caught 3 deviations |
-| Skip research phase | Issue #396 was already a complete verified manifest | ✓ Good — saved tokens without losing quality |
+| Bug-only milestone | Clear backlog of correctness issues before adding features | — Pending |
+| Skip research phase | All bugs are well-documented in GitHub issues, no domain research needed | — Pending |
+| Group by layer/domain | Bugs span DB, backend, frontend — group phases by affected layer | — Pending |
 
 ---
-*Last updated: 2026-03-17 after v1.0 milestone*
+*Last updated: 2026-03-16 after v1.1 milestone start*

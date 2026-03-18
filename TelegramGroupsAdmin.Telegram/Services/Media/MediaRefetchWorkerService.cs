@@ -117,15 +117,19 @@ public class MediaRefetchWorkerService : BackgroundService
             return;
         }
 
-        if (string.IsNullOrEmpty(message.MediaFileId))
+        // Photos use PhotoFileId; all other media use MediaFileId
+        var isPhotoRefetch = request.MediaType == Models.MediaType.Photo;
+        var fileId = isPhotoRefetch ? message.PhotoFileId : message.MediaFileId;
+
+        if (string.IsNullOrEmpty(fileId))
         {
-            _logger.LogWarning("Message {MessageId} has no media_file_id", request.MessageId);
+            _logger.LogWarning("Message {MessageId} has no file_id for {MediaType}", request.MessageId, request.MediaType);
             return;
         }
 
         // Download media from Telegram
         var localPath = await mediaService.DownloadAndSaveMediaAsync(
-            message.MediaFileId,
+            fileId,
             request.MediaType!.Value,
             message.MediaFileName,
             message.Chat.Id,

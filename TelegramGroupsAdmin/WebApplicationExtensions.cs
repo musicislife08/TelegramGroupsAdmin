@@ -40,8 +40,6 @@ public static class WebApplicationExtensions
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
-
             // Serve static files from wwwroot
             // UseStaticFiles is needed for running in Production mode from source (e.g., Rider debugging)
             // MapStaticAssets (below) provides optimized delivery when running from published output

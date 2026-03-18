@@ -8,12 +8,12 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 
 public class PendingNotificationsRepository : IPendingNotificationsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private const int DefaultExpirationDays = 30;
 
-    public PendingNotificationsRepository(AppDbContext context)
+    public PendingNotificationsRepository(IDbContextFactory<AppDbContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task<PendingNotificationModel> AddPendingNotificationAsync(
@@ -23,6 +23,7 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
         DateTimeOffset? expiresAt = null,
         CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var record = new PendingNotificationRecordDto
         {
@@ -34,8 +35,8 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
             ExpiresAt = expiresAt ?? now.AddDays(DefaultExpirationDays)
         };
 
-        _context.PendingNotifications.Add(record);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.PendingNotifications.Add(record);
+        await context.SaveChangesAsync(cancellationToken);
 
         return record.ToModel();
     }
@@ -44,7 +45,8 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
         long telegramUserId,
         CancellationToken cancellationToken = default)
     {
-        var records = await _context.PendingNotifications
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var records = await context.PendingNotifications
             .Where(pn => pn.TelegramUserId == telegramUserId)
             .OrderBy(pn => pn.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -56,13 +58,14 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
         long notificationId,
         CancellationToken cancellationToken = default)
     {
-        var record = await _context.PendingNotifications
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var record = await context.PendingNotifications
             .FirstOrDefaultAsync(pn => pn.Id == notificationId, cancellationToken);
 
         if (record != null)
         {
-            _context.PendingNotifications.Remove(record);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.PendingNotifications.Remove(record);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -70,13 +73,14 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
         long notificationId,
         CancellationToken cancellationToken = default)
     {
-        var record = await _context.PendingNotifications
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var record = await context.PendingNotifications
             .FirstOrDefaultAsync(pn => pn.Id == notificationId, cancellationToken);
 
         if (record != null)
         {
             record.RetryCount++;
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -84,29 +88,31 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
         long telegramUserId,
         CancellationToken cancellationToken = default)
     {
-        var records = await _context.PendingNotifications
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var records = await context.PendingNotifications
             .Where(pn => pn.TelegramUserId == telegramUserId)
             .ToListAsync(cancellationToken);
 
         if (records.Any())
         {
-            _context.PendingNotifications.RemoveRange(records);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.PendingNotifications.RemoveRange(records);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
     public async Task<int> DeleteExpiredNotificationsAsync(
         CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var expiredRecords = await _context.PendingNotifications
+        var expiredRecords = await context.PendingNotifications
             .Where(pn => pn.ExpiresAt <= now)
             .ToListAsync(cancellationToken);
 
         if (expiredRecords.Any())
         {
-            _context.PendingNotifications.RemoveRange(expiredRecords);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.PendingNotifications.RemoveRange(expiredRecords);
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         return expiredRecords.Count;
@@ -116,7 +122,8 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
         long telegramUserId,
         CancellationToken cancellationToken = default)
     {
-        return await _context.PendingNotifications
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.PendingNotifications
             .Where(pn => pn.TelegramUserId == telegramUserId)
             .CountAsync(cancellationToken);
     }

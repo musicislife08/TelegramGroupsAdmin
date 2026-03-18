@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: completed
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-17T00:54:16.200Z"
-last_activity: 2026-03-16 — Completed 05-02-PLAN.md (dead properties, enum, and orphaned tests removal)
+milestone: v1.1
+milestone_name: Bug Fix Sweep
+status: planning
+stopped_at: Completed 08.1-01-PLAN.md
+last_updated: "2026-03-18T02:41:09.725Z"
+last_activity: 2026-03-16 — Roadmap created for v1.1 Bug Fix Sweep
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 8
-  completed_plans: 8
-  percent: 87
+  total_phases: 9
+  completed_phases: 4
+  total_plans: 9
+  completed_plans: 9
+  percent: 0
 ---
 
 # Project State
@@ -20,24 +20,24 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-03-16)
 
-**Core value:** Remove all 62 confirmed dead code items without changing runtime behavior
-**Current focus:** Phase 5 — ContentDetection Project
+**Core value:** Reliable, automated Telegram group moderation with a responsive web UI — correctness and operational simplicity above all
+**Current focus:** Phase 6 — Data Layer Fixes (ready to plan)
 
 ## Current Position
 
-Phase: 5 of 5 (ContentDetection Project)
-Plan: 2 of 2 in current phase
-Status: Plan 05-02 complete
-Last activity: 2026-03-16 — Completed 05-02-PLAN.md (dead properties, enum, and orphaned tests removal)
+Phase: 6 of 8 (Data Layer Fixes)
+Plan: —
+Status: Ready to plan
+Last activity: 2026-03-16 — Roadmap created for v1.1 Bug Fix Sweep
 
-Progress: [█████████░] 87%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
 - Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Average duration: —
+- Total execution time: —
 
 **By Phase:**
 
@@ -45,36 +45,34 @@ Progress: [█████████░] 87%
 |-------|-------|-------|----------|
 | - | - | - | - |
 
-**Recent Trend:**
-- Last 5 plans: -
-- Trend: -
-
 *Updated after each plan completion*
-| Phase 01 P01 | 2min | 2 tasks | 6 files |
-| Phase 02 P01 | 1min | 2 tasks | 7 files |
-| Phase 03 P01 | 1min | 1 tasks | 11 files |
-| Phase 03 P02 | 5min | 2 tasks | 15 files |
-| Phase 04 P01 | 4min | 2 tasks | 16 files |
-| Phase 05 P02 | 3min | 1 tasks | 7 files |
-| Phase 05 P01 | 5min | 2 tasks | 11 files |
+| Phase 08-frontend-fixes P01 | 8m | 2 tasks | 6 files |
+| Phase 08-frontend-fixes P02 | 7m | 2 tasks | 6 files |
+| Phase 08-frontend-fixes P04 | 2m | 1 tasks | 1 files |
+| Phase 08-frontend-fixes P03 | 15m | 1 tasks | 1 files |
+| Phase 08.1-01 P01 | 4m | 2 tasks | 12 files |
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+- [Init]: Bug-only milestone — clear backlog of correctness issues before adding features
+- [Init]: Skip research phase — all bugs are well-documented in GitHub issues
+- [Roadmap]: 7 bugs grouped into 3 phases by layer (data, backend, frontend) — each phase delivers one coherent layer of correctness
+- [Phase 08-frontend-fixes]: Growth queries run independently from startDate filter — separate DB queries for growth windows, not in-memory filtering of view-bounded data
+- [Phase 08-frontend-fixes]: DailyAverageGrowthPercent = (currentAvg - previousAvg) / previousAvg * 100; architecturally independent from MessageGrowthPercent despite algebraic equivalence in symmetric 7-day window
+- [Phase 08-frontend-fixes]: Timezone detected once in MainLayout.OnAfterRenderAsync(firstRender); cascaded as TimeZoneInfo? to all children — eliminates JSException during prerender and duplicate per-component detection
+- [Phase 08-frontend-fixes]: LocalTimestamp uses TimeZoneInfo.ConvertTime() in C# — removed data-utc attribute, local-timestamp CSS class, and JS DOM overwrite pattern entirely
+- [Phase 08-frontend-fixes]: Use Page.Console event (not Page.PageError) for timezone JSException detection — Console catches all logged errors including Blazor interop warnings
+- [Phase 08-frontend-fixes]: Task.Delay(1000) after NetworkIdle to capture async JS errors that fire when SignalR circuit connects and OnAfterRenderAsync runs
+- [Phase 08-frontend-fixes]: 08-03: Based test branch on fix/08-02-timezone-cascade-fix — 08-01/08-02 production changes not yet merged to develop when tests were written
+- [Phase 08.1-01]: Fire-and-forget notification calls use CancellationToken.None — notifications complete even when parent health check is cancelled
+- [Phase 08.1-01]: LocalTimestamp renders em-dash during prerender (UserTimeZone null) to prevent UTC flash before local time resolves
+- [Phase 08.1-01]: CascadingParameters are private — they receive data from parents, not consumed by external callers
 
-- [Init]: Remove all 62 items in one pass — issue is well-verified, no partial cleanup needed
-- [Init]: Delete orphaned tests with their dead code — tests that only test dead code are themselves dead
-- [Init]: Exclude 5 related issues (#398, #399, #400, #401, #342) — those require wiring/design work, not just deletion
-- [Phase 01]: Kept documentary references to TelegramOptions in comments since they explain architectural history, not code dependencies
-- [Phase 02]: No code changes beyond file deletion -- repos already construct models inline
-- [Phase 03]: No code changes beyond file deletion and one DI line removal -- all 10 files had zero references
-- [Phase 03]: Removed unused ITelegramUserRepository/IManagedChatsRepository using from TelegramLoggingExtensions after async extension blocks deleted
-- [Phase 04]: Deleted 4 orphaned component test files alongside dead Razor components -- tests that only test dead code are themselves dead
-- [Phase 05]: Kept Welcome namespace import in test file because Edge Cases region still uses CasConfig
-- [Phase 05]: Kept using imports in repositories since other ContentDetection.Models types still in use after dead method removal
+### Roadmap Evolution
+
+- Phase 08.1 inserted after Phase 8: Fix review-all critical and suggestions (URGENT)
 
 ### Pending Todos
 
@@ -86,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-16T23:52:58.220Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-03-18T02:40:20.337Z
+Stopped at: Completed 08.1-01-PLAN.md
 Resume file: None

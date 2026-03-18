@@ -99,7 +99,7 @@ public class ImageTrainingSamplesRepository : IImageTrainingSamplesRepository
 
             if (!File.Exists(message.MediaLocalPath))
             {
-                _logger.LogWarning("Photo file not found at {PhotoPath} for message {MessageId}, cannot save training sample", message.MediaLocalPath, messageId);
+                _logger.LogDebug("Photo file not found at {PhotoPath} for message {MessageId}, cannot save training sample", message.MediaLocalPath, messageId);
                 return false;
             }
 
