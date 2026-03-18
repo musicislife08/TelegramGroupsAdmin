@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Analytics;
 
@@ -37,8 +38,8 @@ public class TimezonePreRenderTests : SharedAuthenticatedTestBase
         await NavigateToAsync("/");
         await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Wait briefly for any delayed errors that fire asynchronously when the circuit connects
-        await Task.Delay(1000);
+        // Wait for Blazor circuit to connect and render content (replaces brittle Task.Delay)
+        await Expect(Page.Locator(".mud-main-content")).ToBeVisibleAsync();
 
         // Assert — no JSException or JavaScript interop errors in console
         var jsInteropErrors = consoleErrors
@@ -74,8 +75,8 @@ public class TimezonePreRenderTests : SharedAuthenticatedTestBase
         await Page.GetByRole(AriaRole.Tab, new() { Name = "Message Trends" }).ClickAsync();
         await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Wait briefly for any delayed errors that fire asynchronously when the circuit connects
-        await Task.Delay(1000);
+        // Wait for Blazor circuit to connect and render analytics content (replaces brittle Task.Delay)
+        await Expect(Page.Locator(".mud-main-content")).ToBeVisibleAsync();
 
         // Assert — no JSException or JavaScript interop errors in console
         var jsInteropErrors = consoleErrors

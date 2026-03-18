@@ -8,6 +8,7 @@
 @inject INotificationStateService NotificationState
 @inject IHostEnvironment HostEnvironment
 @inject IJSRuntime JsRuntime
+@inject ILogger<MainLayout> Logger
 
 <MudThemeProvider Theme="@_currentTheme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -132,8 +133,9 @@
                 var tzId = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
                 _userTimeZone = TimeZoneInfo.FindSystemTimeZoneById(tzId);
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.LogWarning(ex, "Failed to detect timezone, falling back to UTC");
                 _userTimeZone = TimeZoneInfo.Utc;
             }
             StateHasChanged();

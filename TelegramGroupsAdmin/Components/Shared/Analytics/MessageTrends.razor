@@ -366,7 +366,7 @@
     private string _currentView = "30d"; // "7d", "30d", or "all"
 
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
-    [CascadingParameter] public TimeZoneInfo? UserTimeZone { get; set; }
+    [CascadingParameter] private TimeZoneInfo? UserTimeZone { get; set; }
 
     private List<ManagedChatRecord> _accessibleChats = [];
     private long _selectedChatId;

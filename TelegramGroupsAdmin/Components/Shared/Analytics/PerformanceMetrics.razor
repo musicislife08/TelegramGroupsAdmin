@@ -299,7 +299,7 @@
 
 @code {
     [Parameter] public List<long> SelectedChatIds { get; set; } = [];
-    [CascadingParameter] public TimeZoneInfo? UserTimeZone { get; set; }
+    [CascadingParameter] private TimeZoneInfo? UserTimeZone { get; set; }
 
     private bool _loading = true;
     private bool _dataLoaded;

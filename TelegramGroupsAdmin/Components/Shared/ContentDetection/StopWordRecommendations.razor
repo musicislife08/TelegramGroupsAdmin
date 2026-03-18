@@ -262,7 +262,7 @@
     public EventCallback OnStopWordsChanged { get; set; }
 
     [CascadingParameter]
-    public TimeZoneInfo? UserTimeZone { get; set; }
+    private TimeZoneInfo? UserTimeZone { get; set; }
 
     private StopWordRecommendationBatch? _currentBatch;
     private DateTime? _analysisPeriodStart = DateTime.Now.AddDays(-30);

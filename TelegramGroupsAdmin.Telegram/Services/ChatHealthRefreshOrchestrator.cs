@@ -209,7 +209,7 @@ public class ChatHealthRefreshOrchestrator(
                     status: health.Status.ToString(),
                     isAdmin: health.IsAdmin,
                     warnings: health.Warnings,
-                    ct: cancellationToken);
+                    cancellationToken: CancellationToken.None);
             }
         }
         catch (OperationCanceledException cancelEx)
@@ -261,7 +261,7 @@ public class ChatHealthRefreshOrchestrator(
                     status: health.Status.ToString(),
                     isAdmin: health.IsAdmin,
                     warnings: health.Warnings,
-                    ct: cancellationToken);
+                    cancellationToken: CancellationToken.None);
             }
         }
 

@@ -247,7 +247,7 @@ public sealed class NotificationService : INotificationService
         string status,
         bool isAdmin,
         IReadOnlyList<string> warnings,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
         var builder = NotificationPayloadBuilder.Create("Chat Health Warning")
             .WithField("Chat", chatName)
@@ -263,7 +263,7 @@ public sealed class NotificationService : INotificationService
             });
         }
 
-        return SendToOwnersAsync(NotificationEventType.ChatHealthWarning, builder.Build(), ct);
+        return SendToOwnersAsync(NotificationEventType.ChatHealthWarning, builder.Build(), cancellationToken);
     }
 
     // ════════════════════════════════════════════════════════════════════════════

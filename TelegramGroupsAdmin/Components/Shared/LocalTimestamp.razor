@@ -1,9 +1,12 @@
-@{
-    var displayTime = UserTimeZone is not null
-        ? TimeZoneInfo.ConvertTime(Value, UserTimeZone)
-        : Value;
+@if (UserTimeZone is not null)
+{
+    var displayTime = TimeZoneInfo.ConvertTime(Value, UserTimeZone);
+    <span>@displayTime.ToString(Format)</span>
 }
-<span>@displayTime.ToString(Format)</span>
+else
+{
+    <span>&mdash;</span>
+}
 
 @code {
     [Parameter, EditorRequired]
@@ -13,5 +16,5 @@
     public string Format { get; set; } = "MMM d, yyyy h:mm tt";
 
     [CascadingParameter]
-    public TimeZoneInfo? UserTimeZone { get; set; }
+    private TimeZoneInfo? UserTimeZone { get; set; }
 }
