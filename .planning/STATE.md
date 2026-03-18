@@ -21,11 +21,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Reliable, automated Telegram group moderation with a responsive web UI — correctness and operational simplicity above all
-**Current focus:** v1.2 SaaS Hosting Readiness — Phase 1 ready to plan
+**Current focus:** v1.2 SaaS Hosting Readiness — Phase 9 ready to plan
 
 ## Current Position
 
-Phase: 1 of 3 (ClamAV Environment Variable Override)
+Phase: 9 of 11 (ClamAV Environment Variable Override)
 Plan: — (not yet planned)
 Status: Ready to plan
 Last activity: 2026-03-18 — Roadmap created, 16/16 v1.2 requirements mapped across 3 phases
@@ -58,11 +58,11 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Blockers/Concerns
 
-- [Phase 3]: Status endpoint JSON response schema needs alignment with user before implementation (fields and names not pinned in research). Minimum suggested: status, uptime_seconds, memory_working_set_mb, gc_gen0/1/2, thread pool stats.
-- [Phase 3]: TelegramBotPollingHost bot connection state surface not confirmed — if not easily accessible, endpoint returns "bot": "unknown".
+- [Phase 11]: Status endpoint JSON response schema needs alignment with user before implementation (fields and names not pinned in research). Minimum suggested: status, uptime_seconds, memory_working_set_mb, gc_gen0/1/2, thread pool stats.
+- [Phase 11]: TelegramBotPollingHost bot connection state surface not confirmed — if not easily accessible, endpoint returns "bot": "unknown".
 
 ## Session Continuity
 
 Last session: 2026-03-18
-Stopped at: Roadmap created — ready to plan Phase 1
+Stopped at: Roadmap created — ready to plan Phase 9
 Resume file: None

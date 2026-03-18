@@ -64,22 +64,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BOOT-01 | Phase 2 | Pending |
-| BOOT-02 | Phase 2 | Pending |
-| BOOT-03 | Phase 2 | Pending |
-| BOOT-04 | Phase 2 | Pending |
-| BOOT-05 | Phase 2 | Pending |
-| BOOT-06 | Phase 2 | Pending |
-| BOOT-07 | Phase 2 | Pending |
-| CLAM-01 | Phase 1 | Pending |
-| CLAM-02 | Phase 1 | Pending |
-| CLAM-03 | Phase 1 | Pending |
-| CLAM-04 | Phase 1 | Pending |
-| STAT-01 | Phase 3 | Pending |
-| STAT-02 | Phase 3 | Pending |
-| STAT-03 | Phase 3 | Pending |
-| STAT-04 | Phase 3 | Pending |
-| STAT-05 | Phase 3 | Pending |
+| BOOT-01 | Phase 10 | Pending |
+| BOOT-02 | Phase 10 | Pending |
+| BOOT-03 | Phase 10 | Pending |
+| BOOT-04 | Phase 10 | Pending |
+| BOOT-05 | Phase 10 | Pending |
+| BOOT-06 | Phase 10 | Pending |
+| BOOT-07 | Phase 10 | Pending |
+| CLAM-01 | Phase 9 | Pending |
+| CLAM-02 | Phase 9 | Pending |
+| CLAM-03 | Phase 9 | Pending |
+| CLAM-04 | Phase 9 | Pending |
+| STAT-01 | Phase 11 | Pending |
+| STAT-02 | Phase 11 | Pending |
+| STAT-03 | Phase 11 | Pending |
+| STAT-04 | Phase 11 | Pending |
+| STAT-05 | Phase 11 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 16 total
