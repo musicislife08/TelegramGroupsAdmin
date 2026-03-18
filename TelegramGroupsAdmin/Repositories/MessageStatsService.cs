@@ -395,21 +395,14 @@ public class MessageStatsService : IMessageStatsService
                 ? ((currentWeekSpamPct - previousWeekSpamPct) / previousWeekSpamPct * 100.0)
                 : 0;
 
-            // Daily average growth: (currentAvg - previousAvg) / previousAvg * 100
-            // currentAvg = currentWeekMessages / 7.0, previousAvg = previousWeekMessages / 7.0
-            // Simplifies to the same formula as messageGrowth but kept explicit for clarity
-            var currentDailyAvg = currentWeekMessages / 7.0;
             var previousDailyAvg = previousWeekMessages / 7.0;
-            var dailyAverageGrowth = previousDailyAvg > 0
-                ? ((currentDailyAvg - previousDailyAvg) / previousDailyAvg * 100.0)
-                : 0;
 
             weekOverWeekGrowth = new WeekOverWeekGrowth
             {
                 MessageGrowthPercent = messageGrowth,
                 UserGrowthPercent = userGrowth,
                 SpamGrowthPercent = spamGrowth,
-                DailyAverageGrowthPercent = dailyAverageGrowth,
+                PreviousDailyAverage = previousDailyAvg,
                 HasPreviousPeriod = true
             };
         }

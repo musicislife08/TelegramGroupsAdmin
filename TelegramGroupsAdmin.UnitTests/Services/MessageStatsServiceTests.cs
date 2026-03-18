@@ -216,28 +216,14 @@ public class MessageStatsServiceTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 4: DailyAverageGrowthPercent is independent from MessageGrowthPercent
+    // Test 4: PreviousDailyAverage is correctly computed from previous week data
     // ─────────────────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task GetMessageTrendsAsync_DailyAverageGrowthPercent_IsIndependentFromMessageGrowthPercent()
+    public async Task GetMessageTrendsAsync_PreviousDailyAverage_IsComputedFromPreviousWeek()
     {
-        // Arrange
-        // Previous week: 5 messages (5/7 daily avg ≈ 0.714)
-        // Current week: 10 messages (10/7 daily avg ≈ 1.429)
-        // MessageGrowthPercent = (10-5)/5 * 100 = 100%
-        // DailyAverageGrowthPercent = ((10/7 - 5/7) / (5/7)) * 100 = (5/7) / (5/7) * 100 = 100%
-        // In this symmetric case they are equal — let's use an asymmetric case
-        // We need a scenario where MessageGrowthPercent != DailyAverageGrowthPercent.
-        // Since both use the same 7-day window, the formula is proportional.
-        // DailyAverageGrowthPercent = (currentAvg - previousAvg) / previousAvg * 100
-        //                           = (currentMessages/7 - previousMessages/7) / (previousMessages/7) * 100
-        //                           = (currentMessages - previousMessages) / previousMessages * 100
-        //                           = MessageGrowthPercent  (always equal if same 7-day window)
-        //
-        // The key correctness requirement: DailyAverageGrowthPercent MUST be a separate property
-        // (not null, correctly computed), distinct from being a copy of MessageGrowthPercent in its source.
-        // The property must EXIST on the model and be populated.
+        // Arrange — 5 messages in previous week, 10 in current week
+        // PreviousDailyAverage = 5 / 7 ≈ 0.714
         SeedTwoWeeksOfMessages();
 
         var endDate = Now;
@@ -251,19 +237,14 @@ public class MessageStatsServiceTests
             timeZoneId: "UTC",
             cancellationToken: CancellationToken.None);
 
-        // Assert — DailyAverageGrowthPercent must exist and be correctly populated
+        // Assert
         Assert.That(result.WeekOverWeekGrowth, Is.Not.Null);
         var growth = result.WeekOverWeekGrowth!;
         Assert.That(growth.HasPreviousPeriod, Is.True);
 
-        // DailyAverageGrowthPercent must be a finite number (not NaN or infinity)
-        Assert.That(double.IsFinite(growth.DailyAverageGrowthPercent), Is.True,
-            "DailyAverageGrowthPercent must be a finite number");
-
-        // With 10 current week messages and 5 previous week messages:
-        // Expected DailyAverageGrowthPercent = (10/7 - 5/7) / (5/7) * 100 = 100%
-        Assert.That(growth.DailyAverageGrowthPercent, Is.EqualTo(100.0).Within(0.1),
-            "DailyAverageGrowthPercent should reflect current/previous week daily averages");
+        // PreviousDailyAverage = 5 messages / 7 days ≈ 0.714
+        Assert.That(growth.PreviousDailyAverage, Is.EqualTo(5.0 / 7.0).Within(0.01),
+            "PreviousDailyAverage should be previous week's messages divided by 7");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

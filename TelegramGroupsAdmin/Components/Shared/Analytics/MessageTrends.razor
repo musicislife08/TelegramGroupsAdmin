@@ -91,9 +91,9 @@
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Daily Average</MudText>
                             @if (_currentView != "all" && _trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
                             {
-                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.DailyAverageGrowthPercent)" Variant="Variant.Text">
-                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.DailyAverageGrowthPercent)
-                                </MudChip>
+                                <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                                    prev: @_trendsData.WeekOverWeekGrowth.PreviousDailyAverage.ToString("F1")/day
+                                </MudText>
                             }
                         </MudStack>
                     </MudCardContent>

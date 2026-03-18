@@ -137,7 +137,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                 first_seen_at, last_seen_at, created_at, updated_at
             ) VALUES (
                 {user.TelegramUserId}, {user.Username}, {user.FirstName}, {user.LastName},
-                {user.UserPhotoPath}, {user.PhotoHash}, {false}, {isTrusted},
+                {user.UserPhotoPath}, {user.PhotoHash}, {user.IsActive}, {isTrusted},
                 {user.IsBot}, {false}, {false},
                 {now}, {user.LastSeenAt}, {now}, {now}
             )
@@ -152,7 +152,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                 updated_at = {now}
             """, cancellationToken);
 
-        _logger.LogDebug(
+        _logger.LogInformation(
             "Upserted Telegram user {TelegramUserId} (@{Username})",
             user.TelegramUserId,
             user.Username);

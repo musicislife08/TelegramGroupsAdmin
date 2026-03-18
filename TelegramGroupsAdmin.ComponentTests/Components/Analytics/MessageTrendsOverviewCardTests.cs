@@ -100,19 +100,18 @@ public abstract class MessageTrendsTestContext : BunitContext
     }
 
     /// <summary>
-    /// Creates a WeekOverWeekGrowth record with HasPreviousPeriod = true and distinct
-    /// MessageGrowthPercent / DailyAverageGrowthPercent values for field differentiation tests.
+    /// Creates a WeekOverWeekGrowth record with HasPreviousPeriod = true.
     /// </summary>
     protected static WeekOverWeekGrowth GrowthWithPreviousPeriod(
         double messageGrowthPercent = 15.0,
-        double dailyAverageGrowthPercent = 25.0,
+        double previousDailyAverage = 7.1,
         double userGrowthPercent = 10.0,
         double spamGrowthPercent = 5.0) =>
         new()
         {
             HasPreviousPeriod = true,
             MessageGrowthPercent = messageGrowthPercent,
-            DailyAverageGrowthPercent = dailyAverageGrowthPercent,
+            PreviousDailyAverage = previousDailyAverage,
             UserGrowthPercent = userGrowthPercent,
             SpamGrowthPercent = spamGrowthPercent
         };
@@ -125,7 +124,7 @@ public abstract class MessageTrendsTestContext : BunitContext
 /// - Chips show on 7-day and 30-day views when HasPreviousPeriod is true
 /// - Chips are hidden on All Time view regardless of HasPreviousPeriod
 /// - Chips are hidden when HasPreviousPeriod is false
-/// - The Daily Average card uses DailyAverageGrowthPercent (not MessageGrowthPercent)
+/// - The Daily Average card shows previous period's daily average (not a growth percentage)
 ///
 /// These tests close the FRONT-01 gap identified in 08-VERIFICATION.md.
 /// </summary>
@@ -200,19 +199,17 @@ public class MessageTrendsOverviewCardTests : MessageTrendsTestContext
         var markup = cut.Markup;
         // The chip arrows should not be present since All Time hides growth chips entirely
         Assert.That(markup, Does.Not.Contain("↑ 15.0%"), "Expected message growth chip to be hidden on All Time view");
-        Assert.That(markup, Does.Not.Contain("↑ 25.0%"), "Expected daily average growth chip to be hidden on All Time view");
+        Assert.That(markup, Does.Not.Contain("prev:"), "Expected previous daily average to be hidden on All Time view");
         Assert.That(markup, Does.Not.Contain("↑ 10.0%"), "Expected user growth chip to be hidden on All Time view");
     }
 
     [Test]
-    public void DailyAverageCard_UsesDailyAverageGrowthPercent()
+    public void DailyAverageCard_ShowsPreviousDailyAverage()
     {
-        // Arrange — MessageGrowthPercent = 10.0%, DailyAverageGrowthPercent = 25.0%
-        // If the bug were present, Daily Average card would show "↑ 10.0%" (MessageGrowthPercent)
-        // With the fix, it shows "↑ 25.0%" (DailyAverageGrowthPercent)
+        // Arrange — PreviousDailyAverage = 7.1 msgs/day
+        // The Daily Average card should show "prev: 7.1/day" instead of a growth chip
         ConfigureMocks(growth: GrowthWithPreviousPeriod(
-            messageGrowthPercent: 10.0,
-            dailyAverageGrowthPercent: 25.0));
+            previousDailyAverage: 7.1));
         var cut = Render<MessageTrends>();
 
         // Wait for the initial 30d load to complete
@@ -220,9 +217,9 @@ public class MessageTrendsOverviewCardTests : MessageTrendsTestContext
 
         var markup = cut.Markup;
 
-        // Assert — "↑ 25.0%" must appear (DailyAverageGrowthPercent)
-        Assert.That(markup, Does.Contain("↑ 25.0%"),
-            "Expected Daily Average card to display DailyAverageGrowthPercent (25.0%), not MessageGrowthPercent (10.0%)");
+        // Assert — previous daily average value must appear
+        Assert.That(markup, Does.Contain("prev: 7.1/day"),
+            "Expected Daily Average card to display previous period's daily average");
     }
 
     [Test]
@@ -233,7 +230,7 @@ public class MessageTrendsOverviewCardTests : MessageTrendsTestContext
         {
             HasPreviousPeriod = false,
             MessageGrowthPercent = 15.0,
-            DailyAverageGrowthPercent = 25.0,
+            PreviousDailyAverage = 7.1,
             UserGrowthPercent = 10.0,
             SpamGrowthPercent = 5.0
         });
@@ -247,8 +244,8 @@ public class MessageTrendsOverviewCardTests : MessageTrendsTestContext
         var markup = cut.Markup;
         Assert.That(markup, Does.Not.Contain("↑ 15.0%"),
             "Expected growth chips to be hidden when HasPreviousPeriod is false");
-        Assert.That(markup, Does.Not.Contain("↑ 25.0%"),
-            "Expected growth chips to be hidden when HasPreviousPeriod is false");
+        Assert.That(markup, Does.Not.Contain("prev:"),
+            "Expected previous daily average to be hidden when HasPreviousPeriod is false");
     }
 
     [Test]
