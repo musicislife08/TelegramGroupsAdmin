@@ -169,4 +169,4 @@ Phases execute in numeric order: 6 → 7 → 8
 | 6. Data Layer Fixes | v1.1 | 0/2 | Not started | - |
 | 7. Backend Service Fixes | v1.1 | 2/2 | Complete | 2026-03-17 |
 | 8. Frontend Fixes | 4/4 | Complete   | 2026-03-17 | - |
-| 08.1. Fix review-all findings | 1/1 | Complete   | 2026-03-18 | - |
+| 08.1. Fix review-all findings | 1/1 | Complete    | 2026-03-18 | - |
