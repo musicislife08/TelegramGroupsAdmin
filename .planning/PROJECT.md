@@ -27,7 +27,14 @@ Reliable, automated Telegram group moderation with a responsive web UI for confi
 
 ### Active
 
-(None — planning next milestone)
+## Current Milestone: v1.2 SaaS Hosting Readiness
+
+**Goal:** Make TGA deployable as a managed instance by an external hosting orchestrator (TGA SaaS) without adding SaaS-specific code to the open-source codebase.
+
+**Target features:**
+- Headless owner account bootstrapping via CLI flag (`--bootstrap-owner`)
+- ClamAV connection override via environment variables (shared daemon support)
+- Lightweight runtime status endpoint for hosting provider monitoring (API key gated)
 
 ### Out of Scope
 
@@ -37,6 +44,9 @@ Reliable, automated Telegram group moderation with a responsive web UI for confi
 - FileScanQuotaModel computed properties investigation — #401 (tech-debt, not bug)
 - ConfigRecord.cs + WelcomeConfigMappings.cs design violation — #342 (refactoring)
 - Enum columns stored as varchar instead of smallint — #403 (refactoring)
+- App-level monitoring hooks, billing integration, plan enforcement — hosting provider doesn't need app internals
+- Distributed systems patterns (Redis, RabbitMQ, S3) — singleton architecture by design
+- OTEL/Prometheus changes — already conditional on env vars, no work needed
 
 ## Context
 
@@ -47,6 +57,11 @@ Reliable, automated Telegram group moderation with a responsive web UI for confi
 - UpsertAsync uses atomic PostgreSQL ON CONFLICT DO UPDATE
 - Timezone detection centralized in MainLayout cascade
 - Analytics growth metrics decoupled from date range selection
+- TGA SaaS (separate project) will orchestrate TGA instances on Kubernetes — TGA itself remains open-source and unaware of SaaS
+- ClamAV currently configured via DB only (Host/Port in file_scanning_config JSONB); needs env var override for shared daemon
+- OTEL/Prometheus already conditional on OTEL_EXPORTER_OTLP_ENDPOINT env var — no changes needed
+- Existing CLI flags: --migrate-only, --backup, --restore — bootstrap-owner fits this pattern
+- Existing health endpoints: /healthz/live (liveness), /healthz/ready (readiness + DB check)
 
 ## Constraints
 
@@ -65,6 +80,10 @@ Reliable, automated Telegram group moderation with a responsive web UI for confi
 | Atomic upsert via ON CONFLICT | Replace read-then-write with single SQL statement | ✓ Good — eliminates race condition |
 | Timezone cascade from MainLayout | Single detection point, cascaded TimeZoneInfo to all children | ✓ Good — eliminates JSException during prerender |
 | Replace DailyAverageGrowthPercent with PreviousDailyAverage | Growth % was algebraically identical to MessageGrowthPercent | ✓ Good — shows meaningful comparison |
+| CLI bootstrap over API bootstrap | Runs before instance is internet-facing, no race condition, fits existing --migrate-only pattern | — Pending |
+| Env var override for ClamAV (not all DB config) | ClamAV host is infrastructure concern (shared daemon); other settings are app config managed via UI | — Pending |
+| Status endpoint over Prometheus for SaaS | Hosting provider needs simple JSON polling, not a metrics firehose; gated behind STATUS_API_KEY | — Pending |
+| No SaaS-specific code in OSS repo | TGA stays open-source; SaaS orchestrator is external; extensibility via CLI flags, env vars, and HTTP endpoints | — Pending |
 
 ---
-*Last updated: 2026-03-18 after v1.1 milestone*
+*Last updated: 2026-03-18 after v1.2 milestone started*
