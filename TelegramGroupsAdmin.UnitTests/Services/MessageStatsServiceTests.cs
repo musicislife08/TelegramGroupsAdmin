@@ -209,15 +209,10 @@ public class MessageStatsServiceTests
             timeZoneId: "UTC",
             cancellationToken: CancellationToken.None);
 
-        // Assert — previous week (days 8-14) has no messages, so no previous period
-        var growth = result.WeekOverWeekGrowth;
-        if (growth != null)
-        {
-            Assert.That(growth.HasPreviousPeriod, Is.False,
-                "HasPreviousPeriod should be false when DB has no messages in the previous week window");
-        }
-        // If WeekOverWeekGrowth is null, that also satisfies the requirement
-        // (no growth shown when there's no previous data)
+        // Assert — with only 7 days of data and no previous week messages,
+        // WeekOverWeekGrowth should be null (nothing to compare against)
+        Assert.That(result.WeekOverWeekGrowth, Is.Null,
+            "WeekOverWeekGrowth should be null when DB has no messages in the previous week window");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -308,19 +303,11 @@ public class MessageStatsServiceTests
             timeZoneId: "UTC",
             cancellationToken: CancellationToken.None);
 
-        // Assert — if growth is returned, percentages must not be NaN or Infinity
-        if (result.WeekOverWeekGrowth != null)
-        {
-            var growth = result.WeekOverWeekGrowth;
-            Assert.That(double.IsNaN(growth.MessageGrowthPercent), Is.False,
-                "MessageGrowthPercent must not be NaN");
-            Assert.That(double.IsInfinity(growth.MessageGrowthPercent), Is.False,
-                "MessageGrowthPercent must not be Infinity");
-            Assert.That(double.IsNaN(growth.DailyAverageGrowthPercent), Is.False,
-                "DailyAverageGrowthPercent must not be NaN");
-            Assert.That(double.IsInfinity(growth.DailyAverageGrowthPercent), Is.False,
-                "DailyAverageGrowthPercent must not be Infinity");
-        }
-        // If growth is null, that also satisfies the requirement (no division by zero issue)
+        // Assert — with only current week data seeded, previous week has 0 messages.
+        // WeekOverWeekGrowth should be null (no previous period to compare against).
+        // If the service ever changes to return a growth object with HasPreviousPeriod=false
+        // in this case, the growth percentages must still be finite (zero-division safe).
+        Assert.That(result.WeekOverWeekGrowth, Is.Null,
+            "WeekOverWeekGrowth should be null when previous week has zero messages");
     }
 }

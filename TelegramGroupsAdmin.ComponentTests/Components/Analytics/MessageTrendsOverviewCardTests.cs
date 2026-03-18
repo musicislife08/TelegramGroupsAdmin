@@ -250,4 +250,26 @@ public class MessageTrendsOverviewCardTests : MessageTrendsTestContext
         Assert.That(markup, Does.Not.Contain("↑ 25.0%"),
             "Expected growth chips to be hidden when HasPreviousPeriod is false");
     }
+
+    [Test]
+    public void NoNullReferenceException_WhenGrowthIsNull()
+    {
+        // Arrange — growth is null (no comparison data available)
+        ConfigureMocks(growth: null);
+
+        // Act — should render without throwing NullReferenceException
+        var cut = Render<MessageTrends>();
+
+        // Wait for the initial 30d load to complete
+        cut.WaitForState(() => cut.Markup.Contains("Total Messages"), timeout: TimeSpan.FromSeconds(5));
+
+        // Assert — component rendered successfully, no growth chips visible
+        var markup = cut.Markup;
+        Assert.That(markup, Does.Contain("Total Messages"),
+            "Component should render successfully with null growth");
+        Assert.That(markup, Does.Not.Contain("↑"),
+            "No growth arrows should appear when growth is null");
+        Assert.That(markup, Does.Not.Contain("↓"),
+            "No growth arrows should appear when growth is null");
+    }
 }
