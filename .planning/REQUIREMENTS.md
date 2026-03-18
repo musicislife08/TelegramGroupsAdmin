@@ -64,28 +64,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BOOT-01 | — | Pending |
-| BOOT-02 | — | Pending |
-| BOOT-03 | — | Pending |
-| BOOT-04 | — | Pending |
-| BOOT-05 | — | Pending |
-| BOOT-06 | — | Pending |
-| BOOT-07 | — | Pending |
-| CLAM-01 | — | Pending |
-| CLAM-02 | — | Pending |
-| CLAM-03 | — | Pending |
-| CLAM-04 | — | Pending |
-| STAT-01 | — | Pending |
-| STAT-02 | — | Pending |
-| STAT-03 | — | Pending |
-| STAT-04 | — | Pending |
-| STAT-05 | — | Pending |
+| BOOT-01 | Phase 2 | Pending |
+| BOOT-02 | Phase 2 | Pending |
+| BOOT-03 | Phase 2 | Pending |
+| BOOT-04 | Phase 2 | Pending |
+| BOOT-05 | Phase 2 | Pending |
+| BOOT-06 | Phase 2 | Pending |
+| BOOT-07 | Phase 2 | Pending |
+| CLAM-01 | Phase 1 | Pending |
+| CLAM-02 | Phase 1 | Pending |
+| CLAM-03 | Phase 1 | Pending |
+| CLAM-04 | Phase 1 | Pending |
+| STAT-01 | Phase 3 | Pending |
+| STAT-02 | Phase 3 | Pending |
+| STAT-03 | Phase 3 | Pending |
+| STAT-04 | Phase 3 | Pending |
+| STAT-05 | Phase 3 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after initial definition*
+*Last updated: 2026-03-18 after roadmap creation*

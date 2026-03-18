@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: SaaS Hosting Readiness
-status: defining_requirements
+status: ready_to_plan
 stopped_at: null
 last_updated: "2026-03-18"
-last_activity: 2026-03-18 — Milestone v1.2 started
+last_activity: 2026-03-18 — Roadmap created for v1.2 (3 phases, 16 requirements mapped)
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,36 +21,48 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-18)
 
 **Core value:** Reliable, automated Telegram group moderation with a responsive web UI — correctness and operational simplicity above all
-**Current focus:** v1.2 SaaS Hosting Readiness — defining requirements
+**Current focus:** v1.2 SaaS Hosting Readiness — Phase 1 ready to plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-18 — Milestone v1.2 started
+Phase: 1 of 3 (ClamAV Environment Variable Override)
+Plan: — (not yet planned)
+Status: Ready to plan
+Last activity: 2026-03-18 — Roadmap created, 16/16 v1.2 requirements mapped across 3 phases
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0 (this milestone)
+- Average duration: —
+- Total execution time: —
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
 ### Decisions
 
-- [v1.1]: Bug-only milestone — clear backlog of correctness issues before adding features
-- [v1.1]: Skip research phase — all bugs well-documented in GitHub issues
-- [v1.1]: Group by layer/domain — bugs span DB, backend, frontend
-- [v1.1]: Atomic upsert via ON CONFLICT — eliminates race condition
-- [v1.1]: Timezone cascade from MainLayout — eliminates JSException during prerender
-- [v1.1]: Replace DailyAverageGrowthPercent with PreviousDailyAverage — growth % was algebraically identical to MessageGrowthPercent
-- [v1.2]: CLI bootstrap over API bootstrap — runs before instance is internet-facing, no race condition
-- [v1.2]: Env var override for ClamAV only — infrastructure concern, not all DB config
-- [v1.2]: Status endpoint with API key — simple JSON polling for hosting providers
+- [v1.2]: CLI bootstrap over API bootstrap — runs before instance is internet-facing, no race condition, fits existing --migrate-only pattern
+- [v1.2]: Env var override for ClamAV only — infrastructure concern; other settings are app config managed via UI
+- [v1.2]: Status endpoint with STATUS_API_KEY gate — simple JSON polling for hosting providers, not Prometheus firehose
 - [v1.2]: No SaaS-specific code in OSS repo — extensibility via CLI flags, env vars, HTTP endpoints
 
 ### Blockers/Concerns
 
-None.
+- [Phase 3]: Status endpoint JSON response schema needs alignment with user before implementation (fields and names not pinned in research). Minimum suggested: status, uptime_seconds, memory_working_set_mb, gc_gen0/1/2, thread pool stats.
+- [Phase 3]: TelegramBotPollingHost bot connection state surface not confirmed — if not easily accessible, endpoint returns "bot": "unknown".
 
 ## Session Continuity
 
 Last session: 2026-03-18
-Stopped at: Defining requirements for v1.2
+Stopped at: Roadmap created — ready to plan Phase 1
 Resume file: None
