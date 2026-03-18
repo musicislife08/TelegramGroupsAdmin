@@ -78,20 +78,21 @@ public class ClamAVScannerServiceTests
     [Test]
     public async Task GetHealthAsync_WhenBothEnvVarsSet_DoesNotCallConfigRepository()
     {
-        // Arrange
-        Environment.SetEnvironmentVariable(EnvHost, "shared-clam");
-        Environment.SetEnvironmentVariable(EnvPort, "3311");
+        // Arrange — use localhost:1 so the TCP connection fails fast with "connection refused"
+        // (avoids multi-second timeout that would occur with an unresolvable hostname)
+        Environment.SetEnvironmentVariable(EnvHost, "localhost");
+        Environment.SetEnvironmentVariable(EnvPort, "1");
 
         // Make DB repo throw to confirm it's never called
         _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
             .Returns<FileScanningConfig>(_ => throw new InvalidOperationException("DB must not be called when env vars are set"));
 
-        // Act — will fail to connect (no daemon) but should NOT throw from DB call
+        // Act — will fail to connect (port 1 is not listening) but should NOT throw from DB call
         var result = await _service.GetHealthAsync(CancellationToken.None);
 
-        // Assert — result should carry env var host/port (not DB values), and GetAsync never called
-        Assert.That(result.Host, Is.EqualTo("shared-clam"));
-        Assert.That(result.Port, Is.EqualTo(3311));
+        // Assert — result carries env var host/port, and GetAsync was never called
+        Assert.That(result.Host, Is.EqualTo("localhost"));
+        Assert.That(result.Port, Is.EqualTo(1));
 
         await _mockConfigRepository.DidNotReceive()
             .GetAsync(chatId: null, Arg.Any<CancellationToken>());
@@ -104,19 +105,26 @@ public class ClamAVScannerServiceTests
     [Test]
     public async Task GetHealthAsync_WhenOnlyClamavHostSet_UsesDatabaseConfig()
     {
-        // Arrange — only HOST set, PORT missing
+        // Arrange — only HOST set, PORT missing.
+        // Make GetAsync throw a recognizable sentinel so we can confirm it was consulted
+        // and the test completes without waiting for a TCP connection to timeout.
         Environment.SetEnvironmentVariable(EnvHost, "shared-clam");
         Environment.SetEnvironmentVariable(EnvPort, null);
 
-        // Act
+        var dbConsulted = false;
+        _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
+            .Returns<FileScanningConfig>(_ =>
+            {
+                dbConsulted = true;
+                throw new InvalidOperationException("sentinel: DB was consulted");
+            });
+
+        // Act — GetAsync throws → GetEffectiveEndpointAsync propagates → GetHealthAsync catch returns unhealthy
         var result = await _service.GetHealthAsync(CancellationToken.None);
 
-        // Assert — must have read DB config (GetAsync called at least once)
-        await _mockConfigRepository.Received()
-            .GetAsync(chatId: null, Arg.Any<CancellationToken>());
-
-        // Host/Port in result should be DB values (ping fails → error result, Host may be null on error)
-        // The key assertion is that DB was consulted
+        // Assert — DB config was consulted (override was NOT used)
+        Assert.That(dbConsulted, Is.True, "DB config must be consulted when only CLAMAV_HOST is set");
+        Assert.That(result.IsHealthy, Is.False);
     }
 
     [Test]
@@ -126,12 +134,20 @@ public class ClamAVScannerServiceTests
         Environment.SetEnvironmentVariable(EnvHost, null);
         Environment.SetEnvironmentVariable(EnvPort, "3311");
 
-        // Act
-        await _service.GetHealthAsync(CancellationToken.None);
+        var dbConsulted = false;
+        _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
+            .Returns<FileScanningConfig>(_ =>
+            {
+                dbConsulted = true;
+                throw new InvalidOperationException("sentinel: DB was consulted");
+            });
 
-        // Assert — DB config consulted
-        await _mockConfigRepository.Received()
-            .GetAsync(chatId: null, Arg.Any<CancellationToken>());
+        // Act
+        var result = await _service.GetHealthAsync(CancellationToken.None);
+
+        // Assert
+        Assert.That(dbConsulted, Is.True, "DB config must be consulted when only CLAMAV_PORT is set");
+        Assert.That(result.IsHealthy, Is.False);
     }
 
     [Test]
@@ -141,12 +157,20 @@ public class ClamAVScannerServiceTests
         Environment.SetEnvironmentVariable(EnvHost, "shared-clam");
         Environment.SetEnvironmentVariable(EnvPort, "notanumber");
 
-        // Act
-        await _service.GetHealthAsync(CancellationToken.None);
+        var dbConsulted = false;
+        _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
+            .Returns<FileScanningConfig>(_ =>
+            {
+                dbConsulted = true;
+                throw new InvalidOperationException("sentinel: DB was consulted");
+            });
 
-        // Assert — DB config consulted
-        await _mockConfigRepository.Received()
-            .GetAsync(chatId: null, Arg.Any<CancellationToken>());
+        // Act
+        var result = await _service.GetHealthAsync(CancellationToken.None);
+
+        // Assert
+        Assert.That(dbConsulted, Is.True, "DB config must be consulted when CLAMAV_PORT is not a valid integer");
+        Assert.That(result.IsHealthy, Is.False);
     }
 
     [Test]
@@ -156,12 +180,20 @@ public class ClamAVScannerServiceTests
         Environment.SetEnvironmentVariable(EnvHost, "");
         Environment.SetEnvironmentVariable(EnvPort, "3311");
 
-        // Act
-        await _service.GetHealthAsync(CancellationToken.None);
+        var dbConsulted = false;
+        _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
+            .Returns<FileScanningConfig>(_ =>
+            {
+                dbConsulted = true;
+                throw new InvalidOperationException("sentinel: DB was consulted");
+            });
 
-        // Assert — DB config consulted
-        await _mockConfigRepository.Received()
-            .GetAsync(chatId: null, Arg.Any<CancellationToken>());
+        // Act
+        var result = await _service.GetHealthAsync(CancellationToken.None);
+
+        // Assert
+        Assert.That(dbConsulted, Is.True, "DB config must be consulted when CLAMAV_HOST is empty string");
+        Assert.That(result.IsHealthy, Is.False);
     }
 
     [Test]
@@ -170,12 +202,20 @@ public class ClamAVScannerServiceTests
         // Arrange — no env vars (default case)
         // Both already null from Setup
 
-        // Act
-        await _service.GetHealthAsync(CancellationToken.None);
+        var dbConsulted = false;
+        _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
+            .Returns<FileScanningConfig>(_ =>
+            {
+                dbConsulted = true;
+                throw new InvalidOperationException("sentinel: DB was consulted");
+            });
 
-        // Assert — DB config consulted
-        await _mockConfigRepository.Received()
-            .GetAsync(chatId: null, Arg.Any<CancellationToken>());
+        // Act
+        var result = await _service.GetHealthAsync(CancellationToken.None);
+
+        // Assert
+        Assert.That(dbConsulted, Is.True, "DB config must be consulted when neither env var is set");
+        Assert.That(result.IsHealthy, Is.False);
     }
 
     // -------------------------------------------------------------------------
@@ -185,9 +225,9 @@ public class ClamAVScannerServiceTests
     [Test]
     public async Task GetHealthAsync_WhenBothEnvVarsSet_LogsOverrideInfoOnFirstCallOnly()
     {
-        // Arrange
-        Environment.SetEnvironmentVariable(EnvHost, "shared-clam");
-        Environment.SetEnvironmentVariable(EnvPort, "3311");
+        // Arrange — use localhost:1 so the TCP connection fails fast with "connection refused"
+        Environment.SetEnvironmentVariable(EnvHost, "localhost");
+        Environment.SetEnvironmentVariable(EnvPort, "1");
 
         // DB throws to ensure we don't accidentally call it
         _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
@@ -204,10 +244,10 @@ public class ClamAVScannerServiceTests
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
 
-        // Act — second call (reset override flag is NOT done between calls within a single test)
+        // Act — second call (override flag still set from first call within same test run)
         await _service.GetHealthAsync(CancellationToken.None);
 
-        // Assert — still only one INFO log for override
+        // Assert — still only one INFO log for override (no second log emitted)
         _mockLogger.Received(1).Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
@@ -223,9 +263,9 @@ public class ClamAVScannerServiceTests
     [Test]
     public async Task GetHealthAsync_WhenBothEnvVarsSet_ReturnsEnvVarHostAndPort()
     {
-        // Arrange
-        Environment.SetEnvironmentVariable(EnvHost, "shared-clam");
-        Environment.SetEnvironmentVariable(EnvPort, "3311");
+        // Arrange — use localhost:1 so the TCP connection fails fast with "connection refused"
+        Environment.SetEnvironmentVariable(EnvHost, "localhost");
+        Environment.SetEnvironmentVariable(EnvPort, "1");
 
         _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
             .Returns<FileScanningConfig>(_ => throw new InvalidOperationException("Should not be called"));
@@ -233,17 +273,17 @@ public class ClamAVScannerServiceTests
         // Act
         var result = await _service.GetHealthAsync(CancellationToken.None);
 
-        // Assert — the result reflects override values (ping fails, but host/port in error message or result fields)
-        Assert.That(result.Host, Is.EqualTo("shared-clam"));
-        Assert.That(result.Port, Is.EqualTo(3311));
+        // Assert — the result reflects override values (ping fails, but host/port always set in result)
+        Assert.That(result.Host, Is.EqualTo("localhost"));
+        Assert.That(result.Port, Is.EqualTo(1));
     }
 
     [Test]
     public async Task GetHealthAsync_WhenBothEnvVarsSet_ErrorMessageContainsEnvVarHostPort()
     {
-        // Arrange — clamd not running so GetHealthAsync will return unhealthy
-        Environment.SetEnvironmentVariable(EnvHost, "shared-clam");
-        Environment.SetEnvironmentVariable(EnvPort, "3311");
+        // Arrange — use localhost:1 so the TCP connection fails fast with "connection refused"
+        Environment.SetEnvironmentVariable(EnvHost, "localhost");
+        Environment.SetEnvironmentVariable(EnvPort, "1");
 
         _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
             .Returns<FileScanningConfig>(_ => throw new InvalidOperationException("Should not be called"));
@@ -251,10 +291,9 @@ public class ClamAVScannerServiceTests
         // Act
         var result = await _service.GetHealthAsync(CancellationToken.None);
 
-        // Assert — IsHealthy false (no daemon), and error message / log shows override endpoint
+        // Assert — IsHealthy false (port 1 not listening), error message does not reference DB values
         Assert.That(result.IsHealthy, Is.False);
 
-        // The error message (when ping fails) should mention override host:port, not DB values
         if (result.ErrorMessage != null)
         {
             Assert.That(result.ErrorMessage, Does.Not.Contain("db-host"),

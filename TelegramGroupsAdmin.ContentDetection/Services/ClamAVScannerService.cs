@@ -17,6 +17,12 @@ public class ClamAVScannerService : IFileScannerService
     private readonly ILogger<ClamAVScannerService> _logger;
     private readonly ISystemConfigRepository _configRepository;
 
+    /// <summary>
+    /// Guards the one-time INFO log for env var override. Static because this service is Scoped
+    /// and the "log once per process" semantic must survive across request scopes.
+    /// </summary>
+    private static volatile bool _hasLoggedOverride;
+
     public string ScannerName => "ClamAV";
 
     public ClamAVScannerService(
@@ -33,13 +39,42 @@ public class ClamAVScannerService : IFileScannerService
         return await _configRepository.GetAsync(chatId: null, cancellationToken);
     }
 
-    // Helper method to create ClamClient with current config values
+    /// <summary>
+    /// Returns the effective (host, port) for ClamAV connections.
+    /// When both CLAMAV_HOST and CLAMAV_PORT environment variables are set to valid values,
+    /// they take precedence over the database configuration. This allows operators to point
+    /// all TGA instances at a shared ClamAV daemon without pre-seeding the database on each instance.
+    /// The first time the override is active, one INFO message is logged; subsequent calls are silent.
+    /// </summary>
+    private async Task<(string host, int port)> GetEffectiveEndpointAsync(CancellationToken cancellationToken = default)
+    {
+        var envHost = Environment.GetEnvironmentVariable("CLAMAV_HOST");
+        var envPort = Environment.GetEnvironmentVariable("CLAMAV_PORT");
+
+        if (!string.IsNullOrWhiteSpace(envHost)
+            && !string.IsNullOrWhiteSpace(envPort)
+            && int.TryParse(envPort, out var parsedPort))
+        {
+            if (!_hasLoggedOverride)
+            {
+                _hasLoggedOverride = true;
+                _logger.LogInformation(
+                    "ClamAV env var override active -- using {Host}:{Port} (CLAMAV_HOST / CLAMAV_PORT)",
+                    envHost, parsedPort);
+            }
+
+            return (envHost, parsedPort);
+        }
+
+        var config = await GetConfigAsync(cancellationToken);
+        return (config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
+    }
+
+    // Helper method to create ClamClient with effective endpoint (env var override or DB config)
     private async Task<ClamClient> CreateClamClientAsync(CancellationToken cancellationToken = default)
     {
-        var config = await GetConfigAsync(cancellationToken);
-        return new ClamClient(
-            config.Tier1.ClamAV.Host,
-            config.Tier1.ClamAV.Port);
+        var (host, port) = await GetEffectiveEndpointAsync(cancellationToken);
+        return new ClamClient(host, port);
     }
 
     public async Task<FileScanResult> ScanFileAsync(
@@ -57,7 +92,7 @@ public class ClamAVScannerService : IFileScannerService
 
         try
         {
-            // Get current config from database
+            // Get current config from database (needed for Enabled flag check)
             var config = await GetConfigAsync(cancellationToken);
 
             // Check if ClamAV is enabled
@@ -74,6 +109,9 @@ public class ClamAVScannerService : IFileScannerService
                 RecordScanMetrics(startTimestamp, disabledResult, activity);
                 return disabledResult;
             }
+
+            // Resolve effective endpoint once (env var override or DB config) for use in error logs
+            var (effectiveHost, effectivePort) = await GetEffectiveEndpointAsync(cancellationToken);
 
             // Get file size for limit checking
             var fileInfo = new FileInfo(filePath);
@@ -120,7 +158,7 @@ public class ClamAVScannerService : IFileScannerService
                         if (attempt == maxRetries)
                         {
                             _logger.LogError("ClamAV daemon not responding to ping after {Attempts} attempts at {Host}:{Port}",
-                                maxRetries, config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
+                                maxRetries, effectiveHost, effectivePort);
 
                             return new FileScanResult
                             {
@@ -304,13 +342,16 @@ public class ClamAVScannerService : IFileScannerService
     /// <returns>Health check result with version and signature count</returns>
     public async Task<FileScannerHealthResult> GetHealthAsync(CancellationToken cancellationToken = default)
     {
+        string host = string.Empty;
+        int port = 0;
+
         try
         {
-            var config = await GetConfigAsync(cancellationToken);
-            _logger.LogDebug("ClamAV health check attempting connection to {Host}:{Port}",
-                config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
+            // Resolve effective endpoint (env var override or DB config)
+            (host, port) = await GetEffectiveEndpointAsync(cancellationToken);
+            _logger.LogDebug("ClamAV health check attempting connection to {Host}:{Port}", host, port);
 
-            var clamClient = await CreateClamClientAsync(cancellationToken);
+            var clamClient = new ClamClient(host, port);
 
             // Ping ClamAV daemon
             var pingResult = await clamClient.PingAsync(cancellationToken);
@@ -319,22 +360,24 @@ public class ClamAVScannerService : IFileScannerService
                 return new FileScannerHealthResult
                 {
                     IsHealthy = false,
-                    ErrorMessage = $"ClamAV daemon not responding at {config.Tier1.ClamAV.Host}:{config.Tier1.ClamAV.Port}"
+                    Host = host,
+                    Port = port,
+                    ErrorMessage = $"ClamAV daemon not responding at {host}:{port}"
                 };
             }
 
             // Get version information (includes signature count)
             var versionResult = await clamClient.GetVersionAsync(cancellationToken);
 
-            _logger.LogInformation("✅ ClamAV health check successful: {Version} at {Host}:{Port}",
-                versionResult, config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
+            _logger.LogInformation("ClamAV health check successful: {Version} at {Host}:{Port}",
+                versionResult, host, port);
 
             return new FileScannerHealthResult
             {
                 IsHealthy = true,
                 Version = versionResult ?? "Unknown",
-                Host = config.Tier1.ClamAV.Host,
-                Port = config.Tier1.ClamAV.Port
+                Host = host,
+                Port = port
             };
         }
         catch (Exception ex)
@@ -343,6 +386,8 @@ public class ClamAVScannerService : IFileScannerService
             return new FileScannerHealthResult
             {
                 IsHealthy = false,
+                Host = host,
+                Port = port,
                 ErrorMessage = ex.Message
             };
         }
