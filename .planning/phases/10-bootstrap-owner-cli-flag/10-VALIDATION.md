@@ -38,12 +38,12 @@ created: 2026-03-18
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 10-01-01 | 01 | 1 | BOOT-01 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapTests"` | ❌ W0 | ⬜ pending |
-| 10-01-02 | 01 | 1 | BOOT-02 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapTests"` | ❌ W0 | ⬜ pending |
-| 10-01-03 | 01 | 1 | BOOT-03 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapTests"` | ❌ W0 | ⬜ pending |
-| 10-01-04 | 01 | 1 | BOOT-04 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapTests"` | ❌ W0 | ⬜ pending |
-| 10-01-05 | 01 | 1 | BOOT-05 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapTests"` | ❌ W0 | ⬜ pending |
-| 10-01-06 | 01 | 1 | BOOT-06 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapTests"` | ❌ W0 | ⬜ pending |
+| 10-01-01 | 01 | 1 | BOOT-01 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapOwner"` | ❌ W0 | ⬜ pending |
+| 10-01-02 | 01 | 1 | BOOT-02 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapOwner"` | ❌ W0 | ⬜ pending |
+| 10-01-03 | 01 | 1 | BOOT-03 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapOwner"` | ❌ W0 | ⬜ pending |
+| 10-01-04 | 01 | 1 | BOOT-04 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapOwner"` | ❌ W0 | ⬜ pending |
+| 10-01-05 | 01 | 1 | BOOT-05 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapOwner"` | ❌ W0 | ⬜ pending |
+| 10-01-06 | 01 | 1 | BOOT-06 | unit | `dotnet test TelegramGroupsAdmin.UnitTests --no-build --filter "BootstrapOwner"` | ❌ W0 | ⬜ pending |
 | 10-01-07 | 01 | 1 | BOOT-07 | manual | n/a — positional verification in Program.cs | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -52,7 +52,7 @@ created: 2026-03-18
 
 ## Wave 0 Requirements
 
-- [ ] `TelegramGroupsAdmin.UnitTests/Services/Auth/BootstrapTests.cs` — stubs for BOOT-01 through BOOT-06
+- [ ] `TelegramGroupsAdmin.UnitTests/Services/Auth/BootstrapOwnerServiceTests.cs` — stubs for BOOT-01 through BOOT-06
 - [ ] No new framework install needed — NSubstitute + NUnit already present in UnitTests project
 
 *Existing infrastructure covers framework requirements.*
