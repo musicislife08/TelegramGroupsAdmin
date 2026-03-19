@@ -62,7 +62,9 @@ Plans:
   3. Running `--bootstrap` with a missing, empty, or invalid JSON file exits 1 with a clear error message
   4. The bootstrapped account has EmailVerified=true and TOTP setup forced on first browser login (TotpEnabled=true, TotpSecret=null)
   5. An audit log entry is written recording the Owner account creation (non-fatal — exit 0 if user created even if audit fails)
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 10-01-PLAN.md — TDD: Bootstrap Owner CLI flag (BOOT-01 through BOOT-07)
 
 ### Phase 11: GET /healthz/status Endpoint
 **Goal**: A hosting provider's monitoring dashboard can poll a single authenticated JSON endpoint for .NET runtime health metrics without needing access to the application internals
@@ -89,5 +91,5 @@ Plans:
 | 8. Frontend Fixes | v1.1 | 4/4 | Complete | 2026-03-17 |
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
 | 9. ClamAV Environment Variable Override | 1/1 | Complete   | 2026-03-18 | - |
-| 10. Bootstrap Owner CLI Flag | v1.2 | 0/TBD | Not started | - |
+| 10. Bootstrap Owner CLI Flag | v1.2 | 0/1 | Not started | - |
 | 11. GET /healthz/status Endpoint | v1.2 | 0/TBD | Not started | - |
