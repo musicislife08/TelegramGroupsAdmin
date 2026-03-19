@@ -91,5 +91,5 @@ Plans:
 | 8. Frontend Fixes | v1.1 | 4/4 | Complete | 2026-03-17 |
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
 | 9. ClamAV Environment Variable Override | 1/1 | Complete   | 2026-03-18 | - |
-| 10. Bootstrap Owner CLI Flag | 1/1 | Complete   | 2026-03-19 | - |
+| 10. Bootstrap Owner CLI Flag | 1/1 | Complete    | 2026-03-19 | - |
 | 11. GET /healthz/status Endpoint | v1.2 | 0/TBD | Not started | - |
