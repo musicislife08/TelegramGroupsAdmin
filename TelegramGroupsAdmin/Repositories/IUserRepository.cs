@@ -82,4 +82,9 @@ public interface IUserRepository
     /// Used for VAPID authentication subject in Web Push notifications
     /// </summary>
     Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns true if at least one user exists. Used by --bootstrap for DB-first idempotency (stops at first row).
+    /// </summary>
+    Task<bool> AnyUsersExistAsync(CancellationToken cancellationToken = default);
 }

@@ -53,6 +53,7 @@ public record Actor
     public static readonly Actor TempbanExpiry = FromSystem("tempban_expiry"); // Scheduled tempban expiry
     public static readonly Actor Unknown = FromSystem("unknown");
     public static readonly Actor ProfileScan = FromSystem("profile_scan");
+    public static readonly Actor Bootstrap = FromSystem("bootstrap");
 
     /// <summary>
     /// Create actor from web user
@@ -109,6 +110,7 @@ public record Actor
             "tempban_expiry" => "Tempban Expiry",
             "unknown" => "Unknown",
             "profile_scan" => "Profile Scan",
+            "bootstrap" => "CLI Bootstrap",
             _ => systemIdentifier
         };
 
