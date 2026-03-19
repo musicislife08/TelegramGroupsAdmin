@@ -57,11 +57,11 @@ Plans:
 **Depends on**: Nothing (independent feature)
 **Requirements**: BOOT-01, BOOT-02, BOOT-03, BOOT-04, BOOT-05, BOOT-06, BOOT-07
 **Success Criteria** (what must be TRUE):
-  1. Running `--bootstrap-owner admin@example.com` with `--bootstrap-owner-password` set creates an Owner account that can log in via browser on first run
-  2. Running the same command a second time exits 0 with an "already bootstrapped" log message — no duplicate account created
-  3. Running `--bootstrap-owner` without `--bootstrap-owner-password` set exits 1 with a clear error message
+  1. Running `--bootstrap /path/to/bootstrap.json` (JSON with email + password) creates an Owner account that can log in via browser on first run
+  2. Running the same command a second time exits 0 with an "already bootstrapped" log message — DB-first check, no file read needed on subsequent runs
+  3. Running `--bootstrap` with a missing, empty, or invalid JSON file exits 1 with a clear error message
   4. The bootstrapped account has EmailVerified=true and TOTP setup forced on first browser login (TotpEnabled=true, TotpSecret=null)
-  5. An audit log entry is written recording the Owner account creation
+  5. An audit log entry is written recording the Owner account creation (non-fatal — exit 0 if user created even if audit fails)
 **Plans**: TBD
 
 ### Phase 11: GET /healthz/status Endpoint

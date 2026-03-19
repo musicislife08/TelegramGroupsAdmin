@@ -9,9 +9,9 @@ Requirements for SaaS hosting readiness. Each maps to roadmap phases.
 
 ### Bootstrap
 
-- [ ] **BOOT-01**: Operator can create an Owner account headlessly via `--bootstrap-owner <email> --bootstrap-owner-password <password>` CLI flags
-- [ ] **BOOT-02**: Bootstrap exits 0 with INFO log when any user already exists (idempotent for orchestrator retry loops)
-- [ ] **BOOT-03**: Bootstrap exits 1 with clear error when `--bootstrap-owner-password` is missing
+- [ ] **BOOT-01**: Operator can create an Owner account headlessly via `--bootstrap <path>` CLI flag, where `<path>` points to a JSON file containing `{"email": "...", "password": "..."}`
+- [ ] **BOOT-02**: Bootstrap exits 0 with INFO log when any user already exists (idempotent for orchestrator retry loops — DB check before file read, so file can be absent on subsequent runs)
+- [ ] **BOOT-03**: Bootstrap exits 1 with clear error when the JSON file is missing, empty, or has invalid/incomplete content
 - [ ] **BOOT-04**: Bootstrapped account has `EmailVerified=true` (no inbox for headless setup)
 - [ ] **BOOT-05**: Bootstrapped account has `TotpEnabled=true`, `TotpSecret=null` (forces TOTP setup on first browser login, matching existing registration flow)
 - [ ] **BOOT-06**: Bootstrap writes an audit log entry recording the owner account creation

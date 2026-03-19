@@ -80,7 +80,7 @@ Reliable, automated Telegram group moderation with a responsive web UI for confi
 | Atomic upsert via ON CONFLICT | Replace read-then-write with single SQL statement | ✓ Good — eliminates race condition |
 | Timezone cascade from MainLayout | Single detection point, cascaded TimeZoneInfo to all children | ✓ Good — eliminates JSException during prerender |
 | Replace DailyAverageGrowthPercent with PreviousDailyAverage | Growth % was algebraically identical to MessageGrowthPercent | ✓ Good — shows meaningful comparison |
-| CLI bootstrap over API bootstrap | Runs before instance is internet-facing, no race condition, fits existing --migrate-only pattern | — Pending |
+| CLI bootstrap via `--bootstrap <path>` JSON file | Runs before instance is internet-facing, file-based for K8s Secret mount with optional:true, DB-first idempotency | — Pending |
 | Env var override for ClamAV (not all DB config) | ClamAV host is infrastructure concern (shared daemon); other settings are app config managed via UI | — Pending |
 | Status endpoint over Prometheus for SaaS | Hosting provider needs simple JSON polling, not a metrics firehose; gated behind STATUS_API_KEY | — Pending |
 | No SaaS-specific code in OSS repo | TGA stays open-source; SaaS orchestrator is external; extensibility via CLI flags, env vars, and HTTP endpoints | — Pending |
