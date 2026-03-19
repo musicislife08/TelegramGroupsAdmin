@@ -9,13 +9,13 @@ Requirements for SaaS hosting readiness. Each maps to roadmap phases.
 
 ### Bootstrap
 
-- [ ] **BOOT-01**: Operator can create an Owner account headlessly via `--bootstrap <path>` CLI flag, where `<path>` points to a JSON file containing `{"email": "...", "password": "..."}`
-- [ ] **BOOT-02**: Bootstrap exits 0 with INFO log when any user already exists (idempotent for orchestrator retry loops — DB check before file read, so file can be absent on subsequent runs)
-- [ ] **BOOT-03**: Bootstrap exits 1 with clear error when the JSON file is missing, empty, or has invalid/incomplete content
-- [ ] **BOOT-04**: Bootstrapped account has `EmailVerified=true` (no inbox for headless setup)
-- [ ] **BOOT-05**: Bootstrapped account has `TotpEnabled=true`, `TotpSecret=null` (forces TOTP setup on first browser login, matching existing registration flow)
-- [ ] **BOOT-06**: Bootstrap writes an audit log entry recording the owner account creation
-- [ ] **BOOT-07**: Bootstrap runs after database migrations and before ML training, following existing CLI flag early-exit pattern
+- [x] **BOOT-01**: Operator can create an Owner account headlessly via `--bootstrap <path>` CLI flag, where `<path>` points to a JSON file containing `{"email": "...", "password": "..."}`
+- [x] **BOOT-02**: Bootstrap exits 0 with INFO log when any user already exists (idempotent for orchestrator retry loops — DB check before file read, so file can be absent on subsequent runs)
+- [x] **BOOT-03**: Bootstrap exits 1 with clear error when the JSON file is missing, empty, or has invalid/incomplete content
+- [x] **BOOT-04**: Bootstrapped account has `EmailVerified=true` (no inbox for headless setup)
+- [x] **BOOT-05**: Bootstrapped account has `TotpEnabled=true`, `TotpSecret=null` (forces TOTP setup on first browser login, matching existing registration flow)
+- [x] **BOOT-06**: Bootstrap writes an audit log entry recording the owner account creation
+- [x] **BOOT-07**: Bootstrap runs after database migrations and before ML training, following existing CLI flag early-exit pattern
 
 ### ClamAV Override
 
@@ -64,13 +64,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BOOT-01 | Phase 10 | Pending |
-| BOOT-02 | Phase 10 | Pending |
-| BOOT-03 | Phase 10 | Pending |
-| BOOT-04 | Phase 10 | Pending |
-| BOOT-05 | Phase 10 | Pending |
-| BOOT-06 | Phase 10 | Pending |
-| BOOT-07 | Phase 10 | Pending |
+| BOOT-01 | Phase 10 | Complete |
+| BOOT-02 | Phase 10 | Complete |
+| BOOT-03 | Phase 10 | Complete |
+| BOOT-04 | Phase 10 | Complete |
+| BOOT-05 | Phase 10 | Complete |
+| BOOT-06 | Phase 10 | Complete |
+| BOOT-07 | Phase 10 | Complete |
 | CLAM-01 | Phase 9 | Complete |
 | CLAM-02 | Phase 9 | Complete |
 | CLAM-03 | Phase 9 | Complete |

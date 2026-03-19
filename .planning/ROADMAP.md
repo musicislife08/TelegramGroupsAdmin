@@ -34,7 +34,7 @@
 **Milestone Goal:** Make TGA deployable by an external hosting orchestrator without adding SaaS-specific code to the open-source codebase. Three independent capabilities: infrastructure env var override for ClamAV, headless owner account bootstrapping, and a lightweight runtime status endpoint.
 
 - [x] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars (completed 2026-03-18)
-- [ ] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern
+- [x] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern (completed 2026-03-19)
 - [ ] **Phase 11: GET /healthz/status Endpoint** - API-key-gated runtime status endpoint for hosting provider monitoring
 
 ## Phase Details
@@ -62,7 +62,7 @@ Plans:
   3. Running `--bootstrap` with a missing, empty, or invalid JSON file exits 1 with a clear error message
   4. The bootstrapped account has EmailVerified=true and TOTP setup forced on first browser login (TotpEnabled=true, TotpSecret=null)
   5. An audit log entry is written recording the Owner account creation (non-fatal — exit 0 if user created even if audit fails)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 10-01-PLAN.md — TDD: Bootstrap Owner CLI flag (BOOT-01 through BOOT-07)
 
@@ -91,5 +91,5 @@ Plans:
 | 8. Frontend Fixes | v1.1 | 4/4 | Complete | 2026-03-17 |
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
 | 9. ClamAV Environment Variable Override | 1/1 | Complete   | 2026-03-18 | - |
-| 10. Bootstrap Owner CLI Flag | v1.2 | 0/1 | Not started | - |
+| 10. Bootstrap Owner CLI Flag | 1/1 | Complete   | 2026-03-19 | - |
 | 11. GET /healthz/status Endpoint | v1.2 | 0/TBD | Not started | - |

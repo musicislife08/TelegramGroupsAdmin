@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: SaaS Hosting Readiness
 status: planning
-stopped_at: Phase 10 context gathered
-last_updated: "2026-03-19T03:30:38.462Z"
+stopped_at: Completed 10-bootstrap-owner-cli-flag/10-01-PLAN.md
+last_updated: "2026-03-19T04:57:36.254Z"
 last_activity: 2026-03-18 — Roadmap created, 16/16 v1.2 requirements mapped across 3 phases
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 0
 ---
 
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 09-clamav-environment-variable-override P01 | 15min | 1 tasks | 2 files |
+| Phase 10-bootstrap-owner-cli-flag P01 | 10min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -59,6 +60,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 09]: Static volatile bool _hasLoggedOverride for one-time override log: Scoped service requires static field for per-process semantic
 - [Phase 09]: GetEffectiveEndpointAsync centralizes env var check — both non-whitespace + valid int required for override to apply
 - [Phase 09]: localhost:1 in tests for fast TCP failure (connection refused); sentinel-throw for CLAM-02 DB-consulted verification without TCP
+- [Phase 10]: AnyUsersExistAsync uses AnyAsync (stops at first row) for efficient bootstrap idempotency check
+- [Phase 10]: BootstrapOwnerService is a static class (not injectable) — Program.cs passes resolved services directly, keeps service layer clean
+- [Phase 10]: EmailVerified=true unconditionally on bootstrap (no featureAvailability check) — K8s init container must produce login-ready account
 
 ### Blockers/Concerns
 
@@ -67,6 +71,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-03-19T03:30:38.453Z
-Stopped at: Phase 10 context gathered
-Resume file: .planning/phases/10-bootstrap-owner-cli-flag/10-CONTEXT.md
+Last session: 2026-03-19T04:57:36.251Z
+Stopped at: Completed 10-bootstrap-owner-cli-flag/10-01-PLAN.md
+Resume file: None
