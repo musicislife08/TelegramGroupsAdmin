@@ -11,6 +11,9 @@ using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Services;
+using TelegramGroupsAdmin.Services.Auth;
+using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Core.Services;
 using HumanCron;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -269,6 +272,30 @@ if (args.Contains("--restore"))
     await backupService.RestoreAsync(backupBytes, passphrase); // Use explicit passphrase for CLI restore
 
     app.Logger.LogInformation("✅ System restore complete. Exiting (--restore flag).");
+    Environment.Exit(0);
+}
+
+// Check for --bootstrap flag to create initial Owner account (for K8s init containers)
+// Runs after migrations, before ML training - needs database ready but not the classifier
+if (args.Contains("--bootstrap"))
+{
+    var bootstrapPath = args.SkipWhile(a => a != "--bootstrap").Skip(1).FirstOrDefault();
+
+    using var scope = app.Services.CreateScope();
+    var result = await BootstrapOwnerService.ExecuteAsync(
+        filePath: bootstrapPath,
+        userRepository: scope.ServiceProvider.GetRequiredService<IUserRepository>(),
+        passwordHasher: scope.ServiceProvider.GetRequiredService<IPasswordHasher>(),
+        auditService: scope.ServiceProvider.GetRequiredService<IAuditService>(),
+        logger: app.Logger);
+
+    if (!result.Success)
+    {
+        app.Logger.LogError("Bootstrap failed: {Message}", result.Message);
+        Environment.Exit(1);
+    }
+
+    app.Logger.LogInformation("Bootstrap complete. Exiting.");
     Environment.Exit(0);
 }
 
