@@ -35,7 +35,7 @@
 
 - [x] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars (completed 2026-03-18)
 - [x] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern (completed 2026-03-19)
-- [ ] **Phase 11: Decouple Prometheus Metrics Endpoint** - ENABLE_METRICS env var decouples /metrics from OTEL_EXPORTER_OTLP_ENDPOINT for hosting provider monitoring
+- [x] **Phase 11: Decouple Prometheus Metrics Endpoint** - ENABLE_METRICS env var decouples /metrics from OTEL_EXPORTER_OTLP_ENDPOINT for hosting provider monitoring (completed 2026-03-20)
 
 ## Phase Details
 
@@ -75,7 +75,7 @@ Plans:
   2. Setting `OTEL_EXPORTER_OTLP_ENDPOINT` still implicitly enables `/metrics` (no breaking change for existing deployments)
   3. When only `ENABLE_METRICS` is set (no `OTEL_EXPORTER_OTLP_ENDPOINT`), logging/tracing to Seq are not configured — only meters and Prometheus exporter
   4. Startup INFO log indicates which env var activated the metrics endpoint
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 11-01-PLAN.md — Decouple metrics pipeline from OTEL tracing (STAT-01 through STAT-05)
 
@@ -94,4 +94,4 @@ Plans:
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
 | 9. ClamAV Environment Variable Override | v1.2 | 1/1 | Complete | 2026-03-18 |
 | 10. Bootstrap Owner CLI Flag | v1.2 | 1/1 | Complete | 2026-03-19 |
-| 11. Decouple Prometheus Metrics Endpoint | v1.2 | 0/1 | Not started | - |
+| 11. Decouple Prometheus Metrics Endpoint | 1/1 | Complete   | 2026-03-20 | - |

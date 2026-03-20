@@ -26,11 +26,11 @@ Requirements for SaaS hosting readiness. Each maps to roadmap phases.
 
 ### Metrics Endpoint Decoupling
 
-- [ ] **STAT-01**: `ENABLE_METRICS` env var gates `/metrics` Prometheus endpoint independently of `SEQ_URL` (either env var activates the endpoint)
-- [ ] **STAT-02**: When `ENABLE_METRICS` is set without `SEQ_URL`, OpenTelemetry meters and Prometheus exporter are registered (metrics-only OTEL pipeline); logging/tracing to Seq remain conditional on `SEQ_URL`
-- [ ] **STAT-03**: Existing behavior preserved — `SEQ_URL` still implicitly enables `/metrics` (no breaking change for current deployments)
-- [ ] **STAT-04**: Startup INFO log indicates which env var activated the metrics endpoint (e.g., "via ENABLE_METRICS" or "via SEQ_URL")
-- [ ] **STAT-05**: No app-level authentication on `/metrics` — infrastructure (K8s NetworkPolicy, reverse proxy) controls access
+- [x] **STAT-01**: `ENABLE_METRICS` env var gates `/metrics` Prometheus endpoint independently of `SEQ_URL` (either env var activates the endpoint)
+- [x] **STAT-02**: When `ENABLE_METRICS` is set without `SEQ_URL`, OpenTelemetry meters and Prometheus exporter are registered (metrics-only OTEL pipeline); logging/tracing to Seq remain conditional on `SEQ_URL`
+- [x] **STAT-03**: Existing behavior preserved — `SEQ_URL` still implicitly enables `/metrics` (no breaking change for current deployments)
+- [x] **STAT-04**: Startup INFO log indicates which env var activated the metrics endpoint (e.g., "via ENABLE_METRICS" or "via SEQ_URL")
+- [x] **STAT-05**: No app-level authentication on `/metrics` — infrastructure (K8s NetworkPolicy, reverse proxy) controls access
 
 ## Future Requirements
 
@@ -73,11 +73,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLAM-02 | Phase 9 | Complete |
 | CLAM-03 | Phase 9 | Complete |
 | CLAM-04 | Phase 9 | Complete |
-| STAT-01 | Phase 11 | Pending |
-| STAT-02 | Phase 11 | Pending |
-| STAT-03 | Phase 11 | Pending |
-| STAT-04 | Phase 11 | Pending |
-| STAT-05 | Phase 11 | Pending |
+| STAT-01 | Phase 11 | Complete |
+| STAT-02 | Phase 11 | Complete |
+| STAT-03 | Phase 11 | Complete |
+| STAT-04 | Phase 11 | Complete |
+| STAT-05 | Phase 11 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 16 total

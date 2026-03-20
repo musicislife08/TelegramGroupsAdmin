@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: SaaS Hosting Readiness
 status: planning
-stopped_at: Phase 11 context gathered (pivoted from JSON status to metrics decoupling)
-last_updated: "2026-03-20T01:40:08.696Z"
+stopped_at: Completed 11-decouple-prometheus-metrics-endpoint/11-01-PLAN.md
+last_updated: "2026-03-20T02:21:38.595Z"
 last_activity: 2026-03-18 — Roadmap created, 16/16 v1.2 requirements mapped across 3 phases
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
   percent: 0
 ---
 
@@ -48,6 +48,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 09-clamav-environment-variable-override P01 | 15min | 1 tasks | 2 files |
 | Phase 10-bootstrap-owner-cli-flag P01 | 10min | 2 tasks | 8 files |
+| Phase 11-decouple-prometheus-metrics-endpoint P01 | 10min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 10]: AnyUsersExistAsync uses AnyAsync (stops at first row) for efficient bootstrap idempotency check
 - [Phase 10]: BootstrapOwnerService is a static class (not injectable) — Program.cs passes resolved services directly, keeps service layer clean
 - [Phase 10]: EmailVerified=true unconditionally on bootstrap (no featureAvailability check) — K8s init container must produce login-ready account
+- [Phase Phase 11]: ENABLE_METRICS activates /metrics independently of OTEL_EXPORTER_OTLP_ENDPOINT — hosting providers can enable Prometheus scraping without Seq/OTLP infrastructure
+- [Phase Phase 11]: AddOtlpExporter() on metrics pipeline conditional on otlpEndpoint — ENABLE_METRICS alone produces local-only Prometheus metrics with no OTLP export
 
 ### Blockers/Concerns
 
@@ -70,6 +73,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-03-20T01:40:08.686Z
-Stopped at: Phase 11 context gathered (pivoted from JSON status to metrics decoupling)
-Resume file: .planning/phases/11-decouple-prometheus-metrics-endpoint/11-CONTEXT.md
+Last session: 2026-03-20T02:21:38.592Z
+Stopped at: Completed 11-decouple-prometheus-metrics-endpoint/11-01-PLAN.md
+Resume file: None
