@@ -862,6 +862,66 @@ public class BanCelebrationGifRepositoryTests
             Assert.That(result.FilePath, Does.EndWith(".gif"));
         }
 
+        // Verify file exists on disk
+        var fullPath = _repository.GetFullPath(result.FilePath);
+        Assert.That(File.Exists(fullPath), Is.True, "Converted GIF should exist on disk");
+
+        // Verify FFmpeg conversion was called (magic byte fallback caught it)
+        await _mockVideoService!.Received(1).ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AddFromFileAsync_GifExtensionWithWebMContent_TriggersConversion()
+    {
+        // Arrange - File upload named .gif but containing WebM magic bytes
+        using var stream = new MemoryStream(CreateMinimalWebMBytes());
+
+        // Act
+        var result = await _repository!.AddFromFileAsync(stream, "from-tenor.gif", "Disguised WebM");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.FilePath, Does.EndWith(".gif"));
+        }
+
+        // Verify FFmpeg conversion was called (magic byte fallback caught it)
+        await _mockVideoService!.Received(1).ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region AddFromUrlAsync - WebM Disguised as GIF (Magic Byte Fallback)
+
+    [Test]
+    public async Task AddFromUrlAsync_ServerReturnsWebMBytesWithGifContentType_DetectsAndConverts()
+    {
+        // Arrange - WireMock serves WebM bytes but lies about content type
+        var webmBytes = CreateMinimalWebMBytes();
+
+        _mockServer
+            .Given(Request.Create().WithPath("/media/tenor.gif").UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(200)
+                .WithHeader("Content-Type", "image/gif")
+                .WithBody(webmBytes));
+
+        var url = $"{_mockServer.Urls[0]}/media/tenor.gif";
+
+        // Act
+        var result = await _repository!.AddFromUrlAsync(url, "Tenor Disguised WebM");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Name, Is.EqualTo("Tenor Disguised WebM"));
+            Assert.That(result.FilePath, Does.EndWith(".gif"));
+        }
+
         // Verify FFmpeg conversion was called (magic byte fallback caught it)
         await _mockVideoService!.Received(1).ConvertVideoToGifAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());

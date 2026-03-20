@@ -16,11 +16,6 @@ public class ThumbnailService : IThumbnailService
     private readonly IVideoFrameExtractionService _videoFrameService;
     private readonly ILogger<ThumbnailService> _logger;
 
-    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp4", ".webm", ".mov", ".avi", ".mkv", ".m4v"
-    };
-
     public ThumbnailService(
         IVideoFrameExtractionService videoFrameService,
         ILogger<ThumbnailService> logger)
@@ -43,7 +38,7 @@ public class ThumbnailService : IThumbnailService
             // Giphy and similar services often serve MP4 content from .gif URLs,
             // so the file extension alone is unreliable.
             var extension = Path.GetExtension(sourcePath);
-            if (VideoExtensions.Contains(extension) || MediaPathUtilities.IsVideoContent(sourcePath))
+            if (MediaUtilities.VideoExtensions.Contains(extension) || MediaUtilities.IsVideoContent(sourcePath))
             {
                 return await GenerateVideoThumbnailAsync(sourcePath, destinationPath, maxSize, ct);
             }

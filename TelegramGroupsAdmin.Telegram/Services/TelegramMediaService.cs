@@ -52,7 +52,7 @@ public class TelegramMediaService(
             var uniqueFileName = $"{mediaType.ToString().ToLowerInvariant()}_{messageId}_{file.FileUniqueId}{extension}";
 
             // Get subdirectory from centralized utility
-            var subDir = MediaPathUtilities.GetMediaSubdirectory((int)mediaType);
+            var subDir = MediaUtilities.GetMediaSubdirectory((int)mediaType);
 
             // Ensure media subdirectory exists (e.g., /data/media/video/)
             var mediaDir = Path.Combine(_mediaStoragePath, "media", subDir);

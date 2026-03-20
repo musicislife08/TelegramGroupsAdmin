@@ -86,7 +86,7 @@ public class FetchUserPhotoJob(
                     try
                     {
                         // Resolve relative path to absolute for disk operations
-                        var absolutePath = MediaPathUtilities.ToAbsolutePath(photoResult.RelativePath, appOptions.Value.DataPath);
+                        var absolutePath = MediaUtilities.ToAbsolutePath(photoResult.RelativePath, appOptions.Value.DataPath);
                         var photoHashBytes = await photoHashService.ComputePhotoHashAsync(absolutePath);
                         if (photoHashBytes != null)
                         {

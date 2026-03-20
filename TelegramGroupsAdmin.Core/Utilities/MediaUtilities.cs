@@ -1,15 +1,23 @@
 namespace TelegramGroupsAdmin.Core.Utilities;
 
 /// <summary>
-/// Utilities for constructing media file paths and detecting media formats.
-/// Phase 4.X: Media attachments (Animation, Video, Audio, Voice, Sticker, VideoNote, Document)
+/// Utilities for constructing media file paths, detecting media formats, and identifying video content.
 /// </summary>
-public static class MediaPathUtilities
+public static class MediaUtilities
 {
+    /// <summary>
+    /// File extensions recognized as video formats. Used for extension-based routing before
+    /// falling back to <see cref="IsVideoContent"/> magic byte detection.
+    /// </summary>
+    public static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".webm", ".mov", ".avi", ".mkv", ".m4v"
+    };
+
     /// <summary>
     /// Detects whether a file contains video content by examining its magic bytes (file signature),
     /// regardless of file extension. Giphy and other services often serve MP4/WebM video content
-    /// from URLs with .gif extensions.
+    /// from URLs with .gif extensions. Returns false for files shorter than 4 bytes or that cannot be read.
     /// </summary>
     /// <param name="filePath">Full path to the file to inspect</param>
     /// <returns>True if the file's magic bytes match a known video format (MP4/MOV/M4V, WebM/MKV, AVI)</returns>
@@ -18,7 +26,7 @@ public static class MediaPathUtilities
         try
         {
             Span<byte> header = stackalloc byte[12];
-            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+            using var fs = File.OpenRead(filePath);
             var bytesRead = fs.Read(header);
             if (bytesRead < 4) return false;
 
@@ -42,7 +50,11 @@ public static class MediaPathUtilities
 
             return false;
         }
-        catch
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
         {
             return false;
         }

@@ -551,7 +551,7 @@
             return string.Empty;
 
         // Use centralized utility to construct media path
-        return Core.Utilities.MediaPathUtilities.GetMediaWebPath(filename, (int)mediaType);
+        return Core.Utilities.MediaUtilities.GetMediaWebPath(filename, (int)mediaType);
     }
 
     private bool IsManuallyMarkedAsHam()
