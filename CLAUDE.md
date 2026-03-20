@@ -241,8 +241,13 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - `SEQ_URL`: Seq server URL (e.g., `http://seq:5341`) - if not set, logs only to console
 - `SEQ_API_KEY`: Seq API key for ingestion authentication (optional, leave empty for no auth)
 - `OTEL_SERVICE_NAME`: Service name for traces/metrics (default: `TelegramGroupsAdmin`)
+- `ENABLE_METRICS`: Enables Prometheus `/metrics` endpoint without full OTEL/Seq stack (set to any non-empty value)
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP endpoint for traces and metrics (e.g., `http://seq:5341/ingest/otlp`)
 
-When `SEQ_URL` is configured, the application automatically enables:
+When `ENABLE_METRICS` is set (without `OTEL_EXPORTER_OTLP_ENDPOINT`), the application enables:
+- **Prometheus Metrics**: `/metrics` endpoint with runtime, HTTP, and database metrics
+
+When `OTEL_EXPORTER_OTLP_ENDPOINT` is configured, the application enables both metrics AND:
 - **Structured Logging**: Serilog logs sent to Seq with trace correlation
 - **Distributed Tracing**: OpenTelemetry traces for HTTP requests, database queries, background jobs
 - **Metrics**: Prometheus metrics endpoint at `/metrics` (runtime performance, request rates, job execution)
@@ -293,7 +298,7 @@ When `SEQ_URL` is configured, the application automatically enables:
 **Common Issues**:
 - **Seq not receiving logs**: Check `SEQ_URL` environment variable, verify network connectivity (`docker network inspect telegram-admin`), check container logs (`docker logs tga-seq`)
 - **Missing traces**: Verify `ActivitySource` registration in Program.cs, check OTLP exporter configuration points to correct Seq URL
-- **`/metrics` returning 404**: Ensure `app.MapPrometheusScrapingEndpoint()` called after `app.UseRouting()` in Program.cs, verify `SEQ_URL` is set (metrics endpoint only mapped when observability enabled)
+- **`/metrics` returning 404**: Ensure `ENABLE_METRICS` or `OTEL_EXPORTER_OTLP_ENDPOINT` is set (metrics endpoint only mapped when either is configured)
 - **High memory usage**: Configure OpenTelemetry batch size limits via environment variables, adjust sampling rate if needed
 - **Seq retention**: Configure retention policies in Seq UI (Settings → Retention), default is 7 days
 - **Application works without Seq**: By design - all observability is optional. If `SEQ_URL` not set, app logs to console only and operates normally

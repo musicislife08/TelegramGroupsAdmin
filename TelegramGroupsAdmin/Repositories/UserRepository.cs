@@ -563,4 +563,11 @@ public class UserRepository : IUserRepository
 
         return email;
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> AnyUsersExistAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Users.AnyAsync(cancellationToken);
+    }
 }
