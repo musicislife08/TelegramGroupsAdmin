@@ -93,6 +93,7 @@ Plans:
   5. REQUIREMENTS.md CLAM-01 updated to remove "per-scan, not cached at startup" clause
   6. REQUIREMENTS.md STAT-01/02/03 fixed to reference `OTEL_EXPORTER_OTLP_ENDPOINT` instead of stale `SEQ_URL`
   7. Production compose template includes `ENABLE_METRICS` env var example
+**Plans:** 1 plan
 Plans:
 - [ ] 12-01-PLAN.md — ClamAV IOptions refactor + doc fixes
 
