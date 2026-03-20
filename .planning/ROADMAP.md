@@ -36,7 +36,7 @@
 - [x] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars (completed 2026-03-18)
 - [x] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern (completed 2026-03-19)
 - [x] **Phase 11: Decouple Prometheus Metrics Endpoint** - ENABLE_METRICS env var decouples /metrics from OTEL_EXPORTER_OTLP_ENDPOINT for hosting provider monitoring (completed 2026-03-20)
-- [ ] **Phase 12: ClamAV IOptions Refactor + Doc Fixes** - Refactor ClamAV env var override to use IOptions<ClamAVConfig> pattern; fix stale docs
+- [ ] **Phase 12: Compose Env Var Fix + Doc Fixes** - Fix compose CLAMAV__HOST/PORT to single-underscore matching code; add ENABLE_METRICS to production compose
 
 ## Phase Details
 
@@ -80,22 +80,19 @@ Plans:
 Plans:
 - [ ] 11-01-PLAN.md — Decouple metrics pipeline from OTEL tracing (STAT-01 through STAT-05)
 
-### Phase 12: ClamAV IOptions Refactor + Doc Fixes
-**Goal**: Refactor ClamAV env var override from raw `Environment.GetEnvironmentVariable` to `IOptions<ClamAVConfig>` pattern, aligning with ASP.NET Core conventions and making compose `CLAMAV__HOST`/`CLAMAV__PORT` the correct mechanism. Fix stale documentation.
-**Depends on**: Phase 9 (refactors its implementation)
-**Requirements**: CLAM-01 (updated), CLAM-02, CLAM-03, CLAM-04
+### Phase 12: Compose Env Var Fix + Doc Fixes
+**Goal**: Fix compose file env var names to match what code reads (`CLAMAV_HOST`/`CLAMAV_PORT` single underscore, not `CLAMAV__HOST`/`CLAMAV__PORT` double underscore). Fix stale documentation. No code changes.
+**Depends on**: Phase 9 (fixes its deployment examples)
+**Requirements**: CLAM-01 (updated)
 **Gap Closure:** Closes CLAM-COMPOSE-ENV integration gap + doc fixes from v1.2 audit
 **Success Criteria** (what must be TRUE):
-  1. `ClamAVScannerService` reads ClamAV override from `IOptions<ClamAVConfig>` (bound via `IConfiguration`) instead of raw `Environment.GetEnvironmentVariable`
-  2. When `CLAMAV__HOST` and `CLAMAV__PORT` env vars are set, the override activates (both required, no partial override preserved)
-  3. Existing compose files' `CLAMAV__HOST`/`CLAMAV__PORT` entries work correctly without modification
-  4. Unit tests updated to configure via IOptions instead of mocking env vars
-  5. REQUIREMENTS.md CLAM-01 updated to remove "per-scan, not cached at startup" clause
-  6. REQUIREMENTS.md STAT-01/02/03 fixed to reference `OTEL_EXPORTER_OTLP_ENDPOINT` instead of stale `SEQ_URL`
-  7. Production compose template includes `ENABLE_METRICS` env var example
-**Plans:** 1 plan
+  1. Compose files use `CLAMAV_HOST`/`CLAMAV_PORT` (single underscore) matching `Environment.GetEnvironmentVariable` in code
+  2. Production compose template includes `ENABLE_METRICS` env var example
+  3. REQUIREMENTS.md CLAM-01 text updated to reflect single-underscore env var names
+  4. REQUIREMENTS.md STAT-01/02/03 reference `OTEL_EXPORTER_OTLP_ENDPOINT` (already done)
+  5. No code changes — implementation is correct, only deployment examples were wrong
 Plans:
-- [ ] 12-01-PLAN.md — ClamAV IOptions refactor + doc fixes
+- [ ] 12-01-PLAN.md — Compose env var fix + doc fixes
 
 ## Progress
 
@@ -113,4 +110,4 @@ Plans:
 | 9. ClamAV Environment Variable Override | v1.2 | 1/1 | Complete | 2026-03-18 |
 | 10. Bootstrap Owner CLI Flag | v1.2 | 1/1 | Complete | 2026-03-19 |
 | 11. Decouple Prometheus Metrics Endpoint | v1.2 | 1/1 | Complete | 2026-03-20 |
-| 12. ClamAV IOptions Refactor + Doc Fixes | v1.2 | 0/1 | Planned | - |
+| 12. Compose Env Var Fix + Doc Fixes | v1.2 | 0/1 | Planned | - |

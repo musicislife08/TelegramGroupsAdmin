@@ -19,7 +19,7 @@ Requirements for SaaS hosting readiness. Each maps to roadmap phases.
 
 ### ClamAV Override
 
-- [ ] **CLAM-01**: `CLAMAV__HOST` and `CLAMAV__PORT` env vars (ASP.NET Core convention) override DB-stored ClamAV host and port via `IOptions<ClamAVConfig>` binding
+- [ ] **CLAM-01**: `CLAMAV_HOST` and `CLAMAV_PORT` env vars override DB-stored ClamAV host and port (compose examples must use single-underscore names matching `Environment.GetEnvironmentVariable`)
 - [x] **CLAM-02**: Both env vars are required for override to activate — if either is missing, DB config is used (no partial override)
 - [x] **CLAM-03**: When env var override is active, an INFO log records the effective ClamAV host:port on first use
 - [x] **CLAM-04**: `GetHealthAsync()` uses the same override-aware config path as `ScanFileAsync()`
