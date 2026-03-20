@@ -892,6 +892,27 @@ public class BanCelebrationGifRepositoryTests
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
+    [Test]
+    public async Task AddFromFileAsync_GifExtensionWithVideoContent_ConversionFails_CleansUpAndThrows()
+    {
+        // Arrange - Override the default mock to return false (conversion failure)
+        _mockVideoService!.ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        using var stream = new MemoryStream(CreateMinimalMp4Bytes());
+
+        // Act & Assert — should throw since FFmpeg "failed"
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _repository!.AddFromFileAsync(stream, "bad-video.gif", "Fails Conversion"));
+
+        Assert.That(ex!.Message, Does.Contain("FFmpeg conversion failed"));
+
+        // Verify DB record was cleaned up (no orphaned records)
+        var allGifs = await _repository!.GetAllAsync();
+        Assert.That(allGifs, Is.Empty, "DB record should be removed after conversion failure");
+    }
+
     #endregion
 
     #region AddFromUrlAsync - WebM Disguised as GIF (Magic Byte Fallback)

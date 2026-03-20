@@ -187,7 +187,6 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
                     }
                 }
 
-                isVideo = true;
             }
         }
 
