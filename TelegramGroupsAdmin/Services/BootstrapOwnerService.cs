@@ -9,8 +9,6 @@ namespace TelegramGroupsAdmin.Services;
 
 internal static class BootstrapOwnerService
 {
-    public record BootstrapResult(bool Success, string Message);
-
     public static async Task<BootstrapResult> ExecuteAsync(
         string? filePath,
         IUserRepository userRepository,

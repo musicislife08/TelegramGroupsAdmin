@@ -68,7 +68,7 @@ public class ClamAVScannerServiceTests
     {
         var field = typeof(ClamAVScannerService)
             .GetField("_hasLoggedOverride", BindingFlags.NonPublic | BindingFlags.Static);
-        field?.SetValue(null, false);
+        field?.SetValue(null, 0);
     }
 
     // -------------------------------------------------------------------------

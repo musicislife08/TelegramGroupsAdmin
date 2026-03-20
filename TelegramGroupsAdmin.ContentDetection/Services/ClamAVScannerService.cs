@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using nClam;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -20,8 +21,10 @@ public class ClamAVScannerService : IFileScannerService
     /// <summary>
     /// Guards the one-time INFO log for env var override. Static because this service is Scoped
     /// and the "log once per process" semantic must survive across request scopes.
+    /// Uses int + Interlocked.CompareExchange for atomic check-and-set (volatile bool has a
+    /// benign TOCTOU race where two concurrent calls can both log).
     /// </summary>
-    private static volatile bool _hasLoggedOverride;
+    private static int _hasLoggedOverride;
 
     public string ScannerName => "ClamAV";
 
@@ -40,41 +43,60 @@ public class ClamAVScannerService : IFileScannerService
     }
 
     /// <summary>
-    /// Returns the effective (host, port) for ClamAV connections.
-    /// When both CLAMAV_HOST and CLAMAV_PORT environment variables are set to valid values,
-    /// they take precedence over the database configuration. This allows operators to point
-    /// all TGA instances at a shared ClamAV daemon without pre-seeding the database on each instance.
-    /// The first time the override is active, one INFO message is logged; subsequent calls are silent.
+    /// Checks whether CLAMAV_HOST and CLAMAV_PORT env vars provide a valid override.
+    /// Logs once per process lifetime on first successful override detection.
     /// </summary>
-    private async Task<(string host, int port)> GetEffectiveEndpointAsync(CancellationToken cancellationToken = default)
+    private bool TryGetEnvVarEndpoint(out string host, out int port)
     {
         var envHost = Environment.GetEnvironmentVariable("CLAMAV_HOST");
         var envPort = Environment.GetEnvironmentVariable("CLAMAV_PORT");
 
         if (!string.IsNullOrWhiteSpace(envHost)
             && !string.IsNullOrWhiteSpace(envPort)
-            && int.TryParse(envPort, out var parsedPort))
+            && int.TryParse(envPort, out var parsedPort)
+            && parsedPort > 0 && parsedPort <= 65535)
         {
-            if (!_hasLoggedOverride)
+            if (Interlocked.CompareExchange(ref _hasLoggedOverride, 1, 0) == 0)
             {
-                _hasLoggedOverride = true;
                 _logger.LogInformation(
                     "ClamAV env var override active -- using {Host}:{Port} (CLAMAV_HOST / CLAMAV_PORT)",
                     envHost, parsedPort);
             }
 
-            return (envHost, parsedPort);
+            host = envHost;
+            port = parsedPort;
+            return true;
         }
 
-        var config = await GetConfigAsync(cancellationToken);
+        host = string.Empty;
+        port = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// Returns the effective (host, port) for ClamAV connections from an already-loaded config.
+    /// Env vars take precedence; falls back to the config's host/port.
+    /// Used by ScanFileAsync which already loaded config for the Enabled flag check.
+    /// </summary>
+    private (string host, int port) GetEffectiveEndpoint(FileScanningConfig config)
+    {
+        if (TryGetEnvVarEndpoint(out var host, out var port))
+            return (host, port);
+
         return (config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
     }
 
-    // Helper method to create ClamClient with effective endpoint (env var override or DB config)
-    private async Task<ClamClient> CreateClamClientAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Async wrapper for callers that don't already have the config loaded (e.g. GetHealthAsync).
+    /// Checks env vars first — skips DB entirely if override is active.
+    /// </summary>
+    private async Task<(string host, int port)> GetEffectiveEndpointAsync(CancellationToken cancellationToken = default)
     {
-        var (host, port) = await GetEffectiveEndpointAsync(cancellationToken);
-        return new ClamClient(host, port);
+        if (TryGetEnvVarEndpoint(out var host, out var port))
+            return (host, port);
+
+        var config = await GetConfigAsync(cancellationToken);
+        return (config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
     }
 
     public async Task<FileScanResult> ScanFileAsync(
@@ -88,7 +110,6 @@ public class ClamAVScannerService : IFileScannerService
         activity?.SetTag("file_scanner.file_name", fileName);
 
         var startTimestamp = Stopwatch.GetTimestamp();
-        var stopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -104,14 +125,14 @@ public class ClamAVScannerService : IFileScannerService
                     Scanner = ScannerName,
                     IsClean = true,
                     ResultType = ScanResultType.Clean,
-                    ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                    ScanDurationMs = (int)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
                 RecordScanMetrics(startTimestamp, disabledResult, activity);
                 return disabledResult;
             }
 
-            // Resolve effective endpoint once (env var override or DB config) for use in error logs
-            var (effectiveHost, effectivePort) = await GetEffectiveEndpointAsync(cancellationToken);
+            // Resolve effective endpoint once (env var override or DB config) for use in retry loop + error logs
+            var (effectiveHost, effectivePort) = GetEffectiveEndpoint(config);
 
             // Get file size for limit checking
             var fileInfo = new FileInfo(filePath);
@@ -129,7 +150,7 @@ public class ClamAVScannerService : IFileScannerService
                     IsClean = true,  // Skip, rely on VirusTotal
                     ResultType = ScanResultType.Skipped,
                     ErrorMessage = $"File too large for ClamAV ({fileSize} bytes > 2GB limit)",
-                    ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                    ScanDurationMs = (int)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -151,7 +172,7 @@ public class ClamAVScannerService : IFileScannerService
                 try
                 {
                     // Ping ClamAV before scan attempt to detect connection issues early
-                    var clamClient = await CreateClamClientAsync(cancellationToken);
+                    var clamClient = new ClamClient(effectiveHost, effectivePort);
                     var pingResult = await clamClient.PingAsync(cancellationToken);
                     if (!pingResult)
                     {
@@ -166,7 +187,7 @@ public class ClamAVScannerService : IFileScannerService
                                 IsClean = true,  // Fail-open
                                 ResultType = ScanResultType.Error,
                                 ErrorMessage = "ClamAV daemon not available after retries",
-                                ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                                ScanDurationMs = (int)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                             };
                         }
 
@@ -203,25 +224,25 @@ public class ClamAVScannerService : IFileScannerService
                     IsClean = true,  // Fail-open
                     ResultType = ScanResultType.Error,
                     ErrorMessage = "All scan attempts failed",
-                    ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                    ScanDurationMs = (int)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            stopwatch.Stop();
+            var scanDurationMs = (int)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
             // Process scan result
             switch (scanResult.Result)
             {
                 case ClamScanResults.Clean:
                     _logger.LogDebug("ClamAV scan: File is clean (duration: {Duration}ms)",
-                        stopwatch.ElapsedMilliseconds);
+                        scanDurationMs);
 
                     var cleanResult = new FileScanResult
                     {
                         Scanner = ScannerName,
                         IsClean = true,
                         ResultType = ScanResultType.Clean,
-                        ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                        ScanDurationMs = scanDurationMs
                     };
                     RecordScanMetrics(startTimestamp, cleanResult, activity);
                     return cleanResult;
@@ -229,7 +250,7 @@ public class ClamAVScannerService : IFileScannerService
                 case ClamScanResults.VirusDetected:
                     _logger.LogWarning("ClamAV scan: Virus detected - {VirusName} (duration: {Duration}ms)",
                         scanResult.InfectedFiles?.FirstOrDefault()?.VirusName ?? "Unknown",
-                        stopwatch.ElapsedMilliseconds);
+                        scanDurationMs);
 
                     var infectedResult = new FileScanResult
                     {
@@ -237,7 +258,7 @@ public class ClamAVScannerService : IFileScannerService
                         IsClean = false,
                         ResultType = ScanResultType.Infected,
                         ThreatName = scanResult.InfectedFiles?.FirstOrDefault()?.VirusName,
-                        ScanDurationMs = (int)stopwatch.ElapsedMilliseconds,
+                        ScanDurationMs = scanDurationMs,
                         Metadata = new Dictionary<string, object>
                         {
                             ["infected_files_count"] = scanResult.InfectedFiles?.Count ?? 0
@@ -255,7 +276,7 @@ public class ClamAVScannerService : IFileScannerService
                         IsClean = true,  // Fail-open
                         ResultType = ScanResultType.Error,
                         ErrorMessage = scanResult.RawResult,
-                        ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                        ScanDurationMs = scanDurationMs
                     };
                     RecordScanMetrics(startTimestamp, errorResult, activity);
                     return errorResult;
@@ -270,7 +291,7 @@ public class ClamAVScannerService : IFileScannerService
                         IsClean = true,  // Fail-open on unknown
                         ResultType = ScanResultType.Error,
                         ErrorMessage = $"Unknown scan result: {scanResult.RawResult}",
-                        ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                        ScanDurationMs = scanDurationMs
                     };
                     RecordScanMetrics(startTimestamp, unknownResult, activity);
                     return unknownResult;
@@ -278,7 +299,6 @@ public class ClamAVScannerService : IFileScannerService
         }
         catch (Exception ex)
         {
-            stopwatch.Stop();
             _logger.LogError(ex, "Exception during ClamAV scan");
 
             var exceptionResult = new FileScanResult
@@ -287,7 +307,7 @@ public class ClamAVScannerService : IFileScannerService
                 IsClean = true,  // Fail-open on exception
                 ResultType = ScanResultType.Error,
                 ErrorMessage = ex.Message,
-                ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                ScanDurationMs = (int)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
             RecordScanMetrics(startTimestamp, exceptionResult, activity);
             return exceptionResult;
@@ -330,10 +350,8 @@ public class ClamAVScannerService : IFileScannerService
     private static bool IsTransientClamAVError(Exception ex)
     {
         // Network errors that indicate temporary connectivity issues
-        return ex is System.Net.Sockets.SocketException
-            || ex is IOException
-            || ex is TimeoutException
-            || (ex.InnerException != null && IsTransientClamAVError(ex.InnerException));
+        return ex is SocketException or IOException or TimeoutException
+            || (ex.InnerException is not null && IsTransientClamAVError(ex.InnerException));
     }
 
     /// <summary>

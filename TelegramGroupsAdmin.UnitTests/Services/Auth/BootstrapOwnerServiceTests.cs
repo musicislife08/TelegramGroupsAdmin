@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -390,6 +391,49 @@ public class BootstrapOwnerServiceTests
 
         // Assert: overall success despite audit failure
         Assert.That(result.Success, Is.True);
+    }
+
+    #endregion
+
+    #region Exception propagation
+
+    [Test]
+    public void ExecuteAsync_WhenCreateAsyncThrows_ExceptionPropagates()
+    {
+        // Arrange
+        var filePath = CreateValidBootstrapFile();
+
+        _userRepository.AnyUsersExistAsync(cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        _userRepository.CreateAsync(Arg.Any<UserRecord>(), cancellationToken: Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("Duplicate email"));
+
+        // Act & Assert
+        Assert.ThrowsAsync<DbUpdateException>(async () =>
+            await BootstrapOwnerService.ExecuteAsync(
+                filePath: filePath,
+                userRepository: _userRepository,
+                passwordHasher: _passwordHasher,
+                auditService: _auditService,
+                logger: _logger));
+    }
+
+    [Test]
+    public void ExecuteAsync_WhenAnyUsersExistAsyncThrows_ExceptionPropagates()
+    {
+        // Arrange
+        _userRepository.AnyUsersExistAsync(cancellationToken: Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Database unavailable"));
+
+        // Act & Assert
+        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await BootstrapOwnerService.ExecuteAsync(
+                filePath: null,
+                userRepository: _userRepository,
+                passwordHasher: _passwordHasher,
+                auditService: _auditService,
+                logger: _logger));
     }
 
     #endregion
