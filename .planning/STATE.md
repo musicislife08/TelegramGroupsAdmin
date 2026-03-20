@@ -66,8 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Blockers/Concerns
 
-- [Phase 11]: Status endpoint JSON response schema needs alignment with user before implementation (fields and names not pinned in research). Minimum suggested: status, uptime_seconds, memory_working_set_mb, gc_gen0/1/2, thread pool stats.
-- [Phase 11]: TelegramBotPollingHost bot connection state surface not confirmed — if not easily accessible, endpoint returns "bot": "unknown".
+- [Phase 11]: Phase pivoted from custom JSON /healthz/status endpoint to decoupling /metrics from SEQ_URL via ENABLE_METRICS env var. No app-level auth, no bot state, no custom JSON schema.
 
 ## Session Continuity
 

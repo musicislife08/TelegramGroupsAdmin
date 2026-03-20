@@ -24,13 +24,13 @@ Requirements for SaaS hosting readiness. Each maps to roadmap phases.
 - [x] **CLAM-03**: When env var override is active, an INFO log records the effective ClamAV host:port on first use
 - [x] **CLAM-04**: `GetHealthAsync()` uses the same override-aware config path as `ScanFileAsync()`
 
-### Status Endpoint
+### Metrics Endpoint Decoupling
 
-- [ ] **STAT-01**: `GET /healthz/status` returns JSON with .NET runtime metrics (memory working set, GC gen0/1/2 collections, thread pool stats, uptime)
-- [ ] **STAT-02**: Endpoint is only registered when `STATUS_API_KEY` env var is configured (not mapped otherwise, matching OTEL pattern)
-- [ ] **STAT-03**: Endpoint requires `X-Status-Api-Key` header matching `STATUS_API_KEY` env var; returns 401 on mismatch
-- [ ] **STAT-04**: API key comparison uses `CryptographicOperations.FixedTimeEquals` (constant-time, matching existing PasswordHasher pattern)
-- [ ] **STAT-05**: API key value is never written to logs at any log level
+- [ ] **STAT-01**: `ENABLE_METRICS` env var gates `/metrics` Prometheus endpoint independently of `SEQ_URL` (either env var activates the endpoint)
+- [ ] **STAT-02**: When `ENABLE_METRICS` is set without `SEQ_URL`, OpenTelemetry meters and Prometheus exporter are registered (metrics-only OTEL pipeline); logging/tracing to Seq remain conditional on `SEQ_URL`
+- [ ] **STAT-03**: Existing behavior preserved — `SEQ_URL` still implicitly enables `/metrics` (no breaking change for current deployments)
+- [ ] **STAT-04**: Startup INFO log indicates which env var activated the metrics endpoint (e.g., "via ENABLE_METRICS" or "via SEQ_URL")
+- [ ] **STAT-05**: No app-level authentication on `/metrics` — infrastructure (K8s NetworkPolicy, reverse proxy) controls access
 
 ## Future Requirements
 
@@ -50,13 +50,11 @@ Deferred to v1.x after validation.
 
 | Feature | Reason |
 |---------|--------|
-| DB health in status endpoint | Hosting provider monitors PostgreSQL externally |
-| ClamAV health in status endpoint | Hosting provider monitors shared ClamAV externally |
-| Bot connection state in status endpoint | Subscriber's responsibility, not hosting provider's concern |
+| Bot connection state in metrics | Subscriber's responsibility, not hosting provider's concern |
 | App-level monitoring hooks / billing | Hosting provider model, not platform operator |
 | Distributed systems (Redis, RabbitMQ, S3) | Singleton architecture by design |
-| OTEL/Prometheus changes | Already conditional on env vars, no work needed |
-| mTLS for status endpoint | Overkill for API key gated endpoint behind K8s NetworkPolicy |
+| App-level auth on /metrics | Infrastructure controls access (K8s NetworkPolicy, reverse proxy) |
+| Custom JSON status endpoint | Replaced by decoupled Prometheus /metrics — richer data, standard format |
 
 ## Traceability
 

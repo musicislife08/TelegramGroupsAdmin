@@ -31,11 +31,11 @@
 
 ### 🚧 v1.2 SaaS Hosting Readiness (In Progress)
 
-**Milestone Goal:** Make TGA deployable by an external hosting orchestrator without adding SaaS-specific code to the open-source codebase. Three independent capabilities: infrastructure env var override for ClamAV, headless owner account bootstrapping, and a lightweight runtime status endpoint.
+**Milestone Goal:** Make TGA deployable by an external hosting orchestrator without adding SaaS-specific code to the open-source codebase. Three independent capabilities: infrastructure env var override for ClamAV, headless owner account bootstrapping, and decoupled Prometheus metrics endpoint.
 
 - [x] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars (completed 2026-03-18)
 - [x] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern (completed 2026-03-19)
-- [ ] **Phase 11: GET /healthz/status Endpoint** - API-key-gated runtime status endpoint for hosting provider monitoring
+- [ ] **Phase 11: Decouple Prometheus Metrics Endpoint** - ENABLE_METRICS env var decouples /metrics from SEQ_URL for hosting provider monitoring
 
 ## Phase Details
 
@@ -66,15 +66,15 @@ Plans:
 Plans:
 - [ ] 10-01-PLAN.md — TDD: Bootstrap Owner CLI flag (BOOT-01 through BOOT-07)
 
-### Phase 11: GET /healthz/status Endpoint
-**Goal**: A hosting provider's monitoring dashboard can poll a single authenticated JSON endpoint for .NET runtime health metrics without needing access to the application internals
-**Depends on**: Nothing (independent — status endpoint reports runtime metrics only, not ClamAV/DB health)
+### Phase 11: Decouple Prometheus Metrics Endpoint
+**Goal**: A hosting provider can enable the Prometheus `/metrics` endpoint via `ENABLE_METRICS` env var without requiring the full Seq/OTEL observability stack (`SEQ_URL`)
+**Depends on**: Nothing (independent — decouples existing functionality)
 **Requirements**: STAT-01, STAT-02, STAT-03, STAT-04, STAT-05
 **Success Criteria** (what must be TRUE):
-  1. `GET /healthz/status` with the correct `X-Status-Api-Key` header returns a 200 JSON response containing .NET runtime metrics (memory working set, GC gen0/1/2 collections, thread pool stats, uptime)
-  2. When `STATUS_API_KEY` is not configured, the `/healthz/status` route does not exist (404, not 401)
-  3. A request with a wrong or missing `X-Status-Api-Key` header returns 401
-  4. The API key value never appears in any log output at any log level
+  1. Setting `ENABLE_METRICS` env var maps the `/metrics` Prometheus endpoint and registers OTEL meters, even without `SEQ_URL`
+  2. Setting `SEQ_URL` still implicitly enables `/metrics` (no breaking change for existing deployments)
+  3. When only `ENABLE_METRICS` is set (no `SEQ_URL`), logging/tracing to Seq are not configured — only meters and Prometheus exporter
+  4. Startup INFO log indicates which env var activated the metrics endpoint
 **Plans**: TBD
 
 ## Progress
@@ -92,4 +92,4 @@ Plans:
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
 | 9. ClamAV Environment Variable Override | 1/1 | Complete   | 2026-03-18 | - |
 | 10. Bootstrap Owner CLI Flag | 1/1 | Complete    | 2026-03-19 | - |
-| 11. GET /healthz/status Endpoint | v1.2 | 0/TBD | Not started | - |
+| 11. Decouple Prometheus Metrics Endpoint | v1.2 | 0/TBD | Not started | - |
