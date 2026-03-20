@@ -110,4 +110,4 @@ Plans:
 | 9. ClamAV Environment Variable Override | v1.2 | 1/1 | Complete | 2026-03-18 |
 | 10. Bootstrap Owner CLI Flag | v1.2 | 1/1 | Complete | 2026-03-19 |
 | 11. Decouple Prometheus Metrics Endpoint | v1.2 | 1/1 | Complete | 2026-03-20 |
-| 12. Compose Env Var Fix + Doc Fixes | 1/1 | Complete   | 2026-03-20 | - |
+| 12. Compose Env Var Fix + Doc Fixes | 1/1 | Complete    | 2026-03-20 | - |
