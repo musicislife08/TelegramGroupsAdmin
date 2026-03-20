@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: SaaS Hosting Readiness
 status: planning
-stopped_at: Completed 11-decouple-prometheus-metrics-endpoint/11-01-PLAN.md
-last_updated: "2026-03-20T02:34:43.831Z"
+stopped_at: Completed 12-clamav-ioptions-refactor-doc-fixes/12-01-PLAN.md
+last_updated: "2026-03-20T04:19:15.925Z"
 last_activity: 2026-03-18 — Roadmap created, 16/16 v1.2 requirements mapped across 3 phases
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 4
+  completed_plans: 4
   percent: 0
 ---
 
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09-clamav-environment-variable-override P01 | 15min | 1 tasks | 2 files |
 | Phase 10-bootstrap-owner-cli-flag P01 | 10min | 2 tasks | 8 files |
 | Phase 11-decouple-prometheus-metrics-endpoint P01 | 10min | 2 tasks | 2 files |
+| Phase 12-clamav-ioptions-refactor-doc-fixes P01 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 10]: EmailVerified=true unconditionally on bootstrap (no featureAvailability check) — K8s init container must produce login-ready account
 - [Phase Phase 11]: ENABLE_METRICS activates /metrics independently of OTEL_EXPORTER_OTLP_ENDPOINT — hosting providers can enable Prometheus scraping without Seq/OTLP infrastructure
 - [Phase Phase 11]: AddOtlpExporter() on metrics pipeline conditional on otlpEndpoint — ENABLE_METRICS alone produces local-only Prometheus metrics with no OTLP export
+- [Phase 12]: Compose env var fix is docs-only — ClamAVScannerService already reads correct single-underscore names; compose files were wrong, not code
+- [Phase 12]: ENABLE_METRICS documented in both compose files as commented examples with appropriate context for each deployment scenario
 
 ### Blockers/Concerns
 
@@ -73,6 +76,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Session Continuity
 
-Last session: 2026-03-20T02:21:38.592Z
-Stopped at: Completed 11-decouple-prometheus-metrics-endpoint/11-01-PLAN.md
+Last session: 2026-03-20T04:19:15.923Z
+Stopped at: Completed 12-clamav-ioptions-refactor-doc-fixes/12-01-PLAN.md
 Resume file: None

@@ -36,7 +36,7 @@
 - [x] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars (completed 2026-03-18)
 - [x] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern (completed 2026-03-19)
 - [x] **Phase 11: Decouple Prometheus Metrics Endpoint** - ENABLE_METRICS env var decouples /metrics from OTEL_EXPORTER_OTLP_ENDPOINT for hosting provider monitoring (completed 2026-03-20)
-- [ ] **Phase 12: Compose Env Var Fix + Doc Fixes** - Fix compose CLAMAV__HOST/PORT to single-underscore matching code; add ENABLE_METRICS to production compose
+- [x] **Phase 12: Compose Env Var Fix + Doc Fixes** - Fix compose CLAMAV__HOST/PORT to single-underscore matching code; add ENABLE_METRICS to production compose (completed 2026-03-20)
 
 ## Phase Details
 
@@ -110,4 +110,4 @@ Plans:
 | 9. ClamAV Environment Variable Override | v1.2 | 1/1 | Complete | 2026-03-18 |
 | 10. Bootstrap Owner CLI Flag | v1.2 | 1/1 | Complete | 2026-03-19 |
 | 11. Decouple Prometheus Metrics Endpoint | v1.2 | 1/1 | Complete | 2026-03-20 |
-| 12. Compose Env Var Fix + Doc Fixes | v1.2 | 0/1 | Planned | - |
+| 12. Compose Env Var Fix + Doc Fixes | 1/1 | Complete   | 2026-03-20 | - |
