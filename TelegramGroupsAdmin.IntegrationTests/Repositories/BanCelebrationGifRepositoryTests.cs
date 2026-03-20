@@ -7,6 +7,9 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using WireMock.RequestBuilders;
+using WireMock.ResponseBuilders;
+using WireMock.Server;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Repositories;
 
@@ -30,6 +33,8 @@ public class BanCelebrationGifRepositoryTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private IBanCelebrationGifRepository? _repository;
+    private IVideoFrameExtractionService? _mockVideoService;
+    private WireMockServer _mockServer = null!;
     private string _tempMediaPath = null!;
 
     [SetUp]
@@ -38,6 +43,10 @@ public class BanCelebrationGifRepositoryTests
         // Create unique test database with migrations applied
         _testHelper = new MigrationTestHelper();
         await _testHelper.CreateDatabaseAndApplyMigrationsAsync();
+
+        // Start WireMock server for URL download tests
+        _mockServer = WireMockServer.Start();
+        _mockServer.Reset();
 
         // Create temp directory for media files
         _tempMediaPath = Path.Combine(Path.GetTempPath(), $"BanCelebrationGifTests_{Guid.NewGuid():N}");
@@ -60,22 +69,22 @@ public class BanCelebrationGifRepositoryTests
         services.AddHttpClient();
 
         // Mock IVideoFrameExtractionService for video conversion tests
-        var mockVideoService = Substitute.For<IVideoFrameExtractionService>();
-        mockVideoService.IsAvailable.Returns(true);
-        // Mock successful conversion - writes an empty file to the output path
-        mockVideoService.ConvertVideoToGifAsync(
+        _mockVideoService = Substitute.For<IVideoFrameExtractionService>();
+        _mockVideoService.IsAvailable.Returns(true);
+        // Mock successful conversion - writes a valid GIF to the output path
+        _mockVideoService.ConvertVideoToGifAsync(
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                // Create an empty file at the output path to simulate successful conversion
+                // Create a valid GIF at the output path to simulate successful conversion
                 var outputPath = callInfo.ArgAt<string>(1);
                 File.WriteAllBytes(outputPath, CreateMinimalGifBytes());
                 return true;
             });
-        services.AddSingleton(mockVideoService);
+        services.AddSingleton(_mockVideoService);
 
         services.AddScoped<IBanCelebrationGifRepository, BanCelebrationGifRepository>();
 
@@ -89,6 +98,8 @@ public class BanCelebrationGifRepositoryTests
     {
         (_serviceProvider as IDisposable)?.Dispose();
         _testHelper?.Dispose();
+        _mockServer.Stop();
+        _mockServer.Dispose();
 
         // Clean up temp directory
         if (Directory.Exists(_tempMediaPath))
@@ -705,6 +716,159 @@ public class BanCelebrationGifRepositoryTests
 
     #endregion
 
+    #region AddFromUrlAsync - Video Content Detection (WireMock)
+
+    [Test]
+    public async Task AddFromUrlAsync_ServerReturnsMp4ContentType_TriggersConversion()
+    {
+        // Arrange - WireMock serves MP4 bytes with correct video content type
+        var mp4Bytes = CreateMinimalMp4Bytes();
+
+        _mockServer
+            .Given(Request.Create().WithPath("/media/funny.gif").UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(200)
+                .WithHeader("Content-Type", "video/mp4")
+                .WithBody(mp4Bytes));
+
+        var url = $"{_mockServer.Urls[0]}/media/funny.gif";
+
+        // Act
+        var result = await _repository!.AddFromUrlAsync(url, "MP4 as GIF");
+
+        // Assert - File saved and conversion triggered
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Name, Is.EqualTo("MP4 as GIF"));
+            Assert.That(result.FilePath, Does.EndWith(".gif"));
+        }
+
+        // Verify FFmpeg conversion was called (content-type detection caught it)
+        await _mockVideoService!.Received(1).ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AddFromUrlAsync_ServerReturnsMp4BytesWithGifContentType_DetectsAndConverts()
+    {
+        // Arrange - WireMock serves MP4 bytes but lies about content type (the Giphy scenario)
+        var mp4Bytes = CreateMinimalMp4Bytes();
+
+        _mockServer
+            .Given(Request.Create().WithPath("/media/giphy.gif").UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(200)
+                .WithHeader("Content-Type", "image/gif")
+                .WithBody(mp4Bytes));
+
+        var url = $"{_mockServer.Urls[0]}/media/giphy.gif";
+
+        // Act
+        var result = await _repository!.AddFromUrlAsync(url, "Giphy Disguised MP4");
+
+        // Assert - File saved and magic byte detection triggered conversion
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Name, Is.EqualTo("Giphy Disguised MP4"));
+            Assert.That(result.FilePath, Does.EndWith(".gif"));
+        }
+
+        // Verify FFmpeg conversion was called (magic byte fallback caught it)
+        await _mockVideoService!.Received(1).ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AddFromUrlAsync_ServerReturnsWebMContentType_TriggersConversion()
+    {
+        // Arrange - WireMock serves WebM bytes with video/webm content type
+        var webmBytes = CreateMinimalWebMBytes();
+
+        _mockServer
+            .Given(Request.Create().WithPath("/media/clip.gif").UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(200)
+                .WithHeader("Content-Type", "video/webm")
+                .WithBody(webmBytes));
+
+        var url = $"{_mockServer.Urls[0]}/media/clip.gif";
+
+        // Act
+        var result = await _repository!.AddFromUrlAsync(url, "WebM as GIF");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Name, Is.EqualTo("WebM as GIF"));
+            Assert.That(result.FilePath, Does.EndWith(".gif"));
+        }
+
+        // Verify FFmpeg conversion was called (video/* content-type detection caught it)
+        await _mockVideoService!.Received(1).ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task AddFromUrlAsync_ServerReturnsRealGif_NoConversion()
+    {
+        // Arrange - WireMock serves actual GIF content (no conversion needed)
+        var gifBytes = CreateMinimalGifBytes();
+
+        _mockServer
+            .Given(Request.Create().WithPath("/media/real.gif").UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(200)
+                .WithHeader("Content-Type", "image/gif")
+                .WithBody(gifBytes));
+
+        var url = $"{_mockServer.Urls[0]}/media/real.gif";
+
+        // Act
+        var result = await _repository!.AddFromUrlAsync(url, "Real GIF");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.Name, Is.EqualTo("Real GIF"));
+            Assert.That(result.FilePath, Does.EndWith(".gif"));
+        }
+
+        // Verify FFmpeg conversion was NOT called (real GIF needs no conversion)
+        await _mockVideoService!.DidNotReceive().ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region AddFromFileAsync - Magic Byte Detection
+
+    [Test]
+    public async Task AddFromFileAsync_GifExtensionWithMp4Content_TriggersConversion()
+    {
+        // Arrange - File upload named .gif but containing MP4 magic bytes
+        using var stream = new MemoryStream(CreateMinimalMp4Bytes());
+
+        // Act
+        var result = await _repository!.AddFromFileAsync(stream, "from-giphy.gif", "Disguised MP4");
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.FilePath, Does.EndWith(".gif"));
+        }
+
+        // Verify FFmpeg conversion was called (magic byte fallback caught it)
+        await _mockVideoService!.Received(1).ConvertVideoToGifAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>
@@ -729,6 +893,33 @@ public class BanCelebrationGifRepositoryTests
     /// Creates a minimal valid GIF stream for testing.
     /// </summary>
     private static MemoryStream CreateTestGifStream() => new(CreateMinimalGifBytes());
+
+    /// <summary>
+    /// Creates bytes with a valid MP4 file signature (ftyp box).
+    /// Only the magic bytes matter — FFmpeg conversion is mocked.
+    /// </summary>
+    private static byte[] CreateMinimalMp4Bytes() =>
+    [
+        0x00, 0x00, 0x00, 0x1C,       // box size (28 bytes)
+        0x66, 0x74, 0x79, 0x70,       // "ftyp" — MP4/MOV/M4V signature
+        0x69, 0x73, 0x6F, 0x6D,       // brand: "isom"
+        0x00, 0x00, 0x02, 0x00,       // minor version
+        0x69, 0x73, 0x6F, 0x6D,       // compatible brand: "isom"
+        0x69, 0x73, 0x6F, 0x32,       // compatible brand: "iso2"
+        0x6D, 0x70, 0x34, 0x31,       // compatible brand: "mp41"
+    ];
+
+    /// <summary>
+    /// Creates bytes with a valid WebM/MKV file signature (EBML header).
+    /// Only the magic bytes matter — FFmpeg conversion is mocked.
+    /// </summary>
+    private static byte[] CreateMinimalWebMBytes() =>
+    [
+        0x1A, 0x45, 0xDF, 0xA3,       // EBML header — WebM/MKV signature
+        0x93, 0x42, 0x86, 0x81,       // EBML version element
+        0x01, 0x42, 0xF7, 0x81,       // EBML read version element
+        0x01, 0x42, 0xF2, 0x81,       // padding
+    ];
 
     #endregion
 }

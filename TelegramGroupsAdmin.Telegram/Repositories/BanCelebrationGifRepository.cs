@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Utilities;
+using static TelegramGroupsAdmin.Core.Utilities.MediaPathUtilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -158,6 +159,41 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
             {
                 await fileStream.CopyToAsync(fileStreamWrite, ct);
             }
+
+            // Check if the saved file is actually video content despite non-video extension.
+            // Giphy and similar services often serve MP4 from .gif URLs with misleading content types.
+            if (IsVideoContent(fullPath))
+            {
+                _logger.LogInformation(
+                    "File {FileName} has non-video extension but contains video content, converting to GIF",
+                    fileName);
+
+                var tempPath = fullPath + ".tmp";
+                File.Move(fullPath, tempPath);
+
+                try
+                {
+                    var success = await _videoService.ConvertVideoToGifAsync(tempPath, fullPath, maxSize: 480, ct);
+                    if (!success)
+                    {
+                        // Conversion failed — keep the original file (Telegram can still send it as-is)
+                        File.Move(tempPath, fullPath, overwrite: true);
+                        _logger.LogWarning(
+                            "Video-to-GIF conversion failed for misidentified video {FileName}, keeping original",
+                            fileName);
+                    }
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        try { File.Delete(tempPath); }
+                        catch { /* ignore cleanup errors */ }
+                    }
+                }
+
+                isVideo = true;
+            }
         }
 
         // Update the file path
@@ -181,19 +217,23 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         using var response = await _httpClient.GetAsync(url, ct);
         response.EnsureSuccessStatusCode();
 
-        // Determine extension from content type or URL
+        // Determine extension from content type or URL.
+        // Any video/* content type is treated as .mp4 for FFmpeg conversion,
+        // since Giphy and similar services may serve video from .gif URLs.
         var extension = ".gif";
         var contentType = response.Content.Headers.ContentType?.MediaType;
-        if (contentType == "video/mp4")
-            extension = ".mp4";
-        else if (contentType == "image/gif")
-            extension = ".gif";
-        else
+        if (contentType != null && contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
         {
-            // Try to get from URL
+            extension = ".mp4";
+        }
+        else if (contentType is not "image/gif")
+        {
+            // Unknown or missing content type — check URL extension
             var urlExtension = Path.GetExtension(new Uri(url).AbsolutePath).ToLowerInvariant();
-            if (urlExtension is ".gif" or ".mp4")
+            if (VideoExtensions.Contains(urlExtension))
                 extension = urlExtension;
+            else if (urlExtension is ".gif")
+                extension = ".gif";
         }
 
         await using var downloadStream = await response.Content.ReadAsStreamAsync(ct);

@@ -3,6 +3,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -38,9 +39,11 @@ public class ThumbnailService : IThumbnailService
                 return false;
             }
 
-            // Check if this is a video file
+            // Check if this is a video file by extension or actual content (magic bytes).
+            // Giphy and similar services often serve MP4 content from .gif URLs,
+            // so the file extension alone is unreliable.
             var extension = Path.GetExtension(sourcePath);
-            if (VideoExtensions.Contains(extension))
+            if (VideoExtensions.Contains(extension) || MediaPathUtilities.IsVideoContent(sourcePath))
             {
                 return await GenerateVideoThumbnailAsync(sourcePath, destinationPath, maxSize, ct);
             }

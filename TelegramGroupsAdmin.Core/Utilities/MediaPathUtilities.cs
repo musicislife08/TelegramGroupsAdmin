@@ -1,11 +1,53 @@
 namespace TelegramGroupsAdmin.Core.Utilities;
 
 /// <summary>
-/// Utilities for constructing media file paths
+/// Utilities for constructing media file paths and detecting media formats.
 /// Phase 4.X: Media attachments (Animation, Video, Audio, Voice, Sticker, VideoNote, Document)
 /// </summary>
 public static class MediaPathUtilities
 {
+    /// <summary>
+    /// Detects whether a file contains video content by examining its magic bytes (file signature),
+    /// regardless of file extension. Giphy and other services often serve MP4/WebM video content
+    /// from URLs with .gif extensions.
+    /// </summary>
+    /// <param name="filePath">Full path to the file to inspect</param>
+    /// <returns>True if the file's magic bytes match a known video format (MP4/MOV/M4V, WebM/MKV, AVI)</returns>
+    public static bool IsVideoContent(string filePath)
+    {
+        try
+        {
+            Span<byte> header = stackalloc byte[12];
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+            var bytesRead = fs.Read(header);
+            if (bytesRead < 4) return false;
+
+            // MP4/MOV/M4V: "ftyp" at offset 4
+            if (bytesRead >= 8
+                && header[4] == (byte)'f' && header[5] == (byte)'t'
+                && header[6] == (byte)'y' && header[7] == (byte)'p')
+                return true;
+
+            // WebM/MKV: EBML header 0x1A45DFA3
+            if (header[0] == 0x1A && header[1] == 0x45 && header[2] == 0xDF && header[3] == 0xA3)
+                return true;
+
+            // AVI: "RIFF....AVI "
+            if (bytesRead >= 12
+                && header[0] == (byte)'R' && header[1] == (byte)'I'
+                && header[2] == (byte)'F' && header[3] == (byte)'F'
+                && header[8] == (byte)'A' && header[9] == (byte)'V'
+                && header[10] == (byte)'I' && header[11] == (byte)' ')
+                return true;
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Get the subdirectory name for a given media type
     /// </summary>
