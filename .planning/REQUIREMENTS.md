@@ -19,17 +19,17 @@ Requirements for SaaS hosting readiness. Each maps to roadmap phases.
 
 ### ClamAV Override
 
-- [x] **CLAM-01**: `CLAMAV_HOST` and `CLAMAV_PORT` env vars override DB-stored ClamAV host and port at scan time (per-scan, not cached at startup)
+- [ ] **CLAM-01**: `CLAMAV__HOST` and `CLAMAV__PORT` env vars (ASP.NET Core convention) override DB-stored ClamAV host and port via `IOptions<ClamAVConfig>` binding
 - [x] **CLAM-02**: Both env vars are required for override to activate — if either is missing, DB config is used (no partial override)
 - [x] **CLAM-03**: When env var override is active, an INFO log records the effective ClamAV host:port on first use
 - [x] **CLAM-04**: `GetHealthAsync()` uses the same override-aware config path as `ScanFileAsync()`
 
 ### Metrics Endpoint Decoupling
 
-- [x] **STAT-01**: `ENABLE_METRICS` env var gates `/metrics` Prometheus endpoint independently of `SEQ_URL` (either env var activates the endpoint)
-- [x] **STAT-02**: When `ENABLE_METRICS` is set without `SEQ_URL`, OpenTelemetry meters and Prometheus exporter are registered (metrics-only OTEL pipeline); logging/tracing to Seq remain conditional on `SEQ_URL`
-- [x] **STAT-03**: Existing behavior preserved — `SEQ_URL` still implicitly enables `/metrics` (no breaking change for current deployments)
-- [x] **STAT-04**: Startup INFO log indicates which env var activated the metrics endpoint (e.g., "via ENABLE_METRICS" or "via SEQ_URL")
+- [x] **STAT-01**: `ENABLE_METRICS` env var gates `/metrics` Prometheus endpoint independently of `OTEL_EXPORTER_OTLP_ENDPOINT` (either env var activates the endpoint)
+- [x] **STAT-02**: When `ENABLE_METRICS` is set without `OTEL_EXPORTER_OTLP_ENDPOINT`, OpenTelemetry meters and Prometheus exporter are registered (metrics-only OTEL pipeline); logging/tracing to Seq remain conditional on `SEQ_URL`
+- [x] **STAT-03**: Existing behavior preserved — `OTEL_EXPORTER_OTLP_ENDPOINT` still implicitly enables `/metrics` (no breaking change for current deployments)
+- [x] **STAT-04**: Startup INFO log indicates which env var activated the metrics endpoint (e.g., "via ENABLE_METRICS" or "via OTEL_EXPORTER_OTLP_ENDPOINT")
 - [x] **STAT-05**: No app-level authentication on `/metrics` — infrastructure (K8s NetworkPolicy, reverse proxy) controls access
 
 ## Future Requirements
@@ -69,7 +69,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BOOT-05 | Phase 10 | Complete |
 | BOOT-06 | Phase 10 | Complete |
 | BOOT-07 | Phase 10 | Complete |
-| CLAM-01 | Phase 9 | Complete |
+| CLAM-01 | Phase 12 | Pending |
 | CLAM-02 | Phase 9 | Complete |
 | CLAM-03 | Phase 9 | Complete |
 | CLAM-04 | Phase 9 | Complete |
@@ -86,4 +86,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after roadmap creation*
+*Last updated: 2026-03-19 after gap closure phase creation*

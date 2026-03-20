@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Dead Code Removal** — Phases 1-5 (shipped 2026-03-17)
 - ✅ **v1.1 Bug Fix Sweep** — Phases 6-8.1 (shipped 2026-03-18)
-- 🚧 **v1.2 SaaS Hosting Readiness** — Phases 9-11 (in progress)
+- 🚧 **v1.2 SaaS Hosting Readiness** — Phases 9-12 (in progress)
 
 ## Phases
 
@@ -36,6 +36,7 @@
 - [x] **Phase 9: ClamAV Environment Variable Override** - Shared ClamAV daemon support via CLAMAV_HOST/CLAMAV_PORT env vars (completed 2026-03-18)
 - [x] **Phase 10: Bootstrap Owner CLI Flag** - Headless Owner account creation for Kubernetes init container pattern (completed 2026-03-19)
 - [x] **Phase 11: Decouple Prometheus Metrics Endpoint** - ENABLE_METRICS env var decouples /metrics from OTEL_EXPORTER_OTLP_ENDPOINT for hosting provider monitoring (completed 2026-03-20)
+- [ ] **Phase 12: ClamAV IOptions Refactor + Doc Fixes** - Refactor ClamAV env var override to use IOptions<ClamAVConfig> pattern; fix stale docs
 
 ## Phase Details
 
@@ -79,6 +80,22 @@ Plans:
 Plans:
 - [ ] 11-01-PLAN.md — Decouple metrics pipeline from OTEL tracing (STAT-01 through STAT-05)
 
+### Phase 12: ClamAV IOptions Refactor + Doc Fixes
+**Goal**: Refactor ClamAV env var override from raw `Environment.GetEnvironmentVariable` to `IOptions<ClamAVConfig>` pattern, aligning with ASP.NET Core conventions and making compose `CLAMAV__HOST`/`CLAMAV__PORT` the correct mechanism. Fix stale documentation.
+**Depends on**: Phase 9 (refactors its implementation)
+**Requirements**: CLAM-01 (updated), CLAM-02, CLAM-03, CLAM-04
+**Gap Closure:** Closes CLAM-COMPOSE-ENV integration gap + doc fixes from v1.2 audit
+**Success Criteria** (what must be TRUE):
+  1. `ClamAVScannerService` reads ClamAV override from `IOptions<ClamAVConfig>` (bound via `IConfiguration`) instead of raw `Environment.GetEnvironmentVariable`
+  2. When `CLAMAV__HOST` and `CLAMAV__PORT` env vars are set, the override activates (both required, no partial override preserved)
+  3. Existing compose files' `CLAMAV__HOST`/`CLAMAV__PORT` entries work correctly without modification
+  4. Unit tests updated to configure via IOptions instead of mocking env vars
+  5. REQUIREMENTS.md CLAM-01 updated to remove "per-scan, not cached at startup" clause
+  6. REQUIREMENTS.md STAT-01/02/03 fixed to reference `OTEL_EXPORTER_OTLP_ENDPOINT` instead of stale `SEQ_URL`
+  7. Production compose template includes `ENABLE_METRICS` env var example
+Plans:
+- [ ] 12-01-PLAN.md — ClamAV IOptions refactor + doc fixes
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -94,4 +111,5 @@ Plans:
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
 | 9. ClamAV Environment Variable Override | v1.2 | 1/1 | Complete | 2026-03-18 |
 | 10. Bootstrap Owner CLI Flag | v1.2 | 1/1 | Complete | 2026-03-19 |
-| 11. Decouple Prometheus Metrics Endpoint | 1/1 | Complete    | 2026-03-20 | - |
+| 11. Decouple Prometheus Metrics Endpoint | v1.2 | 1/1 | Complete | 2026-03-20 |
+| 12. ClamAV IOptions Refactor + Doc Fixes | v1.2 | 0/1 | Planned | - |
