@@ -151,46 +151,41 @@ var metricsEnabled = !string.IsNullOrEmpty(otlpEndpoint)
 
 // Note: Logging is handled by Serilog's OpenTelemetry sink (configured above in UseSerilog)
 
-// Metrics pipeline: activates on ENABLE_METRICS or OTEL_EXPORTER_OTLP_ENDPOINT
+// Configure resource once, then conditionally add metrics/tracing pipelines
 if (metricsEnabled)
 {
-    builder.Services.AddOpenTelemetry()
+    var otelBuilder = builder.Services.AddOpenTelemetry()
         .ConfigureResource(resource => resource
             .AddService(serviceName, serviceVersion: serviceVersion)
             .AddAttributes(new Dictionary<string, object>
             {
                 ["deployment.environment"] = environment
-            }))
-        .WithMetrics(metrics =>
-        {
-            metrics.AddAspNetCoreInstrumentation()  // Request rate, duration, active requests
-                   .AddHttpClientInstrumentation()  // HTTP client success/failure rates
-                   .AddRuntimeInstrumentation()     // GC, CPU, memory, thread pool
-                   .AddMeter("Npgsql")              // Npgsql database metrics (connections, commands, bytes)
-                   .AddMeter("TelegramGroupsAdmin.*")  // Custom meters (from TelemetryConstants)
-                   .AddPrometheusExporter();        // Expose /metrics endpoint for Prometheus scraping
+            }));
 
-            if (!string.IsNullOrEmpty(otlpEndpoint))
-                metrics.AddOtlpExporter();          // Send metrics to Aspire Dashboard (only when OTLP endpoint set)
-        });
-}
+    // Metrics pipeline: activates on ENABLE_METRICS or OTEL_EXPORTER_OTLP_ENDPOINT
+    otelBuilder.WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation()  // Request rate, duration, active requests
+               .AddHttpClientInstrumentation()  // HTTP client success/failure rates
+               .AddRuntimeInstrumentation()     // GC, CPU, memory, thread pool
+               .AddMeter("Npgsql")              // Npgsql database metrics (connections, commands, bytes)
+               .AddMeter("TelegramGroupsAdmin.*")  // Custom meters (from TelemetryConstants)
+               .AddPrometheusExporter();        // Expose /metrics endpoint for Prometheus scraping
 
-// Tracing pipeline: activates only on OTEL_EXPORTER_OTLP_ENDPOINT
-if (!string.IsNullOrEmpty(otlpEndpoint))
-{
-    builder.Services.AddOpenTelemetry()
-        .ConfigureResource(resource => resource
-            .AddService(serviceName, serviceVersion: serviceVersion)
-            .AddAttributes(new Dictionary<string, object>
-            {
-                ["deployment.environment"] = environment
-            }))
-        .WithTracing(tracing => tracing
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+            metrics.AddOtlpExporter();          // Send metrics to Aspire Dashboard (only when OTLP endpoint set)
+    });
+
+    // Tracing pipeline: activates only on OTEL_EXPORTER_OTLP_ENDPOINT
+    if (!string.IsNullOrEmpty(otlpEndpoint))
+    {
+        otelBuilder.WithTracing(tracing => tracing
             .AddAspNetCoreInstrumentation()  // Blazor Server requests, SignalR circuits
             .AddHttpClientInstrumentation()  // OpenAI, VirusTotal, Telegram Bot API
             .AddSource("Npgsql")             // Npgsql automatic tracing (via Npgsql.OpenTelemetry package)
             .AddSource("TelegramGroupsAdmin.*")  // Custom ActivitySources (from TelemetryConstants)
             .AddOtlpExporter());             // Send traces to Aspire Dashboard
+    }
 }
 
 var app = builder.Build();

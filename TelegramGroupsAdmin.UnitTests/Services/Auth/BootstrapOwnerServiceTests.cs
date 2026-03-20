@@ -238,7 +238,7 @@ public class BootstrapOwnerServiceTests
     }
 
     [Test]
-    public async Task BOOT03e_EmailMissingAtSign_ReturnsFailed()
+    public async Task BOOT03f_EmailMissingAtSign_ReturnsFailed()
     {
         // Arrange
         var path = Path.GetTempFileName();
