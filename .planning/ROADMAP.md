@@ -94,4 +94,4 @@ Plans:
 | 8.1. Fix review-all findings | v1.1 | 1/1 | Complete | 2026-03-18 |
 | 9. ClamAV Environment Variable Override | v1.2 | 1/1 | Complete | 2026-03-18 |
 | 10. Bootstrap Owner CLI Flag | v1.2 | 1/1 | Complete | 2026-03-19 |
-| 11. Decouple Prometheus Metrics Endpoint | 1/1 | Complete   | 2026-03-20 | - |
+| 11. Decouple Prometheus Metrics Endpoint | 1/1 | Complete    | 2026-03-20 | - |
