@@ -133,8 +133,19 @@ services:
       # =======================================================================
       # ClamAV Connection (Internal Docker Network)
       # =======================================================================
-      CLAMAV__HOST: clamav
-      CLAMAV__PORT: "3310"
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+
+      # =======================================================================
+      # Observability (Optional - Prometheus Metrics)
+      # =======================================================================
+      # Uncomment to expose Prometheus /metrics endpoint for monitoring:
+      # ENABLE_METRICS: "true"
+      #
+      # For full observability (structured logging + traces + metrics), also set:
+      # SEQ_URL: http://seq:80
+      # OTEL_EXPORTER_OTLP_ENDPOINT: http://seq:5341/ingest/otlp
+      # OTEL_SERVICE_NAME: TelegramGroupsAdmin
 
       # =======================================================================
       # Message History Configuration
