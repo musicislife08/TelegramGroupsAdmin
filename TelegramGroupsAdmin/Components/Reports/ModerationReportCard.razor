@@ -43,7 +43,7 @@
 
                 @if (_message.PhotoLocalPath != null)
                 {
-                    <MudImage Src="@MediaPathUtilities.GetPhotoWebPath(_message.PhotoLocalPath)"
+                    <MudImage Src="@MediaUtilities.GetPhotoWebPath(_message.PhotoLocalPath)"
                               Alt="Reported image"
                               ObjectFit="ObjectFit.Contain"
                               Width="300"

@@ -24,11 +24,7 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
     private readonly HttpClient _httpClient;
 
     private const string GifSubdirectory = "ban-gifs";
-
-    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".mp4", ".webm", ".mov", ".avi", ".mkv", ".m4v"
-    };
+    private const long MaxDownloadSize = 50 * 1024 * 1024; // 50 MB — matches file upload limit and Telegram API ceiling
 
     public BanCelebrationGifRepository(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -111,7 +107,7 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
         await context.SaveChangesAsync(ct);
 
         var sourceExtension = Path.GetExtension(fileName).ToLowerInvariant();
-        var isVideo = VideoExtensions.Contains(sourceExtension);
+        var isVideo = MediaUtilities.VideoExtensions.Contains(sourceExtension);
 
         // Final file is always .gif
         var relativePath = $"{GifSubdirectory}/{dto.Id}.gif";
@@ -147,7 +143,7 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
                 if (File.Exists(tempPath))
                 {
                     try { File.Delete(tempPath); }
-                    catch { /* ignore cleanup errors */ }
+                    catch (IOException ex) { _logger.LogDebug(ex, "Failed to clean up temp file: {Path}", tempPath); }
                 }
             }
         }
@@ -157,6 +153,40 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
             await using (var fileStreamWrite = new FileStream(fullPath, FileMode.Create))
             {
                 await fileStream.CopyToAsync(fileStreamWrite, ct);
+            }
+
+            // Check if the saved file is actually video content despite non-video extension.
+            // Giphy and similar services often serve MP4 from .gif URLs with misleading content types.
+            if (MediaUtilities.IsVideoContent(fullPath))
+            {
+                _logger.LogInformation(
+                    "File {FileName} has non-video extension but contains video content, converting to GIF",
+                    fileName);
+
+                var tempPath = fullPath + ".tmp";
+                File.Move(fullPath, tempPath);
+
+                try
+                {
+                    var success = await _videoService.ConvertVideoToGifAsync(tempPath, fullPath, maxSize: 480, ct);
+                    if (!success)
+                    {
+                        // Conversion failed — clean up DB record and throw, same as the explicit-video path
+                        context.BanCelebrationGifs.Remove(dto);
+                        await context.SaveChangesAsync(ct);
+                        throw new InvalidOperationException(
+                            $"Failed to convert video to GIF. FFmpeg conversion failed for: {fileName}");
+                    }
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        try { File.Delete(tempPath); }
+                        catch (IOException ex) { _logger.LogDebug(ex, "Failed to clean up temp file: {Path}", tempPath); }
+                    }
+                }
+
             }
         }
 
@@ -177,27 +207,51 @@ public class BanCelebrationGifRepository : IBanCelebrationGifRepository
 
         _logger.LogInformation("Downloading ban celebration GIF from URL: {Url}", url);
 
-        // Download the file
-        using var response = await _httpClient.GetAsync(url, ct);
+        // Download the file with size limit matching file upload (50 MB)
+        using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
-        // Determine extension from content type or URL
+        var contentLength = response.Content.Headers.ContentLength;
+        if (contentLength > MaxDownloadSize)
+            throw new InvalidOperationException(
+                $"File too large: {contentLength} bytes exceeds {MaxDownloadSize / (1024 * 1024)} MB limit");
+
+        // Determine extension from content type or URL.
+        // Any video/* content type is treated as .mp4 for FFmpeg conversion,
+        // since Giphy and similar services may serve video from .gif URLs.
         var extension = ".gif";
         var contentType = response.Content.Headers.ContentType?.MediaType;
-        if (contentType == "video/mp4")
-            extension = ".mp4";
-        else if (contentType == "image/gif")
-            extension = ".gif";
-        else
+        if (contentType != null && contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
         {
-            // Try to get from URL
+            extension = ".mp4";
+        }
+        else if (contentType is not "image/gif")
+        {
+            // Unknown or missing content type — check URL extension
             var urlExtension = Path.GetExtension(new Uri(url).AbsolutePath).ToLowerInvariant();
-            if (urlExtension is ".gif" or ".mp4")
+            if (MediaUtilities.VideoExtensions.Contains(urlExtension))
                 extension = urlExtension;
+            else if (urlExtension is ".gif")
+                extension = ".gif";
         }
 
+        // Copy to a size-capped MemoryStream (guards against servers that omit Content-Length)
         await using var downloadStream = await response.Content.ReadAsStreamAsync(ct);
-        return await AddFromFileAsync(downloadStream, $"download{extension}", name, ct);
+        using var cappedStream = new MemoryStream();
+        var buffer = new byte[81920];
+        long totalRead = 0;
+        int bytesRead;
+        while ((bytesRead = await downloadStream.ReadAsync(buffer, ct)) > 0)
+        {
+            totalRead += bytesRead;
+            if (totalRead > MaxDownloadSize)
+                throw new InvalidOperationException(
+                    $"Download exceeded {MaxDownloadSize / (1024 * 1024)} MB limit");
+            cappedStream.Write(buffer, 0, bytesRead);
+        }
+
+        cappedStream.Position = 0;
+        return await AddFromFileAsync(cappedStream, $"download{extension}", name, ct);
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct = default)

@@ -179,7 +179,7 @@ public class MessageQueryService : IMessageQueryService
 
             // Validate media path exists on filesystem (nulls if missing)
             // REFACTOR-3: Now uses shared utility to avoid duplication with MessageHistoryRepository
-            var validatedPath = MediaPathUtilities.ValidateMediaPath(
+            var validatedPath = MediaUtilities.ValidateMediaPath(
                 messageModel.MediaLocalPath,
                 (int?)messageModel.MediaType,
                 _imageStoragePath,
@@ -355,7 +355,7 @@ public class MessageQueryService : IMessageQueryService
         var messageModel = enrichedMessage.ToModel();
 
         // Validate media path exists on filesystem
-        var validatedPath = MediaPathUtilities.ValidateMediaPath(
+        var validatedPath = MediaUtilities.ValidateMediaPath(
             messageModel.MediaLocalPath,
             (int?)messageModel.MediaType,
             _imageStoragePath,

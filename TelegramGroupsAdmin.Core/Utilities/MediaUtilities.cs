@@ -1,11 +1,65 @@
 namespace TelegramGroupsAdmin.Core.Utilities;
 
 /// <summary>
-/// Utilities for constructing media file paths
-/// Phase 4.X: Media attachments (Animation, Video, Audio, Voice, Sticker, VideoNote, Document)
+/// Utilities for constructing media file paths, detecting media formats, and identifying video content.
 /// </summary>
-public static class MediaPathUtilities
+public static class MediaUtilities
 {
+    /// <summary>
+    /// File extensions recognized as video formats. Used for extension-based routing before
+    /// falling back to <see cref="IsVideoContent"/> magic byte detection.
+    /// </summary>
+    public static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".webm", ".mov", ".avi", ".mkv", ".m4v"
+    };
+
+    /// <summary>
+    /// Detects whether a file contains video content by examining its magic bytes (file signature),
+    /// regardless of file extension. Giphy and other services often serve MP4/WebM video content
+    /// from URLs with .gif extensions. Returns false for files shorter than 4 bytes or that cannot be read.
+    /// </summary>
+    /// <param name="filePath">Full path to the file to inspect</param>
+    /// <returns>True if the file's magic bytes match a known video format (MP4/MOV/M4V, WebM/MKV, AVI)</returns>
+    public static bool IsVideoContent(string filePath)
+    {
+        try
+        {
+            Span<byte> header = stackalloc byte[12];
+            using var fs = File.OpenRead(filePath);
+            var bytesRead = fs.Read(header);
+            if (bytesRead < 4) return false;
+
+            // MP4/MOV/M4V: "ftyp" at offset 4
+            if (bytesRead >= 8
+                && header[4] == (byte)'f' && header[5] == (byte)'t'
+                && header[6] == (byte)'y' && header[7] == (byte)'p')
+                return true;
+
+            // WebM/MKV: EBML header 0x1A45DFA3
+            if (header[0] == 0x1A && header[1] == 0x45 && header[2] == 0xDF && header[3] == 0xA3)
+                return true;
+
+            // AVI: "RIFF....AVI "
+            if (bytesRead >= 12
+                && header[0] == (byte)'R' && header[1] == (byte)'I'
+                && header[2] == (byte)'F' && header[3] == (byte)'F'
+                && header[8] == (byte)'A' && header[9] == (byte)'V'
+                && header[10] == (byte)'I' && header[11] == (byte)' ')
+                return true;
+
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Get the subdirectory name for a given media type
     /// </summary>

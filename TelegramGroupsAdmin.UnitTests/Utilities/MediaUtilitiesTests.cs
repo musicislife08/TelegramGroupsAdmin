@@ -3,11 +3,11 @@ using TelegramGroupsAdmin.Core.Utilities;
 namespace TelegramGroupsAdmin.UnitTests.Utilities;
 
 /// <summary>
-/// Unit tests for MediaPathUtilities.ValidateMediaPath
+/// Unit tests for MediaUtilities.ValidateMediaPath
 /// Tests the static utility method directly without database dependencies
 /// </summary>
 [TestFixture]
-public class MediaPathUtilitiesTests
+public class MediaUtilitiesTests
 {
     private string _tempDir = null!;
 
@@ -15,7 +15,7 @@ public class MediaPathUtilitiesTests
     public void SetUp()
     {
         // Create a temp directory for test files
-        _tempDir = Path.Combine(Path.GetTempPath(), $"MediaPathUtilitiesTests_{Guid.NewGuid():N}");
+        _tempDir = Path.Combine(Path.GetTempPath(), $"MediaUtilitiesTests_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
         Directory.CreateDirectory(Path.Combine(_tempDir, "media", "video"));
         Directory.CreateDirectory(Path.Combine(_tempDir, "media", "audio"));
@@ -42,7 +42,7 @@ public class MediaPathUtilitiesTests
         int? mediaType = 1; // Animation
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -60,7 +60,7 @@ public class MediaPathUtilitiesTests
         int? mediaType = 1; // Animation
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -78,7 +78,7 @@ public class MediaPathUtilitiesTests
         int? mediaType = null;
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(mediaLocalPath, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -102,7 +102,7 @@ public class MediaPathUtilitiesTests
         int mediaType = 1; // Animation -> "video" subdirectory
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -122,7 +122,7 @@ public class MediaPathUtilitiesTests
         int mediaType = 2; // Video -> "video" subdirectory
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -143,7 +143,7 @@ public class MediaPathUtilitiesTests
         int mediaType = 3; // Audio -> "audio" subdirectory
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -165,7 +165,7 @@ public class MediaPathUtilitiesTests
         int mediaType = 1; // Animation
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -184,7 +184,7 @@ public class MediaPathUtilitiesTests
         int mediaType = 5; // Sticker -> "sticker" subdirectory
 
         // Act
-        var result = MediaPathUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
+        var result = MediaUtilities.ValidateMediaPath(filename, mediaType, _tempDir, out var fullPath);
 
         using (Assert.EnterMultipleScope())
         {
@@ -209,9 +209,152 @@ public class MediaPathUtilitiesTests
     [TestCase(99, "other", Description = "Unknown maps to other")]
     public void GetMediaSubdirectory_ReturnsCorrectSubdirectory(int mediaType, string expected)
     {
-        var result = MediaPathUtilities.GetMediaSubdirectory(mediaType);
+        var result = MediaUtilities.GetMediaSubdirectory(mediaType);
         Assert.That(result, Is.EqualTo(expected));
     }
+
+    #endregion
+
+    #region IsVideoContent - Magic Byte Detection
+
+    [Test]
+    public void IsVideoContent_Mp4FtypSignature_ReturnsTrue()
+    {
+        var path = Path.Combine(_tempDir, "test.dat");
+        File.WriteAllBytes(path, CreateMinimalMp4Bytes());
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.True);
+    }
+
+    [Test]
+    public void IsVideoContent_WebMEbmlSignature_ReturnsTrue()
+    {
+        var path = Path.Combine(_tempDir, "test.dat");
+        File.WriteAllBytes(path, CreateMinimalWebMBytes());
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.True);
+    }
+
+    [Test]
+    public void IsVideoContent_AviRiffSignature_ReturnsTrue()
+    {
+        var path = Path.Combine(_tempDir, "test.dat");
+        File.WriteAllBytes(path, CreateMinimalAviBytes());
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.True);
+    }
+
+    [Test]
+    public void IsVideoContent_RealGifBytes_ReturnsFalse()
+    {
+        var path = Path.Combine(_tempDir, "test.gif");
+        File.WriteAllBytes(path,
+        [
+            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, // GIF89a
+            0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00
+        ]);
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.False);
+    }
+
+    [Test]
+    public void IsVideoContent_FileShorterThan4Bytes_ReturnsFalse()
+    {
+        var path = Path.Combine(_tempDir, "tiny.dat");
+        File.WriteAllBytes(path, [0x00, 0x01, 0x02]);
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.False);
+    }
+
+    [Test]
+    public void IsVideoContent_EmptyFile_ReturnsFalse()
+    {
+        var path = Path.Combine(_tempDir, "empty.dat");
+        File.WriteAllBytes(path, []);
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.False);
+    }
+
+    [Test]
+    public void IsVideoContent_NonexistentFile_ReturnsFalse()
+    {
+        var path = Path.Combine(_tempDir, "doesnotexist.dat");
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.False);
+    }
+
+    [Test]
+    public void IsVideoContent_FtypAtWrongOffset_ReturnsFalse()
+    {
+        // "ftyp" at offset 0 instead of offset 4 — should NOT match
+        var path = Path.Combine(_tempDir, "wrong_offset.dat");
+        File.WriteAllBytes(path,
+        [
+            (byte)'f', (byte)'t', (byte)'y', (byte)'p',
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]);
+
+        Assert.That(MediaUtilities.IsVideoContent(path), Is.False);
+    }
+
+    #endregion
+
+    #region VideoExtensions
+
+    [TestCase(".mp4")]
+    [TestCase(".webm")]
+    [TestCase(".mov")]
+    [TestCase(".avi")]
+    [TestCase(".mkv")]
+    [TestCase(".m4v")]
+    public void VideoExtensions_ContainsExpectedExtension(string ext)
+    {
+        Assert.That(MediaUtilities.VideoExtensions.Contains(ext), Is.True);
+    }
+
+    [TestCase(".gif")]
+    [TestCase(".png")]
+    [TestCase(".jpg")]
+    public void VideoExtensions_DoesNotContainImageExtensions(string ext)
+    {
+        Assert.That(MediaUtilities.VideoExtensions.Contains(ext), Is.False);
+    }
+
+    [Test]
+    public void VideoExtensions_IsCaseInsensitive()
+    {
+        Assert.That(MediaUtilities.VideoExtensions.Contains(".MP4"), Is.True);
+    }
+
+    #endregion
+
+    #region Magic Byte Helpers
+
+    private static byte[] CreateMinimalMp4Bytes() =>
+    [
+        0x00, 0x00, 0x00, 0x1C,       // box size
+        0x66, 0x74, 0x79, 0x70,       // "ftyp"
+        0x69, 0x73, 0x6F, 0x6D,       // brand: "isom"
+        0x00, 0x00, 0x02, 0x00,
+        0x69, 0x73, 0x6F, 0x6D,
+        0x69, 0x73, 0x6F, 0x32,
+        0x6D, 0x70, 0x34, 0x31,
+    ];
+
+    private static byte[] CreateMinimalWebMBytes() =>
+    [
+        0x1A, 0x45, 0xDF, 0xA3,       // EBML header
+        0x93, 0x42, 0x86, 0x81,
+        0x01, 0x42, 0xF7, 0x81,
+        0x01, 0x42, 0xF2, 0x81,
+    ];
+
+    private static byte[] CreateMinimalAviBytes() =>
+    [
+        (byte)'R', (byte)'I', (byte)'F', (byte)'F',  // "RIFF"
+        0x00, 0x00, 0x00, 0x00,                       // file size (don't care)
+        (byte)'A', (byte)'V', (byte)'I', (byte)' ',   // "AVI "
+    ];
 
     #endregion
 }

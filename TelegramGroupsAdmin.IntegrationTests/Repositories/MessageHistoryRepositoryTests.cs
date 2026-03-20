@@ -771,7 +771,7 @@ public class MessageHistoryRepositoryTests
         Assert.That(retrievedBefore!.MediaLocalPath, Is.Null);
 
         // Create test media file on disk (required by ValidateMediaPath)
-        // MediaPathUtilities.GetMediaStoragePath returns: "media/video/filename.mp4"
+        // MediaUtilities.GetMediaStoragePath returns: "media/video/filename.mp4"
         // So full path is: {_imageStoragePath}/media/video/filename.mp4
         const string testMediaFileName = "test_video_999003.mp4";
         var mediaVideoSubfolder = Path.Combine(_imageStoragePath!, "media", "video");
