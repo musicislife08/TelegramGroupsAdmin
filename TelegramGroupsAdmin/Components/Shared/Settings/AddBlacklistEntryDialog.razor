@@ -1,0 +1,39 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add Blacklist Entry</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_pattern"
+                      Label="Display Name Pattern"
+                      HelperText="Exact display name to blacklist (case-insensitive)"
+                      Required="true"
+                      RequiredError="Pattern is required"
+                      Immediate="true" />
+        <MudTextField @bind-Value="_notes"
+                      Label="Notes (optional)"
+                      HelperText="Reason for blacklisting"
+                      Class="mt-3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="@(string.IsNullOrWhiteSpace(_pattern))">
+            Add
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _pattern = string.Empty;
+    private string? _notes;
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(
+        new AddBlacklistEntryData(_pattern.Trim(), _notes?.Trim())));
+
+    private void Cancel() => MudDialog.Cancel();
+}
+
+public sealed record AddBlacklistEntryData(string Pattern, string? Notes);
