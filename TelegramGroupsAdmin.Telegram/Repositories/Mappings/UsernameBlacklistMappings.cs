@@ -17,7 +17,7 @@ internal static class UsernameBlacklistMappings
             return new UiModels.UsernameBlacklistEntry(
                 Id: data.Id,
                 Pattern: data.Pattern,
-                MatchType: (DataModels.BlacklistMatchType)data.MatchType,
+                MatchType: (UiModels.BlacklistMatchType)data.MatchType,
                 Enabled: data.Enabled,
                 CreatedAt: data.CreatedAt,
                 CreatedBy: ActorMappings.ToActor(

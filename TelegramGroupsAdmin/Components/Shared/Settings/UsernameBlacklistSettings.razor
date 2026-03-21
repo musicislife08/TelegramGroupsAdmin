@@ -8,6 +8,7 @@
                Color="Color.Primary"
                Size="Size.Small"
                StartIcon="@Icons.Material.Filled.Add"
+               Disabled="@_busy"
                OnClick="@AddEntry">
         Add Entry
     </MudButton>
@@ -81,8 +82,11 @@
 </MudTable>
 
 @code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
     private IReadOnlyList<UsernameBlacklistEntry> _entries = [];
     private bool _loading = true;
+    private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -108,12 +112,14 @@
 
     private async Task AddEntry()
     {
-        var dialog = await DialogService.ShowAsync<AddBlacklistEntryDialog>("Add Blacklist Entry");
-        var result = await dialog.Result;
-
-        if (result is { Canceled: false, Data: AddBlacklistEntryData data })
+        if (_busy) return;
+        _busy = true;
+        try
         {
-            try
+            var dialog = await DialogService.ShowAsync<AddBlacklistEntryDialog>("Add Blacklist Entry");
+            var result = await dialog.Result;
+
+            if (result is { Canceled: false, Data: AddBlacklistEntryData data })
             {
                 if (await BlacklistRepository.ExistsAsync(data.Pattern))
                 {
@@ -124,20 +130,24 @@
                 var entry = new UsernameBlacklistEntry(
                     Id: 0,
                     Pattern: data.Pattern,
-                    MatchType: DataModels.BlacklistMatchType.Exact,
+                    MatchType: BlacklistMatchType.Exact,
                     Enabled: true,
                     CreatedAt: DateTimeOffset.UtcNow,
-                    CreatedBy: Actor.FromSystem("web_admin"),
+                    CreatedBy: WebUser!.ToActor(),
                     Notes: data.Notes);
 
                 await BlacklistRepository.AddEntryAsync(entry);
                 Snackbar.Add($"Blacklisted \"{data.Pattern}\"", Severity.Success);
                 await LoadEntries();
             }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error adding entry: {ex.Message}", Severity.Error);
-            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error adding entry: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
@@ -146,7 +156,12 @@
         var newState = !entry.Enabled;
         if (await BlacklistRepository.SetEnabledAsync(entry.Id, enabled: newState))
         {
-            Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Info);
+            Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Success);
+            await LoadEntries();
+        }
+        else
+        {
+            Snackbar.Add("Entry not found — it may have been deleted", Severity.Warning);
             await LoadEntries();
         }
     }
@@ -164,6 +179,11 @@
             if (await BlacklistRepository.DeleteEntryAsync(entry.Id))
             {
                 Snackbar.Add($"Deleted \"{entry.Pattern}\"", Severity.Success);
+                await LoadEntries();
+            }
+            else
+            {
+                Snackbar.Add("Entry not found — it may have already been deleted", Severity.Warning);
                 await LoadEntries();
             }
         }

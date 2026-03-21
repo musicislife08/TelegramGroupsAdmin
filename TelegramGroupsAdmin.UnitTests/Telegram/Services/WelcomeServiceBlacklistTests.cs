@@ -8,7 +8,6 @@ using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -293,11 +292,12 @@ public class WelcomeServiceBlacklistTests
         // Act
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // Assert — BanUserAsync must be called with reason containing the pattern
+        // Assert — BanUserAsync must be called with reason containing the pattern and correct executor
         await _moderationService.Received(1).BanUserAsync(
-            Arg.Is<BanIntent>(i =>
-                i.User.Id == TestUserId &&
-                i.Reason.Contains("Scarlett Lux")),
+            Arg.Is<BanIntent>(b =>
+                b.User.Id == TestUserId &&
+                b.Reason.Contains("Scarlett Lux") &&
+                b.Executor == Actor.UsernameBlacklist),
             Arg.Any<CancellationToken>());
 
         // Early-exit: CAS check must NOT be called (short-circuited by blacklist)

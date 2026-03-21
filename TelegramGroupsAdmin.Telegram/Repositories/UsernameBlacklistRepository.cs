@@ -52,7 +52,7 @@ public class UsernameBlacklistRepository(
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.UsernameBlacklistEntries
             .AsNoTracking()
-            .AnyAsync(e => e.Enabled && EF.Functions.ILike(e.Pattern, pattern), cancellationToken);
+            .AnyAsync(e => e.Enabled && e.Pattern.ToLower() == pattern.ToLower(), cancellationToken);
     }
 
     public async Task<bool> SetEnabledAsync(long id, bool enabled,

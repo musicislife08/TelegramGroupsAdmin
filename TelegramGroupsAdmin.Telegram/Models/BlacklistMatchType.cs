@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Data.Models;
+namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
 /// How a username blacklist pattern is matched against display names.

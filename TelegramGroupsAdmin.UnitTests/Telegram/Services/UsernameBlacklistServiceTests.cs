@@ -1,5 +1,4 @@
 using NSubstitute;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -118,6 +117,28 @@ public class UsernameBlacklistServiceTests
             .Returns(new List<UsernameBlacklistEntry> { entry });
 
         var result = await _sut.CheckDisplayNameAsync("User 12345");
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckDisplayName_UnknownUser_ReturnsNull()
+    {
+        var entry = MakeEntry("Unknown User");
+        _repository.GetEnabledEntriesAsync(Arg.Any<CancellationToken>())
+            .Returns(new List<UsernameBlacklistEntry> { entry });
+
+        var result = await _sut.CheckDisplayNameAsync("Unknown User");
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckDisplayName_WhitespaceOnly_ReturnsNull()
+    {
+        var entry = MakeEntry("Scarlett Lux");
+        _repository.GetEnabledEntriesAsync(Arg.Any<CancellationToken>())
+            .Returns(new List<UsernameBlacklistEntry> { entry });
+
+        var result = await _sut.CheckDisplayNameAsync("   ");
         Assert.That(result, Is.Null);
     }
 }
