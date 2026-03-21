@@ -1,4 +1,6 @@
+@using TelegramGroupsAdmin.Core.Models
 @inject IUsernameBlacklistRepository BlacklistRepository
+@inject IAuditService AuditService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -137,6 +139,14 @@
                     Notes: data.Notes);
 
                 await BlacklistRepository.AddEntryAsync(entry);
+
+                var actor = WebUser!.ToActor();
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    actor,
+                    actor,
+                    value: $"username_blacklist:added={data.Pattern}");
+
                 Snackbar.Add($"Blacklisted \"{data.Pattern}\"", Severity.Success);
                 await LoadEntries();
             }
@@ -156,6 +166,14 @@
         var newState = !entry.Enabled;
         if (await BlacklistRepository.SetEnabledAsync(entry.Id, enabled: newState))
         {
+            var actor = WebUser!.ToActor();
+            var action = newState ? "enabled" : "disabled";
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                value: $"username_blacklist:{action}={entry.Pattern}");
+
             Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Success);
             await LoadEntries();
         }
@@ -178,6 +196,13 @@
         {
             if (await BlacklistRepository.DeleteEntryAsync(entry.Id))
             {
+                var actor = WebUser!.ToActor();
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    actor,
+                    actor,
+                    value: $"username_blacklist:deleted={entry.Pattern}");
+
                 Snackbar.Add($"Deleted \"{entry.Pattern}\"", Severity.Success);
                 await LoadEntries();
             }
