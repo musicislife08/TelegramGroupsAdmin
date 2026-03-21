@@ -170,6 +170,9 @@ public static class ServiceCollectionExtensions
             // CAS (Combot Anti-Spam) check on user join
             services.AddSingleton<ICasCheckService, CasCheckService>();
 
+            // Username blacklist check on user join
+            services.AddScoped<IUsernameBlacklistService, UsernameBlacklistService>();
+
             // Bot command system (Keyed Services pattern)
             // Commands are Scoped (to allow injecting Scoped services like BotModerationService)
             // CommandRouter is Singleton (creates scopes internally when executing commands)
