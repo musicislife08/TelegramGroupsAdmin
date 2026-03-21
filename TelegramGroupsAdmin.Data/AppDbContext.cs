@@ -85,6 +85,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Profile scan results
     public DbSet<ProfileScanResultDto> ProfileScanResults => Set<ProfileScanResultDto>();
 
+    // Username blacklist
+    public DbSet<UsernameBlacklistEntryDto> UsernameBlacklistEntries => Set<UsernameBlacklistEntryDto>();
+
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
@@ -512,6 +515,36 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(tl => tl.LabeledByUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // ============================================================================
+        // Username Blacklist Configuration
+        // Stores display name patterns that trigger auto-ban on join
+        // ============================================================================
+
+        modelBuilder.Entity<UsernameBlacklistEntryDto>(entity =>
+        {
+            entity.Property(e => e.MatchType).HasDefaultValue(0);
+
+            entity.HasOne<UserRecordDto>()
+                .WithMany()
+                .HasForeignKey(e => e.WebUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne<TelegramUserDto>()
+                .WithMany()
+                .HasForeignKey(e => e.TelegramUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "CK_username_blacklist_exclusive_actor",
+                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
+
+            // Prevent duplicate patterns (case-insensitive, only enabled entries)
+            entity.HasIndex(e => e.Pattern)
+                .IsUnique()
+                .HasFilter("enabled = true")
+                .HasDatabaseName("IX_username_blacklist_unique_enabled_pattern");
+        });
 
     }
 

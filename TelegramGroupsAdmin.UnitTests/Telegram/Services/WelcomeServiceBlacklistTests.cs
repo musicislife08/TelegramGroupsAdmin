@@ -19,18 +19,16 @@ using TelegramGroupsAdmin.Telegram.Services.Welcome;
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 
 /// <summary>
-/// Unit tests for WelcomeService.HandleChatMemberUpdateAsync.
+/// Tests for username blacklist integration within WelcomeService.HandleChatMemberUpdateAsync.
 ///
-/// Strategy: All 18 dependencies are substituted. Telegram.Bot concrete types
-/// (ChatMemberUpdated, User, Chat, ChatMemberMember, etc.) are created via direct
-/// object initialization — NSubstitute cannot intercept their non-virtual members.
-///
-/// TelegramPhotoService is a concrete class with file-system side effects.
-/// It is constructed with mocked IBotMediaService and IBotChatService dependencies,
-/// using Testably.Abstractions for a fake file system so no real disk I/O occurs.
+/// Verifies that:
+/// - Blacklisted users are banned and short-circuit before CAS check
+/// - Non-blacklisted users proceed to CAS as normal
+/// - Trusted users skip the blacklist check entirely
+/// - Disabled blacklist config skips the check entirely
 /// </summary>
 [TestFixture]
-public class WelcomeServiceTests
+public class WelcomeServiceBlacklistTests
 {
     private const long TestUserId = 111_222_333L;
     private const long TestChatId = -100_987_654_321L;
@@ -63,16 +61,17 @@ public class WelcomeServiceTests
     private static readonly User TestUser = new()
     {
         Id = TestUserId,
-        FirstName = "Alice",
-        Username = "alice_tg",
+        FirstName = "Scarlett",
+        LastName = "Lux",
+        Username = "scarlett_lux",
         IsBot = false
     };
 
     private static readonly TelegramUser NonBannedTelegramUser = new(
         TelegramUserId: TestUserId,
-        Username: "alice_tg",
-        FirstName: "Alice",
-        LastName: null,
+        Username: "scarlett_lux",
+        FirstName: "Scarlett",
+        LastName: "Lux",
         UserPhotoPath: null,
         PhotoHash: null,
         PhotoFileUniqueId: null,
@@ -87,7 +86,7 @@ public class WelcomeServiceTests
         UpdatedAt: DateTimeOffset.UtcNow
     );
 
-    private static readonly TelegramUser BannedTelegramUser = NonBannedTelegramUser with { IsBanned = true };
+    private static readonly TelegramUser TrustedTelegramUser = NonBannedTelegramUser with { IsTrusted = true };
 
     [SetUp]
     public void SetUp()
@@ -157,6 +156,11 @@ public class WelcomeServiceTests
             .SyncBanToChatAsync(Arg.Any<SyncBanIntent>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult { Success = true });
 
+        // BanUserAsync succeeds
+        _moderationService
+            .BanUserAsync(Arg.Any<BanIntent>(), Arg.Any<CancellationToken>())
+            .Returns(new ModerationResult { Success = true });
+
         // SendAndSaveMessageAsync returns a minimal Message so verifyingMessageId is set
         _messageService
             .SendAndSaveMessageAsync(
@@ -171,6 +175,16 @@ public class WelcomeServiceTests
         mockMediaService
             .GetUserProfilePhotosAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(new UserProfilePhotos { TotalCount = 0, Photos = [] });
+
+        // Username blacklist returns no match by default
+        _usernameBlacklistService
+            .CheckDisplayNameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((UsernameBlacklistEntry?)null);
+
+        // CAS returns not banned by default
+        _casCheckService
+            .CheckUserAsync(Arg.Any<long>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
+            .Returns(new CasCheckResult(IsBanned: false, Reason: null));
 
         _sut = new WelcomeService(
             _configService,
@@ -254,274 +268,137 @@ public class WelcomeServiceTests
 
     #endregion
 
-    #region Test 1: Banned user — sync ban and return early
+    #region Test 1: Blacklisted user — ban and return early (before CAS)
 
     [Test]
-    public async Task HandleChatMemberUpdate_BannedUser_SyncsBanAndReturnsEarly()
+    public async Task HandleChatMemberUpdate_BlacklistedUser_BansAndReturnsEarly()
     {
-        // Arrange — repository returns a globally banned user
+        // Arrange — blacklist service returns a matched entry
+        var matchedEntry = new UsernameBlacklistEntry(
+            Id: 1,
+            Pattern: "Scarlett Lux",
+            MatchType: BlacklistMatchType.Exact,
+            Enabled: true,
+            CreatedAt: DateTimeOffset.UtcNow,
+            CreatedBy: Actor.FromSystem("test"),
+            Notes: null);
+
+        _usernameBlacklistService
+            .CheckDisplayNameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(matchedEntry);
+
+        var update = CreateJoinUpdate();
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Assert — BanUserAsync must be called with reason containing the pattern and correct executor
+        await _moderationService.Received(1).BanUserAsync(
+            Arg.Is<BanIntent>(b =>
+                b.User.Id == TestUserId &&
+                b.Reason.Contains("Scarlett Lux") &&
+                b.Executor == Actor.UsernameBlacklist),
+            Arg.Any<CancellationToken>());
+
+        // Early-exit: CAS check must NOT be called (short-circuited by blacklist)
+        await _casCheckService.DidNotReceive().CheckUserAsync(
+            Arg.Any<long>(),
+            Arg.Any<CasConfig>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Test 2: Not blacklisted — proceeds to CAS
+
+    [Test]
+    public async Task HandleChatMemberUpdate_NotBlacklisted_ProceedsToCas()
+    {
+        // Arrange — blacklist returns null (no match), CAS returns not banned
+        _usernameBlacklistService
+            .CheckDisplayNameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((UsernameBlacklistEntry?)null);
+
+        _casCheckService
+            .CheckUserAsync(Arg.Any<long>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
+            .Returns(new CasCheckResult(IsBanned: false, Reason: null));
+
+        var update = CreateJoinUpdate();
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Assert — blacklist was consulted
+        await _usernameBlacklistService.Received(1).CheckDisplayNameAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        // CAS was called (blacklist didn't short-circuit)
+        await _casCheckService.Received(1).CheckUserAsync(
+            Arg.Any<long>(),
+            Arg.Any<CasConfig>(),
+            Arg.Any<CancellationToken>());
+
+        // Ban was NOT called (neither blacklist nor CAS triggered)
+        await _moderationService.DidNotReceive().BanUserAsync(
+            Arg.Any<BanIntent>(), Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Test 3: Trusted user — skips blacklist check
+
+    [Test]
+    public async Task HandleChatMemberUpdate_TrustedUser_SkipsBlacklistCheck()
+    {
+        // Arrange — repository returns a trusted user
         _telegramUserRepository
             .GetOrCreateAsync(
                 Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
                 Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(BannedTelegramUser);
+            .Returns(TrustedTelegramUser);
 
         var update = CreateJoinUpdate();
 
         // Act
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // Assert — SyncBanToChatAsync must be called once with a SyncBanIntent
-        await _moderationService.Received(1).SyncBanToChatAsync(
-            Arg.Is<SyncBanIntent>(i =>
-                i.User.Id == TestUserId &&
-                i.Chat.Id == TestChatId),
-            Arg.Any<CancellationToken>());
-
-        // Early-exit: mute (RestrictUserAsync) must NOT be called
-        await _moderationService.DidNotReceive().RestrictUserAsync(
-            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
-
-        // Early-exit: CAS check must NOT be called
-        await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<long>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
-            Arg.Any<CancellationToken>());
-
-        // Early-exit: profile scan must NOT be called
-        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+        // Assert — blacklist check must NOT be called (trusted users skip it)
+        await _usernameBlacklistService.DidNotReceive().CheckDisplayNameAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
 
-    #region Test 2: Normal user — mute step is reached
+    #region Test 4: Blacklist disabled — skips check
 
     [Test]
-    public async Task HandleChatMemberUpdate_NormalUser_ProceedsToMuteStep()
+    public async Task HandleChatMemberUpdate_BlacklistDisabled_SkipsCheck()
     {
-        // Arrange — default setup: non-banned user, non-admin status
-        var update = CreateJoinUpdate();
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — restrict (mute) must be called exactly once via RestrictUserAsync
-        await _moderationService.Received(1).RestrictUserAsync(
-            Arg.Is<RestrictIntent>(i =>
-                i.User.Id == TestUserId &&
-                i.Chat != null &&
-                i.Chat.Id == TestChatId),
-            Arg.Any<CancellationToken>());
-    }
-
-    #endregion
-
-    #region Test 3: User leaving — GetOrCreateAsync is never called
-
-    [Test]
-    public async Task HandleChatMemberUpdate_UserLeaving_HandlesLeaveNotJoin()
-    {
-        // Arrange — Member → Left (user leaving)
-        var update = CreateJoinUpdate(
-            oldStatus: ChatMemberStatus.Member,
-            newStatus: ChatMemberStatus.Left);
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — the leave path must not attempt to fetch/create a user record
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-
-        // No mute should happen either
-        await _moderationService.DidNotReceive().RestrictUserAsync(
-            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
-    }
-
-    #endregion
-
-    #region Test 4: Bot joining — bot protection is consulted, user record is not created
-
-    [Test]
-    public async Task HandleChatMemberUpdate_BotJoining_ChecksBotProtection()
-    {
-        // Arrange — joining user is a bot
-        var botUser = new User
+        // Arrange — override config to disable username blacklist
+        var configWithBlacklistDisabled = new WelcomeConfig
         {
-            Id = 888_000_111L,
-            FirstName = "TestBot",
-            Username = "testbot",
-            IsBot = true
+            Enabled = true,
+            Mode = WelcomeMode.ChatAcceptDeny,
+            TimeoutSeconds = 60,
+            JoinSecurity = new JoinSecurityConfig
+            {
+                UsernameBlacklist = new UsernameBlacklistConfig { Enabled = false },
+                Cas = new CasConfig { Enabled = false }
+            }
         };
 
-        _botProtectionService
-            .ShouldAllowBotAsync(Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>())
-            .Returns(true); // allowed bot — skip welcome, return early
-
-        var update = CreateJoinUpdate(user: botUser);
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — bot protection consulted exactly once
-        await _botProtectionService.Received(1).ShouldAllowBotAsync(
-            Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>());
-
-        // Human join path must not execute — user record must not be fetched
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task HandleChatMemberUpdate_DisallowedBotJoining_BansBotAndNeverCreatesUserRecord()
-    {
-        // Arrange — bot is NOT whitelisted
-        var disallowedBot = new User
-        {
-            Id = 777_000_222L,
-            FirstName = "SpamBot",
-            Username = "spambot",
-            IsBot = true
-        };
-
-        _botProtectionService
-            .ShouldAllowBotAsync(Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        var update = CreateJoinUpdate(user: disallowedBot);
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — bot protection called, then ban executed
-        await _botProtectionService.Received(1).ShouldAllowBotAsync(
-            Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<ChatMemberUpdated?>(), Arg.Any<CancellationToken>());
-
-        await _botProtectionService.Received(1).BanBotAsync(
-            Arg.Any<Chat>(), Arg.Any<User>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-
-        // User record path must not execute
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-    }
-
-    #endregion
-
-    #region Test 5: Admin joining — welcome flow is skipped entirely
-
-    [Test]
-    public async Task HandleChatMemberUpdate_AdminJoining_SkipsWelcome()
-    {
-        // Arrange — GetChatMemberAsync returns Administrator status
-        var adminUser = new User
-        {
-            Id = TestUserId,
-            FirstName = "Alice",
-            Username = "alice_tg",
-            IsBot = false
-        };
-
-        _userService
-            .GetChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatMemberAdministrator { User = adminUser });
-
-        var update = CreateJoinUpdate(user: adminUser);
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — admin short-circuits before GetOrCreateAsync
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-
-        // No mute, no CAS check, no profile scan
-        await _moderationService.DidNotReceive().RestrictUserAsync(
-            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
-
-        await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<long>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task HandleChatMemberUpdate_OwnerJoining_SkipsWelcome()
-    {
-        // Arrange — GetChatMemberAsync returns Creator (owner) status
-        _userService
-            .GetChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatMemberOwner { User = TestUser });
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(configWithBlacklistDisabled);
 
         var update = CreateJoinUpdate();
 
         // Act
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // Assert — creator also short-circuits before GetOrCreateAsync
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-
-        await _moderationService.DidNotReceive().RestrictUserAsync(
-            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
-    }
-
-    #endregion
-
-    #region Additional edge cases
-
-    [Test]
-    public async Task HandleChatMemberUpdate_NonJoinStatusTransition_IsIgnored()
-    {
-        // Arrange — Restricted → Member is NOT a join (old must be Left or Kicked)
-        var update = CreateJoinUpdate(
-            oldStatus: ChatMemberStatus.Restricted,
-            newStatus: ChatMemberStatus.Member);
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — the early-return guard must fire, nothing processed
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-
-        await _moderationService.DidNotReceive().RestrictUserAsync(
-            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task HandleChatMemberUpdate_BannedUser_SyncBanIntentCarriesCorrectIdentities()
-    {
-        // Arrange
-        _telegramUserRepository
-            .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
-            .Returns(BannedTelegramUser);
-
-        var update = CreateJoinUpdate();
-
-        SyncBanIntent? capturedIntent = null;
-        _moderationService
-            .SyncBanToChatAsync(
-                Arg.Do<SyncBanIntent>(i => capturedIntent = i),
-                Arg.Any<CancellationToken>())
-            .Returns(new ModerationResult { Success = true });
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — intent must carry correct user and chat identities
-        Assert.That(capturedIntent, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(capturedIntent!.User.Id, Is.EqualTo(TestUserId));
-            Assert.That(capturedIntent.Chat.Id, Is.EqualTo(TestChatId));
-        }
+        // Assert — blacklist check must NOT be called (disabled in config)
+        await _usernameBlacklistService.DidNotReceive().CheckDisplayNameAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     #endregion

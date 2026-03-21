@@ -1,0 +1,216 @@
+@using TelegramGroupsAdmin.Core.Models
+@inject IUsernameBlacklistRepository BlacklistRepository
+@inject IAuditService AuditService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+    <MudText Typo="Typo.subtitle1">Blacklisted Display Names</MudText>
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.Add"
+               Disabled="@_busy"
+               OnClick="@AddEntry">
+        Add Entry
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<MudTable Items="@_entries"
+          Hover="true"
+          Dense="true"
+          Loading="@_loading"
+          LoadingProgressColor="Color.Info">
+    <HeaderContent>
+        <MudTh>Pattern</MudTh>
+        <MudTh>Match Type</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Created</MudTh>
+        <MudTh>Notes</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Pattern">
+            <MudText Typo="Typo.body2"><strong>@context.Pattern</strong></MudText>
+        </MudTd>
+        <MudTd DataLabel="Match Type">
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                @context.MatchType.ToString()
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small"
+                     Color="@(context.Enabled ? Color.Success : Color.Error)">
+                @(context.Enabled ? "Enabled" : "Disabled")
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd DataLabel="Notes">
+            @if (!string.IsNullOrEmpty(context.Notes))
+            {
+                <MudTooltip Text="@context.Notes">
+                    <MudText Typo="Typo.body2"
+                             Style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        @context.Notes
+                    </MudText>
+                </MudTooltip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Actions">
+            <MudStack Row="true" Spacing="1">
+                <MudIconButton Icon="@(context.Enabled ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                               Color="@(context.Enabled ? Color.Warning : Color.Success)"
+                               Size="Size.Small"
+                               OnClick="@(() => ToggleEnabled(context))"
+                               title="@(context.Enabled ? "Disable" : "Enable")" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               OnClick="@(() => DeleteEntry(context))"
+                               title="Delete" />
+            </MudStack>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="py-4">
+            No blacklist entries configured yet.
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
+
+    private IReadOnlyList<UsernameBlacklistEntry> _entries = [];
+    private bool _loading = true;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEntries();
+    }
+
+    private async Task LoadEntries()
+    {
+        _loading = true;
+        try
+        {
+            _entries = await BlacklistRepository.GetAllEntriesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading blacklist: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task AddEntry()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var dialog = await DialogService.ShowAsync<AddBlacklistEntryDialog>("Add Blacklist Entry");
+            var result = await dialog.Result;
+
+            if (result is { Canceled: false, Data: AddBlacklistEntryData data })
+            {
+                if (await BlacklistRepository.ExistsAsync(data.Pattern))
+                {
+                    Snackbar.Add($"Pattern \"{data.Pattern}\" already exists", Severity.Warning);
+                    return;
+                }
+
+                var entry = new UsernameBlacklistEntry(
+                    Id: 0,
+                    Pattern: data.Pattern,
+                    MatchType: BlacklistMatchType.Exact,
+                    Enabled: true,
+                    CreatedAt: DateTimeOffset.UtcNow,
+                    CreatedBy: WebUser!.ToActor(),
+                    Notes: data.Notes);
+
+                await BlacklistRepository.AddEntryAsync(entry);
+
+                var actor = WebUser!.ToActor();
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    actor,
+                    actor,
+                    value: $"username_blacklist:added={data.Pattern}");
+
+                Snackbar.Add($"Blacklisted \"{data.Pattern}\"", Severity.Success);
+                await LoadEntries();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error adding entry: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ToggleEnabled(UsernameBlacklistEntry entry)
+    {
+        var newState = !entry.Enabled;
+        if (await BlacklistRepository.SetEnabledAsync(entry.Id, enabled: newState))
+        {
+            var actor = WebUser!.ToActor();
+            var action = newState ? "enabled" : "disabled";
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                actor,
+                actor,
+                value: $"username_blacklist:{action}={entry.Pattern}");
+
+            Snackbar.Add($"{(newState ? "Enabled" : "Disabled")} \"{entry.Pattern}\"", Severity.Success);
+            await LoadEntries();
+        }
+        else
+        {
+            Snackbar.Add("Entry not found — it may have been deleted", Severity.Warning);
+            await LoadEntries();
+        }
+    }
+
+    private async Task DeleteEntry(UsernameBlacklistEntry entry)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete Blacklist Entry",
+            $"Remove \"{entry.Pattern}\" from the blacklist?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            if (await BlacklistRepository.DeleteEntryAsync(entry.Id))
+            {
+                var actor = WebUser!.ToActor();
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    actor,
+                    actor,
+                    value: $"username_blacklist:deleted={entry.Pattern}");
+
+                Snackbar.Add($"Deleted \"{entry.Pattern}\"", Severity.Success);
+                await LoadEntries();
+            }
+            else
+            {
+                Snackbar.Add("Entry not found — it may have already been deleted", Severity.Warning);
+                await LoadEntries();
+            }
+        }
+    }
+}

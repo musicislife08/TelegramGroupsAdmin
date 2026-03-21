@@ -37,6 +37,7 @@ public class WelcomeService(
     IBotModerationService moderationService,
     IJobScheduler jobScheduler,
     ICasCheckService casCheckService,
+    IUsernameBlacklistService usernameBlacklistService,
     TelegramPhotoService photoService,
     IProfileScanService profileScanService,
     ITelegramSessionManager sessionManager,
@@ -169,11 +170,51 @@ public class WelcomeService(
 
             // ═══════════════════════════════════════════════════════════════════
             // SECURITY CHECKS (always run regardless of config.Enabled)
-            // Order: CAS (fail fast) → Photo fetch → Impersonation → Profile scan
+            // Order: Username blacklist (instant) → CAS (fail fast) → Photo fetch → Impersonation → Profile scan
             // Trusted users skip CAS + profile scan (trust is global)
             // ═══════════════════════════════════════════════════════════════════
 
-            // Step 5: CAS (Combot Anti-Spam) check - auto-ban known spammers FIRST (fail fast)
+            // Step 5: Username blacklist check - auto-ban blacklisted display names FIRST (instant, local DB)
+            // Skip trusted users — trust is global, applied across all groups
+            if (config.JoinSecurity.UsernameBlacklist.Enabled && existingUser?.IsTrusted != true)
+            {
+                var userIdentity = UserIdentity.From(user);
+                var blacklistMatch = await usernameBlacklistService.CheckDisplayNameAsync(
+                    userIdentity.DisplayName, cancellationToken);
+
+                if (blacklistMatch != null)
+                {
+                    logger.LogWarning(
+                        "Username blacklist match: {User} in {Chat} (pattern: {Pattern})",
+                        user.ToLogInfo(),
+                        chatMemberUpdate.Chat.ToLogInfo(),
+                        blacklistMatch.Pattern);
+
+                    // Delete verifying message before ban
+                    await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+
+                    await moderationService.BanUserAsync(
+                        new BanIntent
+                        {
+                            User = userIdentity,
+                            Executor = Actor.UsernameBlacklist,
+                            Reason = $"Username blacklisted: {blacklistMatch.Pattern}",
+                            Chat = ChatIdentity.From(chatMemberUpdate.Chat)
+                        },
+                        cancellationToken);
+
+                    logger.LogInformation(
+                        "{User} auto-banned (username blacklist), skipping welcome flow",
+                        user.ToLogInfo());
+                    return;
+                }
+            }
+            else
+            {
+                logger.LogDebug("Username blacklist check skipped for {User}", user.ToLogDebug());
+            }
+
+            // Step 6: CAS (Combot Anti-Spam) check - auto-ban known spammers FIRST (fail fast)
             // Skip trusted users — trust is global, applied across all groups
             if (config.JoinSecurity.Cas.Enabled && existingUser?.IsTrusted != true)
             {
@@ -212,7 +253,7 @@ public class WelcomeService(
                 logger.LogDebug("CAS check disabled, skipping for {User}", user.ToLogDebug());
             }
 
-            // Step 6: Photo fetch (sync, ~1.8s) - enables full impersonation detection
+            // Step 7: Photo fetch (sync, ~1.8s) - enables full impersonation detection
             string? userPhotoPath = existingUser?.UserPhotoPath;
             var photoResult = await photoService.GetUserPhotoWithMetadataAsync(
                 user.Id,
@@ -237,7 +278,7 @@ public class WelcomeService(
                     photoResult.RelativePath);
             }
 
-            // Step 7: Impersonation detection (now has photo for full capability)
+            // Step 8: Impersonation detection (now has photo for full capability)
             if (config.JoinSecurity.Impersonation.Enabled)
             {
                 var shouldCheck = await impersonationDetectionService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
@@ -291,7 +332,7 @@ public class WelcomeService(
                 logger.LogDebug("Impersonation detection disabled, skipping for {User}", user.ToLogDebug());
             }
 
-            // Step 8: Profile scan via User API (skip trusted users)
+            // Step 9: Profile scan via User API (skip trusted users)
             if (config.JoinSecurity.ProfileScan.Enabled
                 && config.JoinSecurity.ProfileScan.ScanOnJoin
                 && existingUser?.IsTrusted != true)
@@ -416,7 +457,7 @@ public class WelcomeService(
                 chatMemberUpdate.Chat.ToLogDebug(),
                 config.Mode);
 
-            // Step 8: Create welcome response record (pending state)
+            // Step 10: Create welcome response record (pending state)
             var welcomeResponse = new WelcomeResponse(
                 Id: 0, // Will be set by database
                 ChatId: chatMemberUpdate.Chat.Id,
@@ -433,7 +474,7 @@ public class WelcomeService(
 
             var responseId = await welcomeResponsesRepository.InsertAsync(welcomeResponse, cancellationToken);
 
-            // Step 9: Schedule timeout via Quartz.NET
+            // Step 11: Schedule timeout via Quartz.NET
             var payload = new WelcomeTimeoutPayload(
                 UserIdentity.From(user),
                 ChatIdentity.From(chatMemberUpdate.Chat),

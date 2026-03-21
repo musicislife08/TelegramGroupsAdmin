@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
             services.AddScoped<IReportCallbackContextRepository, ReportCallbackContextRepository>(); // DM action button contexts
             services.AddScoped<ILinkedChannelsRepository, LinkedChannelsRepository>(); // Linked channel impersonation detection
+            services.AddScoped<IUsernameBlacklistRepository, UsernameBlacklistRepository>();
             // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
             services.AddScoped<IExamSessionRepository, ExamSessionRepository>(); // Phase 2: Entrance exam state tracking
@@ -168,6 +169,9 @@ public static class ServiceCollectionExtensions
 
             // CAS (Combot Anti-Spam) check on user join
             services.AddSingleton<ICasCheckService, CasCheckService>();
+
+            // Username blacklist check on user join
+            services.AddScoped<IUsernameBlacklistService, UsernameBlacklistService>();
 
             // Bot command system (Keyed Services pattern)
             // Commands are Scoped (to allow injecting Scoped services like BotModerationService)

@@ -20,4 +20,9 @@ public class JoinSecurityConfig
     /// User API profile scanning configuration.
     /// </summary>
     public ProfileScanConfig ProfileScan { get; set; } = new();
+
+    /// <summary>
+    /// Username blacklist configuration - auto-ban users with blacklisted display names on join.
+    /// </summary>
+    public UsernameBlacklistConfig UsernameBlacklist { get; set; } = new();
 }
