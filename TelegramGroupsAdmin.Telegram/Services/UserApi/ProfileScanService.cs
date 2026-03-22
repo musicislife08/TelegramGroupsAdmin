@@ -106,7 +106,9 @@ public sealed class ProfileScanService(
                 _ = scanTask.ContinueWith(
                     t => logger.LogDebug(t.Exception?.GetBaseException(),
                         "Abandoned profile scan for {UserId} faulted after timeout", user.Id),
-                    TaskContinuationOptions.OnlyOnFaulted);
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
 
                 return EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
             }
