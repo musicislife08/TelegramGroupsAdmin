@@ -681,8 +681,27 @@ public class BackupService : IBackupService
             return;
         }
 
-        // Temporarily disable FK constraints for self-referencing tables
-        await connection.ExecuteAsync($"ALTER TABLE {tableName} DISABLE TRIGGER ALL", transaction);
+        // Drop FK constraints on this table before insert (recreated after).
+        // Cannot use DISABLE TRIGGER ALL — requires SUPERUSER on PostgreSQL 15+.
+        var fkConstraints = (await connection.QueryAsync<(string constraint_name, string constraint_def)>(
+            """
+            SELECT
+                con.conname AS constraint_name,
+                pg_get_constraintdef(con.oid) AS constraint_def
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            WHERE rel.relname = @tableName
+              AND con.contype = 'f'
+            """,
+            new { tableName },
+            transaction)).ToList();
+
+        foreach (var fk in fkConstraints)
+        {
+            await connection.ExecuteAsync(
+                $"ALTER TABLE {tableName} DROP CONSTRAINT \"{fk.constraint_name}\"",
+                transaction: transaction);
+        }
 
         // Query database schema to find JSONB columns and GENERATED columns
         var schemaInfo = await connection.QueryAsync<(string column_name, string data_type, string is_generated)>(
@@ -770,8 +789,13 @@ public class BackupService : IBackupService
             await connection.ExecuteAsync(sql, parameters, transaction);
         }
 
-        // Re-enable FK constraints
-        await connection.ExecuteAsync($"ALTER TABLE {tableName} ENABLE TRIGGER ALL", transaction);
+        // Recreate FK constraints that were dropped before insert
+        foreach (var fk in fkConstraints)
+        {
+            await connection.ExecuteAsync(
+                $"ALTER TABLE {tableName} ADD CONSTRAINT \"{fk.constraint_name}\" {fk.constraint_def}",
+                transaction: transaction);
+        }
 
         _logger.LogDebug("Inserted {Count} records into {TableName}", records.Count, tableName);
     }

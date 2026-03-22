@@ -115,8 +115,11 @@ public class PgBouncerFixture : IAsyncDisposable
     public async Task<(string directConnStr, string pgBouncerConnStr)> CreateUniqueDatabaseAsync()
     {
         var dbName = $"test_db_{Guid.NewGuid():N}";
+        var roleName = $"tga_test_{Guid.NewGuid():N}";
+        var rolePassword = $"pw_{Guid.NewGuid():N}";
 
-        // Create database via direct connection
+        // Create non-superuser role and database via direct superuser connection
+        // Mirrors production: each tenant gets a restricted role that owns its database
         var adminBuilder = new NpgsqlConnectionStringBuilder(DirectConnectionString)
         {
             Database = "postgres"
@@ -125,13 +128,38 @@ public class PgBouncerFixture : IAsyncDisposable
         await using (var connection = new NpgsqlConnection(adminBuilder.ConnectionString))
         {
             await connection.OpenAsync();
-            await using var cmd = new NpgsqlCommand($"CREATE DATABASE \"{dbName}\"", connection);
-            await cmd.ExecuteNonQueryAsync();
+
+            // Create non-superuser role (matches production tga_{instanceId} pattern)
+            await using (var roleCmd = new NpgsqlCommand(
+                $"CREATE ROLE \"{roleName}\" WITH LOGIN PASSWORD '{rolePassword}' NOSUPERUSER",
+                connection))
+            {
+                await roleCmd.ExecuteNonQueryAsync();
+            }
+
+            // Create database owned by the non-superuser role
+            await using (var dbCmd = new NpgsqlCommand(
+                $"CREATE DATABASE \"{dbName}\" OWNER \"{roleName}\"",
+                connection))
+            {
+                await dbCmd.ExecuteNonQueryAsync();
+            }
         }
 
-        // Return both connection strings for the new database
-        var directBuilder = new NpgsqlConnectionStringBuilder(DirectConnectionString) { Database = dbName };
-        var pgBouncerBuilder = new NpgsqlConnectionStringBuilder(PgBouncerConnectionString) { Database = dbName };
+        // Return connection strings authenticating as the non-superuser role
+        var directBuilder = new NpgsqlConnectionStringBuilder(DirectConnectionString)
+        {
+            Database = dbName,
+            Username = roleName,
+            Password = rolePassword
+        };
+
+        var pgBouncerBuilder = new NpgsqlConnectionStringBuilder(PgBouncerConnectionString)
+        {
+            Database = dbName,
+            Username = roleName,
+            Password = rolePassword
+        };
 
         return (directBuilder.ConnectionString, pgBouncerBuilder.ConnectionString);
     }

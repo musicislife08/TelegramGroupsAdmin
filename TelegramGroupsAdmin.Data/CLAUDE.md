@@ -132,6 +132,27 @@ public class ExamSessionDto
 
 ## Migration Warnings
 
+### Never Use DISABLE TRIGGER ALL
+
+**NEVER** use `ALTER TABLE ... DISABLE TRIGGER ALL` in migrations. This command requires SUPERUSER on PostgreSQL 15+ because it disables system triggers (referential integrity enforcement). The application runs as a non-superuser database owner in production and hosting platform deployments.
+
+If you need to temporarily bypass FK constraints during a data migration (e.g., remapping IDs across parent/child tables), use explicit FK constraint drop/recreate instead:
+
+```csharp
+migrationBuilder.Sql("""
+    -- Drop FK before data manipulation
+    ALTER TABLE child_table DROP CONSTRAINT "FK_child_table_parent_table_column";
+
+    -- ... perform data updates ...
+
+    -- Recreate FK after data manipulation
+    ALTER TABLE child_table ADD CONSTRAINT "FK_child_table_parent_table_column"
+        FOREIGN KEY (column) REFERENCES parent_table(column) ON DELETE CASCADE;
+    """);
+```
+
+Table owners can `DROP CONSTRAINT` and `ADD CONSTRAINT` without SUPERUSER. Keep all operations in a single `migrationBuilder.Sql()` call for transactional atomicity.
+
 ### RENAME vs DROP+CREATE
 
 EF Core often generates `DROP TABLE` + `CREATE TABLE` instead of `RENAME TABLE` when renaming. **Always review migrations** and manually fix:
