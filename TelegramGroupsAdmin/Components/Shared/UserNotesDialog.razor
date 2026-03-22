@@ -28,12 +28,12 @@
                                         By @note.CreatedBy.GetDisplayText()
                                     </MudText>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        <span class="local-timestamp" data-utc="@note.CreatedAt.ToString("o")">@note.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                        <LocalTimestamp Value="@note.CreatedAt" />
                                     </MudText>
                                     @if (note.UpdatedAt.HasValue)
                                     {
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            (edited <span class="local-timestamp" data-utc="@note.UpdatedAt.Value.ToString("o")">@note.UpdatedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>)
+                                            (edited <LocalTimestamp Value="@note.UpdatedAt.Value" />)
                                         </MudText>
                                     }
                                 </MudStack>
