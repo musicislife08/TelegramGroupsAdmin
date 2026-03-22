@@ -34,6 +34,12 @@ public sealed class ProfileScanService(
     /// </summary>
     private static readonly TimeSpan ScanFreshnessWindow = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// Maximum time for the core scan (Telegram API calls, file downloads, AI scoring).
+    /// Prevents hung DC connections from blocking the welcome flow indefinitely.
+    /// </summary>
+    private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(45);
+
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
         ChatIdentity? triggeringChat,
@@ -76,12 +82,36 @@ public sealed class ProfileScanService(
             return EmptyResult(user.Id, "No User API session available. Connect a session in Settings.");
         }
 
-        // Top-level guard: if any API call in Steps 1-8 triggers the flood gate,
-        // bail out immediately without permanently excluding the user.
+        // Top-level guard: WTelegram API calls don't accept CancellationToken, so a hung DC
+        // connection (e.g., file download from DC -4) blocks indefinitely. Task.WhenAny races
+        // the scan against a timeout — if the timeout wins, we abandon the scan and return
+        // gracefully so the welcome flow continues.
+        //
+        // The scan task gets its own scope (via ScanWithOwnedScopeAsync) so that if the timeout
+        // fires and this method returns, the abandoned task's scoped services stay alive until
+        // the task completes or faults — preventing ObjectDisposedException on DbContexts.
         try
         {
-            return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat,
-                userRepo, scope.ServiceProvider, ct);
+            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, ct);
+
+            var completedTask = await Task.WhenAny(scanTask, Task.Delay(ScanTimeout, CancellationToken.None));
+
+            if (completedTask != scanTask)
+            {
+                logger.LogWarning(
+                    "Profile scan timed out after {Timeout}s for {User} (WTelegram call hung, likely DC connection issue)",
+                    ScanTimeout.TotalSeconds, user.ToLogDebug());
+
+                // Observe the abandoned task to prevent UnobservedTaskException and log failures
+                _ = scanTask.ContinueWith(
+                    t => logger.LogDebug(t.Exception?.GetBaseException(),
+                        "Abandoned profile scan for {UserId} faulted after timeout", user.Id),
+                    TaskContinuationOptions.OnlyOnFaulted);
+
+                return EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
+            }
+
+            return await scanTask; // propagate result or exception
         }
         catch (TelegramFloodWaitException ex)
         {
@@ -89,6 +119,24 @@ public sealed class ProfileScanService(
                 user.ToLogDebug(), ex.Message);
             return EmptyResult(user.Id, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Runs the core scan with its own DI scope. The scope stays alive for the task's full
+    /// lifetime, even if the caller abandons the task due to timeout.
+    /// </summary>
+    private async Task<ProfileScanResult> ScanWithOwnedScopeAsync(
+        IWTelegramApiClient client,
+        UserIdentity user,
+        Models.TelegramUser? existingUser,
+        ChatIdentity? triggeringChat,
+        CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat,
+            userRepo, scope.ServiceProvider, ct);
     }
 
     private async Task<ProfileScanResult> ScanUserProfileCoreAsync(
