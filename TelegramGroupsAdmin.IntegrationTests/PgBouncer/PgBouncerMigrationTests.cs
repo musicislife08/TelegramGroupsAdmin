@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.PgBouncer;
 [Category("PgBouncer")]
 public class PgBouncerMigrationTests
 {
-    private PgBouncerFixture _fixture = null!;
+    private PgBouncerFixture? _fixture;
 
     [OneTimeSetUp]
     public async Task FixtureSetup()
@@ -21,16 +21,17 @@ public class PgBouncerMigrationTests
     }
 
     [OneTimeTearDown]
-    public void FixtureTeardown()
+    public async Task FixtureTeardown()
     {
-        _fixture.Dispose();
+        if (_fixture is not null)
+            await _fixture.DisposeAsync();
     }
 
     [Test]
     public async Task MigrateAsync_ThroughPgBouncer_AppliesAllMigrations()
     {
         // Arrange — create a fresh database accessible through PgBouncer
-        var (_, pgBouncerConnStr) = await _fixture.CreateUniqueDatabaseAsync();
+        var (_, pgBouncerConnStr) = await _fixture!.CreateUniqueDatabaseAsync();
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
         optionsBuilder.UseNpgsql(pgBouncerConnStr);
@@ -50,7 +51,7 @@ public class PgBouncerMigrationTests
     public async Task EfCoreCrud_ThroughPgBouncer_WorksCorrectly()
     {
         // Arrange — create and migrate a fresh database
-        var (_, pgBouncerConnStr) = await _fixture.CreateUniqueDatabaseAsync();
+        var (_, pgBouncerConnStr) = await _fixture!.CreateUniqueDatabaseAsync();
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
         optionsBuilder.UseNpgsql(pgBouncerConnStr);
@@ -61,7 +62,7 @@ public class PgBouncerMigrationTests
         // Act — perform a basic CRUD operation through PgBouncer
         await using var crudContext = new AppDbContext(optionsBuilder.Options);
 
-        // Insert a config record (configs table is always available after migration)
+        // Query configs table (always available after migration)
         var configCount = await crudContext.Configs.CountAsync();
 
         // Assert — query succeeded through PgBouncer without errors
@@ -73,7 +74,7 @@ public class PgBouncerMigrationTests
     public async Task MultipleContexts_ThroughPgBouncer_ConnectionPoolingWorks()
     {
         // Arrange — validates IDbContextFactory pattern works through PgBouncer
-        var (_, pgBouncerConnStr) = await _fixture.CreateUniqueDatabaseAsync();
+        var (_, pgBouncerConnStr) = await _fixture!.CreateUniqueDatabaseAsync();
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
         optionsBuilder.UseNpgsql(pgBouncerConnStr);
@@ -85,13 +86,11 @@ public class PgBouncerMigrationTests
         }
 
         // Act — create and dispose multiple contexts rapidly (simulates IDbContextFactory pattern)
+        // If connection pooling through PgBouncer breaks, this will throw
         for (var i = 0; i < 10; i++)
         {
             await using var context = new AppDbContext(optionsBuilder.Options);
             await context.Configs.CountAsync();
         }
-
-        // Assert — if we got here without exceptions, connection pooling through PgBouncer works
-        Assert.Pass("10 rapid context create/dispose cycles completed through PgBouncer");
     }
 }

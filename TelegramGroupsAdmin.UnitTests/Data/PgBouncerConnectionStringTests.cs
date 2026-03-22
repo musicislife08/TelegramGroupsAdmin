@@ -1,5 +1,5 @@
 using Npgsql;
-using TelegramGroupsAdmin.Data.Extensions;
+using static TelegramGroupsAdmin.Data.Extensions.ServiceCollectionExtensions;
 
 namespace TelegramGroupsAdmin.UnitTests.Data;
 
@@ -11,7 +11,7 @@ public class PgBouncerConnectionStringTests
     {
         var connectionString = "Host=localhost;Database=testdb;Username=user;Password=pass";
 
-        var result = TelegramGroupsAdmin.Data.Extensions.ServiceCollectionExtensions.ApplyPgBouncerSettings(connectionString);
+        var result = ApplyPgBouncerSettings(connectionString);
 
         var builder = new NpgsqlConnectionStringBuilder(result);
         Assert.That(builder.NoResetOnClose, Is.True);
@@ -22,7 +22,7 @@ public class PgBouncerConnectionStringTests
     {
         var connectionString = "Host=myhost;Port=6432;Database=testdb;Username=user;Password=pass;Timeout=30";
 
-        var result = TelegramGroupsAdmin.Data.Extensions.ServiceCollectionExtensions.ApplyPgBouncerSettings(connectionString);
+        var result = ApplyPgBouncerSettings(connectionString);
 
         var builder = new NpgsqlConnectionStringBuilder(result);
         Assert.That(builder.Host, Is.EqualTo("myhost"));
@@ -37,7 +37,7 @@ public class PgBouncerConnectionStringTests
     {
         var connectionString = "Host=localhost;Database=testdb;No Reset On Close=false";
 
-        var result = TelegramGroupsAdmin.Data.Extensions.ServiceCollectionExtensions.ApplyPgBouncerSettings(connectionString);
+        var result = ApplyPgBouncerSettings(connectionString);
 
         var builder = new NpgsqlConnectionStringBuilder(result);
         Assert.That(builder.NoResetOnClose, Is.True);

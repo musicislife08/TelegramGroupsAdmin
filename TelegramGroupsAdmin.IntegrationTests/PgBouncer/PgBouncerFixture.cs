@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.PgBouncer;
 /// Starts a PostgreSQL 18 container and a PgBouncer 1.25.1 container in transaction mode.
 /// PgBouncer sits between tests and PostgreSQL, matching production deployment topology.
 /// </summary>
-public class PgBouncerFixture : IDisposable
+public class PgBouncerFixture : IAsyncDisposable
 {
     private INetwork? _network;
     private PostgreSqlContainer? _postgresContainer;
@@ -57,7 +57,7 @@ public class PgBouncerFixture : IDisposable
             await cmd.ExecuteNonQueryAsync();
         }
 
-        // 5. Extract PgBouncer config from embedded resource
+        // 4. Extract PgBouncer config from embedded resource
         var assembly = typeof(PgBouncerFixture).Assembly;
         var configResourceName = assembly.GetManifestResourceNames()
             .First(n => n.EndsWith("pgbouncer.ini"));
@@ -69,7 +69,7 @@ public class PgBouncerFixture : IDisposable
             await stream.CopyToAsync(fileStream);
         }
 
-        // Extract userlist.txt for PgBouncer auth
+        // 5. Extract userlist.txt for PgBouncer auth
         var userlistResourceName = assembly.GetManifestResourceNames()
             .First(n => n.EndsWith("userlist.txt"));
 
@@ -136,13 +136,16 @@ public class PgBouncerFixture : IDisposable
         return (directBuilder.ConnectionString, pgBouncerBuilder.ConnectionString);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
 
-        _pgBouncerContainer?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        _postgresContainer?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        _network?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        if (_pgBouncerContainer is not null)
+            await _pgBouncerContainer.DisposeAsync();
+        if (_postgresContainer is not null)
+            await _postgresContainer.DisposeAsync();
+        if (_network is not null)
+            await _network.DisposeAsync();
 
         if (_tempConfigPath is not null)
             File.Delete(_tempConfigPath);
