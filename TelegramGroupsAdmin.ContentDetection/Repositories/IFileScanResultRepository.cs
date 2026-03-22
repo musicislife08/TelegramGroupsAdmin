@@ -3,14 +3,15 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
 /// <summary>
-/// Repository for managing file scan result caching
-/// Provides hash-based lookups with 24-hour TTL
+/// Repository for managing file scan result caching.
+/// Read path uses a hardcoded 24-hour TTL for cache freshness.
+/// Cleanup retention is configurable via DataCleanupSettings (default: 24 hours).
 /// </summary>
 public interface IFileScanResultRepository
 {
     /// <summary>
-    /// Get cached scan results for a file hash (24-hour TTL)
-    /// Returns all scanner results for the hash that are still fresh
+    /// Get cached scan results for a file hash (hardcoded 24-hour read TTL).
+    /// Returns all scanner results for the hash that are still fresh.
     /// </summary>
     /// <param name="fileHash">SHA256 hash of the file (64 hex chars)</param>
     /// <param name="cancellationToken">Cancellation token</param>

@@ -81,8 +81,8 @@ public class WebAdminAccountsPage
             Timeout = timeoutMs
         });
 
-        // Wait for loading indicator to disappear
-        var loadingIndicator = _page.Locator(LoadingIndicator);
+        // Wait for loading indicator to disappear (use .First to avoid strict mode when multiple progress bars exist)
+        var loadingIndicator = _page.Locator(LoadingIndicator).First;
         try
         {
             await loadingIndicator.WaitForAsync(new LocatorWaitForOptions

@@ -250,14 +250,14 @@
                      Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Joined</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="User">
                         <UserInfoCell User="context" ShowBadges="false" />
                     </MudTd>
-                    <MudTd DataLabel="Joined">
+                    <MudTd DataLabel="Last Seen">
                         <LocalTimestamp Value="@context.LastSeenAt" />
                     </MudTd>
                     <MudTd DataLabel="Actions">
