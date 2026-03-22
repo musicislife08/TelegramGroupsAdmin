@@ -6,6 +6,7 @@ using Quartz;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -80,6 +81,7 @@ public class DataCleanupJob : IJob
         var reportRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.ReportRetention, DataCleanupSettings.DefaultReportRetention);
         var contextRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.CallbackContextRetention, DataCleanupSettings.DefaultShortRetention);
         var notificationRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.WebNotificationRetention, DataCleanupSettings.DefaultShortRetention);
+        var fileScanRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.FileScanResultRetention, DataCleanupSettings.DefaultFileScanResultRetention);
 
         _logger.LogInformation("Data cleanup job started");
 
@@ -95,13 +97,16 @@ public class DataCleanupJob : IJob
         // 4. Clean up old read web notifications
         await CleanupNotificationsAsync(sp, notificationRetention, cancellationToken);
 
+        // 5. Clean up expired file scan results
+        await CleanupFileScanResultsAsync(sp, fileScanRetention, cancellationToken);
+
         _logger.LogInformation("Data cleanup job completed");
     }
 
-    private async Task CleanupMessagesAsync(IServiceProvider sp, TimeSpan retention, CancellationToken ct)
+    private async Task CleanupMessagesAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var repository = sp.GetRequiredService<IMessageHistoryRepository>();
-        var result = await repository.CleanupExpiredAsync(retention, ct);
+        var result = await repository.CleanupExpiredAsync(retention, cancellationToken);
 
         // Delete image files from disk (photo thumbnails)
         var imageDeletedCount = 0;
@@ -157,11 +162,11 @@ public class DataCleanupJob : IJob
                 : "none");
     }
 
-    private async Task CleanupReportsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken ct)
+    private async Task CleanupReportsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var reportsRepo = sp.GetRequiredService<IReportsRepository>();
         var reportsCutoff = DateTimeOffset.UtcNow - retention;
-        var reportsDeleted = await reportsRepo.DeleteOldReportsAsync(reportsCutoff, type: null, ct);
+        var reportsDeleted = await reportsRepo.DeleteOldReportsAsync(reportsCutoff, type: null, cancellationToken);
 
         if (reportsDeleted > 0)
         {
@@ -172,10 +177,10 @@ public class DataCleanupJob : IJob
         }
     }
 
-    private async Task CleanupCallbackContextsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken ct)
+    private async Task CleanupCallbackContextsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var callbackContextRepo = sp.GetRequiredService<IReportCallbackContextRepository>();
-        var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(retention, ct);
+        var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(retention, cancellationToken);
 
         if (contextsDeleted > 0)
         {
@@ -186,17 +191,31 @@ public class DataCleanupJob : IJob
         }
     }
 
-    private async Task CleanupNotificationsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken ct)
+    private async Task CleanupNotificationsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         // Use repository directly - it's the domain expert for notification data
         var notificationRepo = sp.GetRequiredService<IWebNotificationRepository>();
-        var notificationsDeleted = await notificationRepo.DeleteOldReadNotificationsAsync(retention, ct);
+        var notificationsDeleted = await notificationRepo.DeleteOldReadNotificationsAsync(retention, cancellationToken);
 
         if (notificationsDeleted > 0)
         {
             _logger.LogInformation(
                 "Notification cleanup: {Count} old read notifications deleted (retention: {Retention})",
                 notificationsDeleted,
+                TimeSpanUtilities.FormatDuration(retention));
+        }
+    }
+
+    private async Task CleanupFileScanResultsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
+    {
+        var fileScanRepo = sp.GetRequiredService<IFileScanResultRepository>();
+        var deleted = await fileScanRepo.CleanupExpiredResultsAsync(retention, cancellationToken);
+
+        if (deleted > 0)
+        {
+            _logger.LogInformation(
+                "File scan result cleanup: {Count} expired results deleted (retention: {Retention})",
+                deleted,
                 TimeSpanUtilities.FormatDuration(retention));
         }
     }

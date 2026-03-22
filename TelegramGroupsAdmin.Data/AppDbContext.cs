@@ -678,7 +678,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(bs => bs.BlockMode)
             .HasFilter("block_mode > 0");
         modelBuilder.Entity<BlocklistSubscriptionDto>()
-            .HasIndex(bs => bs.Url);  // For duplicate detection
+            .HasIndex(bs => new { bs.Url, bs.ChatId })
+            .IsUnique();
 
         // DomainFilters indexes
         modelBuilder.Entity<DomainFilterDto>()

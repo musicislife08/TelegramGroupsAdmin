@@ -184,6 +184,13 @@
                                  HelperText="e.g., 7d, 2w"
                                  Error="@(!ValidateRetention(_editNotificationRetention))"
                                  ErrorText="Invalid format" />
+
+                    <MudTextField @bind-Value="_editFileScanResultRetention"
+                                 Label="File Scan Results"
+                                 Variant="Variant.Outlined"
+                                 HelperText="e.g., 24h, 7d"
+                                 Error="@(!ValidateRetention(_editFileScanResultRetention))"
+                                 ErrorText="Invalid format" />
                 }
                 else if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
                 {
@@ -251,6 +258,7 @@
     private string _editReportRetention = "30d";
     private string _editContextRetention = "7d";
     private string _editNotificationRetention = "7d";
+    private string _editFileScanResultRetention = "24h";
 
     [CascadingParameter] private WebUserIdentity? WebUser { get; set; }
 
@@ -362,6 +370,7 @@
             _editReportRetention = settings.ReportRetention;
             _editContextRetention = settings.CallbackContextRetention;
             _editNotificationRetention = settings.WebNotificationRetention;
+            _editFileScanResultRetention = settings.FileScanResultRetention;
         }
         else if (job.JobName == BackgroundJobNames.ProfileRescan)
         {
@@ -416,7 +425,8 @@
                 if (!ValidateRetention(_editMessageRetention) ||
                     !ValidateRetention(_editReportRetention) ||
                     !ValidateRetention(_editContextRetention) ||
-                    !ValidateRetention(_editNotificationRetention))
+                    !ValidateRetention(_editNotificationRetention) ||
+                    !ValidateRetention(_editFileScanResultRetention))
                 {
                     Snackbar.Add("Invalid retention format. Use formats like: 7d, 2w, 1M, 1y", Severity.Error);
                     return;
@@ -427,7 +437,8 @@
                     MessageRetention = _editMessageRetention,
                     ReportRetention = _editReportRetention,
                     CallbackContextRetention = _editContextRetention,
-                    WebNotificationRetention = _editNotificationRetention
+                    WebNotificationRetention = _editNotificationRetention,
+                    FileScanResultRetention = _editFileScanResultRetention
                 };
             }
             else if (_editingJob.JobName == BackgroundJobNames.ProfileRescan)

@@ -458,7 +458,10 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
     [Test]
     public void DisplaysTimestamp()
     {
-        // Arrange
+        // Arrange — cascade TimeZoneInfo so LocalTimestamp renders the formatted time
+        RenderTree.TryAdd<Microsoft.AspNetCore.Components.CascadingValue<TimeZoneInfo?>>(p =>
+            p.Add(cv => cv.Value, TimeZoneInfo.Utc));
+
         var timestamp = new DateTimeOffset(2025, 6, 15, 14, 30, 0, TimeSpan.Zero);
         var message = new MessageRecord(
             MessageId: 123,
@@ -494,13 +497,14 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         var cut = Render<MessageBubbleTelegram>(p => p
             .Add(x => x.Message, message));
 
-        // Assert — the timestamp element is rendered with the UTC value in data-utc attribute
+        // Assert — timestamp is rendered inside tg-timestamp wrapper via LocalTimestamp
         var timestampEl = cut.Find(".tg-timestamp");
-        Assert.That(timestampEl.GetAttribute("data-utc"), Is.EqualTo(timestamp.ToString("o")));
+        var displayTime = TimeZoneInfo.ConvertTime(timestamp, TimeZoneInfo.Utc);
+        Assert.That(timestampEl.TextContent.Trim(), Is.EqualTo(displayTime.ToString("MMM d, yyyy h:mm tt")));
     }
 
     [Test]
-    public void TimestampElement_HasLocalTimestampClass()
+    public void TimestampElement_HasTgTimestampClass()
     {
         // Arrange
         var message = CreateMessage();
@@ -509,8 +513,8 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
         var cut = Render<MessageBubbleTelegram>(p => p
             .Add(x => x.Message, message));
 
-        // Assert — client-side JS will localise times; verify the CSS hook class is present
-        var timestampEl = cut.Find(".tg-timestamp.local-timestamp");
+        // Assert — tg-timestamp wrapper exists around the LocalTimestamp component
+        var timestampEl = cut.Find(".tg-timestamp");
         Assert.That(timestampEl, Is.Not.Null);
     }
 

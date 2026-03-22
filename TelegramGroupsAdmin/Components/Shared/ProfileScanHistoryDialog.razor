@@ -23,7 +23,7 @@
                     <MudTimelineItem Color="@ProfileScanDisplayHelpers.GetOutcomeColor(result.Outcome)" Size="Size.Small">
                         <ItemOpposite>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                <span class="local-timestamp" data-utc="@result.ScannedAt.ToString("o")">@result.ScannedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                <LocalTimestamp Value="@result.ScannedAt" />
                             </MudText>
                         </ItemOpposite>
                         <ItemContent>

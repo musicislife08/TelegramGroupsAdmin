@@ -27,6 +27,16 @@ public record DataCleanupSettings
     public static readonly TimeSpan DefaultShortRetention = TimeSpan.FromDays(7);
 
     /// <summary>
+    /// Default file scan result retention period string (24 hours).
+    /// </summary>
+    public const string DefaultFileScanResultRetentionString = "24h";
+
+    /// <summary>
+    /// Fallback retention for file scan results if parsing fails (24 hours).
+    /// </summary>
+    public static readonly TimeSpan DefaultFileScanResultRetention = TimeSpan.FromHours(24);
+
+    /// <summary>
     /// Retention period for message history (default: 2 years).
     /// Messages with detection results (training data) are kept permanently.
     /// </summary>
@@ -47,4 +57,10 @@ public record DataCleanupSettings
     /// Retention period for read web notifications (default: 7 days).
     /// </summary>
     public string WebNotificationRetention { get; init; } = "7d";
+
+    /// <summary>
+    /// Retention period for file scan results (default: 24 hours).
+    /// Scan results are cached to avoid re-scanning the same file.
+    /// </summary>
+    public string FileScanResultRetention { get; init; } = DefaultFileScanResultRetentionString;
 }

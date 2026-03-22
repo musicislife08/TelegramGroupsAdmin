@@ -463,32 +463,46 @@
         }
     }
 
-    private async Task SaveHardBlockConfigurationAsync(Actor actor)
+    private Task SaveHardBlockConfigurationAsync(Actor actor) =>
+        SaveCustomBlockSubscriptionsAsync(_hardBlockCustomUrls, BlockMode.Hard, _hardBlockManualDomains, actor);
+
+    private Task SaveSoftBlockConfigurationAsync(Actor actor) =>
+        SaveCustomBlockSubscriptionsAsync(_softBlockCustomUrls, BlockMode.Soft, _softBlockManualDomains, actor);
+
+    private async Task SaveCustomBlockSubscriptionsAsync(string urlsText, BlockMode mode, string manualDomains, Actor actor)
     {
-        // Save custom URLs
-        var urls = _hardBlockCustomUrls
+        var urls = urlsText
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(u => u.Trim())
             .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // Remove old custom hard block subscriptions
-        var oldCustomHard = _customSubscriptions.Where(s => s.BlockMode == BlockMode.Hard).ToList();
-        foreach (var old in oldCustomHard)
+        // Remove old custom subscriptions for this block mode
+        var oldCustomSubs = _customSubscriptions.Where(s => s.BlockMode == mode).ToList();
+        foreach (var old in oldCustomSubs)
         {
             await BlocklistRepo.DeleteAsync(old.Id);
         }
 
-        // Add new custom subscriptions
+        // Add new custom subscriptions (skip duplicates from other block modes or built-ins)
+        var skippedDuplicates = new List<string>();
         foreach (var url in urls)
         {
+            var existing = await BlocklistRepo.FindByUrlAsync(url, ChatId);
+            if (existing.Count > 0)
+            {
+                skippedDuplicates.Add(url);
+                continue;
+            }
+
             var subscription = new BlocklistSubscription(
                 Id: 0,
                 ChatId: ChatId,
                 Name: $"Custom: {url}",
                 Url: url,
                 Format: BlocklistFormat.NewlineDomains,
-                BlockMode: BlockMode.Hard,
+                BlockMode: mode,
                 IsBuiltIn: false,
                 Enabled: true,
                 LastFetched: null,
@@ -496,55 +510,18 @@
                 RefreshIntervalHours: 24,
                 AddedBy: actor,
                 AddedDate: DateTimeOffset.UtcNow,
-                Notes: "Custom hard block URL"
+                Notes: $"Custom {mode.ToString().ToLowerInvariant()} block URL"
             );
             await BlocklistRepo.InsertAsync(subscription);
         }
 
-        // Save manual domains
-        await SaveManualDomainsAsync(_hardBlockManualDomains, DomainFilterType.Blacklist, BlockMode.Hard, actor);
-    }
-
-    private async Task SaveSoftBlockConfigurationAsync(Actor actor)
-    {
-        // Save custom URLs
-        var urls = _softBlockCustomUrls
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(u => u.Trim())
-            .Where(u => !string.IsNullOrWhiteSpace(u))
-            .ToList();
-
-        // Remove old custom soft block subscriptions
-        var oldCustomSoft = _customSubscriptions.Where(s => s.BlockMode == BlockMode.Soft).ToList();
-        foreach (var old in oldCustomSoft)
+        if (skippedDuplicates.Count > 0)
         {
-            await BlocklistRepo.DeleteAsync(old.Id);
-        }
-
-        // Add new custom subscriptions
-        foreach (var url in urls)
-        {
-            var subscription = new BlocklistSubscription(
-                Id: 0,
-                ChatId: ChatId,
-                Name: $"Custom: {url}",
-                Url: url,
-                Format: BlocklistFormat.NewlineDomains,
-                BlockMode: BlockMode.Soft,
-                IsBuiltIn: false,
-                Enabled: true,
-                LastFetched: null,
-                EntryCount: null,
-                RefreshIntervalHours: 24,
-                AddedBy: actor,
-                AddedDate: DateTimeOffset.UtcNow,
-                Notes: "Custom soft block URL"
-            );
-            await BlocklistRepo.InsertAsync(subscription);
+            Snackbar.Add($"Skipped {skippedDuplicates.Count} duplicate URL(s): {string.Join(", ", skippedDuplicates)}", Severity.Warning);
         }
 
         // Save manual domains
-        await SaveManualDomainsAsync(_softBlockManualDomains, DomainFilterType.Blacklist, BlockMode.Soft, actor);
+        await SaveManualDomainsAsync(manualDomains, DomainFilterType.Blacklist, mode, actor);
     }
 
     private async Task SaveWhitelist()

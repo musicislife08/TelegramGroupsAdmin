@@ -20,7 +20,7 @@
                     @Alert.RiskLevel.ToString()
                 </MudChip>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    <span class="local-timestamp" data-utc="@Alert.DetectedAt.ToString("o")">@Alert.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    <LocalTimestamp Value="@Alert.DetectedAt" />
                 </MudText>
             </MudStack>
         </CardHeaderContent>
@@ -203,7 +203,7 @@
             {
                 <MudAlert Severity="Severity.Info" Dense="true">
                     <b>Reviewed:</b> @Alert.Verdict by @(Alert.ReviewedByEmail ?? Alert.ReviewedByUserId ?? "Unknown")
-                    on <span class="local-timestamp" data-utc="@Alert.ReviewedAt.Value.ToString("o")">@Alert.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    on <LocalTimestamp Value="@Alert.ReviewedAt.Value" />
                 </MudAlert>
             }
         </MudStack>

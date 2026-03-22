@@ -61,11 +61,11 @@ public class FileScanResultRepository : IFileScanResultRepository
         return dto.ToModel();
     }
 
-    public async Task<int> CleanupExpiredResultsAsync(CancellationToken cancellationToken = default)
+    public async Task<int> CleanupExpiredResultsAsync(TimeSpan retention, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var cutoffTime = DateTimeOffset.UtcNow - CacheTtl;
+        var cutoffTime = DateTimeOffset.UtcNow - retention;
 
         var expiredResults = await context.FileScanResults
             .Where(fsr => fsr.ScannedAt < cutoffTime)
@@ -81,8 +81,8 @@ public class FileScanResultRepository : IFileScanResultRepository
         context.FileScanResults.RemoveRange(expiredResults);
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Cleaned up {Count} expired scan results (older than {TTL})",
-            expiredResults.Count, CacheTtl);
+        _logger.LogDebug("Cleaned up {Count} expired scan results (retention: {Retention})",
+            expiredResults.Count, retention);
 
         return expiredResults.Count;
     }

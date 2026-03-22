@@ -32,7 +32,7 @@
                     <MudTimelineItem Color="@(result.IsSpam ? Color.Error : Color.Success)" Size="Size.Small">
                         <ItemOpposite>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                <span class="local-timestamp" data-utc="@result.DetectedAt.ToString("o")">@result.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                <LocalTimestamp Value="@result.DetectedAt" />
                             </MudText>
                         </ItemOpposite>
                         <ItemContent>
