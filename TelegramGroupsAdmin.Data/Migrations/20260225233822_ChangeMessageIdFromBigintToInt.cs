@@ -14,7 +14,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
             // Step 1: Remap out-of-range message_id values (imported ML training data with
             // synthetic bigint IDs that don't fit in int). Build a temp mapping table,
-            // disable FK triggers during remap, then re-enable.
+            // drop FK constraints during remap, then recreate them.
             migrationBuilder.Sql("""
                 CREATE TEMP TABLE _msg_id_remap AS
                 SELECT message_id AS old_id,
