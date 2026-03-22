@@ -243,6 +243,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - `OTEL_SERVICE_NAME`: Service name for traces/metrics (default: `TelegramGroupsAdmin`)
 - `ENABLE_METRICS`: Enables Prometheus `/metrics` endpoint without full OTEL/Seq stack (set to any non-empty value)
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP endpoint for traces and metrics (e.g., `http://seq:5341/ingest/otlp`)
+- `PGBOUNCER_MODE`: Configures connection string for PgBouncer transaction mode compatibility (adds `No Reset On Close=true`). Used when the app connects through PgBouncer instead of directly to PostgreSQL.
 
 When `ENABLE_METRICS` is set (without `OTEL_EXPORTER_OTLP_ENDPOINT`), the application enables:
 - **Prometheus Metrics**: `/metrics` endpoint with runtime, HTTP, and database metrics

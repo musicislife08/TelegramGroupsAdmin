@@ -13,6 +13,13 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddDataServices(this IServiceCollection services, string connectionString)
     {
+        // When behind PgBouncer, prevent Npgsql from sending DISCARD ALL on connection return.
+        // PgBouncer handles connection state reset via its own server_reset_query.
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PGBOUNCER_MODE")))
+        {
+            connectionString = ApplyPgBouncerSettings(connectionString);
+        }
+
         // Single NpgsqlDataSource — the ONE connection pool for all app database access.
         // EF Core (via pooled factory) and raw ADO.NET services (BackupService, etc.) share this pool.
         // Quartz.NET is the only consumer with its own separate pool (API limitation).
@@ -42,5 +49,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMigrationHistoryCompactionService, MigrationHistoryCompactionService>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Modifies a connection string for PgBouncer transaction mode compatibility.
+    /// Sets No Reset On Close = true to prevent Npgsql from sending DISCARD ALL
+    /// when returning connections to its internal pool.
+    /// </summary>
+    internal static string ApplyPgBouncerSettings(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            NoResetOnClose = true
+        };
+        return builder.ConnectionString;
     }
 }
