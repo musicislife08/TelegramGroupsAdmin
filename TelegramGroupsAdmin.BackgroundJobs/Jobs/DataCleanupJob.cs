@@ -6,6 +6,7 @@ using Quartz;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -80,6 +81,7 @@ public class DataCleanupJob : IJob
         var reportRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.ReportRetention, DataCleanupSettings.DefaultReportRetention);
         var contextRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.CallbackContextRetention, DataCleanupSettings.DefaultShortRetention);
         var notificationRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.WebNotificationRetention, DataCleanupSettings.DefaultShortRetention);
+        var fileScanRetention = TimeSpanUtilities.ParseDurationOrDefault(settings.FileScanResultRetention, DataCleanupSettings.DefaultFileScanResultRetention);
 
         _logger.LogInformation("Data cleanup job started");
 
@@ -94,6 +96,9 @@ public class DataCleanupJob : IJob
 
         // 4. Clean up old read web notifications
         await CleanupNotificationsAsync(sp, notificationRetention, cancellationToken);
+
+        // 5. Clean up expired file scan results
+        await CleanupFileScanResultsAsync(sp, fileScanRetention, cancellationToken);
 
         _logger.LogInformation("Data cleanup job completed");
     }
@@ -197,6 +202,20 @@ public class DataCleanupJob : IJob
             _logger.LogInformation(
                 "Notification cleanup: {Count} old read notifications deleted (retention: {Retention})",
                 notificationsDeleted,
+                TimeSpanUtilities.FormatDuration(retention));
+        }
+    }
+
+    private async Task CleanupFileScanResultsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken ct)
+    {
+        var fileScanRepo = sp.GetRequiredService<IFileScanResultRepository>();
+        var deleted = await fileScanRepo.CleanupExpiredResultsAsync(retention, cancellationToken: ct);
+
+        if (deleted > 0)
+        {
+            _logger.LogInformation(
+                "File scan result cleanup: {Count} expired results deleted (retention: {Retention})",
+                deleted,
                 TimeSpanUtilities.FormatDuration(retention));
         }
     }

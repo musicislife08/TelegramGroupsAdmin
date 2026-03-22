@@ -31,12 +31,13 @@ public interface IFileScanResultRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Cleanup expired scan results (older than 24 hours)
-    /// Should be called periodically via Quartz.NET background job
+    /// Cleanup expired scan results older than the specified retention period.
+    /// Should be called periodically via Quartz.NET background job.
     /// </summary>
+    /// <param name="retention">How long to keep scan results before cleanup</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Number of records deleted</returns>
-    Task<int> CleanupExpiredResultsAsync(CancellationToken cancellationToken = default);
+    Task<int> CleanupExpiredResultsAsync(TimeSpan retention, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Clear ALL cached scan results (for testing purposes)
