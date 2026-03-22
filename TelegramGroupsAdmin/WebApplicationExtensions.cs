@@ -97,6 +97,11 @@ public static class WebApplicationExtensions
         {
             app.Logger.LogInformation("Running PostgreSQL database migrations (EF Core)");
 
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PGBOUNCER_MODE")))
+            {
+                app.Logger.LogInformation("PgBouncer mode active — connection string configured for transaction mode compatibility");
+            }
+
             using var scope = app.Services.CreateScope();
 
             // Pre-migration: Check if history compaction is needed
