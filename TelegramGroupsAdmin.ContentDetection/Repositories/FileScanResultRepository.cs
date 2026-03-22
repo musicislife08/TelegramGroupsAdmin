@@ -81,7 +81,7 @@ public class FileScanResultRepository : IFileScanResultRepository
         context.FileScanResults.RemoveRange(expiredResults);
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Cleaned up {Count} expired scan results (retention: {Retention})",
+        _logger.LogDebug("Cleaned up {Count} expired scan results (retention: {Retention})",
             expiredResults.Count, retention);
 
         return expiredResults.Count;
