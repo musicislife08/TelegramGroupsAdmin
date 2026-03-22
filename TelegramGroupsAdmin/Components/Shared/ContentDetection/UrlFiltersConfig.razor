@@ -470,6 +470,7 @@
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(u => u.Trim())
             .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         // Remove old custom hard block subscriptions
@@ -479,9 +480,17 @@
             await BlocklistRepo.DeleteAsync(old.Id);
         }
 
-        // Add new custom subscriptions
+        // Add new custom subscriptions (skip duplicates from other block modes or built-ins)
+        var skippedDuplicates = new List<string>();
         foreach (var url in urls)
         {
+            var existing = await BlocklistRepo.FindByUrlAsync(url, ChatId);
+            if (existing.Count > 0)
+            {
+                skippedDuplicates.Add(url);
+                continue;
+            }
+
             var subscription = new BlocklistSubscription(
                 Id: 0,
                 ChatId: ChatId,
@@ -501,6 +510,11 @@
             await BlocklistRepo.InsertAsync(subscription);
         }
 
+        if (skippedDuplicates.Count > 0)
+        {
+            Snackbar.Add($"Skipped {skippedDuplicates.Count} duplicate URL(s): {string.Join(", ", skippedDuplicates)}", Severity.Warning);
+        }
+
         // Save manual domains
         await SaveManualDomainsAsync(_hardBlockManualDomains, DomainFilterType.Blacklist, BlockMode.Hard, actor);
     }
@@ -512,6 +526,7 @@
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(u => u.Trim())
             .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         // Remove old custom soft block subscriptions
@@ -521,9 +536,17 @@
             await BlocklistRepo.DeleteAsync(old.Id);
         }
 
-        // Add new custom subscriptions
+        // Add new custom subscriptions (skip duplicates from other block modes or built-ins)
+        var skippedDuplicates = new List<string>();
         foreach (var url in urls)
         {
+            var existing = await BlocklistRepo.FindByUrlAsync(url, ChatId);
+            if (existing.Count > 0)
+            {
+                skippedDuplicates.Add(url);
+                continue;
+            }
+
             var subscription = new BlocklistSubscription(
                 Id: 0,
                 ChatId: ChatId,
@@ -541,6 +564,11 @@
                 Notes: "Custom soft block URL"
             );
             await BlocklistRepo.InsertAsync(subscription);
+        }
+
+        if (skippedDuplicates.Count > 0)
+        {
+            Snackbar.Add($"Skipped {skippedDuplicates.Count} duplicate URL(s): {string.Join(", ", skippedDuplicates)}", Severity.Warning);
         }
 
         // Save manual domains
