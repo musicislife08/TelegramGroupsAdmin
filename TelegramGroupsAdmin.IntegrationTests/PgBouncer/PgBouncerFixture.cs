@@ -139,6 +139,7 @@ public class PgBouncerFixture : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
+        _disposed = true;
 
         if (_pgBouncerContainer is not null)
             await _pgBouncerContainer.DisposeAsync();
@@ -151,7 +152,5 @@ public class PgBouncerFixture : IAsyncDisposable
             File.Delete(_tempConfigPath);
         if (_tempUserlistPath is not null)
             File.Delete(_tempUserlistPath);
-
-        _disposed = true;
     }
 }

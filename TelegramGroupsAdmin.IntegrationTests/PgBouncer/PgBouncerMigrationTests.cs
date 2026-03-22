@@ -87,10 +87,15 @@ public class PgBouncerMigrationTests
 
         // Act — create and dispose multiple contexts rapidly (simulates IDbContextFactory pattern)
         // If connection pooling through PgBouncer breaks, this will throw
+        var lastCount = -1;
         for (var i = 0; i < 10; i++)
         {
             await using var context = new AppDbContext(optionsBuilder.Options);
-            await context.Configs.CountAsync();
+            lastCount = await context.Configs.CountAsync();
         }
+
+        // Assert — all 10 context cycles completed successfully through PgBouncer
+        Assert.That(lastCount, Is.GreaterThanOrEqualTo(0),
+            "Expected all 10 contexts to complete queries through PgBouncer connection pool");
     }
 }

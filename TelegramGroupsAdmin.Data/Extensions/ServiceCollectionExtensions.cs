@@ -56,7 +56,7 @@ public static class ServiceCollectionExtensions
     /// Sets No Reset On Close = true to prevent Npgsql from sending DISCARD ALL
     /// when returning connections to its internal pool.
     /// </summary>
-    public static string ApplyPgBouncerSettings(string connectionString)
+    internal static string ApplyPgBouncerSettings(string connectionString)
     {
         var builder = new NpgsqlConnectionStringBuilder(connectionString)
         {
