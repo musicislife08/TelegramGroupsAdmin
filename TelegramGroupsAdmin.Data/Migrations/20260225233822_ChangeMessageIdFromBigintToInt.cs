@@ -22,15 +22,15 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 FROM messages
                 WHERE message_id > 2147483647 OR message_id < -2147483648;
 
-                -- Disable FK triggers for the remap (all tables referencing messages)
-                ALTER TABLE detection_results DISABLE TRIGGER ALL;
-                ALTER TABLE message_translations DISABLE TRIGGER ALL;
-                ALTER TABLE training_labels DISABLE TRIGGER ALL;
-                ALTER TABLE message_edits DISABLE TRIGGER ALL;
-                ALTER TABLE user_actions DISABLE TRIGGER ALL;
-                ALTER TABLE image_training_samples DISABLE TRIGGER ALL;
-                ALTER TABLE video_training_samples DISABLE TRIGGER ALL;
-                ALTER TABLE messages DISABLE TRIGGER ALL;
+                -- Drop FK constraints referencing messages.message_id
+                -- (replaces DISABLE TRIGGER ALL which requires SUPERUSER on PG 15+)
+                ALTER TABLE detection_results DROP CONSTRAINT "FK_detection_results_messages_message_id";
+                ALTER TABLE message_translations DROP CONSTRAINT "FK_message_translations_messages_message_id";
+                ALTER TABLE training_labels DROP CONSTRAINT "FK_training_labels_messages_message_id";
+                ALTER TABLE message_edits DROP CONSTRAINT "FK_message_edits_messages_message_id";
+                ALTER TABLE user_actions DROP CONSTRAINT "FK_user_actions_messages_message_id";
+                ALTER TABLE image_training_samples DROP CONSTRAINT "FK_image_training_samples_messages_message_id";
+                ALTER TABLE video_training_samples DROP CONSTRAINT "FK_video_training_samples_messages_message_id";
 
                 -- Update parent table first
                 UPDATE messages m
@@ -80,15 +80,21 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 FROM _msg_id_remap r
                 WHERE vts.message_id = r.old_id;
 
-                -- Re-enable FK triggers
-                ALTER TABLE detection_results ENABLE TRIGGER ALL;
-                ALTER TABLE message_translations ENABLE TRIGGER ALL;
-                ALTER TABLE training_labels ENABLE TRIGGER ALL;
-                ALTER TABLE message_edits ENABLE TRIGGER ALL;
-                ALTER TABLE user_actions ENABLE TRIGGER ALL;
-                ALTER TABLE image_training_samples ENABLE TRIGGER ALL;
-                ALTER TABLE video_training_samples ENABLE TRIGGER ALL;
-                ALTER TABLE messages ENABLE TRIGGER ALL;
+                -- Recreate FK constraints
+                ALTER TABLE detection_results ADD CONSTRAINT "FK_detection_results_messages_message_id"
+                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE;
+                ALTER TABLE message_translations ADD CONSTRAINT "FK_message_translations_messages_message_id"
+                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE;
+                ALTER TABLE training_labels ADD CONSTRAINT "FK_training_labels_messages_message_id"
+                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE;
+                ALTER TABLE message_edits ADD CONSTRAINT "FK_message_edits_messages_message_id"
+                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE;
+                ALTER TABLE user_actions ADD CONSTRAINT "FK_user_actions_messages_message_id"
+                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE SET NULL;
+                ALTER TABLE image_training_samples ADD CONSTRAINT "FK_image_training_samples_messages_message_id"
+                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE;
+                ALTER TABLE video_training_samples ADD CONSTRAINT "FK_video_training_samples_messages_message_id"
+                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE;
 
                 DROP TABLE _msg_id_remap;
                 """);
