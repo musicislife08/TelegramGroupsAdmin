@@ -34,7 +34,7 @@ The AI returns an assessment, not a decision. No threshold awareness, no flaggin
 - **`reason`**: Human-readable explanation for admin review UI.
 - **`signals_detected`**: Structured tags for logging/analytics.
 - **`contains_nudity`**: Drives Gaussian blur censoring only, not scoring. Narrow definition: bare breasts, exposed genitalia, exposed buttocks. Lingerie/swimwear/cleavage do NOT set this flag.
-- **Removed fields**: `spam`/`flagged` (score replaces the boolean gate), `confidence` (score IS the assessment on the application's scale).
+- **Removed fields**: `spam` (score replaces the boolean gate), `confidence` (score IS the assessment on the application's scale).
 
 ### Prompt Architecture: Three-Part Sandwich
 
@@ -170,12 +170,15 @@ Drop `ai_confidence` column from `profile_scan_results` table. No data migration
 | `Telegram/Services/UserApi/ProfileScanService.cs` | Remove `AiConfidence` from `ScoringResult` usage and history insert |
 | `Data/Models/ProfileScanResultDto.cs` | Drop `AiConfidence` property |
 | `Components/Shared/ProfileScanHistoryDialog.razor` | Remove confidence display |
-| `UnitTests/.../ProfileScoringEngineTests.cs` | Updated AI response mocks, new passthrough/clamp/nudity tests |
+| `Docs/features/08-profile-scanning.md` | Update AI response docs, remove confidence references, document new detection categories |
+| `UnitTests/.../ProfileScoringEngineTests.cs` | Replace AI-layer tests, update Layer 1 tests for record shape |
 | New EF Core migration | Drop `ai_confidence` column |
 
 ## Test Plan
 
 Unit tests in `ProfileScoringEngineTests.cs`:
+
+**Replace existing AI-layer tests** — all tests using the old `{"spam": true/false, "confidence": N}` JSON format and 3-bucket mapping assertions are replaced with:
 
 - AI returns score on 0–5 scale → verify passthrough
 - AI returns score > 5.0 → verify clamped to 5.0
@@ -186,7 +189,8 @@ Unit tests in `ProfileScoringEngineTests.cs`:
 - AI returns `contains_nudity: false` → verify `ScoringResult.ContainsNudity` is false
 - Nudity flag passes through independently of score value
 - Malformed JSON fallback → `AiScoringResult.Empty`
-- Existing Layer 1 tests updated for any record shape changes
+
+**Update existing Layer 1 tests** — record shape changes only (remove `AiConfidence` from assertions). Test logic unchanged.
 
 ## Out of Scope
 
