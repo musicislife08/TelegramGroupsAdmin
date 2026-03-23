@@ -11,35 +11,35 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public class ProfileScanResultsRepository(IDbContextFactory<AppDbContext> contextFactory)
     : IProfileScanResultsRepository
 {
-    public async Task<long> InsertAsync(ProfileScanResultRecord record, CancellationToken ct)
+    public async Task<long> InsertAsync(ProfileScanResultRecord record, CancellationToken cancellationToken)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var dto = record.ToDto();
         context.ProfileScanResults.Add(dto);
-        await context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(cancellationToken);
         return dto.Id;
     }
 
-    public async Task<List<ProfileScanResultRecord>> GetByUserIdAsync(long userId, CancellationToken ct)
+    public async Task<List<ProfileScanResultRecord>> GetByUserIdAsync(long userId, CancellationToken cancellationToken)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await context.ProfileScanResults
             .AsNoTracking()
             .Where(r => r.UserId == userId)
             .OrderByDescending(r => r.ScannedAt)
-            .ToListAsync(ct);
+            .ToListAsync(cancellationToken);
 
         return results.Select(r => r.ToModel()).ToList();
     }
 
-    public async Task<ProfileScanResultRecord?> GetLatestByUserIdAsync(long userId, CancellationToken ct)
+    public async Task<ProfileScanResultRecord?> GetLatestByUserIdAsync(long userId, CancellationToken cancellationToken)
     {
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var dto = await context.ProfileScanResults
             .AsNoTracking()
             .Where(r => r.UserId == userId)
             .OrderByDescending(r => r.ScannedAt)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(cancellationToken);
 
         return dto?.ToModel();
     }
