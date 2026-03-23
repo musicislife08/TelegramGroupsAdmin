@@ -333,7 +333,7 @@ public sealed class ProfileScanService(
         var scoringEngine = sp.GetRequiredService<IProfileScoringEngine>();
 
         var scoreResult = await scoringEngine.ScoreAsync(
-            profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, ct);
+            profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, cancellationToken: ct);
 
         // ── Step 7: Persist results ──
         await userRepo.UpdateProfileScanDataAsync(

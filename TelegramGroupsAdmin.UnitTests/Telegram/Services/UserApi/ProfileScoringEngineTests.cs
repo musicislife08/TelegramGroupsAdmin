@@ -434,11 +434,7 @@ public class ProfileScoringEngineTests
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
 
         // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.AiScore, Is.EqualTo(0.0m));
-
-        }
+        Assert.That(result.AiScore, Is.EqualTo(0.0m));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -597,11 +593,7 @@ public class ProfileScoringEngineTests
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
 
         // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.AiScore, Is.EqualTo(0.0m));
-
-        }
+        Assert.That(result.AiScore, Is.EqualTo(0.0m));
     }
 
     [Test]

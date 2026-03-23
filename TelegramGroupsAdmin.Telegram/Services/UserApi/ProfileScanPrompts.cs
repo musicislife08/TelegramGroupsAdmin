@@ -1,4 +1,4 @@
-using System.Security;
+using System.Net;
 using System.Text.Json.Serialization;
 
 namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
@@ -14,7 +14,7 @@ internal static class ProfileScanPrompts
     /// Escapes &lt;, &gt;, &amp;, &quot;, and &apos;.
     /// </summary>
     internal static string SanitizeForPrompt(string? text)
-        => string.IsNullOrEmpty(text) ? "" : SecurityElement.Escape(text);
+        => string.IsNullOrEmpty(text) ? "" : WebUtility.HtmlEncode(text);
 
     internal static string BuildSystemPrompt(string? customDetectionCriteria = null)
     {
