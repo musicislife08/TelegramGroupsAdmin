@@ -20,7 +20,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.UserApi;
 /// - No real HTTP, database, or file system access.
 /// - Two scoring layers are exercised independently:
 ///     Layer 1 — rule-based: IsScam/IsFake flags, blocked URLs (+3.0), stop words (+1.5).
-///     Layer 2 — AI: confidence tiers (>=80 → 4.5, >=40 → 2.5, <40 → 0.0), malformed JSON fallback.
+///     Layer 2 — AI: direct 0.0-5.0 score passthrough with clamp, nudity flag, malformed JSON fallback.
 /// - Outcome thresholds use defaults: banThreshold=4.0, notifyThreshold=2.0.
 /// </summary>
 [TestFixture]
@@ -101,6 +101,18 @@ public class ProfileScoringEngineTests
 
     private static ChatCompletionResult AiResponse(string json) =>
         new() { Content = json };
+
+    private void EnableAiWithResponse(string json)
+    {
+        _chatService
+            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _chatService
+            .GetCompletionAsync(
+                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(AiResponse(json));
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Layer 1: Telegram-flagged accounts
@@ -390,7 +402,7 @@ public class ProfileScoringEngineTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.AiScore, Is.EqualTo(0.0m));
-            Assert.That(result.AiConfidence, Is.Null);
+
             Assert.That(result.AiReason, Is.Null);
         }
 
@@ -425,185 +437,142 @@ public class ProfileScoringEngineTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.AiScore, Is.EqualTo(0.0m));
-            Assert.That(result.AiConfidence, Is.Null);
+
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 2: AI returns spam=false
+    // Layer 2: AI score passthrough (new 0-5 direct scoring)
     // ═══════════════════════════════════════════════════════════════════════════
 
     [Test]
-    public async Task ScoreAsync_AiReturnsSpamFalse_AiScoreIsZeroAndClean()
+    public async Task ScoreAsync_AiReturnsCleanScore_AiScoreIsZero()
     {
-        // Arrange
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": false, "confidence": 90, "reason": "clean profile"}"""));
+        EnableAiWithResponse("""{"score": 0.0, "reason": "genuine community member", "signals_detected": [], "contains_nudity": false}""");
 
-        // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
 
-        // Assert
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.AiScore, Is.EqualTo(0.0m));
-            Assert.That(result.AiConfidence, Is.EqualTo(90));
-            Assert.That(result.AiReason, Is.EqualTo("clean profile"));
+            Assert.That(result.AiReason, Is.EqualTo("genuine community member"));
             Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Clean));
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 2: AI confidence tiers (spam=true)
-    // ═══════════════════════════════════════════════════════════════════════════
-
     [Test]
-    public async Task ScoreAsync_AiSpamTrueConfidence80_AiScoreIsFourPointFive()
+    public async Task ScoreAsync_AiReturnsSuspiciousScore_OutcomeIsHeldForReview()
     {
-        // Arrange — confidence >= 80 → 4.5 AI score → total >= banThreshold
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 80, "reason": "explicit spam", "signals_detected": ["promo_link"]}"""));
+        EnableAiWithResponse("""{"score": 2.8, "reason": "suggestive photo + name", "signals_detected": ["suggestive_photo", "suggestive_name"], "contains_nudity": false}""");
 
-        // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
 
-        // Assert
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.AiScore, Is.EqualTo(4.5m));
-            Assert.That(result.AiConfidence, Is.EqualTo(80));
-            Assert.That(result.AiReason, Is.EqualTo("explicit spam"));
-            Assert.That(result.AiSignals, Is.EquivalentTo(new[] { "promo_link" }));
-            Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Banned));
-        }
-    }
-
-    [Test]
-    public async Task ScoreAsync_AiSpamTrueConfidenceExactly80_AiScoreIsFourPointFive()
-    {
-        // Arrange — boundary test: confidence of exactly 80 must hit the >=80 tier
-        var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 80, "reason": "boundary"}"""));
-
-        // Act
-        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
-
-        // Assert
-        Assert.That(result.AiScore, Is.EqualTo(4.5m));
-    }
-
-    [Test]
-    public async Task ScoreAsync_AiSpamTrueConfidence50_AiScoreIsTwoPointFive()
-    {
-        // Arrange — confidence >= 40 → 2.5 AI score → HeldForReview
-        var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 50, "reason": "suspicious"}"""));
-
-        // Act
-        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
-
-        // Assert
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.AiScore, Is.EqualTo(2.5m));
-            Assert.That(result.AiConfidence, Is.EqualTo(50));
+            Assert.That(result.AiScore, Is.EqualTo(2.8m));
             Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.HeldForReview));
         }
     }
 
     [Test]
-    public async Task ScoreAsync_AiSpamTrueConfidenceExactly40_AiScoreIsTwoPointFive()
+    public async Task ScoreAsync_AiReturnsBanScore_OutcomeIsBanned()
     {
-        // Arrange — boundary test: confidence of exactly 40 must hit the >=40 tier
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 40, "reason": "boundary"}"""));
+        EnableAiWithResponse("""{"score": 4.5, "reason": "commercial account with product photos", "signals_detected": ["commercial_name", "product_photo"], "contains_nudity": false}""");
 
-        // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
 
-        // Assert
-        Assert.That(result.AiScore, Is.EqualTo(2.5m));
-    }
-
-    [Test]
-    public async Task ScoreAsync_AiSpamTrueConfidence20_AiScoreIsZero()
-    {
-        // Arrange — confidence < 40 → 0 AI score (minor signals treated as clean)
-        var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 20, "reason": "minor signals"}"""));
-
-        // Act
-        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
-
-        // Assert
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(result.AiScore, Is.EqualTo(0.0m));
-            Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Clean));
+            Assert.That(result.AiScore, Is.EqualTo(4.5m));
+            Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Banned));
         }
     }
 
     [Test]
-    public async Task ScoreAsync_AiSpamTrueConfidenceExactly39_AiScoreIsZero()
+    public async Task ScoreAsync_AiScoreExceedsFive_ClampedToMaxScore()
     {
-        // Arrange — boundary: 39 is one below the >=40 tier, must produce 0
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 39, "reason": "below threshold"}"""));
+        EnableAiWithResponse("""{"score": 7.5, "reason": "extreme risk", "signals_detected": [], "contains_nudity": false}""");
 
-        // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
 
-        // Assert
+        Assert.That(result.AiScore, Is.EqualTo(5.0m));
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiScoreNegative_ClampedToZero()
+    {
+        var profile = BuildProfile(bio: "Some bio text");
+        EnableAiWithResponse("""{"score": -1.0, "reason": "invalid", "signals_detected": [], "contains_nudity": false}""");
+
+        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
         Assert.That(result.AiScore, Is.EqualTo(0.0m));
+    }
+
+    [Test]
+    public async Task ScoreAsync_RuleScorePlusAiScore_Additive()
+    {
+        // Rule: stop word (+1.5) + AI score 3.0 = 4.5 → ban
+        var profile = BuildProfile(bio: "guaranteed profits from my service");
+        _stopWordsRepository
+            .GetEnabledStopWordsAsync(Arg.Any<CancellationToken>())
+            .Returns(["guaranteed profits"]);
+        EnableAiWithResponse("""{"score": 3.0, "reason": "scam promotion", "signals_detected": ["scam_language"], "contains_nudity": false}""");
+
+        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RuleScore, Is.EqualTo(1.5m));
+            Assert.That(result.AiScore, Is.EqualTo(3.0m));
+            Assert.That(result.Score, Is.EqualTo(4.5m));
+            Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Banned));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Layer 2: Nudity flag passthrough
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task ScoreAsync_AiReturnsNudityTrue_ContainsNudityIsTrue()
+    {
+        var profile = BuildProfile(bio: "Some bio text");
+        EnableAiWithResponse("""{"score": 4.8, "reason": "visible nudity in profile photo", "signals_detected": ["nudity"], "contains_nudity": true}""");
+
+        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        Assert.That(result.ContainsNudity, Is.True);
+    }
+
+    [Test]
+    public async Task ScoreAsync_AiReturnsNudityFalse_ContainsNudityIsFalse()
+    {
+        var profile = BuildProfile(bio: "Some bio text");
+        EnableAiWithResponse("""{"score": 3.5, "reason": "suggestive but not nude", "signals_detected": ["suggestive_photo"], "contains_nudity": false}""");
+
+        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        Assert.That(result.ContainsNudity, Is.False);
+    }
+
+    [Test]
+    public async Task ScoreAsync_NudityFlagIndependentOfScore_LowScoreCanHaveNudity()
+    {
+        var profile = BuildProfile(bio: "Some bio text");
+        EnableAiWithResponse("""{"score": 1.5, "reason": "minimal risk but nudity present", "signals_detected": ["nudity"], "contains_nudity": true}""");
+
+        var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.ContainsNudity, Is.True);
+            Assert.That(result.AiScore, Is.EqualTo(1.5m));
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -631,14 +600,14 @@ public class ProfileScoringEngineTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.AiScore, Is.EqualTo(0.0m));
-            Assert.That(result.AiConfidence, Is.Null);
+
         }
     }
 
     [Test]
     public async Task ScoreAsync_AiReturnsEmptyJsonObject_AiScoreIsZero()
     {
-        // Arrange — valid JSON but missing fields; Spam defaults to false
+        // Arrange — valid JSON but missing fields; Score defaults to 0
         var profile = BuildProfile(bio: "Some bio text");
         _chatService
             .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
@@ -672,7 +641,7 @@ public class ProfileScoringEngineTests
             .GetCompletionAsync(
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": false, "confidence": 10, "reason": "clean"}"""));
+            .Returns(AiResponse("""{"score": 0.0, "reason": "clean", "signals_detected": [], "contains_nudity": false}"""));
 
         // Act
         await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -708,7 +677,7 @@ public class ProfileScoringEngineTests
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<byte[]>(), Arg.Any<string>(),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": false, "confidence": 5, "reason": "clean"}"""));
+            .Returns(AiResponse("""{"score": 0.0, "reason": "clean", "signals_detected": [], "contains_nudity": false}"""));
 
         // Act
         await _sut.ScoreAsync(profile, [singleImage], "Image 1: profile photo", BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -739,7 +708,7 @@ public class ProfileScoringEngineTests
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<IReadOnlyList<ImageInput>>(),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": false, "confidence": 5, "reason": "clean"}"""));
+            .Returns(AiResponse("""{"score": 0.0, "reason": "clean", "signals_detected": [], "contains_nudity": false}"""));
 
         // Act
         await _sut.ScoreAsync(profile, images, "Image 1: profile photo, Image 2: story", BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -772,17 +741,9 @@ public class ProfileScoringEngineTests
     [Test]
     public async Task ScoreAsync_TotalScoreAtNotifyThreshold_OutcomeIsHeldForReview()
     {
-        // Arrange — stop word hit → rule score 1.5, AI adds 0.5 needed to reach exactly 2.0
-        // Easier: use AI confidence >=40 → AI score 2.5 alone → total 2.5, which is >= 2.0 < 4.0
+        // Arrange — AI returns score 2.5 directly → total 2.5, which is >= 2.0 < 4.0
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 50, "reason": "suspicious"}"""));
+        EnableAiWithResponse("""{"score": 2.5, "reason": "suspicious", "signals_detected": [], "contains_nudity": false}""");
 
         // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -798,16 +759,9 @@ public class ProfileScoringEngineTests
     [Test]
     public async Task ScoreAsync_TotalScoreAtBanThreshold_OutcomeIsBanned()
     {
-        // Arrange — AI returns 4.5 score alone → >= banThreshold 4.0
+        // Arrange — AI returns score 4.5 directly → >= banThreshold 4.0
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 95, "reason": "definitive spam"}"""));
+        EnableAiWithResponse("""{"score": 4.5, "reason": "definitive spam", "signals_detected": [], "contains_nudity": false}""");
 
         // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -841,20 +795,13 @@ public class ProfileScoringEngineTests
     [Test]
     public async Task ScoreAsync_CombinedRuleAndAiScoreExceedsFive_CappedAtFive()
     {
-        // Arrange — blocked URL (3.0) + AI spam confidence 95 (4.5) = 7.5 raw, capped at 5.0
+        // Arrange — blocked URL (3.0) + AI score 4.5 = 7.5 raw, capped at 5.0
         // Rule score 3.0 < banThreshold 4.0 so AI layer is reached.
         var profile = BuildProfile(bio: "spam site link");
         _urlPreFilter
             .CheckHardBlockAsync(Arg.Any<string>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
             .Returns(new HardBlockResult(true, "Blocked", "spam.example"));
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 95, "reason": "definitive spam"}"""));
+        EnableAiWithResponse("""{"score": 4.5, "reason": "definitive spam", "signals_detected": [], "contains_nudity": false}""");
 
         // Note: rule score 3.0 < banThreshold 4.0 so AI layer is reached.
         // Total raw = 3.0 + 4.5 = 7.5, should be capped at 5.0.
@@ -875,14 +822,7 @@ public class ProfileScoringEngineTests
     {
         // Arrange — with a high ban threshold of 5.0, AI score 4.5 should become HeldForReview
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 95, "reason": "definitive spam"}"""));
+        EnableAiWithResponse("""{"score": 4.5, "reason": "definitive spam", "signals_detected": [], "contains_nudity": false}""");
 
         // Act — ban threshold raised so 4.5 does not trigger ban
         var result = await _sut.ScoreAsync(profile, [], null,
@@ -897,14 +837,7 @@ public class ProfileScoringEngineTests
     {
         // Arrange — notify threshold 0.5m means any positive score triggers HeldForReview
         var profile = BuildProfile(bio: "slightly suspicious bio");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": false, "confidence": 30, "reason": "minor flags"}"""));
+        EnableAiWithResponse("""{"score": 0.0, "reason": "minor flags", "signals_detected": [], "contains_nudity": false}""");
         _stopWordsRepository
             .GetEnabledStopWordsAsync(Arg.Any<CancellationToken>())
             .Returns(["suspicious"]);
@@ -965,7 +898,7 @@ public class ProfileScoringEngineTests
             Assert.That(result.Score, Is.EqualTo(0.0m));
             Assert.That(result.RuleScore, Is.EqualTo(0.0m));
             Assert.That(result.AiScore, Is.EqualTo(0.0m));
-            Assert.That(result.AiConfidence, Is.Null);
+
             Assert.That(result.AiReason, Is.Null);
             Assert.That(result.AiSignals, Is.Null);
             Assert.That(result.Outcome, Is.EqualTo(ProfileScanOutcome.Clean));
@@ -977,14 +910,7 @@ public class ProfileScoringEngineTests
     {
         // Arrange
         var profile = BuildProfile(bio: "Some bio text");
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 85, "reason": "crypto scam", "signals_detected": ["promo_link", "explicit_content"]}"""));
+        EnableAiWithResponse("""{"score": 4.5, "reason": "crypto scam", "signals_detected": ["promo_link", "explicit_content"], "contains_nudity": false}""");
 
         // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -1019,7 +945,7 @@ public class ProfileScoringEngineTests
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(),
                 Arg.Is<string>(prompt => prompt.Contains("url_metadata")),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": true, "confidence": 90, "reason": "adult site URL", "signals_detected": ["adult_url_metadata"]}"""));
+            .Returns(AiResponse("""{"score": 4.5, "reason": "adult site URL", "signals_detected": ["adult_url_metadata"], "contains_nudity": false}"""));
 
         // Act
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -1041,14 +967,7 @@ public class ProfileScoringEngineTests
             .ScrapeUrlMetadataAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<string?>(_ => throw new HttpRequestException("Connection refused"));
 
-        _chatService
-            .IsFeatureAvailableAsync(AIFeatureType.ProfileScan, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _chatService
-            .GetCompletionAsync(
-                Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": false, "confidence": 10, "reason": "clean"}"""));
+        EnableAiWithResponse("""{"score": 0.0, "reason": "clean", "signals_detected": [], "contains_nudity": false}""");
 
         // Act — must not throw
         var result = await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
@@ -1100,7 +1019,7 @@ public class ProfileScoringEngineTests
                 Arg.Any<AIFeatureType>(), Arg.Any<string>(),
                 Arg.Is<string>(prompt => !prompt.Contains("url_metadata")),
                 Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
-            .Returns(AiResponse("""{"spam": false, "confidence": 5, "reason": "clean"}"""));
+            .Returns(AiResponse("""{"score": 0.0, "reason": "clean", "signals_detected": [], "contains_nudity": false}"""));
 
         // Act
         await _sut.ScoreAsync(profile, [], null, BanThreshold, NotifyThreshold, CancellationToken.None);
