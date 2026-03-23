@@ -47,10 +47,6 @@
                                     <MudText Typo="Typo.body2">
                                         <strong>Rule:</strong> @result.RuleScore.ToString("F1")
                                         | <strong>AI:</strong> @result.AiScore.ToString("F1")
-                                        @if (result.AiConfidence.HasValue)
-                                        {
-                                            <text> (confidence: @result.AiConfidence%)</text>
-                                        }
                                     </MudText>
 
                                     @* AI Reason *@
