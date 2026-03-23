@@ -142,8 +142,7 @@ internal static class ProfileScanPrompts
 /// Deserialization target for the AI profile scan response.
 /// </summary>
 internal record ProfileScanAIResponse(
-    [property: JsonPropertyName("spam")] bool Spam,
-    [property: JsonPropertyName("confidence")] int Confidence,
+    [property: JsonPropertyName("score")] decimal Score,
     [property: JsonPropertyName("reason")] string? Reason,
     [property: JsonPropertyName("signals_detected")] string[]? SignalsDetected,
     [property: JsonPropertyName("contains_nudity")] bool ContainsNudity);
