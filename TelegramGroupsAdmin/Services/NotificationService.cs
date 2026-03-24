@@ -492,7 +492,7 @@ public sealed class NotificationService : INotificationService
 
             if (result.DmSent)
             {
-                _logger.LogInformation("Sent typed Telegram DM to {User}", user.ToLogInfo());
+                _logger.LogDebug("Sent typed Telegram DM to {User}", user.ToLogInfo());
                 return true;
             }
 

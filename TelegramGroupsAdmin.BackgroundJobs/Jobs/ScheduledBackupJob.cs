@@ -119,11 +119,6 @@ public class ScheduledBackupJob : IJob
 
                 _logger.LogInformation("Backup saved to {Filepath} ({SizeMB:F2} MB)", result.FilePath, backupSizeMb);
 
-                if (result.DeletedCount > 0)
-                {
-                    _logger.LogInformation("Deleted {Count} old backups via retention policy", result.DeletedCount);
-                }
-
                 _logger.LogInformation("Scheduled backup completed successfully");
                 success = true;
             }

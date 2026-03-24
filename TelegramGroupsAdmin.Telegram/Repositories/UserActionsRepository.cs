@@ -39,7 +39,7 @@ public class UserActionsRepository : IUserActionsRepository
             .Select(u => new { u.FirstName, u.LastName, u.Username })
             .FirstOrDefaultAsync(cancellationToken);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Inserted user action {ActionType} for {User} (expires: {ExpiresAt})",
             action.ActionType,
             LogDisplayName.UserInfo(targetUser?.FirstName, targetUser?.LastName, targetUser?.Username, action.UserId),
