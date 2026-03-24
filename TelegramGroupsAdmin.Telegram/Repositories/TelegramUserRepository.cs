@@ -289,7 +289,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
             _logger.LogDebug(
                 "Enabled bot DMs for {User}",
-                entity.ToLogInfo());
+                entity.ToLogDebug());
         }
     }
 
