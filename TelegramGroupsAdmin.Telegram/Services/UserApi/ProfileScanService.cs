@@ -333,7 +333,7 @@ public sealed class ProfileScanService(
         var scoringEngine = sp.GetRequiredService<IProfileScoringEngine>();
 
         var scoreResult = await scoringEngine.ScoreAsync(
-            profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, ct);
+            profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, cancellationToken: ct);
 
         // ── Step 7: Persist results ──
         await userRepo.UpdateProfileScanDataAsync(
@@ -355,10 +355,9 @@ public sealed class ProfileScanService(
             Outcome: scoreResult.Outcome,
             RuleScore: scoreResult.RuleScore,
             AiScore: scoreResult.AiScore,
-            AiConfidence: scoreResult.AiConfidence,
             AiReason: scoreResult.AiReason,
             AiSignals: scoreResult.AiSignals is { Length: > 0 }
-                ? string.Join(", ", scoreResult.AiSignals) : null), ct);
+                ? string.Join(", ", scoreResult.AiSignals) : null), cancellationToken: ct);
 
         var result = new ProfileScanResult(
             user.Id, bio, personalChannelId, channelTitle, channelAbout,

@@ -36,10 +36,6 @@ public class ProfileScanResultDto
     [Column("ai_score")]
     public decimal AiScore { get; set; }
 
-    /// <summary>AI confidence 0-100, null if AI was skipped</summary>
-    [Column("ai_confidence")]
-    public int? AiConfidence { get; set; }
-
     /// <summary>AI's explanation of its decision</summary>
     [Column("ai_reason")]
     public string? AiReason { get; set; }
