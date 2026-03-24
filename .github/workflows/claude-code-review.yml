@@ -44,7 +44,14 @@ jobs:
 
             IMPORTANT: Never use # followed by a number (e.g. #1, #2, #3) when numbering findings or list items. GitHub renders these as issue/PR links, which pollutes unrelated issues with cross-references. Use "1.", "2.", "3." or "Finding 1:", "Finding 2:" etc. instead.
 
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+            When your review is complete, post it as a single PR comment using this exact pattern:
+
+            gh pr comment $PR_NUMBER --repo $REPO --body "$(cat <<'REVIEW_EOF'
+            Your review content here (markdown is fine, no escaping needed)
+            REVIEW_EOF
+            )"
+
+            This heredoc approach avoids all shell escaping issues with quotes, backticks, and special characters in your review text. Do NOT use gh api, do NOT write to /tmp or any files, do NOT use Python — just the heredoc pattern above.
 
           show_full_output: true
 
