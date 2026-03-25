@@ -152,10 +152,9 @@ public class TelegramUserRepository : ITelegramUserRepository
                 updated_at = {now}
             """, cancellationToken);
 
-        _logger.LogInformation(
-            "Upserted Telegram user {TelegramUserId} (@{Username})",
-            user.TelegramUserId,
-            user.Username);
+        _logger.LogDebug(
+            "Upserted Telegram user {User}",
+            user.ToLogDebug());
     }
 
     /// <summary>
@@ -288,9 +287,9 @@ public class TelegramUserRepository : ITelegramUserRepository
 
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Enabled bot DMs for {User}",
-                entity.ToLogInfo());
+                entity.ToLogDebug());
         }
     }
 
