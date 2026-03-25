@@ -232,11 +232,11 @@ if (args.Contains("--backup"))
     var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.IBackupService>();
 
     app.Logger.LogInformation("Creating encrypted backup...");
-    var backupBytes = await backupService.ExportAsync(passphrase); // Use passphrase override for CLI
-    await File.WriteAllBytesAsync(backupPath, backupBytes);
+    await backupService.ExportToFileAsync(backupPath, passphrase, CancellationToken.None);
 
+    var backupSize = new FileInfo(backupPath).Length;
     app.Logger.LogInformation("✅ Encrypted backup created: {Path} ({Size:F2} MB)",
-        backupPath, backupBytes.Length / 1024.0 / 1024.0);
+        backupPath, backupSize / 1024.0 / 1024.0);
     app.Logger.LogInformation("🔐 Store your passphrase securely - you'll need it to restore this backup!");
     app.Logger.LogInformation("Exiting (--backup flag).");
     Environment.Exit(0);
