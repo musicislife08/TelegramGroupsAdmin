@@ -6,18 +6,22 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 public interface IBackupService
 {
     /// <summary>
-    /// Export all system data to a gzip-compressed (and optionally encrypted) JSON file
-    /// Uses passphrase from database config if encryption is enabled
+    /// Export all system data to a tar.gz file streamed directly to disk.
+    /// Uses passphrase from database config for encryption.
+    /// Writes to a temp file first, then atomically renames on success.
     /// </summary>
-    /// <returns>Compressed (and optionally encrypted) backup file bytes</returns>
-    Task<byte[]> ExportAsync();
+    /// <param name="filepath">Destination file path for the backup</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task ExportToFileAsync(string filepath, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Export all system data with explicit passphrase (for CLI usage)
+    /// Export all system data to a tar.gz file with explicit passphrase (for CLI usage).
+    /// Writes to a temp file first, then atomically renames on success.
     /// </summary>
+    /// <param name="filepath">Destination file path for the backup</param>
     /// <param name="passphraseOverride">Passphrase to use (overrides DB config)</param>
-    /// <returns>Encrypted and compressed backup file bytes</returns>
-    Task<byte[]> ExportAsync(string passphraseOverride);
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task ExportToFileAsync(string filepath, string passphraseOverride, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Restore system from backup file (WIPES ALL DATA FIRST)
