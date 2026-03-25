@@ -240,12 +240,16 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Set environment variables for production
 # TZ can be overridden at runtime: -e TZ=America/Phoenix
+# GC tuning: ConserveMemory=7 auto-compacts LOH, HighMemPercent=70% triggers earlier compaction
+# These are defaults — override via compose.yml if CPU overhead is too high (dial ConserveMemory back to 5)
 ENV ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_EnableDiagnostics=0 \
     ASPNETCORE_HTTP_PORTS=8080 \
     TZ=UTC \
-    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
+    DOTNET_GCConserveMemory=7 \
+    DOTNET_GCHighMemPercent=46
 
 # Entrypoint
 ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
