@@ -193,7 +193,7 @@ public class BackupService : IBackupService
         var metadataJson = JsonSerializer.SerializeToUtf8Bytes(backup.Metadata, jsonOptions);
 
         // Stream tar.gz directly to disk via temp file for atomic write
-        var tempPath = filepath + ".tmp";
+        var tempPath = $"{filepath}.{Guid.NewGuid().ToString("N")[..8]}.tmp";
         try
         {
             await using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))

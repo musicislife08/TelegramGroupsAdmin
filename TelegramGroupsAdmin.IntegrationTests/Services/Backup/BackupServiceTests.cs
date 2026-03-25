@@ -591,6 +591,50 @@ public class BackupServiceTests
     }
 
     [Test]
+    public async Task ExportToFileAsync_CancelledDuringWrite_ShouldCleanUpTempFile()
+    {
+        // Arrange - Use a pre-cancelled token so the export creates the temp file
+        // but fails during tar entry writing (WriteEntryAsync checks the token).
+        // This exercises the finally block's temp file cleanup.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"backup_cleanup_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var filepath = Path.Combine(tempDir, "test_backup.tar.gz");
+
+        try
+        {
+            // Act - Export should fail with cancellation after temp file is created
+            await Assert.ThatAsync(
+                () => _backupService!.ExportToFileAsync(filepath, cts.Token),
+                Throws.InstanceOf<OperationCanceledException>());
+
+            // Assert - No temp files should remain (finally block cleaned up)
+            var tempFiles = Directory.GetFiles(tempDir, "*.tmp");
+            Assert.That(tempFiles, Is.Empty, "Temp file should be cleaned up after cancelled export");
+
+            // Final file should not exist either
+            Assert.That(File.Exists(filepath), Is.False, "Final backup file should not exist after cancelled export");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public async Task ExportToFileAsync_WithEmptyPassphrase_ShouldThrowArgumentException(string passphrase)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"test_backup_{Guid.NewGuid():N}.tar.gz");
+
+        await Assert.ThatAsync(
+            () => _backupService!.ExportToFileAsync(tempPath, passphrase),
+            Throws.ArgumentException.With.Property(nameof(ArgumentException.ParamName)).EqualTo("passphraseOverride"));
+    }
+
+    [Test]
     public async Task ExportAndRestore_ShouldPreserveDateTimeOffsetTimezone()
     {
         // Arrange - Insert a DateTimeOffset with a non-UTC timezone (+05:30 IST)
