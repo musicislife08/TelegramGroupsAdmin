@@ -240,7 +240,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Set environment variables for production
 # TZ can be overridden at runtime: -e TZ=America/Phoenix
-# GC tuning: ConserveMemory=7 auto-compacts LOH, HighMemPercent=70% triggers earlier compaction
+# GC tuning: ConserveMemory=7 auto-compacts LOH, HighMemPercent triggers earlier compaction
+# NOTE: DOTNET_ env vars use hex per .NET convention — 0x46 = 70 decimal = 70% threshold
 # These are defaults — override via compose.yml if CPU overhead is too high (dial ConserveMemory back to 5)
 ENV ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_RUNNING_IN_CONTAINER=true \

@@ -196,6 +196,8 @@ public class BackupService : IBackupService
         var tempPath = $"{filepath}.{Guid.NewGuid().ToString("N")[..8]}.tmp";
         try
         {
+            // leaveOpen: TarWriter leaves gzipStream open for the await using to flush/close;
+            // gzipStream closes fileStream when it disposes (leaveOpen defaults to false)
             await using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
             await using (var gzipStream = new GZipStream(fileStream, CompressionLevel.Optimal))
             await using (var tarWriter = new TarWriter(gzipStream, leaveOpen: true))
