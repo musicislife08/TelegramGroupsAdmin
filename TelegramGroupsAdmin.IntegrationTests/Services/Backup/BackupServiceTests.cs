@@ -162,7 +162,7 @@ public class BackupServiceTests
     #region Export Tests
 
     [Test]
-    public async Task ExportAsync_WithDbPassphrase_ShouldCreateEncryptedBackup()
+    public async Task ExportToFileAsync_WithDbPassphrase_ShouldCreateEncryptedBackup()
     {
         // Arrange - encryption config already set up in SetUp()
 
@@ -188,7 +188,7 @@ public class BackupServiceTests
     }
 
     [Test]
-    public async Task ExportAsync_WithExplicitPassphrase_ShouldOverrideDbPassphrase()
+    public async Task ExportToFileAsync_WithExplicitPassphrase_ShouldOverrideDbPassphrase()
     {
         // Arrange - Set DB passphrase (should be ignored)
         await using (var context = _testHelper!.GetDbContext())
@@ -212,7 +212,7 @@ public class BackupServiceTests
     }
 
     [Test]
-    public async Task ExportAsync_ShouldIncludeAllExpectedTables()
+    public async Task ExportToFileAsync_ShouldIncludeAllExpectedTables()
     {
         // Act
         var backupBytes = await ExportBackupAsBytesAsync();
@@ -229,7 +229,7 @@ public class BackupServiceTests
     }
 
     [Test]
-    public async Task ExportAsync_ShouldDecryptDataProtectionFields()
+    public async Task ExportToFileAsync_ShouldDecryptDataProtectionFields()
     {
         // Arrange - Golden dataset has encrypted API keys
         // Verify seed worked
@@ -540,7 +540,7 @@ public class BackupServiceTests
     #region Error Handling Tests
 
     [Test]
-    public async Task ExportAsync_WithCorruptedJsonbColumn_ShouldFailFastWithClearError()
+    public async Task ExportToFileAsync_WithCorruptedJsonbColumn_ShouldFailFastWithClearError()
     {
         // Arrange - Corrupt the warnings JSONB column with JSON that can't deserialize to List<WarningEntry>
         // This simulates database corruption or schema mismatch that would produce an incomplete backup
@@ -573,7 +573,7 @@ public class BackupServiceTests
     }
 
     [Test]
-    public async Task ExportAsync_WithValidJsonbColumn_ShouldSucceed()
+    public async Task ExportToFileAsync_WithValidJsonbColumn_ShouldSucceed()
     {
         // Arrange - Ensure we have valid JSONB data (golden dataset already has this)
         // This test verifies the happy path still works after adding error handling
