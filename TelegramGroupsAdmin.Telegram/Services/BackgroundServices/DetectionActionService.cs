@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
@@ -22,6 +23,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class DetectionActionService(
     IServiceProvider serviceProvider,
+    PipelineMetrics pipelineMetrics,
     ILogger<DetectionActionService> logger)
 {
     /// <summary>
@@ -99,6 +101,7 @@ public class DetectionActionService(
                         TelegramMessage = message
                     },
                     cancellationToken);
+                pipelineMetrics.RecordModerationAction("ban", "auto");
 
                 return;
             }
@@ -129,6 +132,7 @@ public class DetectionActionService(
                         TelegramMessage = message
                     },
                     cancellationToken);
+                pipelineMetrics.RecordModerationAction("ban", "auto");
             }
             else if (spamResult.TotalScore > config.ReviewQueueThreshold)
             {
@@ -148,6 +152,7 @@ public class DetectionActionService(
                     message,
                     isAutomated: true,
                     cancellationToken);
+                pipelineMetrics.RecordModerationAction("report", "auto");
 
                 logger.LogInformation(
                     "Created admin review report for message {MessageId} in {Chat}: {Reason}",

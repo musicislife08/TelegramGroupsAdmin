@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -31,6 +33,7 @@ public partial class MessageProcessingService(
     CommandRouter commandRouter,
     IChatCache chatCache,
     IServiceProvider serviceProvider,
+    PipelineMetrics pipelineMetrics,
     ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
     // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
@@ -61,6 +64,8 @@ public partial class MessageProcessingService(
         activity?.SetTag("message.message_id", message.MessageId);
         activity?.SetTag("message.chat_type", message.Chat.Type.ToString());
         activity?.SetTag("message.has_text", !string.IsNullOrWhiteSpace(message.Text ?? message.Caption));
+
+        var startTimestamp = Stopwatch.GetTimestamp();
 
         // Skip private chats - only process group messages for history/spam detection
         if (message.Chat.Type == ChatType.Private)
@@ -142,6 +147,8 @@ public partial class MessageProcessingService(
                 }
             }
 
+            pipelineMetrics.RecordMessageProcessed("new_message", "skipped",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             return; // Don't process private messages further
         }
 
@@ -166,6 +173,8 @@ public partial class MessageProcessingService(
             using var migrationScope = scopeFactory.CreateScope();
             var chatService = migrationScope.ServiceProvider.GetRequiredService<IBotChatService>();
             await chatService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
+            pipelineMetrics.RecordMessageProcessed("new_message", "skipped",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             return; // Don't process migration message further
         }
 
@@ -274,6 +283,8 @@ public partial class MessageProcessingService(
                     message.Chat.ToLogDebug());
             }
 
+            pipelineMetrics.RecordMessageProcessed("new_message", "skipped",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             return; // Don't process service messages further
         }
 
@@ -747,9 +758,14 @@ public partial class MessageProcessingService(
                         cancellationToken);
                 }
             }
+
+            pipelineMetrics.RecordMessageProcessed("new_message", "processed",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
         }
         catch (Exception ex)
         {
+            pipelineMetrics.RecordMessageProcessed("new_message", "error",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             logger.LogError(ex,
                 "Error caching message {MessageId} from {User} in {Chat}",
                 message.MessageId,
@@ -768,6 +784,8 @@ public partial class MessageProcessingService(
         activity?.SetTag("message.message_id", editedMessage.MessageId);
         activity?.SetTag("message.chat_type", editedMessage.Chat.Type.ToString());
 
+        var startTimestamp = Stopwatch.GetTimestamp();
+
         try
         {
             using var scope = scopeFactory.CreateScope();
@@ -780,9 +798,14 @@ public partial class MessageProcessingService(
             {
                 OnMessageEdited?.Invoke(editRecord);
             }
+
+            pipelineMetrics.RecordMessageProcessed("edit", "processed",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
         }
         catch (Exception ex)
         {
+            pipelineMetrics.RecordMessageProcessed("edit", "error",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             logger.LogError(ex,
                 "Error handling edit for message {MessageId}",
                 editedMessage.MessageId);
