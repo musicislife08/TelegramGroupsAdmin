@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.UnitTests.ContentDetection;
@@ -49,7 +50,7 @@ public class ClamAVScannerServiceTests
         _mockConfigRepository.GetAsync(chatId: null, Arg.Any<CancellationToken>())
             .Returns(DbConfig);
 
-        _service = new ClamAVScannerService(_mockLogger, _mockConfigRepository);
+        _service = new ClamAVScannerService(_mockLogger, _mockConfigRepository, new DetectionMetrics());
 
         ResetHasLoggedOverride();
     }

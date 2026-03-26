@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
@@ -34,6 +35,9 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service (Singleton: binary path lookup happens once)
             services.AddSingleton<IVideoFrameExtractionService, VideoFrameExtractionService>(); // ML-6: FFmpeg frame extraction (Singleton: binary path lookup happens once)
                                                                                                 // NOTE: IMessageContextProvider is registered by the main app (MessageContextAdapter)
+
+            // Register domain metrics
+            services.AddSingleton<DetectionMetrics>();
 
             // Register repositories (needed by engine for config)
             services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();

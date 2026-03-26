@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -20,6 +21,7 @@ public class VirusTotalScannerService : ICloudScannerService
     private readonly ISystemConfigRepository _configRepository;
     private readonly IFileScanQuotaRepository _quotaRepository;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly DetectionMetrics _detectionMetrics;
 
     public string ServiceName => "VirusTotal";
 
@@ -30,12 +32,14 @@ public class VirusTotalScannerService : ICloudScannerService
         ILogger<VirusTotalScannerService> logger,
         ISystemConfigRepository configRepository,
         IFileScanQuotaRepository quotaRepository,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        DetectionMetrics detectionMetrics)
     {
         _logger = logger;
         _configRepository = configRepository;
         _quotaRepository = quotaRepository;
         _httpClientFactory = httpClientFactory;
+        _detectionMetrics = detectionMetrics;
     }
 
     public async Task<CloudHashLookupResult?> LookupHashAsync(
@@ -182,6 +186,8 @@ public class VirusTotalScannerService : ICloudScannerService
                 _logger.LogInformation("VirusTotal hash lookup: CLEAN - {DetectionCount}/{TotalEngines} engines (below threshold)",
                     detectionCount, totalEngines);
             }
+
+            _detectionMetrics.RecordFileScan("virustotal", status == HashLookupStatus.Malicious, stopwatch.ElapsedMilliseconds);
 
             return new CloudHashLookupResult
             {
@@ -392,6 +398,8 @@ public class VirusTotalScannerService : ICloudScannerService
                         _logger.LogWarning("VirusTotal scan: INFECTED - {DetectionCount}/{TotalEngines} engines detected {ThreatName}",
                             detectionCount, totalEngines, threatName ?? "unknown");
 
+                        _detectionMetrics.RecordFileScan("virustotal", true, stopwatch.ElapsedMilliseconds);
+
                         return new CloudScanResult
                         {
                             ServiceName = ServiceName,
@@ -415,6 +423,8 @@ public class VirusTotalScannerService : ICloudScannerService
                     {
                         _logger.LogInformation("VirusTotal scan: CLEAN - {DetectionCount}/{TotalEngines} engines",
                             detectionCount, totalEngines);
+
+                        _detectionMetrics.RecordFileScan("virustotal", false, stopwatch.ElapsedMilliseconds);
 
                         return new CloudScanResult
                         {
