@@ -13,6 +13,8 @@ public class IntermediateAuthService : IIntermediateAuthService
     private readonly ConcurrentDictionary<string, TokenData> _tokens = new();
     private readonly ILogger<IntermediateAuthService> _logger;
 
+    public int EntryCount => _tokens.Count;
+
     public IntermediateAuthService(ILogger<IntermediateAuthService> logger)
     {
         _logger = logger;

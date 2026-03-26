@@ -32,4 +32,14 @@ public sealed record BayesClassifierMetadata
     public double SpamRatio => TotalSampleCount > 0
         ? (double)SpamSampleCount / TotalSampleCount
         : 0.0;
+
+    /// <summary>
+    /// Number of unique words in the spam vocabulary.
+    /// </summary>
+    public int SpamVocabularySize { get; init; }
+
+    /// <summary>
+    /// Number of unique words in the ham vocabulary.
+    /// </summary>
+    public int HamVocabularySize { get; init; }
 }

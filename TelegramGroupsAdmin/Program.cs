@@ -355,6 +355,10 @@ app.MapApiEndpoints();
 // Map Prometheus metrics endpoint (if metrics pipeline is enabled)
 if (metricsEnabled)
 {
+    // Force-resolve MemoryInstrumentation to register ObservableGauges on stateful singletons.
+    // Without this, DI never instantiates it since nothing injects it.
+    app.Services.GetRequiredService<MemoryInstrumentation>();
+
     app.MapPrometheusScrapingEndpoint();
     var activatedBy = !string.IsNullOrEmpty(otlpEndpoint)
         ? "OTEL_EXPORTER_OTLP_ENDPOINT"

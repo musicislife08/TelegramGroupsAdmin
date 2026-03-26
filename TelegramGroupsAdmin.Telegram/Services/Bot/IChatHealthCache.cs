@@ -60,4 +60,9 @@ public interface IChatHealthCache
     /// Called on successful reachability check or after MarkInactiveAsync is invoked.
     /// </summary>
     void ResetFailureCount(long chatId);
+
+    /// <summary>
+    /// Get the number of chats currently tracked in the health cache.
+    /// </summary>
+    int Count { get; }
 }

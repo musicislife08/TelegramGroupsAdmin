@@ -70,4 +70,6 @@ public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
 
     public void ResetFailureCount(long chatId)
         => _failureCounts.TryRemove(chatId, out _);
+
+    public int Count => _healthCache.Count;
 }

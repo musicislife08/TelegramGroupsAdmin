@@ -13,6 +13,9 @@ internal class BayesClassifier
     private int _spamMessageCount;
     private int _hamMessageCount;
 
+    public int SpamVocabularySize => _spamWordCounts.Count;
+    public int HamVocabularySize => _hamWordCounts.Count;
+
     public BayesClassifier(ITokenizerService tokenizerService)
     {
         _tokenizerService = tokenizerService;
