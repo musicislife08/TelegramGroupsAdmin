@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Metrics;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -22,6 +23,7 @@ public class VirusTotalScannerService : ICloudScannerService
     private readonly IFileScanQuotaRepository _quotaRepository;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly DetectionMetrics _detectionMetrics;
+    private readonly ApiMetrics _apiMetrics;
 
     public string ServiceName => "VirusTotal";
 
@@ -33,13 +35,15 @@ public class VirusTotalScannerService : ICloudScannerService
         ISystemConfigRepository configRepository,
         IFileScanQuotaRepository quotaRepository,
         IHttpClientFactory httpClientFactory,
-        DetectionMetrics detectionMetrics)
+        DetectionMetrics detectionMetrics,
+        ApiMetrics apiMetrics)
     {
         _logger = logger;
         _configRepository = configRepository;
         _quotaRepository = quotaRepository;
         _httpClientFactory = httpClientFactory;
         _detectionMetrics = detectionMetrics;
+        _apiMetrics = apiMetrics;
     }
 
     public async Task<CloudHashLookupResult?> LookupHashAsync(
@@ -64,6 +68,7 @@ public class VirusTotalScannerService : ICloudScannerService
             if (!quotaAvailable)
             {
                 _logger.LogInformation("VirusTotal daily quota exhausted, skipping hash lookup");
+                _apiMetrics.RecordVirusTotalQuotaExhausted();
                 return new CloudHashLookupResult
                 {
                     Status = HashLookupStatus.Error,
@@ -86,6 +91,7 @@ public class VirusTotalScannerService : ICloudScannerService
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 _logger.LogInformation("VirusTotal rate limit hit (429), marking service as unavailable");
+                _apiMetrics.RecordVirusTotalCall("hash_lookup", stopwatch.ElapsedMilliseconds, success: false);
                 return new CloudHashLookupResult
                 {
                     Status = HashLookupStatus.Error,
@@ -97,6 +103,7 @@ public class VirusTotalScannerService : ICloudScannerService
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 _logger.LogInformation("VirusTotal hash lookup: File not found (must upload to scan)");
+                _apiMetrics.RecordVirusTotalCall("hash_lookup", stopwatch.ElapsedMilliseconds, success: true);
 
                 // Increment quota (hash lookup counts as API call)
                 await _quotaRepository.IncrementQuotaUsageAsync(
@@ -118,6 +125,7 @@ public class VirusTotalScannerService : ICloudScannerService
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
                 _logger.LogError("VirusTotal hash lookup failed: {StatusCode} - {Content}",
                     response.StatusCode, errorContent);
+                _apiMetrics.RecordVirusTotalCall("hash_lookup", stopwatch.ElapsedMilliseconds, success: false);
 
                 return new CloudHashLookupResult
                 {
@@ -188,6 +196,7 @@ public class VirusTotalScannerService : ICloudScannerService
             }
 
             _detectionMetrics.RecordFileScan("virustotal", status == HashLookupStatus.Malicious, stopwatch.ElapsedMilliseconds);
+            _apiMetrics.RecordVirusTotalCall("hash_lookup", stopwatch.ElapsedMilliseconds, success: true);
 
             return new CloudHashLookupResult
             {
@@ -209,6 +218,7 @@ public class VirusTotalScannerService : ICloudScannerService
         {
             stopwatch.Stop();
             _logger.LogError(ex, "Exception during VirusTotal hash lookup");
+            _apiMetrics.RecordVirusTotalCall("hash_lookup", stopwatch.ElapsedMilliseconds, success: false);
 
             return new CloudHashLookupResult
             {
@@ -251,6 +261,7 @@ public class VirusTotalScannerService : ICloudScannerService
             if (!quotaAvailable)
             {
                 _logger.LogInformation("VirusTotal daily quota exhausted, cannot upload file");
+                _apiMetrics.RecordVirusTotalQuotaExhausted();
                 return new CloudScanResult
                 {
                     ServiceName = ServiceName,
@@ -283,6 +294,7 @@ public class VirusTotalScannerService : ICloudScannerService
             {
                 stopwatch.Stop();
                 _logger.LogInformation("VirusTotal rate limit hit during file upload");
+                _apiMetrics.RecordVirusTotalCall("file_upload", stopwatch.ElapsedMilliseconds, success: false);
 
                 return new CloudScanResult
                 {
@@ -302,6 +314,7 @@ public class VirusTotalScannerService : ICloudScannerService
                     response.StatusCode, errorContent);
 
                 stopwatch.Stop();
+                _apiMetrics.RecordVirusTotalCall("file_upload", stopwatch.ElapsedMilliseconds, success: false);
 
                 return new CloudScanResult
                 {
@@ -399,6 +412,7 @@ public class VirusTotalScannerService : ICloudScannerService
                             detectionCount, totalEngines, threatName ?? "unknown");
 
                         _detectionMetrics.RecordFileScan("virustotal", true, stopwatch.ElapsedMilliseconds);
+                        _apiMetrics.RecordVirusTotalCall("file_upload", stopwatch.ElapsedMilliseconds, success: true);
 
                         return new CloudScanResult
                         {
@@ -425,6 +439,7 @@ public class VirusTotalScannerService : ICloudScannerService
                             detectionCount, totalEngines);
 
                         _detectionMetrics.RecordFileScan("virustotal", false, stopwatch.ElapsedMilliseconds);
+                        _apiMetrics.RecordVirusTotalCall("file_upload", stopwatch.ElapsedMilliseconds, success: true);
 
                         return new CloudScanResult
                         {
@@ -448,6 +463,7 @@ public class VirusTotalScannerService : ICloudScannerService
                 maxPolls, stopwatch.ElapsedMilliseconds);
 
             _detectionMetrics.RecordFileScan("virustotal", false, stopwatch.ElapsedMilliseconds);
+            _apiMetrics.RecordVirusTotalCall("file_upload", stopwatch.ElapsedMilliseconds, success: false);
 
             return new CloudScanResult
             {
@@ -465,6 +481,7 @@ public class VirusTotalScannerService : ICloudScannerService
             _logger.LogError(ex, "Exception during VirusTotal file scan");
 
             _detectionMetrics.RecordFileScan("virustotal", false, stopwatch.ElapsedMilliseconds);
+            _apiMetrics.RecordVirusTotalCall("file_upload", stopwatch.ElapsedMilliseconds, success: false);
 
             return new CloudScanResult
             {

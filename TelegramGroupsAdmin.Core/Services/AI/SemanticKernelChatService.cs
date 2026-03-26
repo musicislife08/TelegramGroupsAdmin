@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Metrics;
 
 namespace TelegramGroupsAdmin.Core.Services.AI;
 
@@ -24,15 +26,18 @@ public class SemanticKernelChatService : IChatService
     private static readonly ConcurrentDictionary<string, CachedKernel> KernelCache = new();
     private readonly ISystemConfigRepository _configRepository;
     private readonly ILogger<SemanticKernelChatService> _logger;
+    private readonly ApiMetrics _apiMetrics;
 
     public static int CachedKernelCount => KernelCache.Count;
 
     public SemanticKernelChatService(
         ISystemConfigRepository configRepository,
-        ILogger<SemanticKernelChatService> logger)
+        ILogger<SemanticKernelChatService> logger,
+        ApiMetrics apiMetrics)
     {
         _configRepository = configRepository;
         _logger = logger;
+        _apiMetrics = apiMetrics;
     }
 
     /// <inheritdoc />
@@ -53,6 +58,7 @@ public class SemanticKernelChatService : IChatService
         var kernelInfo = lookupResult.Kernel;
         var featureConfig = lookupResult.FeatureConfig;
 
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             var chatHistory = new ChatHistory();
@@ -69,10 +75,27 @@ public class SemanticKernelChatService : IChatService
                 kernel: kernelInfo.Kernel,
                 cancellationToken: cancellationToken);
 
-            return CreateResult(response, kernelInfo.ModelId);
+            stopwatch.Stop();
+            var result = CreateResult(response, kernelInfo.ModelId);
+            _apiMetrics.RecordOpenAiCall(
+                feature.ToString(),
+                kernelInfo.ModelId,
+                result?.PromptTokens ?? 0,
+                result?.CompletionTokens ?? 0,
+                stopwatch.Elapsed.TotalMilliseconds,
+                success: true);
+
+            return result;
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
+            _apiMetrics.RecordOpenAiCall(
+                feature.ToString(),
+                kernelInfo.ModelId,
+                0, 0,
+                stopwatch.Elapsed.TotalMilliseconds,
+                success: false);
             _logger.LogError(ex, "Error getting chat completion from {Model} for feature {Feature}",
                 kernelInfo.ModelId, feature);
             throw; // Let caller handle the exception
@@ -99,6 +122,7 @@ public class SemanticKernelChatService : IChatService
         var kernelInfo = lookupResult.Kernel;
         var featureConfig = lookupResult.FeatureConfig;
 
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             var chatHistory = new ChatHistory();
@@ -119,10 +143,27 @@ public class SemanticKernelChatService : IChatService
                 kernel: kernelInfo.Kernel,
                 cancellationToken: cancellationToken);
 
-            return CreateResult(response, kernelInfo.ModelId);
+            stopwatch.Stop();
+            var result = CreateResult(response, kernelInfo.ModelId);
+            _apiMetrics.RecordOpenAiCall(
+                feature.ToString(),
+                kernelInfo.ModelId,
+                result?.PromptTokens ?? 0,
+                result?.CompletionTokens ?? 0,
+                stopwatch.Elapsed.TotalMilliseconds,
+                success: true);
+
+            return result;
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
+            _apiMetrics.RecordOpenAiCall(
+                feature.ToString(),
+                kernelInfo.ModelId,
+                0, 0,
+                stopwatch.Elapsed.TotalMilliseconds,
+                success: false);
             _logger.LogError(ex, "Error getting vision completion from {Model} for feature {Feature}",
                 kernelInfo.ModelId, feature);
             throw; // Let caller handle the exception
@@ -148,6 +189,7 @@ public class SemanticKernelChatService : IChatService
         var kernelInfo = lookupResult.Kernel;
         var featureConfig = lookupResult.FeatureConfig;
 
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             var chatHistory = new ChatHistory();
@@ -173,10 +215,27 @@ public class SemanticKernelChatService : IChatService
                 kernel: kernelInfo.Kernel,
                 cancellationToken: cancellationToken);
 
-            return CreateResult(response, kernelInfo.ModelId);
+            stopwatch.Stop();
+            var result = CreateResult(response, kernelInfo.ModelId);
+            _apiMetrics.RecordOpenAiCall(
+                feature.ToString(),
+                kernelInfo.ModelId,
+                result?.PromptTokens ?? 0,
+                result?.CompletionTokens ?? 0,
+                stopwatch.Elapsed.TotalMilliseconds,
+                success: true);
+
+            return result;
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
+            _apiMetrics.RecordOpenAiCall(
+                feature.ToString(),
+                kernelInfo.ModelId,
+                0, 0,
+                stopwatch.Elapsed.TotalMilliseconds,
+                success: false);
             _logger.LogError(ex, "Error getting multi-image vision completion from {Model} for feature {Feature}",
                 kernelInfo.ModelId, feature);
             throw;
