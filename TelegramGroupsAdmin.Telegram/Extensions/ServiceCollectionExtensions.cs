@@ -197,6 +197,7 @@ public static class ServiceCollectionExtensions
 
             // Caching services (singletons for cross-request state)
             services.AddSingleton<IChatCache, ChatCache>();
+            services.AddSingleton<ChatMetrics>(); // Depends on IChatCache for ObservableGauge callback
             services.AddSingleton<IChatHealthCache, ChatHealthCache>();
             services.AddSingleton<IBotIdentityCache, BotIdentityCache>();
 

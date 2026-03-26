@@ -34,6 +34,7 @@ public partial class MessageProcessingService(
     IChatCache chatCache,
     IServiceProvider serviceProvider,
     PipelineMetrics pipelineMetrics,
+    ChatMetrics chatMetrics,
     ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
     // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
@@ -154,6 +155,19 @@ public partial class MessageProcessingService(
 
         // Keep SDK Chat cache warm (used by NotificationHandler and other services)
         chatCache.UpdateChat(message.Chat);
+
+        // Record message type metric for group messages
+        var messageType = message switch
+        {
+            { Photo: not null } => "photo",
+            { Video: not null } => "video",
+            { Animation: not null } => "animation",
+            { Document: not null } => "document",
+            { Sticker: not null } => "sticker",
+            _ when !string.IsNullOrEmpty(message.Text) => "text",
+            _ => "other"
+        };
+        chatMetrics.RecordMessage(messageType);
 
         // Detect Group → Supergroup migration
         // When a Group is upgraded to Supergroup (e.g., when granting admin), Telegram:
