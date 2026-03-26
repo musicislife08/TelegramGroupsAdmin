@@ -122,6 +122,10 @@ internal sealed class ReportActionsService(
         }
         finally
         {
+            // Always decrement pending count — the report is no longer awaiting a decision
+            // regardless of whether the action succeeded or failed
+            reportMetrics.DecrementPending();
+
             if (acquired)
                 entry.Semaphore.Release();
             if (Interlocked.Decrement(ref entry.ReferenceCount) == 0)

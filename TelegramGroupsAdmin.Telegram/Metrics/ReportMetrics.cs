@@ -48,6 +48,14 @@ public sealed class ReportMetrics
     {
         _resolvedTotal.Add(1, new TagList { { "type", type }, { "action", action } });
         _resolutionDuration.Record(durationMs, new TagList { { "type", type } });
+    }
+
+    /// <summary>
+    /// Decrement the pending report count. Call when a report resolution is attempted
+    /// (regardless of success/failure) since the report is no longer awaiting a decision.
+    /// </summary>
+    public void DecrementPending()
+    {
         Interlocked.Decrement(ref _pendingCount);
     }
 }
