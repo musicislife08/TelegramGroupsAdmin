@@ -13,6 +13,8 @@ public class RateLimitService : IRateLimitService
     private readonly ConcurrentDictionary<string, List<DateTimeOffset>> _attempts = new();
     private readonly Lock _lock = new();
 
+    public int EntryCount => _attempts.Count;
+
     // Rate limit configurations (attempts / time window)
     private static readonly Dictionary<string, (int MaxAttempts, TimeSpan Window)> RateLimits = new()
     {

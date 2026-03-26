@@ -47,6 +47,12 @@ public static class TelemetryConstants
     /// </summary>
     public static readonly Meter Metrics = new("TelegramGroupsAdmin.Metrics");
 
+    /// <summary>
+    /// Meter for memory attribution and cache size tracking.
+    /// Observable gauges on this meter help identify which components hold memory.
+    /// </summary>
+    public static readonly Meter Memory = new("TelegramGroupsAdmin.Memory");
+
     // =========================================================================
     // Counters - Monotonically increasing values
     // =========================================================================

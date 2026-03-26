@@ -94,7 +94,9 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
             {
                 TrainedAt = DateTimeOffset.UtcNow,
                 SpamSampleCount = spamCount,
-                HamSampleCount = hamCount
+                HamSampleCount = hamCount,
+                SpamVocabularySize = newClassifier.SpamVocabularySize,
+                HamVocabularySize = newClassifier.HamVocabularySize
             };
 
             // Log balance warning

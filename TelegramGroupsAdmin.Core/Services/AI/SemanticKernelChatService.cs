@@ -25,6 +25,8 @@ public class SemanticKernelChatService : IChatService
     private readonly ISystemConfigRepository _configRepository;
     private readonly ILogger<SemanticKernelChatService> _logger;
 
+    public static int CachedKernelCount => KernelCache.Count;
+
     public SemanticKernelChatService(
         ISystemConfigRepository configRepository,
         ILogger<SemanticKernelChatService> logger)

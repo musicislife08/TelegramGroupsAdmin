@@ -26,4 +26,7 @@ public class ChatCache : IChatCache
     /// <inheritdoc />
     public IReadOnlyCollection<Chat> GetAllChats()
         => _cache.Values.ToList().AsReadOnly();
+
+    /// <inheritdoc />
+    public int Count => _cache.Count;
 }

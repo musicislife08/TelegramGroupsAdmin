@@ -39,4 +39,9 @@ public interface IIntermediateAuthService
     /// <param name="userId">The user ID that must match the token</param>
     /// <returns>True if token is valid and matches userId, false otherwise</returns>
     bool ValidateAndConsumeToken(string token, string userId);
+
+    /// <summary>
+    /// Number of pending intermediate auth tokens (for memory instrumentation).
+    /// </summary>
+    int EntryCount { get; }
 }

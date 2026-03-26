@@ -28,6 +28,8 @@ public sealed class TelegramSessionManager(
     private readonly ConcurrentDictionary<string, CachedClient> _clients = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _reconnectLocks = new();
 
+    public int ActiveClientCount => _clients.Count;
+
     private sealed record CachedClient(IWTelegramApiClient ApiClient, long SessionId, DatabaseSessionStream SessionStream);
 
     public async Task<IWTelegramApiClient?> GetClientAsync(string webUserId, CancellationToken ct)

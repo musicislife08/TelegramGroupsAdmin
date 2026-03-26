@@ -31,4 +31,9 @@ public interface IChatCache
     /// Get all cached chats.
     /// </summary>
     IReadOnlyCollection<Chat> GetAllChats();
+
+    /// <summary>
+    /// Get the number of chats currently in the cache.
+    /// </summary>
+    int Count { get; }
 }

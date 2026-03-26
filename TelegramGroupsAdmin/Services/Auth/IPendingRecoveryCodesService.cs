@@ -32,4 +32,9 @@ public interface IPendingRecoveryCodesService
     /// <param name="userId">The user ID (must match stored userId)</param>
     /// <returns>True if recovery codes are available</returns>
     bool HasRecoveryCodes(string token, string userId);
+
+    /// <summary>
+    /// Number of pending recovery code entries (for memory instrumentation).
+    /// </summary>
+    int EntryCount { get; }
 }

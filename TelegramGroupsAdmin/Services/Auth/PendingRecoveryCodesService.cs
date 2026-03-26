@@ -18,6 +18,8 @@ public class PendingRecoveryCodesService : IPendingRecoveryCodesService
     private readonly ConcurrentDictionary<string, PendingCodesData> _pendingCodes = new();
     private readonly ILogger<PendingRecoveryCodesService> _logger;
 
+    public int EntryCount => _pendingCodes.Count;
+
     public PendingRecoveryCodesService(ILogger<PendingRecoveryCodesService> logger)
     {
         _logger = logger;
