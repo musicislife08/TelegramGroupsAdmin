@@ -3,6 +3,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Bot.Handlers;
 
@@ -22,6 +23,7 @@ public class BotUserServiceTests
 {
     private IBotUserHandler _mockUserHandler = null!;
     private IBotIdentityCache _mockIdentityCache = null!;
+    private ApiMetrics _apiMetrics = null!;
     private ILogger<BotUserService> _mockLogger = null!;
     private BotUserService _service = null!;
 
@@ -38,11 +40,13 @@ public class BotUserServiceTests
     {
         _mockUserHandler = Substitute.For<IBotUserHandler>();
         _mockIdentityCache = Substitute.For<IBotIdentityCache>();
+        _apiMetrics = new ApiMetrics();
         _mockLogger = Substitute.For<ILogger<BotUserService>>();
 
         _service = new BotUserService(
             _mockUserHandler,
             _mockIdentityCache,
+            _apiMetrics,
             _mockLogger);
     }
 

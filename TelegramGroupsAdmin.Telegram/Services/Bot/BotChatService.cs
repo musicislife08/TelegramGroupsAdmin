@@ -3,6 +3,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -27,11 +28,14 @@ public class BotChatService(
     ITelegramUserRepository userRepo,
     IUserActionsRepository userActionsRepo,
     INotificationService notificationService,
+    ApiMetrics apiMetrics,
     ILogger<BotChatService> logger) : IBotChatService
 {
     public async Task<ChatFullInfo> GetChatAsync(long chatId, CancellationToken ct = default)
     {
-        return await chatHandler.GetChatAsync(chatId, ct);
+        var chat = await chatHandler.GetChatAsync(chatId, ct);
+        apiMetrics.RecordTelegramApiCall("get_chat", success: true);
+        return chat;
     }
 
     public async Task<string?> GetInviteLinkAsync(long chatId, CancellationToken ct = default)
@@ -79,6 +83,7 @@ public class BotChatService(
     public async Task LeaveChatAsync(long chatId, CancellationToken ct = default)
     {
         await chatHandler.LeaveChatAsync(chatId, ct);
+        apiMetrics.RecordTelegramApiCall("leave_chat", success: true);
     }
 
     public async Task<bool> CheckHealthAsync(ChatIdentity chat, CancellationToken ct = default)
@@ -87,10 +92,12 @@ public class BotChatService(
         {
             // Basic health check - can we get chat info?
             var chatInfo = await chatHandler.GetChatAsync(chat.Id, ct);
+            apiMetrics.RecordTelegramApiCall("get_chat", success: true);
             return chatInfo != null;
         }
         catch (Exception ex)
         {
+            apiMetrics.RecordTelegramApiCall("get_chat", success: false);
             logger.LogWarning(ex, "Health check failed for {Chat}", chat.ToLogDebug());
             return false;
         }
@@ -402,6 +409,7 @@ public class BotChatService(
         {
             // Check if this is a group chat (only groups/supergroups have administrators)
             var sdkChat = await chatHandler.GetChatAsync(chat.Id, ct);
+            apiMetrics.RecordTelegramApiCall("get_chat", success: true);
             if (sdkChat.Type != ChatType.Group && sdkChat.Type != ChatType.Supergroup)
             {
                 logger.LogDebug("Skipping admin refresh for non-group chat {Chat} (type: {Type})",
@@ -411,6 +419,7 @@ public class BotChatService(
 
             // Get all administrators from Telegram
             var admins = await chatHandler.GetChatAdministratorsAsync(chat.Id, ct);
+            apiMetrics.RecordTelegramApiCall("get_chat_administrators", success: true);
 
             // Get current admin IDs from Telegram
             var currentAdminIds = admins.Select(a => a.User.Id).ToHashSet();
@@ -496,6 +505,7 @@ public class BotChatService(
         }
         catch (Exception ex)
         {
+            apiMetrics.RecordTelegramApiCall("get_chat_administrators", success: false);
             logger.LogWarning(ex, "Failed to refresh admins for {Chat}", chat.ToLogDebug());
             throw; // Re-throw so caller can track failures
         }
@@ -543,6 +553,7 @@ public class BotChatService(
     private async Task<string?> FetchAndCacheInviteLinkAsync(long chatId, CancellationToken ct)
     {
         var chat = await chatHandler.GetChatAsync(chatId, ct);
+        apiMetrics.RecordTelegramApiCall("get_chat", success: true);
         string? currentLink;
 
         // Public group - use username link (e.g., https://t.me/groupname)
@@ -577,6 +588,7 @@ public class BotChatService(
         // No cached link - export the primary link (this WILL revoke any previous primary link)
         // This should only happen on first setup
         currentLink = await chatHandler.ExportChatInviteLinkAsync(chatId, ct);
+        apiMetrics.RecordTelegramApiCall("export_chat_invite_link", success: true);
         logger.LogWarning(
             "Exported PRIMARY invite link for private chat {ChatId} - this revokes previous primary link! Link: {Link}",
             chatId,
