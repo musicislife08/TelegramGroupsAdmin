@@ -27,17 +27,20 @@ public class SemanticKernelChatService : IChatService
     private readonly ISystemConfigRepository _configRepository;
     private readonly ILogger<SemanticKernelChatService> _logger;
     private readonly ApiMetrics _apiMetrics;
+    private readonly CacheMetrics _cacheMetrics;
 
     public static int CachedKernelCount => KernelCache.Count;
 
     public SemanticKernelChatService(
         ISystemConfigRepository configRepository,
         ILogger<SemanticKernelChatService> logger,
-        ApiMetrics apiMetrics)
+        ApiMetrics apiMetrics,
+        CacheMetrics cacheMetrics)
     {
         _configRepository = configRepository;
         _logger = logger;
         _apiMetrics = apiMetrics;
+        _cacheMetrics = cacheMetrics;
     }
 
     /// <inheritdoc />
@@ -466,8 +469,15 @@ public class SemanticKernelChatService : IChatService
         // Generate cache key for test kernel
         var cacheKey = GenerateCacheKey(connection, testFeatureConfig, apiKey);
 
-        // Use GetOrAdd for thread-safe atomic cache access
-        var cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
+        // Check cache first for hit/miss tracking, then use GetOrAdd for thread safety
+        if (KernelCache.TryGetValue(cacheKey, out var cachedKernel))
+        {
+            _cacheMetrics.RecordHit("kernel");
+            return cachedKernel;
+        }
+
+        _cacheMetrics.RecordMiss("kernel");
+        cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
         {
             var kernel = BuildKernel(connection, testFeatureConfig, apiKey);
             var chatService = kernel.GetRequiredService<IChatCompletionService>();
@@ -523,19 +533,27 @@ public class SemanticKernelChatService : IChatService
 
         try
         {
-            var cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
+            if (KernelCache.TryGetValue(cacheKey, out var cachedKernel))
             {
-                var kernel = BuildKernel(conn, featConfig, key);
-                var chatService = kernel.GetRequiredService<IChatCompletionService>();
-                var modelId = conn.Provider == AIProviderType.AzureOpenAI
-                    ? featConfig.AzureDeploymentName ?? featConfig.Model
-                    : featConfig.Model;
+                _cacheMetrics.RecordHit("kernel");
+            }
+            else
+            {
+                _cacheMetrics.RecordMiss("kernel");
+                cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
+                {
+                    var kernel = BuildKernel(conn, featConfig, key);
+                    var chatService = kernel.GetRequiredService<IChatCompletionService>();
+                    var modelId = conn.Provider == AIProviderType.AzureOpenAI
+                        ? featConfig.AzureDeploymentName ?? featConfig.Model
+                        : featConfig.Model;
 
-                _logger.LogDebug("Created and cached kernel for connection {ConnectionId}, model {Model}",
-                    conn.Id, modelId);
+                    _logger.LogDebug("Created and cached kernel for connection {ConnectionId}, model {Model}",
+                        conn.Id, modelId);
 
-                return new CachedKernel(kernel, chatService, modelId);
-            });
+                    return new CachedKernel(kernel, chatService, modelId);
+                });
+            }
 
             // Return kernel with feature config so caller can use config defaults (Temperature, MaxTokens)
             return new KernelLookupResult(cachedKernel, featureConfig);

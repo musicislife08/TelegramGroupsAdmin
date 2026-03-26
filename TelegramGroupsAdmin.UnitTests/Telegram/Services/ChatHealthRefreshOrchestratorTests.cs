@@ -3,6 +3,7 @@ using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -216,7 +217,7 @@ public class ChatHealthRefreshOrchestratorTests
     {
         // Arrange: use real health cache to track state: fail, fail, success, fail, fail
         // Pattern: max 2 consecutive failures — should NOT trigger MarkInactive
-        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>());
+        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>(), new CacheMetrics());
 
         var orchestrator = new ChatHealthRefreshOrchestrator(
             _configLoader,
@@ -269,7 +270,7 @@ public class ChatHealthRefreshOrchestratorTests
     public async Task RefreshHealthForChatAsync_FailureCounters_ArePerChat()
     {
         // Arrange: use real health cache to verify independent counters
-        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>());
+        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>(), new CacheMetrics());
 
         var orchestrator = new ChatHealthRefreshOrchestrator(
             _configLoader,
@@ -304,7 +305,7 @@ public class ChatHealthRefreshOrchestratorTests
     public async Task RefreshHealthForChatAsync_ChatAAt3Failures_DoesNotAffectChatB()
     {
         // Arrange: use real health cache for true counter isolation
-        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>());
+        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>(), new CacheMetrics());
 
         var orchestrator = new ChatHealthRefreshOrchestrator(
             _configLoader,
@@ -345,7 +346,7 @@ public class ChatHealthRefreshOrchestratorTests
     public async Task RefreshHealthForChatAsync_After4thConsecutiveFailure_StartsNewCount()
     {
         // Arrange: use real health cache — counter must reset after MarkInactive
-        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>());
+        var realHealthCache = new ChatHealthCache(Substitute.For<ILogger<ChatHealthCache>>(), new CacheMetrics());
 
         var orchestrator = new ChatHealthRefreshOrchestrator(
             _configLoader,

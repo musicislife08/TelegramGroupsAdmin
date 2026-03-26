@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
     {
         // Metrics
         services.AddSingleton<ApiMetrics>();
+        services.AddSingleton<CacheMetrics>();
 
         // Utility services
         services.AddSingleton<SimHashService>(); // SimHash fingerprinting for O(1) deduplication
