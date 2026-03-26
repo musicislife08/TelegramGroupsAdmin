@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.ReportActions;
 
@@ -46,6 +47,7 @@ public class ReportActionsServiceTests
 
         _service = new ReportActionsService(
             _mockScopeFactory,
+            new ReportMetrics(),
             NullLogger<ReportActionsService>.Instance);
     }
 

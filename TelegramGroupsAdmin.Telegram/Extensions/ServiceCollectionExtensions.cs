@@ -199,6 +199,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IChatCache, ChatCache>();
             services.AddSingleton<ChatMetrics>(); // Depends on IChatCache for ObservableGauge callback
             services.AddSingleton<WelcomeMetrics>();
+            services.AddSingleton<ReportMetrics>();
             services.AddSingleton<IChatHealthCache, ChatHealthCache>();
             services.AddSingleton<IBotIdentityCache, BotIdentityCache>();
 
