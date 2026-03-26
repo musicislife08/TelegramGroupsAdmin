@@ -3,14 +3,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
-using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Services.Bot;
-using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -24,7 +24,8 @@ public class WelcomeTimeoutJob(
     IDbContextFactory<AppDbContext> contextFactory,
     IBotModerationService moderationService,
     IBotMessageService messageService,
-    IExamSessionRepository examSessionRepository) : IJob
+    IExamSessionRepository examSessionRepository,
+    JobMetrics jobMetrics) : IJob
 {
 
     /// <summary>
@@ -173,16 +174,7 @@ public class WelcomeTimeoutJob(
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 

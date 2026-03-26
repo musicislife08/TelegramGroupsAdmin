@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 
 namespace TelegramGroupsAdmin.UnitTests.BackgroundJobs.Jobs;
@@ -78,7 +79,7 @@ public class ScheduledBackupJobTests
         // Arrange — DB config has custom directory and retention
         SetupDbConfig(backupDir: "/custom/path", hourly: 48);
 
-        var job = new ScheduledBackupJob(_logger, _scopeFactory);
+        var job = new ScheduledBackupJob(_logger, _scopeFactory, new JobMetrics());
 
         // Act
         await job.Execute(_jobContext);
@@ -100,7 +101,7 @@ public class ScheduledBackupJobTests
         // Arrange — DB config has null BackupDirectory
         SetupDbConfig(backupDir: null);
 
-        var job = new ScheduledBackupJob(_logger, _scopeFactory);
+        var job = new ScheduledBackupJob(_logger, _scopeFactory, new JobMetrics());
 
         // Act
         await job.Execute(_jobContext);
@@ -118,7 +119,7 @@ public class ScheduledBackupJobTests
         // Arrange — DB config has non-default retention values
         SetupDbConfig(hourly: 10, daily: 3, weekly: 2, monthly: 6, yearly: 1);
 
-        var job = new ScheduledBackupJob(_logger, _scopeFactory);
+        var job = new ScheduledBackupJob(_logger, _scopeFactory, new JobMetrics());
 
         // Act
         await job.Execute(_jobContext);
@@ -154,7 +155,7 @@ public class ScheduledBackupJobTests
             { JobDataKeys.PayloadJson, payloadJson }
         });
 
-        var job = new ScheduledBackupJob(_logger, _scopeFactory);
+        var job = new ScheduledBackupJob(_logger, _scopeFactory, new JobMetrics());
 
         // Act
         await job.Execute(_jobContext);
@@ -179,7 +180,7 @@ public class ScheduledBackupJobTests
         _configService.GetJobConfigAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("DB connection failed"));
 
-        var job = new ScheduledBackupJob(_logger, _scopeFactory);
+        var job = new ScheduledBackupJob(_logger, _scopeFactory, new JobMetrics());
 
         // Act — should NOT throw (graceful fallback)
         await job.Execute(_jobContext);
@@ -203,7 +204,7 @@ public class ScheduledBackupJobTests
         _configService.GetJobConfigAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((BackgroundJobConfig?)null);
 
-        var job = new ScheduledBackupJob(_logger, _scopeFactory);
+        var job = new ScheduledBackupJob(_logger, _scopeFactory, new JobMetrics());
 
         // Act
         await job.Execute(_jobContext);

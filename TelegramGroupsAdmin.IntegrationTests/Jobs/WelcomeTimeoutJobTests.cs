@@ -15,6 +15,7 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Jobs;
@@ -140,7 +141,8 @@ public class WelcomeTimeoutJobTests
             ContextFactory,
             _mockModerationService!,
             _mockMessageService!,
-            _mockExamSessionRepository!);
+            _mockExamSessionRepository!,
+            new JobMetrics());
 
     /// <summary>
     /// Creates a mock IJobExecutionContext whose MergedJobDataMap contains the given payload.

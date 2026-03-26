@@ -4,6 +4,7 @@ using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Jobs;
 using TelegramGroupsAdmin.BackgroundJobs.Listeners;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
@@ -27,6 +28,9 @@ public static class ServiceCollectionExtensions
 
         // Register ad-hoc job scheduler (for one-time delayed jobs)
         services.AddSingleton<Core.BackgroundJobs.IJobScheduler, QuartzJobScheduler>();
+
+        // Register job metrics
+        services.AddSingleton<JobMetrics>();
 
         // Register Backup services
         services.AddBackupServices();

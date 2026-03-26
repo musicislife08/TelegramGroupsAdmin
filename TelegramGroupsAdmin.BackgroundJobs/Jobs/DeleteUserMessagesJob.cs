@@ -2,10 +2,10 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
-using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -17,7 +17,8 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
     IBotMessageService messageService,
-    IMessageHistoryRepository messageHistoryRepository) : IJob
+    IMessageHistoryRepository messageHistoryRepository,
+    JobMetrics jobMetrics) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
     {
@@ -36,6 +37,7 @@ public class DeleteUserMessagesJob(
         const string jobName = "DeleteUserMessages";
         var startTimestamp = Stopwatch.GetTimestamp();
         var success = false;
+        var deletedCount = 0;
         var user = payload.User;
 
         try
@@ -63,7 +65,6 @@ public class DeleteUserMessagesJob(
                 userMessages.Count,
                 user.DisplayName, user.Id);
 
-            var deletedCount = 0;
             var failedCount = 0;
             var skippedCount = 0;
 
@@ -141,16 +142,8 @@ public class DeleteUserMessagesJob(
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
+            jobMetrics.RecordRowsAffected(jobName, deletedCount);
         }
     }
 }

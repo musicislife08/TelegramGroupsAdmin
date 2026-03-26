@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -19,11 +19,13 @@ public class DatabaseMaintenanceJob : IJob
 {
     private readonly ILogger<DatabaseMaintenanceJob> _logger;
     private readonly NpgsqlDataSource _dataSource;
+    private readonly JobMetrics _jobMetrics;
 
-    public DatabaseMaintenanceJob(ILogger<DatabaseMaintenanceJob> logger, NpgsqlDataSource dataSource)
+    public DatabaseMaintenanceJob(ILogger<DatabaseMaintenanceJob> logger, NpgsqlDataSource dataSource, JobMetrics jobMetrics)
     {
         _logger = logger;
         _dataSource = dataSource;
+        _jobMetrics = jobMetrics;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -108,16 +110,7 @@ public class DatabaseMaintenanceJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 

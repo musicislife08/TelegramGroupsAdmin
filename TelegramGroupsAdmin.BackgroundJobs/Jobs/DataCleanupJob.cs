@@ -3,14 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
+using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Repositories;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -25,15 +25,18 @@ public class DataCleanupJob : IJob
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _dataPath;
     private readonly ILogger<DataCleanupJob> _logger;
+    private readonly JobMetrics _jobMetrics;
 
     public DataCleanupJob(
         IServiceScopeFactory scopeFactory,
         IOptions<AppOptions> appOptions,
-        ILogger<DataCleanupJob> logger)
+        ILogger<DataCleanupJob> logger,
+        JobMetrics jobMetrics)
     {
         _scopeFactory = scopeFactory;
         _dataPath = appOptions.Value.DataPath;
         _logger = logger;
+        _jobMetrics = jobMetrics;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -55,15 +58,7 @@ public class DataCleanupJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 

@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.ContentDetection.ML;
-using TelegramGroupsAdmin.Core.Telemetry;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -16,13 +16,16 @@ public class BayesClassifierRetrainingJob : IJob
 {
     private readonly IBayesClassifierService _bayesClassifier;
     private readonly ILogger<BayesClassifierRetrainingJob> _logger;
+    private readonly JobMetrics _jobMetrics;
 
     public BayesClassifierRetrainingJob(
         IBayesClassifierService bayesClassifier,
-        ILogger<BayesClassifierRetrainingJob> logger)
+        ILogger<BayesClassifierRetrainingJob> logger,
+        JobMetrics jobMetrics)
     {
         _bayesClassifier = bayesClassifier;
         _logger = logger;
+        _jobMetrics = jobMetrics;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -61,15 +64,7 @@ public class BayesClassifierRetrainingJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }
