@@ -447,6 +447,8 @@ public class VirusTotalScannerService : ICloudScannerService
             _logger.LogWarning("VirusTotal analysis timeout after {Polls} polls ({Duration}ms)",
                 maxPolls, stopwatch.ElapsedMilliseconds);
 
+            _detectionMetrics.RecordFileScan("virustotal", false, stopwatch.ElapsedMilliseconds);
+
             return new CloudScanResult
             {
                 ServiceName = ServiceName,
@@ -461,6 +463,8 @@ public class VirusTotalScannerService : ICloudScannerService
         {
             stopwatch.Stop();
             _logger.LogError(ex, "Exception during VirusTotal file scan");
+
+            _detectionMetrics.RecordFileScan("virustotal", false, stopwatch.ElapsedMilliseconds);
 
             return new CloudScanResult
             {
