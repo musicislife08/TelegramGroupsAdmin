@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Metrics;
@@ -53,6 +54,7 @@ public class BotUserService(
         catch (Exception ex)
         {
             apiMetrics.RecordTelegramApiCall("get_chat_member", success: false);
+            apiMetrics.RecordTelegramApiError(ex is ApiRequestException apiEx ? apiEx.ErrorCode.ToString() : ex.GetType().Name);
             logger.LogWarning(ex, "Failed to check admin status for user {UserId} in chat {ChatId}",
                 userId, chatId);
             return false;

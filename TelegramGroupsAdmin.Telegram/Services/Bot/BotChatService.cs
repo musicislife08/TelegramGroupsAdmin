@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration.Repositories;
@@ -98,6 +99,7 @@ public class BotChatService(
         catch (Exception ex)
         {
             apiMetrics.RecordTelegramApiCall("get_chat", success: false);
+            apiMetrics.RecordTelegramApiError(ex is ApiRequestException apiEx ? apiEx.ErrorCode.ToString() : ex.GetType().Name);
             logger.LogWarning(ex, "Health check failed for {Chat}", chat.ToLogDebug());
             return false;
         }
@@ -506,6 +508,7 @@ public class BotChatService(
         catch (Exception ex)
         {
             apiMetrics.RecordTelegramApiCall("get_chat_administrators", success: false);
+            apiMetrics.RecordTelegramApiError(ex is ApiRequestException apiEx ? apiEx.ErrorCode.ToString() : ex.GetType().Name);
             logger.LogWarning(ex, "Failed to refresh admins for {Chat}", chat.ToLogDebug());
             throw; // Re-throw so caller can track failures
         }

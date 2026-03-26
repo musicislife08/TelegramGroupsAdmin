@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -222,6 +223,7 @@ public class BotMessageService(
         catch (Exception ex)
         {
             apiMetrics.RecordTelegramApiCall("delete_message", success: false);
+            apiMetrics.RecordTelegramApiError(ex is ApiRequestException apiEx ? apiEx.ErrorCode.ToString() : ex.GetType().Name);
 
             logger.LogWarning(ex,
                 "Failed to delete message {MessageId} from Telegram (chat: {ChatId}), marking as deleted in DB anyway",
