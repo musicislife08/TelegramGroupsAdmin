@@ -165,8 +165,8 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
             services.AddHostedService<Services.Docs.DocumentationStartupService>();
 
-            // Memory instrumentation — ObservableGauges on all stateful singletons for Prometheus/Grafana
-            services.AddSingleton<MemoryInstrumentation>();
+            // Memory metrics — ObservableGauges on all stateful singletons for Prometheus/Grafana
+            services.AddSingleton<MemoryMetrics>();
 
             return services;
         }
