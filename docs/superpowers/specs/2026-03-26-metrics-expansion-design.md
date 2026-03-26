@@ -2,7 +2,7 @@
 
 ## Summary
 
-Expand `/metrics` endpoint instrumentation from ~22 instruments to ~58, standardize naming on `tga.*` dotted prefix, and organize metrics into domain-scoped singleton classes with wrapper methods that enforce consistent tagging.
+Expand `/metrics` endpoint instrumentation from ~19 custom instruments to ~58, standardize naming on `tga.*` dotted prefix, and organize metrics into domain-scoped singleton classes with wrapper methods that enforce consistent tagging.
 
 ## Goals
 
@@ -229,8 +229,8 @@ Meter: `TelegramGroupsAdmin.Reports`
 
 | Metric | Type | Unit | Tags | Purpose |
 |---|---|---|---|---|
-| `tga.reports.created_total` | Counter | — | `type` (content\|profile_scan\|impersonation\|exam_failure), `source` (auto\|user) | Reports created |
-| `tga.reports.resolved_total` | Counter | — | `type`, `action` (spam\|ban\|warn\|dismiss\|kick\|allow\|confirm\|trust\|approve\|reject) | Resolution actions |
+| `tga.reports.created_total` | Counter | — | `type` (content\|profile_scan\|impersonation\|exam_failure), `source` (auto\|user) | Reports created. Type mapping: `ContentReport`→`content`, `ProfileScanAlert`→`profile_scan`, `ImpersonationAlert`→`impersonation`, `ExamFailure`→`exam_failure` |
+| `tga.reports.resolved_total` | Counter | — | `type`, `action` (spam\|ban\|warn\|dismiss\|kick\|allow\|confirm\|trust\|approve\|deny\|deny_and_ban) | Resolution actions |
 | `tga.reports.resolution.duration` | Histogram | ms | `type` | Time from creation to resolution |
 | `tga.reports.pending_count` | ObservableGauge | — | — | Current total pending reports |
 
@@ -333,7 +333,7 @@ In `Program.cs`, the existing `AddMeter("TelegramGroupsAdmin.*")` wildcard alrea
 Tag cardinality is bounded:
 - `feature` tag: ~6 values (spam_check, image_classification, content_analysis, profile_scan, translation, impersonation)
 - `algorithm` tag: ~14 values (fixed set of content checks)
-- `command` tag: ~10 values (fixed set of bot commands)
+- `command` tag: ~13 values (fixed set of bot commands)
 - `job_name` tag: 17 values (fixed set of Quartz jobs)
 - `operation` tag (Telegram API): ~15-20 values (fixed set of Bot API operations)
 - `operation` tag (VirusTotal): 2 values (hash_lookup, file_upload)
