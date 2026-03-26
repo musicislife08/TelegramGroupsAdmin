@@ -44,10 +44,11 @@ public class DataCleanupJob : IJob
         const string jobName = BackgroundJobNames.DataCleanup;
         var startTimestamp = Stopwatch.GetTimestamp();
         var success = false;
+        long totalRowsDeleted = 0;
 
         try
         {
-            await ExecuteCleanupAsync(context.CancellationToken);
+            totalRowsDeleted = await ExecuteCleanupAsync(context.CancellationToken);
             success = true;
         }
         catch (Exception ex)
@@ -59,10 +60,11 @@ public class DataCleanupJob : IJob
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
             _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
+            _jobMetrics.RecordRowsAffected(jobName, totalRowsDeleted);
         }
     }
 
-    private async Task ExecuteCleanupAsync(CancellationToken cancellationToken)
+    private async Task<long> ExecuteCleanupAsync(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
@@ -80,25 +82,28 @@ public class DataCleanupJob : IJob
 
         _logger.LogInformation("Data cleanup job started");
 
+        long totalDeleted = 0;
+
         // 1. Clean up expired messages + disk files
-        await CleanupMessagesAsync(sp, messageRetention, cancellationToken);
+        totalDeleted += await CleanupMessagesAsync(sp, messageRetention, cancellationToken);
 
         // 2. Clean up old resolved reports
-        await CleanupReportsAsync(sp, reportRetention, cancellationToken);
+        totalDeleted += await CleanupReportsAsync(sp, reportRetention, cancellationToken);
 
         // 3. Clean up expired DM callback contexts
-        await CleanupCallbackContextsAsync(sp, contextRetention, cancellationToken);
+        totalDeleted += await CleanupCallbackContextsAsync(sp, contextRetention, cancellationToken);
 
         // 4. Clean up old read web notifications
-        await CleanupNotificationsAsync(sp, notificationRetention, cancellationToken);
+        totalDeleted += await CleanupNotificationsAsync(sp, notificationRetention, cancellationToken);
 
         // 5. Clean up expired file scan results
-        await CleanupFileScanResultsAsync(sp, fileScanRetention, cancellationToken);
+        totalDeleted += await CleanupFileScanResultsAsync(sp, fileScanRetention, cancellationToken);
 
         _logger.LogInformation("Data cleanup job completed");
+        return totalDeleted;
     }
 
-    private async Task CleanupMessagesAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
+    private async Task<long> CleanupMessagesAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var repository = sp.GetRequiredService<IMessageHistoryRepository>();
         var result = await repository.CleanupExpiredAsync(retention, cancellationToken);
@@ -155,9 +160,11 @@ public class DataCleanupJob : IJob
             result.OldestTimestamp.HasValue
                 ? result.OldestTimestamp.Value.ToString("g")
                 : "none");
+
+        return result.DeletedCount;
     }
 
-    private async Task CleanupReportsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
+    private async Task<long> CleanupReportsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var reportsRepo = sp.GetRequiredService<IReportsRepository>();
         var reportsCutoff = DateTimeOffset.UtcNow - retention;
@@ -170,9 +177,11 @@ public class DataCleanupJob : IJob
                 reportsDeleted,
                 TimeSpanUtilities.FormatDuration(retention));
         }
+
+        return reportsDeleted;
     }
 
-    private async Task CleanupCallbackContextsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
+    private async Task<long> CleanupCallbackContextsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var callbackContextRepo = sp.GetRequiredService<IReportCallbackContextRepository>();
         var contextsDeleted = await callbackContextRepo.DeleteExpiredAsync(retention, cancellationToken);
@@ -184,9 +193,11 @@ public class DataCleanupJob : IJob
                 contextsDeleted,
                 TimeSpanUtilities.FormatDuration(retention));
         }
+
+        return contextsDeleted;
     }
 
-    private async Task CleanupNotificationsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
+    private async Task<long> CleanupNotificationsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         // Use repository directly - it's the domain expert for notification data
         var notificationRepo = sp.GetRequiredService<IWebNotificationRepository>();
@@ -199,9 +210,11 @@ public class DataCleanupJob : IJob
                 notificationsDeleted,
                 TimeSpanUtilities.FormatDuration(retention));
         }
+
+        return notificationsDeleted;
     }
 
-    private async Task CleanupFileScanResultsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
+    private async Task<long> CleanupFileScanResultsAsync(IServiceProvider sp, TimeSpan retention, CancellationToken cancellationToken)
     {
         var fileScanRepo = sp.GetRequiredService<IFileScanResultRepository>();
         var deleted = await fileScanRepo.CleanupExpiredResultsAsync(retention, cancellationToken);
@@ -213,5 +226,7 @@ public class DataCleanupJob : IJob
                 deleted,
                 TimeSpanUtilities.FormatDuration(retention));
         }
+
+        return deleted;
     }
 }
