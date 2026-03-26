@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
@@ -205,6 +206,8 @@ public class WelcomeServiceBlacklistTests
             _profileScanService,
             _sessionManager,
             _admissionHandler,
+            new WelcomeMetrics(),
+            new ChatMetrics(Substitute.For<IChatCache>()),
             NullLogger<WelcomeService>.Instance);
     }
 

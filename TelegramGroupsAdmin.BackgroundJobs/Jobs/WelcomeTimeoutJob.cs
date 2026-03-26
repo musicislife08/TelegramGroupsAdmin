@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -25,7 +26,8 @@ public class WelcomeTimeoutJob(
     IBotModerationService moderationService,
     IBotMessageService messageService,
     IExamSessionRepository examSessionRepository,
-    JobMetrics jobMetrics) : IJob
+    JobMetrics jobMetrics,
+    WelcomeMetrics welcomeMetrics) : IJob
 {
 
     /// <summary>
@@ -154,6 +156,9 @@ public class WelcomeTimeoutJob(
             response.Response = Data.Models.WelcomeResponseType.Timeout;
             response.RespondedAt = DateTimeOffset.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
+
+            welcomeMetrics.RecordWelcomeTimeout();
+            welcomeMetrics.RecordWelcomeOutcome("timed_out", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
 
             logger.LogInformation(
                 "Recorded welcome timeout for {User} in {Chat}",
