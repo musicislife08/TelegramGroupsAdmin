@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.Core.Services.AI;
@@ -102,5 +103,19 @@ public sealed class MemoryMetrics
             "tga.cache.kernel.count",
             () => SemanticKernelChatService.CachedKernelCount,
             description: "Number of cached Semantic Kernel instances");
+
+        // --- Native memory gap (RSS minus GC committed) ---
+        // Stable gap = WTelegram + ML.NET + Kestrel SSL baseline.
+        // Growing gap = native memory leak. See context-keep: tga_perf_ml_retraining_loh
+        meter.CreateObservableGauge(
+            "tga.memory.native_gap",
+            () =>
+            {
+                var rss = Process.GetCurrentProcess().WorkingSet64;
+                var gcCommitted = GC.GetGCMemoryInfo().TotalCommittedBytes;
+                return (rss - gcCommitted) / (1024.0 * 1024.0);
+            },
+            unit: "MiB",
+            description: "Native memory gap: RSS minus GC committed bytes");
     }
 }
