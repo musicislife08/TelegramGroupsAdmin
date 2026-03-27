@@ -2,9 +2,9 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
-using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Services.Bot;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Telegram.Services.Bot;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -15,7 +15,8 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteMessageJob(
     ILogger<DeleteMessageJob> logger,
-    IBotMessageService messageService) : IJob
+    IBotMessageService messageService,
+    JobMetrics jobMetrics) : IJob
 {
     /// <summary>
     /// Execute delayed message deletion (Quartz.NET entry point)
@@ -71,16 +72,7 @@ public class DeleteMessageJob(
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }

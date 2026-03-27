@@ -4,13 +4,13 @@ using Quartz;
 using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -34,7 +34,8 @@ public class FileScanJob(
     IEnumerable<IContentCheckV2> contentChecks,
     ITelegramUserRepository telegramUserRepository,
     IMessageHistoryRepository messageHistoryRepository,
-    IDetectionResultsRepository detectionResultsRepository) : IJob
+    IDetectionResultsRepository detectionResultsRepository,
+    JobMetrics jobMetrics) : IJob
 {
     private readonly IContentCheckV2 _fileScanningCheck = contentChecks.First(c => c.CheckName == CheckName.FileScanning);
 
@@ -207,16 +208,7 @@ public class FileScanJob(
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 

@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -18,6 +19,7 @@ public class ReportService(
     INotificationService notificationService,
     IAuditService auditService,
     IMessageHistoryRepository messageHistoryRepository,
+    ReportMetrics reportMetrics,
     ILogger<ReportService> logger) : IReportService
 {
     public async Task<ReportCreationResult> CreateReportAsync(
@@ -36,6 +38,8 @@ public class ReportService(
 
         // 1. Insert report into database
         var reportId = await reportsRepository.InsertContentReportAsync(report, cancellationToken);
+
+        reportMetrics.RecordReportCreated("content", isAutomated ? "auto" : "user");
 
         logger.LogInformation(
             "Report {ReportId} created: ChatId={ChatId}, MessageId={MessageId}, IsAutomated={IsAutomated}, ReportedBy={ReportedBy}",

@@ -1,6 +1,7 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.Core.Services.AI;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Docs;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -15,9 +16,9 @@ namespace TelegramGroupsAdmin.Services;
 /// per-component memory attribution in Prometheus/Grafana.
 /// Gauges are pull-based — callbacks only fire on /metrics scrape, zero overhead between scrapes.
 /// </summary>
-public sealed class MemoryInstrumentation
+public sealed class MemoryMetrics
 {
-    public MemoryInstrumentation(
+    public MemoryMetrics(
         IChatCache chatCache,
         IChatHealthCache chatHealthCache,
         ITelegramSessionManager sessionManager,
@@ -29,7 +30,7 @@ public sealed class MemoryInstrumentation
         IMLTextClassifierService mlClassifier,
         IBayesClassifierService bayesClassifier)
     {
-        var meter = TelemetryConstants.Memory;
+        var meter = new Meter("TelegramGroupsAdmin.Memory");
 
         // --- Telegram caches ---
         meter.CreateObservableGauge(
@@ -102,5 +103,19 @@ public sealed class MemoryInstrumentation
             "tga.cache.kernel.count",
             () => SemanticKernelChatService.CachedKernelCount,
             description: "Number of cached Semantic Kernel instances");
+
+        // --- Native memory gap (RSS minus GC committed) ---
+        // Stable gap = WTelegram + ML.NET + Kestrel SSL baseline.
+        // Growing gap = native memory leak. See context-keep: tga_perf_ml_retraining_loh
+        meter.CreateObservableGauge(
+            "tga.memory.native_gap",
+            () =>
+            {
+                var rss = Process.GetCurrentProcess().WorkingSet64;
+                var gcCommitted = GC.GetGCMemoryInfo().TotalCommittedBytes;
+                return (rss - gcCommitted) / (1024.0 * 1024.0);
+            },
+            unit: "MiB",
+            description: "Native memory gap: RSS minus GC committed bytes");
     }
 }

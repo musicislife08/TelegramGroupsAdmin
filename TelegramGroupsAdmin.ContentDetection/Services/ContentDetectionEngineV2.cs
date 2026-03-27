@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Extensions;
 
@@ -28,6 +29,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
     private readonly IUrlPreFilterService _preFilterService;
     private readonly ContentDetectionOptions _spamDetectionOptions;
+    private readonly DetectionMetrics _detectionMetrics;
 
     // Action thresholds are per-chat config (ContentDetectionConfig.AutoBanThreshold / ReviewQueueThreshold)
     // Safety clamps are in ContentDetectionConstants (MinScore / MaxScore)
@@ -39,7 +41,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         IPromptVersionRepository promptVersionRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
         IUrlPreFilterService preFilterService,
-        IOptions<ContentDetectionOptions> spamDetectionOptions)
+        IOptions<ContentDetectionOptions> spamDetectionOptions,
+        DetectionMetrics detectionMetrics)
     {
         _logger = logger;
         _configRepository = configRepository;
@@ -48,6 +51,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         _contentChecksV2 = contentChecksV2;
         _preFilterService = preFilterService;
         _spamDetectionOptions = spamDetectionOptions.Value;
+        _detectionMetrics = detectionMetrics;
     }
 
     private async Task<ContentDetectionConfig> GetConfigAsync(ContentCheckRequest request, CancellationToken cancellationToken)
@@ -171,6 +175,13 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 {
                     _logger.LogInformation("AI vetoed spam detection for {User} (clean result with 0.0 score)",
                         request.User.ToLogInfo());
+
+                    // Record veto for each algorithm that was overridden
+                    foreach (var check in pipelineResult.CheckResults.Where(r => r.Score > 0 && !r.Abstained))
+                    {
+                        _detectionMetrics.RecordVeto(check.CheckName.ToString());
+                    }
+
                     var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoResultV2);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;
@@ -445,16 +456,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
         // Record metrics
-        TelemetryConstants.SpamDetectionDuration.Record(durationMs,
-            new KeyValuePair<string, object?>("algorithm", check.CheckName),
-            new KeyValuePair<string, object?>("version", "v2"));
-
-        var resultType = result.Abstained ? "abstained" : (result.Score >= 1.0 ? "spam" : "low_confidence");
-
-        TelemetryConstants.SpamDetections.Add(1,
-            new KeyValuePair<string, object?>("algorithm", check.CheckName),
-            new KeyValuePair<string, object?>("result", resultType),
-            new KeyValuePair<string, object?>("version", "v2"));
+        var resultType = result.Abstained ? "abstained" : (result.Score >= 1.0 ? "spam" : "clean");
+        _detectionMetrics.RecordSpamDetection(check.CheckName.ToString(), resultType, durationMs);
 
         if (activity != null)
         {
@@ -490,19 +493,12 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         };
     }
 
-    private static void RecordDetectionMetrics(long startTimestamp, ContentDetectionResult result, Activity? activity)
+    private void RecordDetectionMetrics(long startTimestamp, ContentDetectionResult result, Activity? activity)
     {
         var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
-        TelemetryConstants.SpamDetectionDuration.Record(durationMs,
-            new KeyValuePair<string, object?>("algorithm", "pipeline"),
-            new KeyValuePair<string, object?>("version", "v2"));
-
         var resultType = result.IsSpam ? "spam" : "clean";
-        TelemetryConstants.SpamDetections.Add(1,
-            new KeyValuePair<string, object?>("algorithm", "pipeline"),
-            new KeyValuePair<string, object?>("result", resultType),
-            new KeyValuePair<string, object?>("version", "v2"));
+        _detectionMetrics.RecordSpamDetection("pipeline", resultType, durationMs);
 
         if (activity != null)
         {

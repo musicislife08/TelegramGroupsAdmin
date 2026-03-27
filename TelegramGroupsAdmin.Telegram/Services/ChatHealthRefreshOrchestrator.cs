@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -31,6 +32,7 @@ public class ChatHealthRefreshOrchestrator(
     TelegramPhotoService photoService,
     IPhotoHashService photoHashService,
     INotificationService notificationService,
+    ChatMetrics chatMetrics,
     ILogger<ChatHealthRefreshOrchestrator> logger) : IChatHealthRefreshOrchestrator
 {
     /// <summary>
@@ -47,6 +49,7 @@ public class ChatHealthRefreshOrchestrator(
 
             if (!isReachable)
             {
+                chatMetrics.RecordHealthCheck("unreachable");
                 var failureCount = healthCache.IncrementFailureCount(chat.Id);
                 logger.LogDebug("Reachability check failed for {Chat}, consecutive failures: {Count}",
                     chat.ToLogDebug(), failureCount);
@@ -57,6 +60,7 @@ public class ChatHealthRefreshOrchestrator(
                         "Chat {Chat} unreachable after {Count} consecutive failures, marking inactive",
                         chat.ToLogDebug(), failureCount);
                     await managedChatsRepository.MarkInactiveAsync(chat, cancellationToken);
+                    chatMetrics.RecordChatMarkedInactive();
                     healthCache.ResetFailureCount(chat.Id);
                 }
 
@@ -76,6 +80,15 @@ public class ChatHealthRefreshOrchestrator(
 
             var health = await PerformHealthCheckAsync(chat, cancellationToken);
             healthCache.SetHealth(chat.Id, health);
+
+            // Record health check result as metric
+            var healthResult = health.Status switch
+            {
+                ChatHealthStatusType.Healthy or ChatHealthStatusType.NotApplicable => "healthy",
+                ChatHealthStatusType.Warning => "degraded",
+                _ => "unreachable"
+            };
+            chatMetrics.RecordHealthCheck(healthResult);
 
             // Update chat name in database if Telegram returned a fresher name
             var freshName = health.Chat.ChatName;

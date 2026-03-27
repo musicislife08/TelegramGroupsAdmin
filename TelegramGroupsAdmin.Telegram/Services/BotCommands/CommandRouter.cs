@@ -5,6 +5,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -21,16 +22,19 @@ public partial class CommandRouter
 {
     private readonly ILogger<CommandRouter> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly PipelineMetrics _pipelineMetrics;
 
     [GeneratedRegex(@"^/(\w+)(?:@\w+)?(?:\s+(.*))?$", RegexOptions.Compiled)]
     private static partial Regex CommandPattern();
 
     public CommandRouter(
         ILogger<CommandRouter> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        PipelineMetrics pipelineMetrics)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _pipelineMetrics = pipelineMetrics;
     }
 
     /// <summary>
@@ -128,6 +132,7 @@ public partial class CommandRouter
                 string.Join(", ", args));
 
             var result = await command.ExecuteAsync(message, args, permissionLevel, cancellationToken);
+            _pipelineMetrics.RecordCommandHandled(commandName);
 
             // Commands can now return dynamic CommandResult or use defaults from interface properties
             return result;

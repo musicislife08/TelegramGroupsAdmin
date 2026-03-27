@@ -2,11 +2,11 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -22,19 +22,22 @@ public class RotateBackupPassphraseJob : IJob
     private readonly IPassphraseManagementService _passphraseService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<RotateBackupPassphraseJob> _logger;
+    private readonly JobMetrics _jobMetrics;
 
     public RotateBackupPassphraseJob(
         IBackupEncryptionService encryptionService,
         IBackupService backupService,
         IPassphraseManagementService passphraseService,
         IServiceScopeFactory scopeFactory,
-        ILogger<RotateBackupPassphraseJob> logger)
+        ILogger<RotateBackupPassphraseJob> logger,
+        JobMetrics jobMetrics)
     {
         _encryptionService = encryptionService;
         _backupService = backupService;
         _passphraseService = passphraseService;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _jobMetrics = jobMetrics;
     }
 
     /// <summary>
@@ -201,16 +204,7 @@ public class RotateBackupPassphraseJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 

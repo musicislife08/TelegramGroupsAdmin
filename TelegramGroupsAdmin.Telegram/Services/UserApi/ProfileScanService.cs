@@ -12,6 +12,8 @@ using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using System.Diagnostics;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TL;
@@ -26,6 +28,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 public sealed class ProfileScanService(
     ITelegramSessionManager sessionManager,
     IServiceScopeFactory scopeFactory,
+    PipelineMetrics pipelineMetrics,
     ILogger<ProfileScanService> logger) : IProfileScanService
 {
     /// <summary>
@@ -45,6 +48,9 @@ public sealed class ProfileScanService(
         ChatIdentity? triggeringChat,
         CancellationToken ct)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var scanSource = triggeringChat is not null ? "welcome" : "rescan";
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
@@ -62,6 +68,7 @@ public sealed class ProfileScanService(
             logger.LogDebug("Profile scan for {User}: recently scanned ({LastScan}), reusing cached score {Score}",
                 user.ToLogDebug(), lastScan, existingUser.ProfileScanScore);
 
+            pipelineMetrics.RecordProfileScanSkipped("dedup");
             var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
             return new ProfileScanResult(
                 user.Id,
@@ -79,6 +86,7 @@ public sealed class ProfileScanService(
         if (client == null)
         {
             logger.LogWarning("No User API client available for profile scan of {User}", user.ToLogDebug());
+            pipelineMetrics.RecordProfileScanSkipped("no_session");
             return EmptyResult(user.Id, "No User API session available. Connect a session in Settings.");
         }
 
@@ -110,10 +118,15 @@ public sealed class ProfileScanService(
                     TaskContinuationOptions.OnlyOnFaulted,
                     TaskScheduler.Default);
 
+                pipelineMetrics.RecordProfileScanTimeout();
                 return EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
             }
 
-            return await scanTask; // propagate result or exception
+            var result = await scanTask;
+            pipelineMetrics.RecordProfileScan(
+                OutcomeToTag(result.Outcome), scanSource,
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            return result;
         }
         catch (TelegramFloodWaitException ex)
         {
@@ -156,6 +169,7 @@ public sealed class ProfileScanService(
         {
             logger.LogWarning("Could not resolve {User} — marking as excluded from future rescans", user.ToLogDebug());
             await userRepo.ExcludeFromProfileScanAsync(user.Id, ct);
+            pipelineMetrics.RecordProfileScanSkipped("excluded");
             return EmptyResult(user.Id, "User could not be resolved — they may have deleted their Telegram account.");
         }
 
@@ -813,4 +827,12 @@ public sealed class ProfileScanService(
     private static ProfileScanResult EmptyResult(long userId, string? skipReason = null) =>
         new(userId, null, null, null, null, false, null, false, false, false,
             0.0m, ProfileScanOutcome.Clean, null, null, ContainsNudity: false, skipReason);
+
+    private static string OutcomeToTag(ProfileScanOutcome outcome) => outcome switch
+    {
+        ProfileScanOutcome.Clean => "clean",
+        ProfileScanOutcome.HeldForReview => "held_for_review",
+        ProfileScanOutcome.Banned => "banned",
+        _ => outcome.ToString().ToLowerInvariant()
+    };
 }

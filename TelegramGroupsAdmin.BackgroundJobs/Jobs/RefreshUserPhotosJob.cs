@@ -3,14 +3,14 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
-using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Services.Media;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Media;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -23,13 +23,16 @@ public class RefreshUserPhotosJob : IJob
 {
     private readonly ILogger<RefreshUserPhotosJob> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly JobMetrics _jobMetrics;
 
     public RefreshUserPhotosJob(
         ILogger<RefreshUserPhotosJob> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        JobMetrics jobMetrics)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _jobMetrics = jobMetrics;
     }
 
     /// <summary>
@@ -117,16 +120,7 @@ public class RefreshUserPhotosJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }

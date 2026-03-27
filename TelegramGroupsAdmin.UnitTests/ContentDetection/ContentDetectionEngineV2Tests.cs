@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -970,7 +971,8 @@ public class ContentDetectionEngineV2Tests
             _promptVersionRepo,
             checks,
             _preFilterService,
-            _options);
+            _options,
+            new DetectionMetrics());
     }
 
     private static ContentCheckRequest BuildRequest(

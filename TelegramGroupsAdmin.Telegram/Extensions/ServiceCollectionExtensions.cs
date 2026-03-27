@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 using Testably.Abstractions;
@@ -192,9 +193,13 @@ public static class ServiceCollectionExtensions
             services.AddKeyedScoped<IBotCommand, DeleteCommand>(CommandNames.Delete);
             services.AddKeyedScoped<IBotCommand, MyStatusCommand>(CommandNames.MyStatus);
             services.AddSingleton<CommandRouter>();
+            services.AddSingleton<PipelineMetrics>();
 
             // Caching services (singletons for cross-request state)
             services.AddSingleton<IChatCache, ChatCache>();
+            services.AddSingleton<ChatMetrics>(); // Depends on IChatCache for ObservableGauge callback
+            services.AddSingleton<WelcomeMetrics>();
+            services.AddSingleton<ReportMetrics>();
             services.AddSingleton<IChatHealthCache, ChatHealthCache>();
             services.AddSingleton<IBotIdentityCache, BotIdentityCache>();
 

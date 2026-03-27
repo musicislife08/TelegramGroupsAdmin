@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.UnitTests.BackgroundJobs.Jobs;
@@ -68,7 +69,7 @@ public class DataCleanupJobTests
         _jobContext = Substitute.For<IJobExecutionContext>();
         _jobContext.CancellationToken.Returns(CancellationToken.None);
 
-        _sut = new DataCleanupJob(_scopeFactory, appOptions, logger);
+        _sut = new DataCleanupJob(_scopeFactory, appOptions, logger, new JobMetrics());
     }
 
     [TearDown]

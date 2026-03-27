@@ -2,9 +2,9 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Telemetry;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
@@ -17,7 +17,8 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class ProfileScanJob(
     ILogger<ProfileScanJob> logger,
     IProfileScanService profileScanService,
-    ITelegramSessionManager sessionManager) : IJob
+    ITelegramSessionManager sessionManager,
+    JobMetrics jobMetrics) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
     {
@@ -68,15 +69,7 @@ public class ProfileScanJob(
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }

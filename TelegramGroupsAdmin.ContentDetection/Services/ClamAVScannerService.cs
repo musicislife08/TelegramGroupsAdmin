@@ -5,6 +5,7 @@ using nClam;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.Core.Telemetry;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -17,6 +18,7 @@ public class ClamAVScannerService : IFileScannerService
 {
     private readonly ILogger<ClamAVScannerService> _logger;
     private readonly ISystemConfigRepository _configRepository;
+    private readonly DetectionMetrics _detectionMetrics;
 
     /// <summary>
     /// Guards the one-time INFO log for env var override. Static because this service is Scoped
@@ -30,10 +32,12 @@ public class ClamAVScannerService : IFileScannerService
 
     public ClamAVScannerService(
         ILogger<ClamAVScannerService> logger,
-        ISystemConfigRepository configRepository)
+        ISystemConfigRepository configRepository,
+        DetectionMetrics detectionMetrics)
     {
         _logger = logger;
         _configRepository = configRepository;
+        _detectionMetrics = detectionMetrics;
     }
 
     // Helper method to get current config from database
@@ -317,19 +321,11 @@ public class ClamAVScannerService : IFileScannerService
     /// <summary>
     /// Record telemetry metrics for file scan execution
     /// </summary>
-    private static void RecordScanMetrics(long startTimestamp, FileScanResult result, Activity? activity)
+    private void RecordScanMetrics(long startTimestamp, FileScanResult result, Activity? activity)
     {
         var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
-        // Record duration histogram
-        TelemetryConstants.FileScanDuration.Record(durationMs,
-            new KeyValuePair<string, object?>("tier", "tier1"));
-
-        // Record scan result counter
-        var resultType = result.IsClean ? "clean" : "malicious";
-        TelemetryConstants.FileScanResults.Add(1,
-            new KeyValuePair<string, object?>("tier", "tier1"),
-            new KeyValuePair<string, object?>("result", resultType));
+        _detectionMetrics.RecordFileScan("clamav", !result.IsClean, durationMs);
 
         // Enrich activity with scan result details
         if (activity != null)
