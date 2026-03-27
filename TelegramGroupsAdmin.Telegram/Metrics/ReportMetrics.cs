@@ -11,7 +11,6 @@ public sealed class ReportMetrics
 {
     private readonly Counter<long> _createdTotal;
     private readonly Counter<long> _resolvedTotal;
-    private readonly Histogram<double> _resolutionDuration;
 
     private long _pendingCount;
 
@@ -27,11 +26,6 @@ public sealed class ReportMetrics
             "tga.reports.resolved_total",
             description: "Reports resolved by type and action");
 
-        _resolutionDuration = meter.CreateHistogram<double>(
-            "tga.reports.resolution.duration",
-            unit: "ms",
-            description: "Report resolution duration by type");
-
         meter.CreateObservableGauge(
             "tga.reports.pending_count",
             () => Interlocked.Read(ref _pendingCount),
@@ -44,10 +38,9 @@ public sealed class ReportMetrics
         Interlocked.Increment(ref _pendingCount);
     }
 
-    public void RecordReportResolved(string type, string action, double durationMs)
+    public void RecordReportResolved(string type, string action)
     {
         _resolvedTotal.Add(1, new TagList { { "type", type }, { "action", action } });
-        _resolutionDuration.Record(durationMs, new TagList { { "type", type } });
     }
 
     /// <summary>

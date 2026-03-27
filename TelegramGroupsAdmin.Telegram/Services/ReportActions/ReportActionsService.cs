@@ -111,7 +111,7 @@ internal sealed class ReportActionsService(
             var result = await handler(scope);
 
             if (result.Success)
-                reportMetrics.RecordReportResolved(reportType, action, 0);
+                reportMetrics.RecordReportResolved(reportType, action);
 
             return result;
         }
