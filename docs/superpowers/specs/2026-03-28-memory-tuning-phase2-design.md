@@ -54,13 +54,13 @@ No other new packages. `FrozenDictionary` is inbox (System.Collections.Frozen), 
 - Eliminates the 261 MB JSON deserialization error on download
 
 **Encryption interface:**
-- `EncryptBackup` works with streams (preparation for #434) but still does single-shot AES-GCM internally
+- `EncryptBackup` accepts `Stream` input instead of `byte[]` (preparation for #434) but still reads the full stream into a buffer internally for single-shot AES-GCM — the peak memory improvement in Wave 1 comes from streaming JSON serialization and early null of `backup.Data`, NOT from streaming encryption. The full 500 MB → 2 MB improvement requires #434 (Wave 3)
 
 ### #427 — MLContext Elimination + ITransformer Disposal
 
 - Remove redundant `new MLContext()` in `SaveModelAsync` (line 170) and `LoadModelAsync` (line 237)
 - Store training MLContext as a field, protected by existing `_retrainingSemaphore`
-- Dispose old `ITransformer` on model swap before `Interlocked.Exchange` of `_currentModel`
+- Dispose old `ITransformer` on model swap before `Interlocked.Exchange` of `_currentModel` — `ITransformer` does not extend `IDisposable`, so use conditional cast: `(oldContainer?.Model as IDisposable)?.Dispose()`
 
 ### #428 — LoggerMessage Source Generator
 
@@ -80,15 +80,19 @@ No other new packages. `FrozenDictionary` is inbox (System.Collections.Frozen), 
 - `PendingRecoveryCodesService`: same pattern, cache handles eviction
 - `RateLimitService`: same pattern, sliding expiration for attempt windows
 - Eliminates all fire-and-forget cleanup code
+- **MemoryMetrics compatibility:** Each service exposes an `EntryCount` property consumed by `MemoryMetrics.cs` for Prometheus gauges. `IMemoryCache` has no count API, so maintain an `Interlocked` counter (increment on set, decrement on eviction callback) alongside the cache to preserve gauge accuracy
 
 ### #431 — EF Core 10 LeftJoin + AsNoTracking
 
-- Replace 12+ `GroupJoin/SelectMany/DefaultIfEmpty` patterns with `LeftJoin` across:
+- Replace `GroupJoin/SelectMany/DefaultIfEmpty` patterns with `LeftJoin` across 7 repositories:
   - MLTrainingDataRepository (4 patterns)
   - DetectionResultsRepository (4 chained joins)
   - StopWordsRepository
   - MessageHistoryRepository
   - InviteRepository
+  - AnalyticsRepository
+  - TelegramUserRepository
+- **Query syntax caveat:** `LeftJoin` is method-syntax only. Queries currently in query syntax (e.g., MLTrainingDataRepository implicit ham, MessageHistoryRepository) must be converted to method syntax. Correlated subquery patterns (e.g., `from mt in context.MessageTranslations.Where(mt => mt.MessageId == m.MessageId)`) may not convert directly to `LeftJoin` since it requires independent key selectors — these will use the standard method-syntax `GroupJoin`/`SelectMany`/`DefaultIfEmpty` if `LeftJoin` cannot express the correlation.
 - Fix missing `AsNoTracking()` on read-only queries
 
 ### #432 — VirusTotal Stream-Based JSON + Disposal
@@ -104,7 +108,7 @@ No other new packages. `FrozenDictionary` is inbox (System.Collections.Frozen), 
 
 ### Tier 3: Stagger Retrains
 
-- Add `Task.Delay(TimeSpan.FromMinutes(5))` between the two `TriggerNowAsync` calls in TrainingHandler.cs:109-119
+- Schedule the second retrain (Bayes) with a 5-minute `startAt` offset via the Quartz trigger rather than `Task.Delay` — avoids blocking the TrainingHandler for 5 minutes during the spam moderation flow
 - Log warning at startup if backup and retrain schedules overlap within 10 minutes
 
 ## Wave 2 — Depends on Wave 1
@@ -137,7 +141,7 @@ No other new packages. `FrozenDictionary` is inbox (System.Collections.Frozen), 
 
 **Protocol:**
 - 1 MB plaintext chunks, each encrypted independently with AES-GCM
-- Per-chunk nonce: base nonce + chunk counter
+- Per-chunk nonce: XOR a 64-bit big-endian chunk counter into the last 8 bytes of the 12-byte base nonce
 - Final chunk sentinel (length = 0) for truncation detection
 - File header: magic bytes + version byte + salt + base nonce
 
@@ -190,7 +194,8 @@ No other new packages. `FrozenDictionary` is inbox (System.Collections.Frozen), 
 | Native gap steady state | 380-508 MiB | 250-350 MiB |
 | Native gap peak | 808 MiB | <500 MiB |
 | LOH fragmentation | 38% | <15% |
-| Backup peak memory | ~500 MB (two 250 MB buffers) | ~2 MB (chunked) |
+| Backup peak memory (after Wave 1) | ~500 MB | ~300 MB (streaming serialization + early null, still single-shot AES-GCM) |
+| Backup peak memory (after Wave 3) | ~300 MB | ~2 MB (chunked AEAD) |
 
 ## PR Structure
 
