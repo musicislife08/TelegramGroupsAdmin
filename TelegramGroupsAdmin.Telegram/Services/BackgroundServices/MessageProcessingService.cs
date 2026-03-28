@@ -113,9 +113,7 @@ public partial class MessageProcessingService(
                             message.Text,
                             cancellationToken);
 
-                        logger.LogInformation(
-                            "Processed open-ended exam answer for {User}: Complete={Complete}, Passed={Passed}",
-                            message.From.ToLogInfo(), result.ExamComplete, result.Passed);
+                        LogOpenEndedExamAnswer(logger, message.From.ToLogInfo(), result.ExamComplete, result.Passed);
 
                         // Cancel welcome timeout and update response if exam completed
                         if (result.ExamComplete && result.GroupChatId.HasValue)
@@ -203,11 +201,7 @@ public partial class MessageProcessingService(
 
         if (ServiceMessageHelper.IsServiceMessage(message, deletionConfig, out var shouldDelete))
         {
-            logger.LogDebug(
-                "Detected service message: Type={Type}, MessageId={MessageId}, Chat={Chat}",
-                message.Type,
-                message.MessageId,
-                message.Chat.ToLogDebug());
+            LogDetectedServiceMessage(logger, message.Type.ToString(), message.MessageId, message.Chat.ToLogDebug());
 
             // Store service message for UI consistency with Telegram Desktop
             var serviceMessageText = ServiceMessageHelper.GetServiceMessageText(message);
@@ -256,9 +250,7 @@ public partial class MessageProcessingService(
                 var botInfo = await userService.GetMeAsync(cancellationToken);
                 if (message.LeftChatMember.Id == botInfo.Id)
                 {
-                    logger.LogInformation(
-                        "Skipping deletion of LeftChatMember service message - bot was removed from {Chat}",
-                        message.Chat.ToLogInfo());
+                    LogSkippingBotRemovedDeletion(logger, message.Chat.ToLogInfo());
                     return; // Don't try to delete or process further
                 }
             }
@@ -275,10 +267,7 @@ public partial class MessageProcessingService(
                         deletionSource: "service_message",
                         cancellationToken);
 
-                    logger.LogInformation(
-                        "Deleted service message (type: {Type}) in {Chat}",
-                        message.Type,
-                        message.Chat.ToLogInfo());
+                    LogDeletedServiceMessage(logger, message.Type.ToString(), message.Chat.ToLogInfo());
                 }
                 catch (Exception ex)
                 {
@@ -291,10 +280,7 @@ public partial class MessageProcessingService(
             }
             else
             {
-                logger.LogDebug(
-                    "Skipping deletion of {Type} service message (disabled in config) in {Chat}",
-                    message.Type,
-                    message.Chat.ToLogDebug());
+                LogSkippingServiceMessageDeletion(logger, message.Type.ToString(), message.Chat.ToLogDebug());
             }
 
             pipelineMetrics.RecordMessageProcessed("new_message", "skipped",
@@ -341,10 +327,7 @@ public partial class MessageProcessingService(
 
                 if (shouldRefreshAdmins)
                 {
-                    logger.LogInformation(
-                        "Refreshing admin cache for {Chat} ({Reason})",
-                        message.Chat.ToLogInfo(),
-                        refreshReason);
+                    LogRefreshingAdminCache(logger, message.Chat.ToLogInfo(), refreshReason);
 
                     try
                     {
@@ -361,7 +344,7 @@ public partial class MessageProcessingService(
             {
                 if (isNewChat)
                 {
-                    logger.LogDebug("Discovered new private {Chat}, skipping admin cache refresh", message.Chat.ToLogDebug());
+                    LogDiscoveredNewPrivateChat(logger, message.Chat.ToLogDebug());
                 }
             }
 
@@ -695,21 +678,13 @@ public partial class MessageProcessingService(
                 var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
                 await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
 
-                logger.LogDebug(
-                    "Profile change detected for {User}, scheduled background scan",
-                    message.From.ToLogDebug());
+                LogProfileChangeDetected(logger, message.From.ToLogDebug());
             }
 
             // Raise event for real-time UI updates
             OnNewMessage?.Invoke(messageRecord);
 
-            logger.LogDebug(
-                "Cached message {MessageId} from {User} in {Chat} (photo: {HasPhoto}, text: {HasText})",
-                message.MessageId,
-                message.From.ToLogDebug(),
-                message.Chat.ToLogDebug(),
-                photoFileId != null,
-                text != null);
+            LogCachedMessage(logger, message.MessageId, message.From.ToLogDebug(), message.Chat.ToLogDebug(), photoFileId != null, text != null);
 
             // Delete command message if requested (AFTER saving to database for FK integrity)
             if (commandResult?.DeleteCommandMessage == true)
@@ -724,7 +699,7 @@ public partial class MessageProcessingService(
                         deletionSource: "command_cleanup",
                         cancellationToken);
 
-                    logger.LogDebug("Deleted command message {MessageId} in {Chat}", message.MessageId, message.Chat.ToLogDebug());
+                    LogDeletedCommandMessage(logger, message.MessageId, message.Chat.ToLogDebug());
                 }
                 catch (Exception ex)
                 {
@@ -754,9 +729,7 @@ public partial class MessageProcessingService(
                 {
                     // Chat is inactive (bot not admin) - skip content detection
                     // Message is already saved, just don't process for spam
-                    logger.LogDebug(
-                        "Skipping content detection for inactive {Chat} - bot is not admin",
-                        message.Chat.ToLogDebug());
+                    LogSkippingContentDetectionInactiveChat(logger, message.Chat.ToLogDebug());
                 }
                 else
                 {
