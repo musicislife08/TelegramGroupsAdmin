@@ -161,13 +161,11 @@ public class BackupService : IBackupService
             TypeInfoResolver = new NotMappedPropertiesIgnoringResolver()
         };
 
-        // Serialize database content via pooled stream, then convert to byte[] (AES-GCM requires full buffer)
+        // Serialize database content via pooled stream
         using var jsonStream = _streamManager.GetStream("BackupService.Serialize");
         await JsonSerializer.SerializeAsync(jsonStream, backup.Data, jsonOptions, cancellationToken: cancellationToken);
-        jsonStream.Position = 0;
-        var databaseJson = jsonStream.ToArray();
         backup.Data = null; // release object graph early
-        _logger.LogInformation("Serialized database to JSON: {Size} bytes", databaseJson.Length);
+        _logger.LogInformation("Serialized database to JSON: {Size} bytes", jsonStream.Length);
 
         // Determine passphrase: explicit override takes priority, then DB config
         string? passphrase = passphraseOverride;
@@ -185,10 +183,13 @@ public class BackupService : IBackupService
             passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
         }
 
-        // Encrypt database content (AES-GCM requires full plaintext in memory)
-        var databaseContent = _encryptionService.EncryptBackup(databaseJson, passphrase);
+        // Encrypt database content using chunked AEAD streaming (~2 MB peak instead of ~500 MB)
+        jsonStream.Position = 0;
+        using var encryptedStream = _streamManager.GetStream("BackupService.Encrypt");
+        _encryptionService.EncryptBackup(jsonStream, encryptedStream, passphrase);
+        encryptedStream.Position = 0;
         _logger.LogInformation("Encrypted database: {OriginalSize} bytes → {EncryptedSize} bytes",
-            databaseJson.Length, databaseContent.Length);
+            jsonStream.Length, encryptedStream.Length);
 
         // Count media files for metadata
         var banGifDir = Path.Combine(_mediaBasePath, "media", "ban-gifs");
@@ -221,10 +222,10 @@ public class BackupService : IBackupService
                 // Add encrypted database entry
                 var databaseEntry = new PaxTarEntry(TarEntryType.RegularFile, "database.json.enc")
                 {
-                    DataStream = new MemoryStream(databaseContent)
+                    DataStream = encryptedStream
                 };
                 await tarWriter.WriteEntryAsync(databaseEntry, cancellationToken);
-                _logger.LogDebug("Added database.json.enc to archive: {Size} bytes", databaseContent.Length);
+                _logger.LogDebug("Added database.json.enc to archive: {Size} bytes", encryptedStream.Length);
 
                 // Add ban celebration GIFs (streamed from disk, not buffered)
                 if (gifFiles.Length > 0)
@@ -448,13 +449,18 @@ public class BackupService : IBackupService
                         throw new InvalidOperationException("Database is encrypted but no passphrase provided");
                     }
 
-                    using var ms = new MemoryStream();
-                    await entry.DataStream.CopyToAsync(ms);
-                    var content = ms.ToArray();
-                    var decryptedContent = _encryptionService.DecryptBackup(content, passphrase);
-                    databaseData = JsonSerializer.Deserialize<Dictionary<string, List<object>>>(decryptedContent, jsonOptions);
+                    // Stream encrypted data into a pooled stream, then decrypt via stream API
+                    using var encryptedMs = _streamManager.GetStream("BackupService.Restore.Encrypted");
+                    await entry.DataStream.CopyToAsync(encryptedMs);
+                    encryptedMs.Position = 0;
+
+                    using var decryptedMs = _streamManager.GetStream("BackupService.Restore.Decrypted");
+                    _encryptionService.DecryptBackup(encryptedMs, decryptedMs, passphrase);
+                    decryptedMs.Position = 0;
+
+                    databaseData = JsonSerializer.Deserialize<Dictionary<string, List<object>>>(decryptedMs.ToArray(), jsonOptions);
                     _logger.LogInformation("Decrypted database: {EncryptedSize} bytes → {DecryptedSize} bytes",
-                        content.Length, decryptedContent.Length);
+                        encryptedMs.Length, decryptedMs.Length);
                 }
                 else if (entry.Name.StartsWith("media/"))
                 {
