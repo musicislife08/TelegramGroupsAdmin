@@ -347,11 +347,11 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 Enabled = true,
                 Schedule = "every 30 minutes"
             },
-            [BackgroundJobNames.TextClassifierRetraining] = new BackgroundJobConfig
+            [BackgroundJobNames.ClassifierRetraining] = new BackgroundJobConfig
             {
-                JobName = BackgroundJobNames.TextClassifierRetraining,
-                DisplayName = "ML Text Classifier Retraining",
-                Description = "Retrain ML.NET SDCA spam classifier with latest training data",
+                JobName = BackgroundJobNames.ClassifierRetraining,
+                DisplayName = "Classifier Retraining",
+                Description = "Retrain ML.NET SDCA text classifier and Naive Bayes classifier with latest training data",
                 Enabled = true,
                 Schedule = "every 8 hours"
             },

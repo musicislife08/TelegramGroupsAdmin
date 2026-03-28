@@ -995,9 +995,9 @@
                 reason: reason,
                 auditLogId: null);
 
-            // 3. Trigger ML text classifier retraining
+            // 3. Trigger classifier retraining (SDCA + Bayes)
             await JobTriggerService.TriggerNowAsync(
-                BackgroundJobNames.TextClassifierRetraining,
+                BackgroundJobNames.ClassifierRetraining,
                 payload: new { });
 
             // 2. Only unban and restore trust if this was previously marked as spam (false positive correction)

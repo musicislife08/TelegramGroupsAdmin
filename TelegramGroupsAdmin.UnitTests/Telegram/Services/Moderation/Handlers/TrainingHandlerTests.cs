@@ -174,13 +174,9 @@ public class TrainingHandlerTests
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
 
-        // Assert - Verify retraining jobs triggered (both text and Bayes classifiers)
+        // Assert - Verify combined classifier retraining job triggered once
         await _mockJobTrigger.Received(1).TriggerNowAsync(
-            BackgroundJobNames.TextClassifierRetraining,
-            Arg.Any<object>(),
-            cancellationToken: Arg.Any<CancellationToken>());
-        await _mockJobTrigger.Received(1).TriggerNowAsync(
-            BackgroundJobNames.BayesClassifierRetraining,
+            BackgroundJobNames.ClassifierRetraining,
             Arg.Any<object>(),
             cancellationToken: Arg.Any<CancellationToken>());
     }
@@ -332,13 +328,9 @@ public class TrainingHandlerTests
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
 
-        // Assert - Retraining jobs ARE still triggered
+        // Assert - Combined classifier retraining job IS still triggered
         await _mockJobTrigger.Received(1).TriggerNowAsync(
-            BackgroundJobNames.TextClassifierRetraining,
-            Arg.Any<object>(),
-            cancellationToken: Arg.Any<CancellationToken>());
-        await _mockJobTrigger.Received(1).TriggerNowAsync(
-            BackgroundJobNames.BayesClassifierRetraining,
+            BackgroundJobNames.ClassifierRetraining,
             Arg.Any<object>(),
             cancellationToken: Arg.Any<CancellationToken>());
 
