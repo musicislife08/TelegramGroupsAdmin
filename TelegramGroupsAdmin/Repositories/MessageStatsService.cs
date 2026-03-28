@@ -23,17 +23,17 @@ public class MessageStatsService : IMessageStatsService
     public async Task<HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var totalMessages = await context.Messages.CountAsync(cancellationToken);
-        var uniqueUsers = await context.Messages.Select(m => m.UserId).Distinct().CountAsync(cancellationToken);
-        var photoCount = await context.Messages.CountAsync(m => m.PhotoFileId != null, cancellationToken);
+        var totalMessages = await context.Messages.AsNoTracking().CountAsync(cancellationToken);
+        var uniqueUsers = await context.Messages.AsNoTracking().Select(m => m.UserId).Distinct().CountAsync(cancellationToken);
+        var photoCount = await context.Messages.AsNoTracking().CountAsync(m => m.PhotoFileId != null, cancellationToken);
 
         DateTimeOffset? oldestTimestamp = null;
         DateTimeOffset? newestTimestamp = null;
 
         if (totalMessages > 0)
         {
-            oldestTimestamp = await context.Messages.MinAsync(m => m.Timestamp, cancellationToken);
-            newestTimestamp = await context.Messages.MaxAsync(m => m.Timestamp, cancellationToken);
+            oldestTimestamp = await context.Messages.AsNoTracking().MinAsync(m => m.Timestamp, cancellationToken);
+            newestTimestamp = await context.Messages.AsNoTracking().MaxAsync(m => m.Timestamp, cancellationToken);
         }
 
         var result = new HistoryStats(
@@ -110,22 +110,23 @@ public class MessageStatsService : IMessageStatsService
 
         // === CONSOLIDATED QUERY 1: Fetch all message data with spam flag in single query ===
         // Uses LEFT JOIN to include all messages, marking spam where detection results exist
-        var allMessageData = await (
-            from m in context.Messages
-            where m.Timestamp >= startDate && m.Timestamp <= endDate
-            where chatIds.Count == 0 || chatIds.Contains(m.ChatId)
-            join dr in context.DetectionResults on m.MessageId equals dr.MessageId into detections
-            from dr in detections.DefaultIfEmpty()
-            select new
-            {
-                m.MessageId,
-                m.UserId,
-                m.Timestamp,
-                m.ChatId,
-                m.ContentCheckSkipReason,
-                IsSpam = dr != null && dr.IsSpam
-            }
-        ).AsNoTracking().ToListAsync(cancellationToken);
+        var allMessageData = await context.Messages
+            .Where(m => m.Timestamp >= startDate && m.Timestamp <= endDate)
+            .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
+            .LeftJoin(context.DetectionResults,
+                m => m.MessageId,
+                dr => dr.MessageId,
+                (m, dr) => new
+                {
+                    m.MessageId,
+                    m.UserId,
+                    m.Timestamp,
+                    m.ChatId,
+                    m.ContentCheckSkipReason,
+                    IsSpam = dr != null && dr.IsSpam
+                })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
         // === DE-DUPLICATE MESSAGES ===
         // LEFT JOIN can produce duplicate rows if a message has multiple detection results
@@ -325,19 +326,20 @@ public class MessageStatsService : IMessageStatsService
         var previousWeekEnd = currentWeekStart;
 
         // Check if any messages exist in the previous week window (separate from startDate filter)
-        var previousWeekMessageData = await (
-            from m in context.Messages
-            where m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd
-            where chatIds.Count == 0 || chatIds.Contains(m.ChatId)
-            join dr in context.DetectionResults on m.MessageId equals dr.MessageId into detections
-            from dr in detections.DefaultIfEmpty()
-            select new
-            {
-                m.MessageId,
-                m.UserId,
-                IsSpam = dr != null && dr.IsSpam
-            }
-        ).AsNoTracking().ToListAsync(cancellationToken);
+        var previousWeekMessageData = await context.Messages
+            .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
+            .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
+            .LeftJoin(context.DetectionResults,
+                m => m.MessageId,
+                dr => dr.MessageId,
+                (m, dr) => new
+                {
+                    m.MessageId,
+                    m.UserId,
+                    IsSpam = dr != null && dr.IsSpam
+                })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
         // De-duplicate previous week messages (same LEFT JOIN de-dup pattern)
         var distinctPreviousWeek = previousWeekMessageData
@@ -351,19 +353,20 @@ public class MessageStatsService : IMessageStatsService
             // Current week metrics — query independently from endDate-7d to endDate
             // (may already be in distinctMessages for 7d/30d views, but re-querying ensures
             // correctness regardless of the startDate filter chosen by the user)
-            var currentWeekMessageData = await (
-                from m in context.Messages
-                where m.Timestamp >= currentWeekStart && m.Timestamp <= endDate
-                where chatIds.Count == 0 || chatIds.Contains(m.ChatId)
-                join dr in context.DetectionResults on m.MessageId equals dr.MessageId into detections
-                from dr in detections.DefaultIfEmpty()
-                select new
-                {
-                    m.MessageId,
-                    m.UserId,
-                    IsSpam = dr != null && dr.IsSpam
-                }
-            ).AsNoTracking().ToListAsync(cancellationToken);
+            var currentWeekMessageData = await context.Messages
+                .Where(m => m.Timestamp >= currentWeekStart && m.Timestamp <= endDate)
+                .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
+                .LeftJoin(context.DetectionResults,
+                    m => m.MessageId,
+                    dr => dr.MessageId,
+                    (m, dr) => new
+                    {
+                        m.MessageId,
+                        m.UserId,
+                        IsSpam = dr != null && dr.IsSpam
+                    })
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
 
             var distinctCurrentWeek = currentWeekMessageData
                 .GroupBy(m => m.MessageId)

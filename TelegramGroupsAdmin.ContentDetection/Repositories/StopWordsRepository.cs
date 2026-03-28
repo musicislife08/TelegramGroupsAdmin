@@ -147,10 +147,8 @@ public class StopWordsRepository : IStopWordsRepository
             // Query with LEFT JOINs to resolve actor display names (Phase 4.19)
             var stopWords = await context.StopWords
                 .AsNoTracking()
-                .GroupJoin(context.Users, sw => sw.WebUserId, u => u.Id, (sw, users) => new { sw, users })
-                .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.sw, user })
-                .GroupJoin(context.TelegramUsers, x => x.sw.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.sw, x.user, tgUsers })
-                .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new
+                .LeftJoin(context.Users, sw => sw.WebUserId, u => u.Id, (sw, user) => new { sw, user })
+                .LeftJoin(context.TelegramUsers, x => x.sw.TelegramUserId, tu => tu.TelegramUserId, (x, tgUser) => new
                 {
                     x.sw,
                     ActorWebEmail = x.user != null ? x.user.Email : null,

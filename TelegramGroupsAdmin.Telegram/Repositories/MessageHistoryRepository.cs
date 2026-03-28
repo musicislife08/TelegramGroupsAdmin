@@ -340,6 +340,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.Messages
+            .AsNoTracking()
             .Where(m => m.UserId == telegramUserId)
             .Where(m => m.DeletedAt == null) // Only non-deleted messages
             .Select(m => new UiModels.UserMessageInfo
