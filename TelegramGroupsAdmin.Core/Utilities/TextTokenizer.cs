@@ -17,6 +17,8 @@ public static partial class TextTokenizer
     /// <summary>
     /// Common stop words to filter out for content analysis.
     /// Based on tg-spam's excluded tokens for Bayes classification.
+    /// Uses OrdinalIgnoreCase comparer to support <see cref="HashSet{T}.GetAlternateLookup{TAlternate}"/>
+    /// with <see cref="ReadOnlySpan{T}"/> for allocation-free stop word checks.
     /// </summary>
     public static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -29,6 +31,12 @@ public static partial class TextTokenizer
         "most", "never", "only", "other", "same", "should", "since", "still", "then", "there", "these",
         "this", "those", "through", "under", "upon", "used", "using", "where", "which", "while", "would"
     };
+
+    /// <summary>
+    /// Alternate lookup for span-based stop word checks without string allocation.
+    /// </summary>
+    private static readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> StopWordsSpanLookup =
+        StopWords.GetAlternateLookup<ReadOnlySpan<char>>();
 
     #region Regex Patterns
 
@@ -105,7 +113,8 @@ public static partial class TextTokenizer
     /// <summary>
     /// Extract words from text using word boundary detection.
     /// Applies configurable filtering: emojis, stop words, numbers.
-    /// Used by Bayes classifier and content detection checks.
+    /// Used by Bayes classifier training and content detection checks.
+    /// Uses <see cref="Regex.EnumerateMatches(ReadOnlySpan{char})"/> for allocation-free regex matching.
     /// </summary>
     /// <param name="text">Text to extract words from</param>
     /// <param name="options">Tokenization options (null = default options)</param>
@@ -124,24 +133,24 @@ public static partial class TextTokenizer
         if (options.ConvertToLowerCase)
             text = text.ToLowerInvariant();
 
-        // Extract words using word boundary regex
-        var matches = WordBoundaryExtractor().Matches(text);
+        // Extract words using span-based regex enumeration (avoids Match object allocations)
+        var textSpan = text.AsSpan();
         var words = new List<string>();
 
-        foreach (Match match in matches)
+        foreach (var valueMatch in WordBoundaryExtractor().EnumerateMatches(textSpan))
         {
-            var word = match.Value;
+            var wordSpan = textSpan.Slice(valueMatch.Index, valueMatch.Length);
 
-            if (word.Length < options.MinWordLength)
+            if (wordSpan.Length < options.MinWordLength)
                 continue;
 
-            if (options.RemoveStopWords && IsStopWord(word))
+            if (options.RemoveStopWords && IsStopWord(wordSpan))
                 continue;
 
-            if (options.RemoveNumbers && int.TryParse(word, out _))
+            if (options.RemoveNumbers && int.TryParse(wordSpan, out _))
                 continue;
 
-            words.Add(word);
+            words.Add(wordSpan.ToString());
         }
 
         return words.ToArray();
@@ -193,6 +202,21 @@ public static partial class TextTokenizer
     {
         return StopWords.Contains(word);
     }
+
+    /// <summary>
+    /// Check if a word span is a common stop word without allocating a string.
+    /// Uses <see cref="HashSet{T}.AlternateLookup{TAlternate}"/> for allocation-free lookup.
+    /// </summary>
+    public static bool IsStopWord(ReadOnlySpan<char> word)
+    {
+        return StopWordsSpanLookup.Contains(word);
+    }
+
+    /// <summary>
+    /// Gets the compiled word boundary regex for span-based enumeration.
+    /// Callers can use <see cref="Regex.EnumerateMatches(ReadOnlySpan{char})"/> for allocation-free matching.
+    /// </summary>
+    public static Regex GetWordBoundaryRegex() => WordBoundaryExtractor();
 
     #endregion
 }

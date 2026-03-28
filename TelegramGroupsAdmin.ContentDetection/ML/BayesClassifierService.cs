@@ -96,7 +96,7 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
                     explicitCount++;
             }
 
-            var newClassifier = new BayesClassifier(tokenizerService, spamCounts, hamCounts, spamCount, hamCount);
+            var newClassifier = new BayesClassifier(spamCounts, hamCounts, spamCount, hamCount);
 
             var metadata = new BayesClassifierMetadata
             {
@@ -141,9 +141,8 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
         if (model is null)
             return null;
 
-        // Preprocessing: remove emojis (we need ITokenizerService but can't inject Scoped into Singleton)
-        // The BayesClassifier internally uses ITokenizerService for tokenization,
-        // and the check already calls RemoveEmojis before calling us
+        // BayesClassifier.ClassifyMessage does its own span-based tokenization inline —
+        // emoji removal is unnecessary (emojis don't match the \b[\w']+\b regex).
         return model.Classifier.ClassifyMessage(message);
     }
 
