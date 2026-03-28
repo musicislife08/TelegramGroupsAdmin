@@ -7,6 +7,7 @@ using Dapper;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.IO;
 using Npgsql;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data.Attributes;
@@ -35,6 +36,7 @@ public class BackupService : IBackupService
     private readonly DependencyResolutionService _dependencyResolutionService;
     private readonly IBackupRetentionService _retentionService;
     private readonly IThumbnailService _thumbnailService;
+    private readonly RecyclableMemoryStreamManager _streamManager;
     private readonly string _mediaBasePath;
     private const string CurrentVersion = "3.0"; // Real tar.gz format with media files
 
@@ -53,6 +55,7 @@ public class BackupService : IBackupService
         DependencyResolutionService dependencyResolutionService,
         IBackupRetentionService retentionService,
         IThumbnailService thumbnailService,
+        RecyclableMemoryStreamManager streamManager,
         IOptions<AppOptions> appOptions)
     {
         _dataSource = dataSource;
@@ -69,6 +72,7 @@ public class BackupService : IBackupService
         _dependencyResolutionService = dependencyResolutionService;
         _retentionService = retentionService;
         _thumbnailService = thumbnailService;
+        _streamManager = streamManager;
         _mediaBasePath = appOptions.Value.DataPath;
     }
 
@@ -132,7 +136,7 @@ public class BackupService : IBackupService
             {
                 _logger.LogDebug("Exporting table: {TableName}", tableName);
                 var records = await _tableExportService.ExportTableAsync(connection, tableName, dtoType);
-                backup.Data[tableName] = records;
+                backup.Data![tableName] = records;
                 _logger.LogDebug("Exported {Count} records from {TableName}", records.Count, tableName);
             }
             catch (Exception ex)
@@ -157,8 +161,12 @@ public class BackupService : IBackupService
             TypeInfoResolver = new NotMappedPropertiesIgnoringResolver()
         };
 
-        // Serialize database content (kept as byte[] — AES-GCM requires full buffer)
-        var databaseJson = JsonSerializer.SerializeToUtf8Bytes(backup.Data, jsonOptions);
+        // Serialize database content via pooled stream, then convert to byte[] (AES-GCM requires full buffer)
+        using var jsonStream = _streamManager.GetStream("BackupService.Serialize");
+        await JsonSerializer.SerializeAsync(jsonStream, backup.Data, jsonOptions, cancellationToken: cancellationToken);
+        jsonStream.Position = 0;
+        var databaseJson = jsonStream.ToArray();
+        backup.Data = null; // release object graph early
         _logger.LogInformation("Serialized database to JSON: {Size} bytes", databaseJson.Length);
 
         // Determine passphrase: explicit override takes priority, then DB config
@@ -1101,7 +1109,7 @@ public class BackupService : IBackupService
     /// </summary>
     private void MigrateConfigsChatIdNullToZero(SystemBackup backup)
     {
-        if (!backup.Data.TryGetValue("configs", out var configRecords))
+        if (backup.Data is null || !backup.Data.TryGetValue("configs", out var configRecords))
         {
             _logger.LogDebug("No configs table in backup, skipping SCHEMA-3 migration");
             return;

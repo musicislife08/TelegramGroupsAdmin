@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.IO;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
@@ -167,6 +168,16 @@ public static class ServiceCollectionExtensions
 
             // Memory metrics — ObservableGauges on all stateful singletons for Prometheus/Grafana
             services.AddSingleton<MemoryMetrics>();
+
+            // RecyclableMemoryStreamManager — pooled MemoryStream buffers for backup pipeline
+            services.AddSingleton(new RecyclableMemoryStreamManager(new RecyclableMemoryStreamManager.Options
+            {
+                BlockSize = 128 * 1024,
+                LargeBufferMultiple = 1024 * 1024,
+                MaximumBufferSize = 512 * 1024 * 1024,
+                MaximumSmallPoolFreeBytes = 16 * 1024 * 1024,
+                MaximumLargePoolFreeBytes = 256 * 1024 * 1024
+            }));
 
             return services;
         }

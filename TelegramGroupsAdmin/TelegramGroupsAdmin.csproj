@@ -30,6 +30,7 @@
         </PackageReference>
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
         <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+        <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
         <PackageReference Include="MudBlazor" />
         <PackageReference Include="Npgsql" />
         <PackageReference Include="Npgsql.DependencyInjection" />
