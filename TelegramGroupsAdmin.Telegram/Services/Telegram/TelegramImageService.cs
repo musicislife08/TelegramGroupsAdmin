@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.IO;
 using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -8,13 +9,16 @@ public class TelegramImageService : ITelegramImageService
 {
     private readonly IBotMediaService _mediaService;
     private readonly ILogger<TelegramImageService> _logger;
+    private readonly RecyclableMemoryStreamManager _streamManager;
 
     public TelegramImageService(
         IBotMediaService mediaService,
-        ILogger<TelegramImageService> logger)
+        ILogger<TelegramImageService> logger,
+        RecyclableMemoryStreamManager streamManager)
     {
         _mediaService = mediaService;
         _logger = logger;
+        _streamManager = streamManager;
     }
 
     public async Task<Stream?> DownloadPhotoAsync(string fileId, CancellationToken cancellationToken = default)
@@ -31,7 +35,7 @@ public class TelegramImageService : ITelegramImageService
                 return null;
             }
 
-            var stream = new MemoryStream();
+            var stream = _streamManager.GetStream("TelegramImageService.Download");
             await _mediaService.DownloadFileAsync(file.FilePath, stream, cancellationToken);
             stream.Position = 0;
 
