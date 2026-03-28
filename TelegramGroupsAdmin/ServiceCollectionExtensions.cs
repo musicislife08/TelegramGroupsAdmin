@@ -55,18 +55,8 @@ public static class ServiceCollectionExtensions
             services.AddMudServices();
             services.AddHttpContextAccessor();
 
-            // Add HttpClient for Blazor components (for calling our own API)
-            services.AddScoped(sp =>
-            {
-                var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
-                var httpContext = httpContextAccessor.HttpContext;
-
-                if (httpContext == null) return new HttpClient { BaseAddress = new Uri("http://localhost:5161") };
-                var host = httpContext.Request.Host;
-                var hostString = host.Host == "0.0.0.0" ? $"localhost:{host.Port}" : host.ToString();
-                var baseAddress = $"{httpContext.Request.Scheme}://{hostString}";
-                return new HttpClient { BaseAddress = new Uri(baseAddress) };
-            });
+            services.AddHttpClient("Internal");
+            services.AddScoped<InternalApiClient>();
 
             return services;
         }
