@@ -105,6 +105,8 @@ public static class ServiceCollectionExtensions
         public IServiceCollection AddApplicationServices()
         {
             // Note: HybridCache (registered in AddHttpClients) provides L1 in-memory caching
+            // Explicit registration ensures IMemoryCache is available for RateLimitService
+            services.AddMemoryCache();
 
             // Auth services
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
@@ -113,6 +115,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPendingRecoveryCodesService, TelegramGroupsAdmin.Services.Auth.PendingRecoveryCodesService>();
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IRateLimitService, TelegramGroupsAdmin.Services.Auth.RateLimitService>(); // SECURITY-5
             services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAccountLockoutService, TelegramGroupsAdmin.Services.Auth.AccountLockoutService>(); // SECURITY-6
+            services.AddHostedService<TelegramGroupsAdmin.Services.Auth.TokenCleanupService>();
 
             // Core services
             services.AddScoped<IAuthService, AuthService>();

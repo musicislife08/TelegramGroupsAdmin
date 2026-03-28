@@ -44,4 +44,10 @@ public interface IIntermediateAuthService
     /// Number of pending intermediate auth tokens (for memory instrumentation).
     /// </summary>
     int EntryCount { get; }
+
+    /// <summary>
+    /// Removes all expired tokens from the in-memory store.
+    /// Called by <see cref="TokenCleanupService"/> on a periodic timer.
+    /// </summary>
+    void CleanupExpiredEntries();
 }

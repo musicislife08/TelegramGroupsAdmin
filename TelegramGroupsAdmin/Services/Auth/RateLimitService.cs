@@ -1,19 +1,21 @@
-using System.Collections.Concurrent;
+using Microsoft.Extensions.Caching.Memory;
 using TelegramGroupsAdmin.Constants;
 
 namespace TelegramGroupsAdmin.Services.Auth;
 
 /// <summary>
-/// In-memory rate limiting service for authentication endpoints
-/// Thread-safe implementation suitable for single-instance deployments
+/// In-memory rate limiting service for authentication endpoints.
+/// Thread-safe implementation suitable for single-instance deployments.
+/// Uses IMemoryCache with SlidingExpiration for automatic TTL-based eviction.
 /// </summary>
 public class RateLimitService : IRateLimitService
 {
     private readonly ILogger<RateLimitService> _logger;
-    private readonly ConcurrentDictionary<string, List<DateTimeOffset>> _attempts = new();
+    private readonly IMemoryCache _cache;
     private readonly Lock _lock = new();
+    private int _entryCount;
 
-    public int EntryCount => _attempts.Count;
+    public int EntryCount => _entryCount;
 
     // Rate limit configurations (attempts / time window)
     private static readonly Dictionary<string, (int MaxAttempts, TimeSpan Window)> RateLimits = new()
@@ -27,9 +29,10 @@ public class RateLimitService : IRateLimitService
         ["reset_password"] = (RateLimitConstants.ResetPasswordMaxAttempts, RateLimitConstants.ResetPasswordWindow)
     };
 
-    public RateLimitService(ILogger<RateLimitService> logger)
+    public RateLimitService(ILogger<RateLimitService> logger, IMemoryCache cache)
     {
         _logger = logger;
+        _cache = cache;
     }
 
     public Task<RateLimitCheckResult> CheckRateLimitAsync(string identifier, string endpointKey, CancellationToken cancellationToken = default)
@@ -45,12 +48,11 @@ public class RateLimitService : IRateLimitService
             var key = GetKey(identifier, endpointKey);
             var now = DateTimeOffset.UtcNow;
 
-            // Get or create attempt list
-            var attempts = _attempts.GetOrAdd(key, _ => new List<DateTimeOffset>());
-
-            // Thread-safe cleanup and check using C# 13 Lock.EnterScope()
+            // Thread-safe check using C# 13 Lock.EnterScope()
             using (_lock.EnterScope())
             {
+                var attempts = _cache.Get<List<DateTimeOffset>>(key) ?? [];
+
                 // Remove expired attempts
                 attempts.RemoveAll(a => a < now - limit.Window);
 
@@ -85,7 +87,7 @@ public class RateLimitService : IRateLimitService
     {
         try
         {
-            if (!RateLimits.ContainsKey(endpointKey))
+            if (!RateLimits.TryGetValue(endpointKey, out var limit))
             {
                 _logger.LogWarning("Unknown endpoint key for rate limiting: {EndpointKey}", endpointKey);
                 return Task.CompletedTask;
@@ -94,11 +96,37 @@ public class RateLimitService : IRateLimitService
             var key = GetKey(identifier, endpointKey);
             var now = DateTimeOffset.UtcNow;
 
-            var attempts = _attempts.GetOrAdd(key, _ => new List<DateTimeOffset>());
-
             using (_lock.EnterScope())
             {
+                var isNew = !_cache.TryGetValue(key, out List<DateTimeOffset>? attempts);
+                if (isNew || attempts is null)
+                {
+                    attempts = [];
+                }
+
                 attempts.Add(now);
+
+                var options = new MemoryCacheEntryOptions
+                {
+                    SlidingExpiration = limit.Window
+                };
+
+                if (isNew)
+                {
+                    // Register eviction callback to decrement counter only when entry is truly removed
+                    options.RegisterPostEvictionCallback((_, _, reason, _) =>
+                    {
+                        // Replaced means the entry was overwritten via Set — the new entry will manage the count
+                        if (reason != EvictionReason.Replaced)
+                        {
+                            Interlocked.Decrement(ref _entryCount);
+                        }
+                    });
+
+                    Interlocked.Increment(ref _entryCount);
+                }
+
+                _cache.Set(key, attempts, options);
             }
         }
         catch (Exception ex)
@@ -113,6 +141,6 @@ public class RateLimitService : IRateLimitService
     private static string GetKey(string identifier, string endpointKey)
     {
         // Normalize email to lowercase for consistent keying
-        return $"{endpointKey}:{identifier.ToLowerInvariant()}";
+        return $"ratelimit:{endpointKey}:{identifier.ToLowerInvariant()}";
     }
 }
