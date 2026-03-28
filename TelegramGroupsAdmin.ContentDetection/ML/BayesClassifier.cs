@@ -1,48 +1,54 @@
+using System.Collections.Frozen;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.ContentDetection.ML;
 
 /// <summary>
-/// Naive Bayes classifier for spam detection
+/// Naive Bayes classifier for spam detection.
+/// Constructed with frozen, immutable word-count snapshots and pre-computed aggregates
+/// so that ClassifyMessage incurs zero per-call allocations for sums or set unions.
 /// </summary>
 internal class BayesClassifier
 {
-    private readonly Dictionary<string, int> _spamWordCounts = new();
-    private readonly Dictionary<string, int> _hamWordCounts = new();
+    private readonly FrozenDictionary<string, int> _spamWordCounts;
+    private readonly FrozenDictionary<string, int> _hamWordCounts;
     private readonly ITokenizerService _tokenizerService;
-    private int _spamMessageCount;
-    private int _hamMessageCount;
+    private readonly int _spamMessageCount;
+    private readonly int _hamMessageCount;
+
+    // Pre-computed aggregates — never recalculated on hot path
+    private readonly int _vocabularySize;
+    private readonly long _spamWordTotal;
+    private readonly long _hamWordTotal;
+    private readonly double _laplaceDenominatorSpam;
+    private readonly double _laplaceDenominatorHam;
 
     public int SpamVocabularySize => _spamWordCounts.Count;
     public int HamVocabularySize => _hamWordCounts.Count;
 
-    public BayesClassifier(ITokenizerService tokenizerService)
+    public BayesClassifier(
+        ITokenizerService tokenizerService,
+        Dictionary<string, int> spamWordCounts,
+        Dictionary<string, int> hamWordCounts,
+        int spamMessageCount,
+        int hamMessageCount)
     {
         _tokenizerService = tokenizerService;
-    }
+        _spamMessageCount = spamMessageCount;
+        _hamMessageCount = hamMessageCount;
 
-    public void TrainSpam(string message)
-    {
-        var words = _tokenizerService.Tokenize(message);
-        foreach (var word in words)
-        {
-            _spamWordCounts[word] = _spamWordCounts.GetValueOrDefault(word, 0) + 1;
-        }
-        _spamMessageCount++;
-    }
+        _spamWordCounts = spamWordCounts.ToFrozenDictionary();
+        _hamWordCounts = hamWordCounts.ToFrozenDictionary();
 
-    public void TrainHam(string message)
-    {
-        var words = _tokenizerService.Tokenize(message);
-        foreach (var word in words)
-        {
-            _hamWordCounts[word] = _hamWordCounts.GetValueOrDefault(word, 0) + 1;
-        }
-        _hamMessageCount++;
+        _vocabularySize = _spamWordCounts.Keys.Union(_hamWordCounts.Keys).Count();
+        _spamWordTotal = _spamWordCounts.Values.Sum();
+        _hamWordTotal = _hamWordCounts.Values.Sum();
+        _laplaceDenominatorSpam = _spamWordTotal + _vocabularySize;
+        _laplaceDenominatorHam = _hamWordTotal + _vocabularySize;
     }
 
     /// <summary>
-    /// Classify a message and return spam probability with certainty score
+    /// Classify a message and return spam probability with certainty score.
     /// </summary>
     public BayesClassificationResult ClassifyMessage(string message)
     {
@@ -66,10 +72,6 @@ internal class BayesClassifier
         var logProbSpam = Math.Log(priorSpam);
         var logProbHam = Math.Log(priorHam);
 
-        var spamWordTotal = _spamWordCounts.Values.Sum();
-        var hamWordTotal = _hamWordCounts.Values.Sum();
-        var vocabularySize = _spamWordCounts.Keys.Union(_hamWordCounts.Keys).Count();
-
         var significantWords = new List<string>();
 
         foreach (var word in words.Distinct())
@@ -77,9 +79,9 @@ internal class BayesClassifier
             var spamWordCount = _spamWordCounts.GetValueOrDefault(word, 0);
             var hamWordCount = _hamWordCounts.GetValueOrDefault(word, 0);
 
-            // Laplace smoothing: add 1 to counts, add vocabulary size to totals
-            var spamLikelihood = (double)(spamWordCount + 1) / (spamWordTotal + vocabularySize);
-            var hamLikelihood = (double)(hamWordCount + 1) / (hamWordTotal + vocabularySize);
+            // Laplace smoothing: add 1 to counts, use pre-computed denominators
+            var spamLikelihood = (double)(spamWordCount + 1) / _laplaceDenominatorSpam;
+            var hamLikelihood = (double)(hamWordCount + 1) / _laplaceDenominatorHam;
 
             logProbSpam += Math.Log(spamLikelihood);
             logProbHam += Math.Log(hamLikelihood);
