@@ -190,6 +190,7 @@ public class BackupService : IBackupService
         encryptedStream.Position = 0;
         _logger.LogInformation("Encrypted database: {OriginalSize} bytes → {EncryptedSize} bytes",
             jsonStream.Length, encryptedStream.Length);
+        jsonStream.Dispose(); // return ~250 MB pool buffer before tar-write phase
 
         // Count media files for metadata
         var banGifDir = Path.Combine(_mediaBasePath, "media", "ban-gifs");
@@ -458,7 +459,7 @@ public class BackupService : IBackupService
                     _encryptionService.DecryptBackup(encryptedMs, decryptedMs, passphrase);
                     decryptedMs.Position = 0;
 
-                    databaseData = JsonSerializer.Deserialize<Dictionary<string, List<object>>>(decryptedMs.ToArray(), jsonOptions);
+                    databaseData = await JsonSerializer.DeserializeAsync<Dictionary<string, List<object>>>(decryptedMs, jsonOptions);
                     _logger.LogInformation("Decrypted database: {EncryptedSize} bytes → {DecryptedSize} bytes",
                         encryptedMs.Length, decryptedMs.Length);
                 }

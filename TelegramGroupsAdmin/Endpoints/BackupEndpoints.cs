@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
@@ -62,7 +63,7 @@ public static partial class BackupEndpoints
                 cancellationToken: cancellationToken);
 
             return Results.File(fullPath, "application/gzip", filename, enableRangeProcessing: true);
-        }).RequireAuthorization();
+        }).RequireAuthorization(AuthenticationConstants.PolicyGlobalAdminOrOwner);
 
         return endpoints;
     }

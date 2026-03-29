@@ -85,7 +85,7 @@ public static class ServiceCollectionExtensions
 
             // Add authorization policies
             services.AddAuthorizationBuilder()
-                .AddPolicy("GlobalAdminOrOwner", policy =>
+                .AddPolicy(AuthenticationConstants.PolicyGlobalAdminOrOwner, policy =>
                     policy.RequireRole("GlobalAdmin", "Owner"))
                 .AddPolicy("OwnerOnly", policy =>
                     policy.RequireRole("Owner"));

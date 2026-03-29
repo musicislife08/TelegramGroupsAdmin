@@ -24,7 +24,6 @@ public sealed class MemoryMetrics
         ITelegramSessionManager sessionManager,
         IMediaRefetchQueueService mediaRefetchQueue,
         IDocumentationService documentationService,
-        IRateLimitService rateLimitService,
         IIntermediateAuthService intermediateAuthService,
         IPendingRecoveryCodesService pendingRecoveryCodesService,
         IMLTextClassifierService mlClassifier,
@@ -62,11 +61,6 @@ public sealed class MemoryMetrics
             description: "Whether the documentation cache has been loaded (1=yes, 0=no)");
 
         // --- Auth state ---
-        meter.CreateObservableGauge(
-            "tga.cache.rate_limit.count",
-            () => rateLimitService.EntryCount,
-            description: "Number of active rate limit tracking entries");
-
         meter.CreateObservableGauge(
             "tga.cache.auth_tokens.count",
             () => intermediateAuthService.EntryCount,

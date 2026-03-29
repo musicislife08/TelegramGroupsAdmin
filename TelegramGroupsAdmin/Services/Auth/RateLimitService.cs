@@ -13,9 +13,6 @@ public class RateLimitService : IRateLimitService
     private readonly ILogger<RateLimitService> _logger;
     private readonly IMemoryCache _cache;
     private readonly Lock _lock = new();
-    private int _entryCount;
-
-    public int EntryCount => _entryCount;
 
     // Rate limit configurations (attempts / time window)
     private static readonly Dictionary<string, (int MaxAttempts, TimeSpan Window)> RateLimits = new()
@@ -98,11 +95,7 @@ public class RateLimitService : IRateLimitService
 
             using (_lock.EnterScope())
             {
-                var isNew = !_cache.TryGetValue(key, out List<DateTimeOffset>? attempts);
-                if (isNew || attempts is null)
-                {
-                    attempts = [];
-                }
+                var attempts = _cache.Get<List<DateTimeOffset>>(key) ?? [];
 
                 attempts.Add(now);
 
@@ -110,21 +103,6 @@ public class RateLimitService : IRateLimitService
                 {
                     SlidingExpiration = limit.Window
                 };
-
-                if (isNew)
-                {
-                    // Register eviction callback to decrement counter only when entry is truly removed
-                    options.RegisterPostEvictionCallback((_, _, reason, _) =>
-                    {
-                        // Replaced means the entry was overwritten via Set — the new entry will manage the count
-                        if (reason != EvictionReason.Replaced)
-                        {
-                            Interlocked.Decrement(ref _entryCount);
-                        }
-                    });
-
-                    Interlocked.Increment(ref _entryCount);
-                }
 
                 _cache.Set(key, attempts, options);
             }

@@ -1,4 +1,6 @@
 using System.Collections.Frozen;
+using System.IO.Hashing;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using TelegramGroupsAdmin.Core.Utilities;
 
@@ -26,7 +28,7 @@ internal class BayesClassifier
     private readonly FrozenDictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _hamLookup;
 
     // Cached regex instance for span-based word extraction
-    private readonly Regex _wordBoundaryRegex = TextTokenizer.GetWordBoundaryRegex();
+    private static readonly Regex _wordBoundaryRegex = TextTokenizer.GetWordBoundaryRegex();
 
     // Pre-computed aggregates — never recalculated on hot path
     private readonly int _vocabularySize;
@@ -87,7 +89,7 @@ internal class BayesClassifier
         // Span-based tokenization: enumerate regex matches without allocating Match objects.
         // Skip emoji removal (emojis don't match \b[\w']+\b) and lowercasing (OrdinalIgnoreCase comparer).
         var textSpan = message.AsSpan();
-        var seenWords = new HashSet<int>(); // track seen words by hash to avoid duplicates
+        var seenWords = new HashSet<UInt128>(); // track seen words by 128-bit hash (collision-safe)
         var wordCount = 0;
 
         // Calculate prior probabilities
@@ -99,6 +101,11 @@ internal class BayesClassifier
         var logProbHam = Math.Log(priorHam);
 
         var significantWords = new List<string>();
+
+        // Pre-allocate lowercase buffer outside loop (CA2014: stackalloc must not be in loops).
+        // Telegram messages are max 4096 chars; individual words are much shorter.
+        const int maxWordLength = 256;
+        Span<char> lowerBuf = stackalloc char[maxWordLength];
 
         foreach (var valueMatch in _wordBoundaryRegex.EnumerateMatches(textSpan))
         {
@@ -118,8 +125,10 @@ internal class BayesClassifier
 
             wordCount++;
 
-            // Deduplicate using case-insensitive hash (matching the FrozenDictionary comparer)
-            var hash = string.GetHashCode(wordSpan, StringComparison.OrdinalIgnoreCase);
+            // Deduplicate using 128-bit hash — zero-allocation via pre-allocated buffer + ToLowerInvariant
+            var wordLower = lowerBuf[..wordSpan.Length];
+            wordSpan.ToLowerInvariant(wordLower);
+            var hash = XxHash128.HashToUInt128(MemoryMarshal.AsBytes(wordLower));
             if (!seenWords.Add(hash))
                 continue;
 

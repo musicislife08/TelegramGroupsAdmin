@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.IO;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -97,6 +98,7 @@ public class BackupServiceTests
         services.AddSingleton(mockJobScheduler);
 
         // Add backup services (using shared extension method from BackgroundJobs library)
+        services.AddSingleton(new RecyclableMemoryStreamManager());
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();

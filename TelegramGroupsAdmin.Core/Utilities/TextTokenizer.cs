@@ -224,7 +224,7 @@ public static partial class TextTokenizer
 /// <summary>
 /// Configuration options for word extraction tokenization.
 /// </summary>
-public class TokenizerOptions
+public record TokenizerOptions
 {
     /// <summary>
     /// Default options: remove emojis, stop words, numbers; min length 2; lowercase.
@@ -232,17 +232,17 @@ public class TokenizerOptions
     public static readonly TokenizerOptions Default = new();
 
     /// <summary>Remove emojis before tokenization.</summary>
-    public bool RemoveEmojis { get; set; } = true;
+    public bool RemoveEmojis { get; init; } = true;
 
     /// <summary>Remove common stop words from results.</summary>
-    public bool RemoveStopWords { get; set; } = true;
+    public bool RemoveStopWords { get; init; } = true;
 
     /// <summary>Remove pure numeric tokens.</summary>
-    public bool RemoveNumbers { get; set; } = true;
+    public bool RemoveNumbers { get; init; } = true;
 
     /// <summary>Minimum word length to include.</summary>
-    public int MinWordLength { get; set; } = 2;
+    public int MinWordLength { get; init; } = 2;
 
     /// <summary>Convert all words to lowercase.</summary>
-    public bool ConvertToLowerCase { get; set; } = true;
+    public bool ConvertToLowerCase { get; init; } = true;
 }

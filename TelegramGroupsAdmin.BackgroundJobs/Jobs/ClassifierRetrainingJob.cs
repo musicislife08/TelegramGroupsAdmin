@@ -13,25 +13,12 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Can be triggered manually via Settings → Background Jobs UI or on-demand after admin corrections.
 /// </summary>
 [DisallowConcurrentExecution]
-public class ClassifierRetrainingJob : IJob
+public class ClassifierRetrainingJob(
+    IMLTextClassifierService mlClassifier,
+    IBayesClassifierService bayesClassifier,
+    ILogger<ClassifierRetrainingJob> logger,
+    JobMetrics jobMetrics) : IJob
 {
-    private readonly IMLTextClassifierService _mlClassifier;
-    private readonly IBayesClassifierService _bayesClassifier;
-    private readonly ILogger<ClassifierRetrainingJob> _logger;
-    private readonly JobMetrics _jobMetrics;
-
-    public ClassifierRetrainingJob(
-        IMLTextClassifierService mlClassifier,
-        IBayesClassifierService bayesClassifier,
-        ILogger<ClassifierRetrainingJob> logger,
-        JobMetrics jobMetrics)
-    {
-        _mlClassifier = mlClassifier;
-        _bayesClassifier = bayesClassifier;
-        _logger = logger;
-        _jobMetrics = jobMetrics;
-    }
-
     public async Task Execute(IJobExecutionContext context)
     {
         const string jobName = "ClassifierRetrainingJob";
@@ -40,7 +27,7 @@ public class ClassifierRetrainingJob : IJob
 
         try
         {
-            _logger.LogInformation("Starting scheduled classifier retraining (SDCA + Bayes)");
+            logger.LogInformation("Starting scheduled classifier retraining (SDCA + Bayes)");
 
             // Train SDCA text classifier first
             var sdcaSuccess = await TrainSdcaAsync(context.CancellationToken);
@@ -52,19 +39,19 @@ public class ClassifierRetrainingJob : IJob
 
             if (!overallSuccess)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Classifier retraining completed with partial failures — SDCA: {SdcaSuccess}, Bayes: {BayesSuccess}",
                     sdcaSuccess, bayesSuccess);
             }
             else
             {
-                _logger.LogInformation("Classifier retraining completed successfully (SDCA + Bayes)");
+                logger.LogInformation("Classifier retraining completed successfully (SDCA + Bayes)");
             }
         }
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-            _jobMetrics.RecordJobExecution(jobName, overallSuccess, elapsedMs);
+            jobMetrics.RecordJobExecution(jobName, overallSuccess, elapsedMs);
         }
     }
 
@@ -72,14 +59,14 @@ public class ClassifierRetrainingJob : IJob
     {
         try
         {
-            _logger.LogInformation("Retraining ML.NET SDCA text classifier");
+            logger.LogInformation("Retraining ML.NET SDCA text classifier");
 
-            await _mlClassifier.TrainModelAsync(cancellationToken);
+            await mlClassifier.TrainModelAsync(cancellationToken);
 
-            var metadata = _mlClassifier.GetMetadata();
+            var metadata = mlClassifier.GetMetadata();
             if (metadata != null)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "ML text classifier retrained successfully: {Spam} spam + {Ham} ham samples (ratio: {Ratio:P1}, balanced: {Balanced})",
                     metadata.SpamSampleCount,
                     metadata.HamSampleCount,
@@ -88,14 +75,14 @@ public class ClassifierRetrainingJob : IJob
             }
             else
             {
-                _logger.LogWarning("SDCA retraining completed but metadata unavailable (model may not have trained due to insufficient data)");
+                logger.LogWarning("SDCA retraining completed but metadata unavailable (model may not have trained due to insufficient data)");
             }
 
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ML text classifier retraining failed");
+            logger.LogError(ex, "ML text classifier retraining failed");
             return false;
         }
     }
@@ -104,14 +91,14 @@ public class ClassifierRetrainingJob : IJob
     {
         try
         {
-            _logger.LogInformation("Retraining Bayes classifier");
+            logger.LogInformation("Retraining Bayes classifier");
 
-            await _bayesClassifier.TrainAsync(cancellationToken);
+            await bayesClassifier.TrainAsync(cancellationToken);
 
-            var metadata = _bayesClassifier.GetMetadata();
+            var metadata = bayesClassifier.GetMetadata();
             if (metadata != null)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Bayes classifier retrained successfully: {Spam} spam + {Ham} ham samples (ratio: {Ratio:P1})",
                     metadata.SpamSampleCount,
                     metadata.HamSampleCount,
@@ -119,14 +106,14 @@ public class ClassifierRetrainingJob : IJob
             }
             else
             {
-                _logger.LogWarning("Bayes retraining completed but metadata unavailable (insufficient data)");
+                logger.LogWarning("Bayes retraining completed but metadata unavailable (insufficient data)");
             }
 
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Bayes classifier retraining failed");
+            logger.LogError(ex, "Bayes classifier retraining failed");
             return false;
         }
     }

@@ -10,14 +10,8 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 /// Handles encryption and decryption of backup files using AES-256-GCM.
 /// Supports both chunked AEAD streaming (TGAEC2) and legacy single-shot (TGAENC) formats.
 /// </summary>
-public class BackupEncryptionService : IBackupEncryptionService
+public class BackupEncryptionService(ILogger<BackupEncryptionService> logger) : IBackupEncryptionService
 {
-    private readonly ILogger<BackupEncryptionService> _logger;
-
-    public BackupEncryptionService(ILogger<BackupEncryptionService> logger)
-    {
-        _logger = logger;
-    }
 
     /// <summary>
     /// Encrypts backup JSON bytes with passphrase-derived key (legacy single-shot format).
@@ -68,7 +62,7 @@ public class BackupEncryptionService : IBackupEncryptionService
 
         tag.CopyTo(span[offset..]);
 
-        _logger.LogDebug("Encrypted backup: {OriginalSize} bytes → {EncryptedSize} bytes (overhead: {Overhead} bytes)",
+        logger.LogDebug("Encrypted backup: {OriginalSize} bytes → {EncryptedSize} bytes (overhead: {Overhead} bytes)",
             jsonBytes.Length, encryptedBackup.Length, encryptedBackup.Length - jsonBytes.Length);
 
         return encryptedBackup;
@@ -143,11 +137,11 @@ public class BackupEncryptionService : IBackupEncryptionService
         }
         catch (CryptographicException ex)
         {
-            _logger.LogWarning(ex, "Decryption failed - likely incorrect passphrase or corrupted data");
+            logger.LogWarning(ex, "Decryption failed - likely incorrect passphrase or corrupted data");
             throw new CryptographicException("Failed to decrypt backup. Incorrect passphrase or corrupted file.", ex);
         }
 
-        _logger.LogDebug("Decrypted backup: {EncryptedSize} bytes → {DecryptedSize} bytes",
+        logger.LogDebug("Decrypted backup: {EncryptedSize} bytes → {DecryptedSize} bytes",
             encryptedBytes.Length, plaintext.Length);
 
         return plaintext;
@@ -197,6 +191,7 @@ public class BackupEncryptionService : IBackupEncryptionService
         cipherOutput.Write(baseNonce);
 
         var chunkBuffer = new byte[EncryptionConstants.ChunkSize];
+        var ciphertextBuffer = new byte[EncryptionConstants.ChunkSize];
         var chunkNonce = new byte[EncryptionConstants.NonceSizeBytes];
         var tag = new byte[EncryptionConstants.TagSizeBytes];
         var lengthBuffer = new byte[4];
@@ -208,7 +203,7 @@ public class BackupEncryptionService : IBackupEncryptionService
         while (true)
         {
             // Read up to ChunkSize bytes from plaintext
-            var bytesRead = ReadFully(plaintext, chunkBuffer, 0, EncryptionConstants.ChunkSize);
+            var bytesRead = plaintext.ReadAtLeast(chunkBuffer.AsSpan(0, EncryptionConstants.ChunkSize), EncryptionConstants.ChunkSize, throwOnEndOfStream: false);
             if (bytesRead == 0)
                 break;
 
@@ -221,11 +216,11 @@ public class BackupEncryptionService : IBackupEncryptionService
 
             // Encrypt chunk with AES-GCM
             var plaintextSlice = chunkBuffer.AsSpan(0, bytesRead);
-            var ciphertext = new byte[bytesRead];
-            aesGcm.Encrypt(chunkNonce, plaintextSlice, ciphertext, tag);
+            var ciphertextSlice = ciphertextBuffer.AsSpan(0, bytesRead);
+            aesGcm.Encrypt(chunkNonce, plaintextSlice, ciphertextSlice, tag);
 
             // Write ciphertext + tag
-            cipherOutput.Write(ciphertext);
+            cipherOutput.Write(ciphertextSlice);
             cipherOutput.Write(tag);
 
             totalPlaintextBytes += bytesRead;
@@ -236,7 +231,7 @@ public class BackupEncryptionService : IBackupEncryptionService
         BinaryPrimitives.WriteInt32BigEndian(lengthBuffer, 0);
         cipherOutput.Write(lengthBuffer);
 
-        _logger.LogDebug(
+        logger.LogDebug(
             "Chunked encryption complete: {PlaintextBytes} bytes in {ChunkCount} chunks → {CipherBytes} bytes",
             totalPlaintextBytes, chunkCounter, cipherOutput.Position);
     }
@@ -260,7 +255,7 @@ public class BackupEncryptionService : IBackupEncryptionService
 
         // Read first 7 bytes to detect format
         var magicBuffer = new byte[EncryptionConstants.LegacyMagicHeader.Length];
-        ReadExactly(cipherInput, magicBuffer, 0, magicBuffer.Length);
+        cipherInput.ReadExactly(magicBuffer, 0, magicBuffer.Length);
 
         if (magicBuffer.AsSpan().SequenceEqual(EncryptionConstants.LegacyMagicHeader))
         {
@@ -280,17 +275,17 @@ public class BackupEncryptionService : IBackupEncryptionService
 
         // Chunked format: read version byte, salt, base nonce from header
         var versionByte = new byte[1];
-        ReadExactly(cipherInput, versionByte, 0, 1);
+        cipherInput.ReadExactly(versionByte, 0, 1);
         if (versionByte[0] != EncryptionConstants.ChunkedFormatVersion)
         {
             throw new InvalidOperationException($"Unsupported chunked format version: {versionByte[0]}");
         }
 
         var salt = new byte[EncryptionConstants.SaltSizeBytes];
-        ReadExactly(cipherInput, salt, 0, salt.Length);
+        cipherInput.ReadExactly(salt, 0, salt.Length);
 
         var baseNonce = new byte[EncryptionConstants.NonceSizeBytes];
-        ReadExactly(cipherInput, baseNonce, 0, baseNonce.Length);
+        cipherInput.ReadExactly(baseNonce, 0, baseNonce.Length);
 
         // Derive key ONCE via PBKDF2
         var key = DeriveKey(passphrase, salt);
@@ -298,6 +293,8 @@ public class BackupEncryptionService : IBackupEncryptionService
         var chunkNonce = new byte[EncryptionConstants.NonceSizeBytes];
         var tag = new byte[EncryptionConstants.TagSizeBytes];
         var lengthBuffer = new byte[4];
+        var ciphertextBuffer = new byte[EncryptionConstants.ChunkSize];
+        var decryptedBuffer = new byte[EncryptionConstants.ChunkSize];
         long chunkCounter = 0;
         long totalDecryptedBytes = 0;
 
@@ -306,7 +303,7 @@ public class BackupEncryptionService : IBackupEncryptionService
         while (true)
         {
             // Read 4-byte big-endian chunk length
-            ReadExactly(cipherInput, lengthBuffer, 0, 4);
+            cipherInput.ReadExactly(lengthBuffer, 0, 4);
             var chunkLength = BinaryPrimitives.ReadInt32BigEndian(lengthBuffer);
 
             // Sentinel: chunk length = 0 means end of data
@@ -323,28 +320,28 @@ public class BackupEncryptionService : IBackupEncryptionService
             DeriveChunkNonce(baseNonce, chunkCounter, chunkNonce);
 
             // Read ciphertext (chunkLength bytes) + tag (16 bytes)
-            var ciphertext = new byte[chunkLength];
-            ReadExactly(cipherInput, ciphertext, 0, chunkLength);
-            ReadExactly(cipherInput, tag, 0, EncryptionConstants.TagSizeBytes);
+            var ciphertextSlice = ciphertextBuffer.AsSpan(0, chunkLength);
+            cipherInput.ReadExactly(ciphertextBuffer, 0, chunkLength);
+            cipherInput.ReadExactly(tag, 0, EncryptionConstants.TagSizeBytes);
 
             // Decrypt chunk
-            var decryptedChunk = new byte[chunkLength];
+            var decryptedSlice = decryptedBuffer.AsSpan(0, chunkLength);
             try
             {
-                aesGcm.Decrypt(chunkNonce, ciphertext, tag, decryptedChunk);
+                aesGcm.Decrypt(chunkNonce, ciphertextSlice, tag, decryptedSlice);
             }
             catch (CryptographicException ex)
             {
-                _logger.LogWarning(ex, "Chunk {ChunkIndex} decryption failed - likely incorrect passphrase or corrupted data", chunkCounter);
+                logger.LogWarning(ex, "Chunk {ChunkIndex} decryption failed - likely incorrect passphrase or corrupted data", chunkCounter);
                 throw new CryptographicException("Failed to decrypt backup. Incorrect passphrase or corrupted file.", ex);
             }
 
-            plainOutput.Write(decryptedChunk);
+            plainOutput.Write(decryptedSlice);
             totalDecryptedBytes += chunkLength;
             chunkCounter++;
         }
 
-        _logger.LogDebug(
+        logger.LogDebug(
             "Chunked decryption complete: {ChunkCount} chunks → {DecryptedBytes} bytes",
             chunkCounter, totalDecryptedBytes);
     }
@@ -364,7 +361,7 @@ public class BackupEncryptionService : IBackupEncryptionService
         try
         {
             var header = new byte[EncryptionConstants.LegacyMagicHeader.Length];
-            var bytesRead = ReadFully(input, header, 0, header.Length);
+            var bytesRead = input.ReadAtLeast(header.AsSpan(0, header.Length), header.Length, throwOnEndOfStream: false);
 
             if (bytesRead < header.Length)
                 return false;
@@ -396,40 +393,6 @@ public class BackupEncryptionService : IBackupEncryptionService
         {
             chunkNonce[4 + i] ^= counterBytes[i];
         }
-    }
-
-    /// <summary>
-    /// Reads exactly <paramref name="count"/> bytes from the stream.
-    /// Throws if the stream ends before the required number of bytes are read.
-    /// </summary>
-    private static void ReadExactly(Stream stream, byte[] buffer, int offset, int count)
-    {
-        var totalRead = 0;
-        while (totalRead < count)
-        {
-            var bytesRead = stream.Read(buffer, offset + totalRead, count - totalRead);
-            if (bytesRead == 0)
-                throw new InvalidOperationException(
-                    $"Unexpected end of stream: expected {count} bytes but only read {totalRead}");
-            totalRead += bytesRead;
-        }
-    }
-
-    /// <summary>
-    /// Reads up to <paramref name="count"/> bytes from the stream, handling partial reads.
-    /// Returns the total number of bytes actually read.
-    /// </summary>
-    private static int ReadFully(Stream stream, byte[] buffer, int offset, int count)
-    {
-        var totalRead = 0;
-        while (totalRead < count)
-        {
-            var bytesRead = stream.Read(buffer, offset + totalRead, count - totalRead);
-            if (bytesRead == 0)
-                break;
-            totalRead += bytesRead;
-        }
-        return totalRead;
     }
 
     /// <summary>
