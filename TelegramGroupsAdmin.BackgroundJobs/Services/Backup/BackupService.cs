@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Dapper;
 using Microsoft.AspNetCore.DataProtection;
@@ -353,73 +354,32 @@ public class BackupService : IBackupService
         return parameters;
     }
 
-    public async Task RestoreAsync(byte[] backupBytes)
+    public async Task RestoreAsync(string filepath)
     {
-        string? passphrase = null;
-
-        // Check if database entry is encrypted by peeking into tar
-        if (await TarContainsEncryptedDatabaseAsync(backupBytes))
-        {
-            try
-            {
-                passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
-                _logger.LogInformation("Detected encrypted database in tar archive, using passphrase from database");
-            }
-            catch (InvalidOperationException)
-            {
-                throw new InvalidOperationException(
-                    "Backup contains encrypted database but no passphrase is configured. " +
-                    "Use RestoreAsync(backupBytes, passphrase) to provide passphrase explicitly.");
-            }
-        }
-
-        await RestoreInternalAsync(backupBytes, passphrase);
+        await RestoreInternalAsync(filepath, passphrase: null);
     }
 
-    public async Task RestoreAsync(byte[] backupBytes, string passphrase)
+    public async Task RestoreAsync(string filepath, string passphrase)
     {
         if (string.IsNullOrWhiteSpace(passphrase))
             throw new ArgumentException("Passphrase cannot be empty", nameof(passphrase));
 
         _logger.LogInformation("Restoring backup with explicit passphrase");
-        await RestoreInternalAsync(backupBytes, passphrase);
+        await RestoreInternalAsync(filepath, passphrase);
     }
 
-    /// <summary>
-    /// Peeks into tar archive to check if database.json.enc exists (encrypted database)
-    /// </summary>
-    private static async Task<bool> TarContainsEncryptedDatabaseAsync(byte[] backupBytes)
-    {
-        using var stream = new MemoryStream(backupBytes);
-        await using var gzipStream = new GZipStream(stream, CompressionMode.Decompress);
-        using var tarReader = new TarReader(gzipStream);
-
-        while (await tarReader.GetNextEntryAsync() is { } entry)
-        {
-            if (entry.Name == "database.json.enc")
-                return true;
-            if (entry.Name == "database.json")
-                return false;
-        }
-
-        throw new InvalidOperationException("Invalid backup: no database entry found in tar archive");
-    }
-
-    private async Task RestoreInternalAsync(byte[] backupBytes, string? passphrase)
+    private async Task RestoreInternalAsync(string filepath, string? passphrase)
     {
         _logger.LogWarning("Starting full system restore - THIS WILL WIPE ALL DATA");
 
-        // Media files are streamed to a temp directory during tar extraction to avoid
-        // buffering potentially hundreds of GIF files in memory. The temp directory is
-        // moved to the final location only after the DB transaction commits successfully.
         var mediaTempDir = Directory.CreateTempSubdirectory(BackupConstants.MediaTempDirPrefix);
         var mediaFileCount = 0;
 
         try
         {
-            // Extract tar.gz archive
-            using var stream = new MemoryStream(backupBytes);
-            await using var gzipStream = new GZipStream(stream, CompressionMode.Decompress);
+            // Stream directly from file — never load entire backup into memory
+            await using var fileStream = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await using var gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
             using var tarReader = new TarReader(gzipStream);
 
             BackupMetadata? metadata = null;
@@ -430,7 +390,6 @@ public class BackupService : IBackupService
                 PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
             };
 
-            // Read all tar entries — media files stream directly to temp disk
             while (await tarReader.GetNextEntryAsync() is { } entry)
             {
                 if (entry.DataStream == null)
@@ -438,36 +397,33 @@ public class BackupService : IBackupService
 
                 if (entry.Name == "metadata.json")
                 {
-                    using var ms = new MemoryStream();
-                    await entry.DataStream.CopyToAsync(ms);
-                    metadata = JsonSerializer.Deserialize<BackupMetadata>(ms.ToArray(), jsonOptions);
-                    _logger.LogDebug("Read metadata.json: {Size} bytes", ms.Length);
+                    metadata = await JsonSerializer.DeserializeAsync<BackupMetadata>(entry.DataStream, jsonOptions);
+                    _logger.LogDebug("Read metadata.json from tar stream");
                 }
                 else if (entry.Name == "database.json.enc")
                 {
-                    if (string.IsNullOrWhiteSpace(passphrase))
-                    {
-                        throw new InvalidOperationException("Database is encrypted but no passphrase provided");
-                    }
-
-                    // Stream encrypted data into a pooled stream, then decrypt via stream API
                     using var encryptedMs = _streamManager.GetStream("BackupService.Restore.Encrypted");
                     await entry.DataStream.CopyToAsync(encryptedMs);
-                    encryptedMs.Position = 0;
 
                     using var decryptedMs = _streamManager.GetStream("BackupService.Restore.Decrypted");
-                    _encryptionService.DecryptBackup(encryptedMs, decryptedMs, passphrase);
-                    decryptedMs.Position = 0;
+                    var resolvedPassphrase = await DecryptWithFallbackAsync(encryptedMs, decryptedMs, passphrase);
 
+                    decryptedMs.Position = 0;
                     databaseData = await JsonSerializer.DeserializeAsync<Dictionary<string, List<object>>>(decryptedMs, jsonOptions);
-                    _logger.LogInformation("Decrypted database: {EncryptedSize} bytes → {DecryptedSize} bytes",
+                    _logger.LogInformation("Decrypted database with {Source}: {EncryptedSize} bytes → {DecryptedSize} bytes",
+                        resolvedPassphrase == passphrase ? "explicit passphrase" : "config passphrase",
                         encryptedMs.Length, decryptedMs.Length);
+                }
+                else if (entry.Name == "database.json")
+                {
+                    using var ms = _streamManager.GetStream("BackupService.Restore.Unencrypted");
+                    await entry.DataStream.CopyToAsync(ms);
+                    ms.Position = 0;
+                    databaseData = await JsonSerializer.DeserializeAsync<Dictionary<string, List<object>>>(ms, jsonOptions);
+                    _logger.LogInformation("Read unencrypted database: {Size} bytes", ms.Length);
                 }
                 else if (entry.Name.StartsWith("media/"))
                 {
-                    // Path.GetFullPath resolves "../" segments to prevent path traversal.
-                    // Extra "../" beyond root are no-ops on Unix, so attackers don't need
-                    // to know the exact directory depth — we must always validate.
                     var targetPath = Path.GetFullPath(Path.Combine(mediaTempDir.FullName, entry.Name));
                     if (!targetPath.StartsWith(mediaTempDir.FullName, StringComparison.OrdinalIgnoreCase))
                     {
@@ -479,9 +435,8 @@ public class BackupService : IBackupService
                     if (targetDir != null && !Directory.Exists(targetDir))
                         Directory.CreateDirectory(targetDir);
 
-                    // Stream directly to disk — no in-memory buffering
-                    await using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write);
-                    await entry.DataStream.CopyToAsync(fileStream);
+                    await using var fileOut = new FileStream(targetPath, FileMode.Create, FileAccess.Write);
+                    await entry.DataStream.CopyToAsync(fileOut);
                     mediaFileCount++;
                     _logger.LogDebug("Streamed media file to temp: {Name}", entry.Name);
                 }
@@ -613,6 +568,57 @@ public class BackupService : IBackupService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Attempts decryption with explicit passphrase first, falling back to DB config passphrase.
+    /// Resets stream positions before each attempt.
+    /// </summary>
+    /// <returns>The passphrase that succeeded</returns>
+    private async Task<string> DecryptWithFallbackAsync(Stream encryptedStream, Stream decryptedStream, string? explicitPassphrase)
+    {
+        // Try explicit passphrase first
+        if (!string.IsNullOrWhiteSpace(explicitPassphrase))
+        {
+            try
+            {
+                encryptedStream.Position = 0;
+                decryptedStream.Position = 0;
+                decryptedStream.SetLength(0);
+                _encryptionService.DecryptBackup(encryptedStream, decryptedStream, explicitPassphrase);
+                return explicitPassphrase;
+            }
+            catch (CryptographicException)
+            {
+                _logger.LogWarning("Explicit passphrase failed, trying config passphrase");
+            }
+        }
+
+        // Fall back to config passphrase
+        string configPassphrase;
+        try
+        {
+            configPassphrase = await _passphraseService.GetDecryptedPassphraseAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                "Backup is encrypted but no passphrase is available. " +
+                "Configure a passphrase in Settings → Backup & Restore, or provide one explicitly.");
+        }
+
+        // Don't retry with the same passphrase
+        if (configPassphrase == explicitPassphrase)
+        {
+            throw new CryptographicException(
+                "Passphrase is incorrect. The backup was encrypted with a different passphrase.");
+        }
+
+        encryptedStream.Position = 0;
+        decryptedStream.Position = 0;
+        decryptedStream.SetLength(0);
+        _encryptionService.DecryptBackup(encryptedStream, decryptedStream, configPassphrase);
+        return configPassphrase;
     }
 
     /// <summary>
@@ -890,11 +896,6 @@ public class BackupService : IBackupService
     }
 
 
-    public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes)
-    {
-        return await GetMetadataInternalAsync(backupBytes);
-    }
-
     public async Task<BackupMetadata> GetMetadataAsync(string filepath)
     {
         await using var fileStream = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -923,14 +924,6 @@ public class BackupService : IBackupService
     }
 
     /// <summary>
-    /// Check if backup contains encrypted database by looking for database.json.enc in the tar archive.
-    /// </summary>
-    public async Task<bool> IsEncryptedAsync(byte[] backupBytes)
-    {
-        return await TarContainsEncryptedDatabaseAsync(backupBytes);
-    }
-
-    /// <summary>
     /// Stream-based encryption check that reads only tar entry names from disk.
     /// Avoids loading the entire backup file into memory.
     /// </summary>
@@ -949,49 +942,6 @@ public class BackupService : IBackupService
         }
 
         throw new InvalidOperationException("Invalid backup: no database entry found in tar archive");
-    }
-
-    private async Task<BackupMetadata> GetMetadataInternalAsync(byte[] backupBytes)
-    {
-        try
-        {
-            return await GetMetadataFromTarAsync(backupBytes);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read backup metadata");
-            throw new InvalidOperationException("Invalid backup file format", ex);
-        }
-    }
-
-    /// <summary>
-    /// Extracts metadata.json from a tar.gz archive (no passphrase needed - metadata is unencrypted)
-    /// </summary>
-    private static async Task<BackupMetadata> GetMetadataFromTarAsync(byte[] backupBytes)
-    {
-        using var stream = new MemoryStream(backupBytes);
-        await using var gzipStream = new GZipStream(stream, CompressionMode.Decompress);
-        using var tarReader = new TarReader(gzipStream);
-
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-        };
-
-        while (await tarReader.GetNextEntryAsync() is { } entry)
-        {
-            if (entry.Name == "metadata.json" && entry.DataStream != null)
-            {
-                using var ms = new MemoryStream();
-                await entry.DataStream.CopyToAsync(ms);
-                var content = ms.ToArray();
-
-                return JsonSerializer.Deserialize<BackupMetadata>(content, jsonOptions)
-                    ?? throw new InvalidOperationException("Failed to deserialize metadata");
-            }
-        }
-
-        throw new InvalidOperationException("Invalid backup: metadata.json not found in tar archive");
     }
 
     /// <summary>
