@@ -280,11 +280,8 @@ if (args.Contains("--restore"))
     using var scope = app.Services.CreateScope();
     var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.IBackupService>();
 
-    app.Logger.LogInformation("Reading encrypted backup...");
-    var backupBytes = await File.ReadAllBytesAsync(restorePath);
-
     app.Logger.LogInformation("Decrypting and restoring backup...");
-    await backupService.RestoreAsync(backupBytes, passphrase); // Use explicit passphrase for CLI restore
+    await backupService.RestoreAsync(restorePath, passphrase); // Use explicit passphrase for CLI restore
 
     app.Logger.LogInformation("✅ System restore complete. Exiting (--restore flag).");
     Environment.Exit(0);
