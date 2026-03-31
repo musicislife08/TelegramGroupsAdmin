@@ -123,6 +123,10 @@ internal class BayesClassifier
             if (int.TryParse(wordSpan, out _))
                 continue;
 
+            // Filter: tokens exceeding stackalloc buffer — no Bayesian signal in 256+ char tokens
+            if (wordSpan.Length > maxWordLength)
+                continue;
+
             wordCount++;
 
             // Deduplicate using 128-bit hash — zero-allocation via pre-allocated buffer + ToLowerInvariant
