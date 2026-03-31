@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 using Microsoft.ML;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -12,12 +13,16 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// <summary>
 /// ML.NET SDCA text classifier for spam detection.
 /// Thread-safe Singleton service with immutable container pattern for atomic model swapping.
+/// Uses ObjectPool&lt;PredictionEngine&gt; for thread-safe concurrent predictions.
 /// </summary>
 public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<MLTextClassifierService> _logger;
     private readonly string _dataDirectory;
+
+    // Shared MLContext for training and saving (protected by _retrainingSemaphore)
+    private readonly MLContext _mlContext = new(seed: MLConstants.MlNetSeed);
 
     // Thread-safe retraining semaphore (prevents overlapping retrains)
     private readonly SemaphoreSlim _retrainingSemaphore = new(1, 1);
@@ -27,12 +32,24 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 
     /// <summary>
     /// Immutable container for thread-safe atomic model swapping.
-    /// All three fields swap together via Interlocked.Exchange.
+    /// Uses ObjectPool for thread-safe PredictionEngine access (PredictionEngine is NOT thread-safe).
     /// </summary>
     private sealed record ModelContainer(
         ITransformer Model,
-        PredictionEngine<SpamTextFeatures, SpamPrediction> PredictionEngine,
+        ObjectPool<PredictionEngine<SpamTextFeatures, SpamPrediction>> EnginePool,
         SpamClassifierMetadata Metadata);
+
+    /// <summary>
+    /// ObjectPool policy that creates PredictionEngine instances from a given MLContext + ITransformer.
+    /// </summary>
+    private sealed class PredictionEnginePoolPolicy(MLContext mlContext, ITransformer model)
+        : PooledObjectPolicy<PredictionEngine<SpamTextFeatures, SpamPrediction>>
+    {
+        public override PredictionEngine<SpamTextFeatures, SpamPrediction> Create()
+            => mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
+
+        public override bool Return(PredictionEngine<SpamTextFeatures, SpamPrediction> obj) => true;
+    }
 
     public MLTextClassifierService(
         IServiceProvider serviceProvider,
@@ -99,14 +116,13 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
                 .Concat(hamSamples.Select(sample => new SpamTextFeatures { MessageText = sample.Text, IsSpam = false }))
                 .ToList();
 
-            // Create ML.NET context and load data
-            var mlContext = new MLContext(seed: MLConstants.MlNetSeed);
-            var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
+            // Load data using shared MLContext (protected by _retrainingSemaphore)
+            var dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
 
             // Build pipeline: TF-IDF → SDCA Logistic Regression
-            var pipeline = mlContext.Transforms.Text
+            var pipeline = _mlContext.Transforms.Text
                 .FeaturizeText("Features", nameof(SpamTextFeatures.MessageText))  // TF-IDF
-                .Append(mlContext.BinaryClassification.Trainers.SdcaLogisticRegression(
+                .Append(_mlContext.BinaryClassification.Trainers.SdcaLogisticRegression(
                     labelColumnName: "Label",
                     featureColumnName: "Features"));
 
@@ -139,13 +155,14 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             // Save model and metadata
             await SaveModelAsync(model, metadata, cancellationToken);
 
-            // Create new container and atomically swap (thread-safe)
-            var predictionEngine = mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
-            var newContainer = new ModelContainer(model, predictionEngine, metadata);
+            // Create thread-safe prediction engine pool and atomically swap container
+            var enginePool = new DefaultObjectPool<PredictionEngine<SpamTextFeatures, SpamPrediction>>(
+                new PredictionEnginePoolPolicy(_mlContext, model));
+            var newContainer = new ModelContainer(model, enginePool, metadata);
             var oldContainer = Interlocked.Exchange(ref _currentModel, newContainer);
 
-            // Dispose old prediction engine if it exists
-            oldContainer?.PredictionEngine.Dispose();
+            // Dispose old transformer if it supports IDisposable (ITransformer does not extend IDisposable)
+            (oldContainer?.Model as IDisposable)?.Dispose();
 
             _logger.LogInformation(
                 "Model deployed: {Spam} spam + {Ham} ham = {Total} samples (spam ratio: {Ratio:P1}, balanced: {Balanced})",
@@ -166,9 +183,8 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
         // Ensure directory exists (should be created by Program.cs, but double-check)
         Directory.CreateDirectory(ModelDirectory);
 
-        // Save model to disk
-        var mlContext = new MLContext();
-        mlContext.Model.Save(model, null, ModelPath);
+        // Save model to disk (uses shared _mlContext, always called under _retrainingSemaphore)
+        _mlContext.Model.Save(model, null, ModelPath);
 
         // Compute SHA256 hash
         await using (var stream = File.OpenRead(ModelPath))
@@ -233,17 +249,18 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
                 }
             }
 
-            // Load model
+            // Load model (local MLContext: runs once at startup, avoids race with shared field)
             var mlContext = new MLContext();
             var model = mlContext.Model.Load(ModelPath, out var _);
 
-            // Create new container and atomically swap (thread-safe)
-            var predictionEngine = mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
-            var newContainer = new ModelContainer(model, predictionEngine, metadata);
+            // Create thread-safe prediction engine pool and atomically swap container
+            var enginePool = new DefaultObjectPool<PredictionEngine<SpamTextFeatures, SpamPrediction>>(
+                new PredictionEnginePoolPolicy(mlContext, model));
+            var newContainer = new ModelContainer(model, enginePool, metadata);
             var oldContainer = Interlocked.Exchange(ref _currentModel, newContainer);
 
-            // Dispose old prediction engine if it exists
-            oldContainer?.PredictionEngine.Dispose();
+            // Dispose old transformer if it supports IDisposable (ITransformer does not extend IDisposable)
+            (oldContainer?.Model as IDisposable)?.Dispose();
 
             _logger.LogInformation(
                 "Model loaded successfully: trained {TrainedAt}, {Spam} spam + {Ham} ham samples",
@@ -260,7 +277,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 
     /// <summary>
     /// Predicts spam probability for a message.
-    /// Thread-safe: uses volatile container for atomic reads.
+    /// Thread-safe: borrows a PredictionEngine from the ObjectPool for each call.
     /// </summary>
     public SpamPrediction? Predict(string messageText)
     {
@@ -271,8 +288,16 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             return null;
         }
 
-        var features = new SpamTextFeatures { MessageText = messageText };
-        return container.PredictionEngine.Predict(features);
+        var engine = container.EnginePool.Get();
+        try
+        {
+            var features = new SpamTextFeatures { MessageText = messageText };
+            return engine.Predict(features);
+        }
+        finally
+        {
+            container.EnginePool.Return(engine);
+        }
     }
 
     /// <summary>
@@ -305,6 +330,6 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
     public void Dispose()
     {
         _retrainingSemaphore.Dispose();
-        _currentModel?.PredictionEngine.Dispose();
+        (_currentModel?.Model as IDisposable)?.Dispose();
     }
 }

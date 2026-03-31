@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.IO;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
@@ -54,18 +55,8 @@ public static class ServiceCollectionExtensions
             services.AddMudServices();
             services.AddHttpContextAccessor();
 
-            // Add HttpClient for Blazor components (for calling our own API)
-            services.AddScoped(sp =>
-            {
-                var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
-                var httpContext = httpContextAccessor.HttpContext;
-
-                if (httpContext == null) return new HttpClient { BaseAddress = new Uri("http://localhost:5161") };
-                var host = httpContext.Request.Host;
-                var hostString = host.Host == "0.0.0.0" ? $"localhost:{host.Port}" : host.ToString();
-                var baseAddress = $"{httpContext.Request.Scheme}://{hostString}";
-                return new HttpClient { BaseAddress = new Uri(baseAddress) };
-            });
+            services.AddHttpClient("Internal");
+            services.AddScoped<InternalApiClient>();
 
             return services;
         }
@@ -94,7 +85,7 @@ public static class ServiceCollectionExtensions
 
             // Add authorization policies
             services.AddAuthorizationBuilder()
-                .AddPolicy("GlobalAdminOrOwner", policy =>
+                .AddPolicy(AuthenticationConstants.PolicyGlobalAdminOrOwner, policy =>
                     policy.RequireRole("GlobalAdmin", "Owner"))
                 .AddPolicy("OwnerOnly", policy =>
                     policy.RequireRole("Owner"));
@@ -114,6 +105,8 @@ public static class ServiceCollectionExtensions
         public IServiceCollection AddApplicationServices()
         {
             // Note: HybridCache (registered in AddHttpClients) provides L1 in-memory caching
+            // Explicit registration ensures IMemoryCache is available for RateLimitService
+            services.AddMemoryCache();
 
             // Auth services
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
@@ -122,6 +115,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPendingRecoveryCodesService, TelegramGroupsAdmin.Services.Auth.PendingRecoveryCodesService>();
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IRateLimitService, TelegramGroupsAdmin.Services.Auth.RateLimitService>(); // SECURITY-5
             services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAccountLockoutService, TelegramGroupsAdmin.Services.Auth.AccountLockoutService>(); // SECURITY-6
+            services.AddHostedService<TelegramGroupsAdmin.Services.Auth.TokenCleanupService>();
 
             // Core services
             services.AddScoped<IAuthService, AuthService>();
@@ -167,6 +161,16 @@ public static class ServiceCollectionExtensions
 
             // Memory metrics — ObservableGauges on all stateful singletons for Prometheus/Grafana
             services.AddSingleton<MemoryMetrics>();
+
+            // RecyclableMemoryStreamManager — pooled MemoryStream buffers for backup pipeline
+            services.AddSingleton(new RecyclableMemoryStreamManager(new RecyclableMemoryStreamManager.Options
+            {
+                BlockSize = 128 * 1024,
+                LargeBufferMultiple = 1024 * 1024,
+                MaximumBufferSize = 512 * 1024 * 1024,
+                MaximumSmallPoolFreeBytes = 16 * 1024 * 1024,
+                MaximumLargePoolFreeBytes = 256 * 1024 * 1024
+            }));
 
             return services;
         }

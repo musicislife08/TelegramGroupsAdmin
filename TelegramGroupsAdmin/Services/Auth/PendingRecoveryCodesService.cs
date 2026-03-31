@@ -38,19 +38,6 @@ public class PendingRecoveryCodesService : IPendingRecoveryCodesService
         _logger.LogInformation(
             "Stored {Count} pending recovery codes for user {UserId}, expires at {ExpiresAt}",
             recoveryCodes.Count, userId, data.ExpiresAt);
-
-        // Clean up expired entries (fire and forget)
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                CleanupExpiredEntries();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to clean up expired pending recovery codes");
-            }
-        });
     }
 
     public IReadOnlyList<string>? RetrieveRecoveryCodes(string token, string userId)
@@ -104,7 +91,7 @@ public class PendingRecoveryCodesService : IPendingRecoveryCodesService
         return data.ExpiresAt >= DateTimeOffset.UtcNow && data.UserId == userId;
     }
 
-    private void CleanupExpiredEntries()
+    public void CleanupExpiredEntries()
     {
         var now = DateTimeOffset.UtcNow;
         var expiredKeys = _pendingCodes

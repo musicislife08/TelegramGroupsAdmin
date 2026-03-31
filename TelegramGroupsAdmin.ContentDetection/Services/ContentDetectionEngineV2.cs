@@ -20,7 +20,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 /// Fixes the critical bug where abstentions (finding nothing) voted "Clean" and cancelled spam signals
 /// Key change: Score = Σ(positive_scores) instead of Net = Σ(spam) - Σ(clean)
 /// </summary>
-public class ContentDetectionEngineV2 : IContentDetectionEngine
+public partial class ContentDetectionEngineV2 : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngineV2> _logger;
     private readonly IContentDetectionConfigRepository _configRepository;
@@ -149,8 +149,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 var activePrompt = await _promptVersionRepo.GetActiveVersionAsync(request.Chat.Id, cancellationToken);
                 var systemPrompt = activePrompt?.PromptText;
 
-                _logger.LogDebug("Running AI veto check for {User} (custom prompt: {HasCustom})",
-                    request.User.ToLogDebug(), systemPrompt != null);
+                LogRunningAIVetoCheck(_logger, request.User.ToLogDebug(), systemPrompt != null);
 
                 var vetoRequest = request with { HasSpamFlags = true };
                 var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, pipelineResult.VisionAnalysisText, cancellationToken);
@@ -173,8 +172,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 // AI ran successfully and returned clean (score = 0.0, not abstained) - veto the spam detection
                 if (vetoResultV2.Score == 0.0)
                 {
-                    _logger.LogInformation("AI vetoed spam detection for {User} (clean result with 0.0 score)",
-                        request.User.ToLogInfo());
+                    LogAIVetoedSpamDetection(_logger, request.User.ToLogInfo());
 
                     // Record veto for each algorithm that was overridden
                     foreach (var check in pipelineResult.CheckResults.Where(r => r.Score > 0 && !r.Abstained))
@@ -189,8 +187,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
                 // AI confirmed spam - AI score is the sole authority for action determination
                 // Pipeline scores served as a gate to trigger the veto; AI verdict drives the action
-                _logger.LogDebug("AI confirmed spam for {User} with score {Score}",
-                    request.User.ToLogDebug(), vetoResultV2.Score);
+                LogAIConfirmedSpam(_logger, request.User.ToLogDebug(), vetoResultV2.Score);
 
                 var confirmedResult = pipelineResult with
                 {

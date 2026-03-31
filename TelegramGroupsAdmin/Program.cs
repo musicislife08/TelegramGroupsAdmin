@@ -45,7 +45,7 @@ Directory.CreateDirectory(mlModelsPath);
 // NOTE: We intentionally train fresh on every startup (~3 seconds) to ensure
 // the model uses the latest training data. For a homelab single-instance deployment,
 // this startup cost is acceptable and guarantees data freshness. The model is
-// persisted to disk for the scheduled retraining job (TextClassifierRetrainingJob).
+// persisted to disk for the scheduled retraining job (ClassifierRetrainingJob).
 
 // Application services (auth, users, messages, etc.)
 builder.Services.AddApplicationServices();
@@ -280,11 +280,8 @@ if (args.Contains("--restore"))
     using var scope = app.Services.CreateScope();
     var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.IBackupService>();
 
-    app.Logger.LogInformation("Reading encrypted backup...");
-    var backupBytes = await File.ReadAllBytesAsync(restorePath);
-
     app.Logger.LogInformation("Decrypting and restoring backup...");
-    await backupService.RestoreAsync(backupBytes, passphrase); // Use explicit passphrase for CLI restore
+    await backupService.RestoreAsync(restorePath, passphrase); // Use explicit passphrase for CLI restore
 
     app.Logger.LogInformation("✅ System restore complete. Exiting (--restore flag).");
     Environment.Exit(0);

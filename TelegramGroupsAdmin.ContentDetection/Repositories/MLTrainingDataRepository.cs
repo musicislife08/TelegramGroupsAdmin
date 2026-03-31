@@ -170,9 +170,8 @@ public class MLTrainingDataRepository(
         // Calculate how many implicit ham we need after explicit ham
         var maxImplicitHam = Math.Max(dynamicHamCap - explicitHam.Count, 0);
 
-        // Implicit ham: fetch ALL candidates, dedupe in memory, then cap
-        // No limit here - deduplication happens after fetch, then we take what we need
-        // For homelab scale (~20k messages), this is trivial memory/CPU
+        // Implicit ham: fetch a capped set of candidates from the database, dedupe in memory, then cap
+        // Over-fetch by 3x to account for SimHash deduplication removing ~30-50% of samples
         // Uses ix_messages_text_length expression index for efficient sorting
         // NOT EXISTS correlated subqueries use composite (MessageId, ChatId) to prevent cross-chat data leakage
         var implicitHamRaw = await (
@@ -187,7 +186,7 @@ public class MLTrainingDataRepository(
             where text != null && text.Length > MLConstants.MinTextLength
             orderby text.Length descending  // Sort by LENGTH (uses expression index)
             select new { Text = text, m.MessageId, m.ChatId }
-        ).ToListAsync(cancellationToken);
+        ).Take(maxImplicitHam * 3).ToListAsync(cancellationToken);
 
         // Convert to samples for deduplication
         var implicitHamSamples = implicitHamRaw.Select(x => new TrainingSample

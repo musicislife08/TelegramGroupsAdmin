@@ -83,7 +83,7 @@ public class VirusTotalScannerService : ICloudScannerService
             var requestUrl = $"files/{fileHash}";
             _logger.LogDebug("VirusTotal hash lookup: GET {Url}", requestUrl);
 
-            var response = await client.GetAsync(requestUrl, cancellationToken);
+            using var response = await client.GetAsync(requestUrl, cancellationToken);
 
             stopwatch.Stop();
 
@@ -135,8 +135,8 @@ public class VirusTotalScannerService : ICloudScannerService
             }
 
             // Parse response
-            var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var doc = JsonDocument.Parse(jsonContent);
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             var data = doc.RootElement.GetProperty("data");
             var attributes = data.GetProperty("attributes");
             var stats = attributes.GetProperty("last_analysis_stats");
@@ -287,7 +287,7 @@ public class VirusTotalScannerService : ICloudScannerService
             var requestUrl = "files";
             _logger.LogDebug("VirusTotal file upload: POST {Url} (size: {Size} bytes)", requestUrl, fileSize);
 
-            var response = await client.PostAsync(requestUrl, content, cancellationToken);
+            using var response = await client.PostAsync(requestUrl, content, cancellationToken);
 
             // Handle rate limiting
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
@@ -328,8 +328,8 @@ public class VirusTotalScannerService : ICloudScannerService
             }
 
             // Parse upload response to get analysis ID
-            var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var doc = JsonDocument.Parse(jsonContent);
+            using var uploadStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(uploadStream, cancellationToken: cancellationToken);
             var data = doc.RootElement.GetProperty("data");
             var analysisId = data.GetProperty("id").GetString();
 
@@ -355,7 +355,7 @@ public class VirusTotalScannerService : ICloudScannerService
             {
                 await Task.Delay(pollDelay, cancellationToken);
 
-                var analysisResponse = await client.GetAsync($"analyses/{analysisId}", cancellationToken);
+                using var analysisResponse = await client.GetAsync($"analyses/{analysisId}", cancellationToken);
 
                 // Increment quota for polling request
                 await _quotaRepository.IncrementQuotaUsageAsync(
@@ -370,8 +370,8 @@ public class VirusTotalScannerService : ICloudScannerService
                     continue;
                 }
 
-                var analysisJson = await analysisResponse.Content.ReadAsStringAsync(cancellationToken);
-                using var analysisDoc = JsonDocument.Parse(analysisJson);
+                using var analysisStream = await analysisResponse.Content.ReadAsStreamAsync(cancellationToken);
+                using var analysisDoc = await JsonDocument.ParseAsync(analysisStream, cancellationToken: cancellationToken);
                 var analysisData = analysisDoc.RootElement.GetProperty("data");
                 var analysisAttrs = analysisData.GetProperty("attributes");
                 var analysisStatus = analysisAttrs.GetProperty("status").GetString();

@@ -12,5 +12,5 @@ public class SystemBackup
     public BackupMetadata Metadata { get; set; } = new();
 
     [JsonPropertyName("data")]
-    public Dictionary<string, List<object>> Data { get; set; } = new();
+    public Dictionary<string, List<object>>? Data { get; set; } = new();
 }

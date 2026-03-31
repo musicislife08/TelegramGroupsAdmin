@@ -57,12 +57,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         return detectionResults
             .Join(context.Messages, dr => new { dr.MessageId, dr.ChatId }, m => new { m.MessageId, m.ChatId }, (dr, m) => new { dr, m })
-            .GroupJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, users) => new { x.dr, x.m, users })
-            .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.dr, x.m, user })
-            .GroupJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.dr, x.m, x.user, tgUsers })
-            .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new { x.dr, x.m, x.user, tgUser })
-            .GroupJoin(context.MessageTranslations, x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId }, mt => new { mt.MessageId, mt.ChatId }, (x, translations) => new { x.dr, x.m, x.user, x.tgUser, translations })
-            .SelectMany(x => x.translations.DefaultIfEmpty(), (x, translation) => new
+            .LeftJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, user) => new { x.dr, x.m, user })
+            .LeftJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUser) => new { x.dr, x.m, x.user, tgUser })
+            .LeftJoin(context.MessageTranslations, x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId }, mt => new { mt.MessageId, mt.ChatId }, (x, translation) => new
             {
                 x.dr,
                 x.m,
@@ -166,17 +163,22 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Phase 4.20+: Use translated text when available (matches spam detection behavior)
         // - Spam detection runs on translated text for non-English messages
         // - Training samples should match what was analyzed (COALESCE: translated > original)
-        var results = await (
-            from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
-            join mt in context.MessageTranslations on new { MessageId = (int?)m.MessageId, ChatId = (long?)m.ChatId } equals new { mt.MessageId, mt.ChatId } into translations
-            from mt in translations.DefaultIfEmpty()
-            where dr.UsedForTraining == true
-                && m.MessageText != null
-                && m.MessageText != ""
-            orderby dr.IsSpam descending
-            select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam }
-        ).ToListAsync(cancellationToken);
+        var results = await context.DetectionResults
+            .AsNoTracking()
+            .Join(context.Messages,
+                dr => new { dr.MessageId, dr.ChatId },
+                m => new { m.MessageId, m.ChatId },
+                (dr, m) => new { dr, m })
+            .LeftJoin(context.MessageTranslations,
+                x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
+                mt => new { mt.MessageId, mt.ChatId },
+                (x, mt) => new { x.dr, x.m, mt })
+            .Where(x => x.dr.UsedForTraining == true
+                && x.m.MessageText != null
+                && x.m.MessageText != "")
+            .OrderByDescending(x => x.dr.IsSpam)
+            .Select(x => new { MessageText = x.mt != null ? x.mt.TranslatedText : x.m.MessageText, x.dr.IsSpam })
+            .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} training samples for Bayes classifier (used_for_training = true)",

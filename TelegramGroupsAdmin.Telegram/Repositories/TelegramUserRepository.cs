@@ -878,28 +878,24 @@ public class TelegramUserRepository : ITelegramUserRepository
         .ToList();
 
         // Get user actions with actor display name enrichment (LEFT JOINs for IssuedBy)
-        var actions = await (
-            from ua in context.UserActions.AsNoTracking()
-            join tu in context.TelegramUsers.AsNoTracking() on ua.TelegramUserId equals tu.TelegramUserId into telegramActors
-            from ta in telegramActors.DefaultIfEmpty()
-            join wu in context.Users.AsNoTracking() on ua.WebUserId equals wu.Id into webActors
-            from wa in webActors.DefaultIfEmpty()
-            join target in context.TelegramUsers.AsNoTracking() on ua.UserId equals target.TelegramUserId into targets
-            from t in targets.DefaultIfEmpty()
-            where ua.UserId == telegramUserId
-            orderby ua.IssuedAt descending
-            select new
+        var actions = await context.UserActions
+            .AsNoTracking()
+            .Where(ua => ua.UserId == telegramUserId)
+            .LeftJoin(context.TelegramUsers, ua => ua.TelegramUserId, tu => tu.TelegramUserId, (ua, ta) => new { ua, ta })
+            .LeftJoin(context.Users, x => x.ua.WebUserId, wu => wu.Id, (x, wa) => new { x.ua, x.ta, wa })
+            .LeftJoin(context.TelegramUsers, x => x.ua.UserId, t => t.TelegramUserId, (x, t) => new
             {
-                Action = ua,
-                TelegramActorUsername = ta.Username,
-                TelegramActorFirstName = ta.FirstName,
-                TelegramActorLastName = ta.LastName,
-                WebActorEmail = wa.Email,
-                TargetUsername = t.Username,
-                TargetFirstName = t.FirstName,
-                TargetLastName = t.LastName
-            }
-        ).ToListAsync(cancellationToken);
+                Action = x.ua,
+                TelegramActorUsername = x.ta != null ? x.ta.Username : null,
+                TelegramActorFirstName = x.ta != null ? x.ta.FirstName : null,
+                TelegramActorLastName = x.ta != null ? x.ta.LastName : null,
+                WebActorEmail = x.wa != null ? x.wa.Email : null,
+                TargetUsername = t != null ? t.Username : null,
+                TargetFirstName = t != null ? t.FirstName : null,
+                TargetLastName = t != null ? t.LastName : null
+            })
+            .OrderByDescending(x => x.Action.IssuedAt)
+            .ToListAsync(cancellationToken);
 
         // Get detection history (join through messages to filter by user)
         var detectionHistory = await (

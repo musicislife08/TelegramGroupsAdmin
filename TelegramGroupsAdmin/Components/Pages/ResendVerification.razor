@@ -1,6 +1,6 @@
 @page "/resend-verification"
 @using System.ComponentModel.DataAnnotations
-@inject HttpClient HttpClient
+@inject TelegramGroupsAdmin.Services.InternalApiClient InternalApiClient
 @inject ILogger<ResendVerification> Logger
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
@@ -71,7 +71,7 @@
 
         try
         {
-            var response = await HttpClient.PostAsJsonAsync("/resend-verification", new { Model.Email });
+            var response = await InternalApiClient.CreateClient().PostAsJsonAsync("/resend-verification", new { Model.Email });
 
             if (response.IsSuccessStatusCode)
             {

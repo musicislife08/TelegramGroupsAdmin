@@ -43,16 +43,10 @@ public static class BackgroundJobNames
     public const string ChatHealthCheck = "ChatHealthCheckJob";
 
     /// <summary>
-    /// ML text classifier retraining (retrains ML.NET SDCA spam model with latest data)
-    /// Quartz Job: TextClassifierRetrainingJob
+    /// Classifier retraining (retrains ML.NET SDCA text classifier and Naive Bayes classifier with latest data)
+    /// Quartz Job: ClassifierRetrainingJob
     /// </summary>
-    public const string TextClassifierRetraining = "TextClassifierRetrainingJob";
-
-    /// <summary>
-    /// Bayes classifier retraining (retrains Naive Bayes spam model with latest data)
-    /// Quartz Job: BayesClassifierRetrainingJob
-    /// </summary>
-    public const string BayesClassifierRetraining = "BayesClassifierRetrainingJob";
+    public const string ClassifierRetraining = "ClassifierRetrainingJob";
 
     // ============================================
     // Ad-Hoc Jobs (one-time delayed execution)

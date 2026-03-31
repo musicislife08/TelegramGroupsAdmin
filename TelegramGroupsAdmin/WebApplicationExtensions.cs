@@ -86,6 +86,7 @@ public static class WebApplicationExtensions
 
             app.MapAuthEndpoints();
             app.MapEmailVerificationEndpoints();
+            app.MapBackupEndpoints();
 
             return app;
         }

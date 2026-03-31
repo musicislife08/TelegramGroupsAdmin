@@ -1,4 +1,5 @@
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
+@implements IDisposable
 @inject IBackupService BackupService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -59,7 +60,7 @@
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
                    OnClick="@RestoreBackup"
-                   Disabled="@(_metadata == null || _isRestoring)">
+                   Disabled="@(_uploadTempFilePath == null || _isRestoring)">
             Restore
         </MudButton>
     </DialogActions>
@@ -71,7 +72,7 @@
     private IBrowserFile? _selectedFile;
     private BackupMetadata? _metadata;
     private bool _isRestoring;
-    private byte[]? _backupBytes;
+    private string? _uploadTempFilePath;
     private string? _passphrase; // Store passphrase for encrypted backups
 
     private async Task OnFileSelected(IBrowserFile? file)
@@ -88,14 +89,15 @@
 
         try
         {
-            // Read file (500MB max)
+            // Stream upload to temp file — never buffer entire backup in managed memory
+            CleanupTempFile();
+            _uploadTempFilePath = Path.Combine(Path.GetTempPath(), $"tga_upload_{Guid.NewGuid():N}.tar.gz");
             await using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500);
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
-            _backupBytes = ms.ToArray();
+            await using var tempFile = new FileStream(_uploadTempFilePath, FileMode.Create, FileAccess.Write);
+            await stream.CopyToAsync(tempFile);
 
             // Check if backup is encrypted
-            var isEncrypted = await BackupService.IsEncryptedAsync(_backupBytes);
+            var isEncrypted = await BackupService.IsEncryptedAsync(_uploadTempFilePath);
 
             if (isEncrypted)
             {
@@ -110,7 +112,7 @@
                 {
                     Snackbar.Add("Passphrase required to read encrypted backup", Severity.Warning);
                     _selectedFile = null;
-                    _backupBytes = null;
+                    CleanupTempFile();
                     StateHasChanged();
                     return;
                 }
@@ -121,7 +123,7 @@
                 {
                     Snackbar.Add("Invalid passphrase", Severity.Error);
                     _selectedFile = null;
-                    _backupBytes = null;
+                    CleanupTempFile();
                     StateHasChanged();
                     return;
                 }
@@ -130,7 +132,7 @@
             // Get metadata (always unencrypted in tar — no passphrase needed)
             try
             {
-                _metadata = await BackupService.GetMetadataAsync(_backupBytes);
+                _metadata = await BackupService.GetMetadataAsync(_uploadTempFilePath);
                 Snackbar.Add(isEncrypted
                     ? "Encrypted backup file loaded successfully"
                     : "Backup file loaded successfully", Severity.Success);
@@ -139,7 +141,7 @@
             {
                 Snackbar.Add($"Failed to read backup metadata: {ex.Message}", Severity.Error);
                 _selectedFile = null;
-                _backupBytes = null;
+                CleanupTempFile();
                 _passphrase = null;
             }
         }
@@ -147,7 +149,7 @@
         {
             Snackbar.Add($"Failed to read backup file: {ex.Message}", Severity.Error);
             _selectedFile = null;
-            _backupBytes = null;
+            CleanupTempFile();
             _passphrase = null;
         }
 
@@ -156,7 +158,7 @@
 
     private async Task RestoreBackup()
     {
-        if (_backupBytes == null)
+        if (_uploadTempFilePath == null)
             return;
 
         _isRestoring = true;
@@ -167,11 +169,11 @@
             // Use passphrase if available (for encrypted backups)
             if (!string.IsNullOrWhiteSpace(_passphrase))
             {
-                await BackupService.RestoreAsync(_backupBytes, _passphrase);
+                await BackupService.RestoreAsync(_uploadTempFilePath!, _passphrase);
             }
             else
             {
-                await BackupService.RestoreAsync(_backupBytes);
+                await BackupService.RestoreAsync(_uploadTempFilePath!);
             }
 
             // Close dialog and force page reload to re-evaluate auth state
@@ -185,6 +187,21 @@
             _isRestoring = false;
             StateHasChanged();
         }
+    }
+
+    private void CleanupTempFile()
+    {
+        if (_uploadTempFilePath != null && File.Exists(_uploadTempFilePath))
+        {
+            try { File.Delete(_uploadTempFilePath); }
+            catch { /* best effort */ }
+        }
+        _uploadTempFilePath = null;
+    }
+
+    public void Dispose()
+    {
+        CleanupTempFile();
     }
 
     private void Cancel()

@@ -106,15 +106,9 @@ public class TrainingHandler : ITrainingHandler
                 auditLogId: null,
                 cancellationToken: cancellationToken);
 
-            // Trigger ML text classifier retraining (immediate, no payload)
+            // Trigger combined classifier retraining (SDCA + Bayes, immediate, no payload)
             await _jobTriggerService.TriggerNowAsync(
-                BackgroundJobNames.TextClassifierRetraining,
-                payload: new { },
-                cancellationToken: cancellationToken);
-
-            // Trigger Bayes classifier retraining
-            await _jobTriggerService.TriggerNowAsync(
-                BackgroundJobNames.BayesClassifierRetraining,
+                BackgroundJobNames.ClassifierRetraining,
                 payload: new { },
                 cancellationToken: cancellationToken);
 

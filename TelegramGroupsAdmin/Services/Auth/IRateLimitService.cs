@@ -14,9 +14,4 @@ public interface IRateLimitService
     /// Records an attempt for rate limiting
     /// </summary>
     Task RecordAttemptAsync(string identifier, string endpointKey, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Number of active rate limit tracking entries (for memory instrumentation).
-    /// </summary>
-    int EntryCount { get; }
 }

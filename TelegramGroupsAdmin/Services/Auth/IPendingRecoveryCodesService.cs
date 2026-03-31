@@ -37,4 +37,10 @@ public interface IPendingRecoveryCodesService
     /// Number of pending recovery code entries (for memory instrumentation).
     /// </summary>
     int EntryCount { get; }
+
+    /// <summary>
+    /// Removes all expired recovery code entries from the in-memory store.
+    /// Called by <see cref="TokenCleanupService"/> on a periodic timer.
+    /// </summary>
+    void CleanupExpiredEntries();
 }

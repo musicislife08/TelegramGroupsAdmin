@@ -173,8 +173,8 @@ public class QuartzSchedulingSyncService(
         if (_scheduler == null) return;
 
         // Create pre-configured trigger builder (schedule + start time already set)
-        // For TextClassifierRetrainingJob, skip missed executions (we already train fresh on startup)
-        var misfireInstruction = config.JobName == BackgroundJobNames.TextClassifierRetraining
+        // For ClassifierRetrainingJob, skip missed executions (we already train fresh on startup)
+        var misfireInstruction = config.JobName == BackgroundJobNames.ClassifierRetraining
             ? MisfireInstruction.CronTrigger.DoNothing
             : MisfireInstruction.SmartPolicy;
 

@@ -446,17 +446,17 @@ public class AnalyticsRepository : IAnalyticsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Join welcome_responses with managed_chats to get chat names
-        var chatStats = await (
-            from wr in context.WelcomeResponses
-            where wr.CreatedAt >= startDate && wr.CreatedAt <= endDate
-            join mc in context.ManagedChats on wr.ChatId equals mc.ChatId into chatGroup
-            from mc in chatGroup.DefaultIfEmpty()
-            select new
-            {
-                wr.ChatId,
-                ChatName = mc != null ? mc.ChatName : "Unknown Chat",
-                wr.Response
-            })
+        var chatStats = await context.WelcomeResponses
+            .Where(wr => wr.CreatedAt >= startDate && wr.CreatedAt <= endDate)
+            .LeftJoin(context.ManagedChats,
+                wr => wr.ChatId,
+                mc => mc.ChatId,
+                (wr, mc) => new
+                {
+                    wr.ChatId,
+                    ChatName = mc != null ? mc.ChatName : "Unknown Chat",
+                    wr.Response
+                })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -474,7 +474,7 @@ public class AnalyticsRepository : IAnalyticsRepository
                 return new ChatWelcomeStats
                 {
                     ChatId = g.Key.ChatId,
-                    ChatName = g.Key.ChatName,
+                    ChatName = g.Key.ChatName ?? "Unknown Chat",
                     TotalJoins = totalJoins,
                     AcceptedCount = acceptedCount,
                     DeniedCount = deniedCount,

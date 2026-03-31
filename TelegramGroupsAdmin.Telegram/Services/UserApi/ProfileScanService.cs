@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.IO;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using TelegramGroupsAdmin.Configuration;
@@ -29,6 +30,7 @@ public sealed class ProfileScanService(
     ITelegramSessionManager sessionManager,
     IServiceScopeFactory scopeFactory,
     PipelineMetrics pipelineMetrics,
+    RecyclableMemoryStreamManager streamManager,
     ILogger<ProfileScanService> logger) : IProfileScanService
 {
     /// <summary>
@@ -646,9 +648,10 @@ public sealed class ProfileScanService(
         {
             try
             {
-                using var ms = new MemoryStream();
+                using var ms = streamManager.GetStream("ProfileScan.ProfilePhoto");
                 var fileType = await client.DownloadProfilePhotoAsync(tlUser, ms, big: false);
-                var resized = await ResizeForVisionAsync(ms.ToArray());
+                ms.Position = 0;
+                var resized = await ResizeForVisionAsync(ms);
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("profile photo");
             }
@@ -664,9 +667,10 @@ public sealed class ProfileScanService(
         {
             try
             {
-                using var ms = new MemoryStream();
+                using var ms = streamManager.GetStream("ProfileScan.ChannelPhoto");
                 var fileType = await client.DownloadProfilePhotoAsync(personalChannel, ms, big: false);
-                var resized = await ResizeForVisionAsync(ms.ToArray());
+                ms.Position = 0;
+                var resized = await ResizeForVisionAsync(ms);
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("personal channel photo");
             }
@@ -691,9 +695,10 @@ public sealed class ProfileScanService(
                     {
                         case MessageMediaPhoto { photo: Photo photo }:
                         {
-                            using var ms = new MemoryStream();
+                            using var ms = streamManager.GetStream("ProfileScan.StoryPhoto");
                             var fileType = await client.DownloadFileAsync(photo, ms);
-                            var resized = await ResizeForVisionAsync(ms.ToArray());
+                            ms.Position = 0;
+                            var resized = await ResizeForVisionAsync(ms);
                             images.Add(new ImageInput(resized, ToMimeType(fileType)));
                             labels.Add("story photo");
                             storyImageCount++;
@@ -706,9 +711,10 @@ public sealed class ProfileScanService(
                             var thumb = doc.LargestThumbSize;
                             if (thumb == null) continue;
 
-                            using var ms = new MemoryStream();
+                            using var ms = streamManager.GetStream("ProfileScan.StoryThumb");
                             await client.DownloadFileAsync(doc, ms, thumb);
-                            var resized = await ResizeForVisionAsync(ms.ToArray());
+                            ms.Position = 0;
+                            var resized = await ResizeForVisionAsync(ms);
                             images.Add(new ImageInput(resized, "image/jpeg"));
                             labels.Add("story video thumbnail");
                             storyImageCount++;
@@ -734,12 +740,19 @@ public sealed class ProfileScanService(
         return new ImageCollectionResult(images, labelString);
     }
 
-    private static async Task<byte[]> ResizeForVisionAsync(byte[] imageBytes, int maxDimension = VisionMaxDimension)
+    private static async Task<byte[]> ResizeForVisionAsync(Stream imageStream, int maxDimension = VisionMaxDimension)
     {
-        using var image = Image.Load(imageBytes);
+        imageStream.Position = 0;
+        using var image = await Image.LoadAsync(imageStream);
 
         if (image.Width <= maxDimension && image.Height <= maxDimension)
-            return imageBytes;
+        {
+            // Image fits — return raw bytes without re-encoding
+            imageStream.Position = 0;
+            using var passthrough = new MemoryStream((int)imageStream.Length);
+            await imageStream.CopyToAsync(passthrough);
+            return passthrough.ToArray();
+        }
 
         image.Mutate(x => x.Resize(new ResizeOptions
         {
