@@ -24,38 +24,25 @@ public interface IBackupService
     Task ExportToFileAsync(string filepath, string passphraseOverride, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Restore system from backup file (WIPES ALL DATA FIRST)
-    /// Auto-detects encryption and uses passphrase from DB config
+    /// Restore system from backup file on disk (WIPES ALL DATA FIRST).
+    /// Auto-detects encryption from tar entry names. Uses passphrase from DB config.
     /// </summary>
-    /// <param name="backupBytes">Backup file bytes (gzipped or encrypted)</param>
-    Task RestoreAsync(byte[] backupBytes);
+    /// <param name="filepath">Path to backup .tar.gz file</param>
+    Task RestoreAsync(string filepath);
 
     /// <summary>
-    /// Restore system from backup file with explicit passphrase (for CLI/first-run usage)
+    /// Restore system from backup file on disk with explicit passphrase.
+    /// Falls back to DB config passphrase if explicit passphrase fails decryption.
     /// </summary>
-    /// <param name="backupBytes">Backup file bytes</param>
-    /// <param name="passphrase">Passphrase to decrypt (if encrypted)</param>
-    Task RestoreAsync(byte[] backupBytes, string passphrase);
-
-    /// <summary>
-    /// Get backup metadata without restoring.
-    /// Metadata is always unencrypted in the tar archive — no passphrase needed.
-    /// </summary>
-    /// <param name="backupBytes">gzip backup file bytes</param>
-    Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes);
+    /// <param name="filepath">Path to backup .tar.gz file</param>
+    /// <param name="passphrase">Passphrase to try first for decryption</param>
+    Task RestoreAsync(string filepath, string passphrase);
 
     /// <summary>
     /// Get backup metadata by streaming from disk without loading the entire file into memory.
     /// </summary>
     /// <param name="filepath">Path to the backup .tar.gz file</param>
     Task<BackupMetadata> GetMetadataAsync(string filepath);
-
-    /// <summary>
-    /// Check if backup contains an encrypted database by inspecting tar entries.
-    /// </summary>
-    /// <param name="backupBytes">Backup file bytes</param>
-    /// <returns>True if encrypted, false if plain</returns>
-    Task<bool> IsEncryptedAsync(byte[] backupBytes);
 
     /// <summary>
     /// Check if backup file on disk contains an encrypted database by streaming only the tar entry names.
