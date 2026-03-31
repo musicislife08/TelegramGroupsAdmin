@@ -2,6 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using HumanCron.Quartz.Abstractions;
 using Quartz;
+using Quartz.Impl.Matchers;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services;
@@ -157,7 +158,31 @@ public class QuartzSchedulingSyncService(
             }
         }
 
+        // Clean up orphaned Quartz jobs whose types were removed (e.g., after job merges/renames)
+        await RemoveOrphanedJobsAsync(allJobs.Keys, cancellationToken);
+
         logger.LogInformation("Job schedule sync complete");
+    }
+
+    /// <summary>
+    /// Removes Quartz jobs and triggers that reference types no longer registered.
+    /// Prevents TypeLoadException on startup when jobs are renamed or merged.
+    /// </summary>
+    private async Task RemoveOrphanedJobsAsync(IEnumerable<string> registeredJobNames, CancellationToken cancellationToken)
+    {
+        if (_scheduler == null) return;
+
+        var registered = registeredJobNames.ToHashSet();
+        var allQuartzJobs = await _scheduler.GetJobKeys(GroupMatcher<JobKey>.AnyGroup(), cancellationToken);
+
+        foreach (var jobKey in allQuartzJobs)
+        {
+            if (!registered.Contains(jobKey.Name))
+            {
+                await _scheduler.DeleteJob(jobKey, cancellationToken);
+                logger.LogWarning("Removed orphaned Quartz job {JobName} — type no longer registered", jobKey.Name);
+            }
+        }
     }
 
     /// <summary>
