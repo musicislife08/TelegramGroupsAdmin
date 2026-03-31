@@ -211,8 +211,7 @@
                 return;
             }
 
-            var apiUrl = new Uri(Navigation.BaseUri).GetLeftPart(UriPartial.Authority) + "/api/auth/register";
-            var response = await InternalApiClient.CreateClient().PostAsJsonAsync(apiUrl, new
+            var response = await InternalApiClient.CreateClient().PostAsJsonAsync("/api/auth/register", new
             {
                 Email = _email,
                 Password = _password, // Already initialized as empty string, never null
