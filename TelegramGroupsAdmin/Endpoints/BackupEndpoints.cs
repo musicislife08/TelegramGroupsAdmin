@@ -38,8 +38,7 @@ public static partial class BackupEndpoints
             var resolvedDirectory = Path.GetFullPath(backupDirectory);
             var fullPath = Path.GetFullPath(Path.Combine(resolvedDirectory, filename));
 
-            if (!fullPath.StartsWith(resolvedDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-                && fullPath != resolvedDirectory)
+            if (!fullPath.StartsWith(resolvedDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             {
                 return Results.BadRequest("Invalid file path.");
             }
