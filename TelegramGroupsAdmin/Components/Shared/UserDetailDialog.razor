@@ -427,7 +427,7 @@
                 <!-- Name History -->
                 @if (_nameHistory.Count > 0)
                 {
-                    <MudExpansionPanels Class="mt-4" Elevation="0">
+                    <MudExpansionPanels Class="mb-4" Elevation="1">
                         <MudExpansionPanel Text="@($"Name History ({_nameHistory.Count})")"
                                            Icon="@Icons.Material.Filled.History"
                                            Expanded="false">
@@ -445,7 +445,7 @@
                                         <tr>
                                             <td>@(entry.Username != null ? $"@{entry.Username}" : "(no username)")</td>
                                             <td>@FormatName(entry.FirstName, entry.LastName)</td>
-                                            <td>@entry.RecordedAt.LocalDateTime.ToString("MMM d, yyyy")</td>
+                                            <td><LocalTimestamp Value="@entry.RecordedAt" /></td>
                                         </tr>
                                     }
                                 </tbody>
