@@ -666,8 +666,6 @@ public partial class MessageProcessingService(
                 CreatedAt: now,
                 UpdatedAt: now
             );
-            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
-
             // Profile change detection: compare Bot API User fields against stored values
             // New users (existingUser == null) get scanned on join, not here.
             // Trusted/admin users are already skipped by contentCheckSkipReason.
@@ -675,11 +673,20 @@ public partial class MessageProcessingService(
                 && contentCheckSkipReason == ContentCheckSkipReason.NotSkipped
                 && ProfileDiffDetected(existingUser, message.From))
             {
-                var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
-                await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                LogProfileChangeDetected(logger, message.From.ToLogDebug(), existingUser.ToLogInfo(), message.From.ToLogInfo());
 
-                LogProfileChangeDetected(logger, message.From.ToLogDebug());
+                try
+                {
+                    var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
+                    await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to schedule profile scan for user {UserId}", message.From.Id);
+                }
             }
+
+            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
 
             // Raise event for real-time UI updates
             OnNewMessage?.Invoke(messageRecord);
