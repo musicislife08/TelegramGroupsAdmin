@@ -16,7 +16,6 @@
 @inject NavigationManager Navigation
 @inject TelegramGroupsAdmin.Telegram.Services.UserApi.IProfileScanService ProfileScanService
 @inject TelegramGroupsAdmin.Telegram.Repositories.ITelegramUserRepository TelegramUserRepository
-@inject IUsernameHistoryRepository UsernameHistoryRepo
 
 <MudDialog>
     <DialogContent>
@@ -626,7 +625,7 @@
         try
         {
             _userDetail = await UserManagementService.GetUserDetailAsync(UserId);
-            _nameHistory = await UsernameHistoryRepo.GetByUserIdAsync(UserId);
+            _nameHistory = await UserManagementService.GetNameHistoryAsync(UserId);
         }
         catch (Exception ex)
         {

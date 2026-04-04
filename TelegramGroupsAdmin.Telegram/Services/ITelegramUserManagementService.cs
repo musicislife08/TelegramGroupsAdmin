@@ -49,4 +49,7 @@ public interface ITelegramUserManagementService
 
     /// <summary>Unbans a user from all chats.</summary>
     Task<bool> UnbanAsync(long telegramUserId, Actor unbannedBy, string? reason = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Gets the username/name change history for a user.</summary>
+    Task<List<UsernameHistoryRecord>> GetNameHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default);
 }

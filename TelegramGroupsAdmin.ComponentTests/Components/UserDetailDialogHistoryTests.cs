@@ -25,7 +25,6 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
     private IUserTagsRepository _mockTagsRepo = null!;
     private ITagDefinitionsRepository _mockTagDefinitionsRepo = null!;
     private IUserActionsRepository _mockActionsRepo = null!;
-    private IUsernameHistoryRepository _mockHistoryRepo = null!;
     private ISnackbar _mockSnackbar = null!;
     private IDialogService _dialogService = null!;
 
@@ -46,7 +45,6 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
         _mockModerationService = Substitute.For<IBotModerationService>();
         _mockSnackbar = Substitute.For<ISnackbar>();
         _mockTagDefinitionsRepo = Substitute.For<ITagDefinitionsRepository>();
-        _mockHistoryRepo = Substitute.For<IUsernameHistoryRepository>();
 
         // These repositories satisfy constructor injection but are not directly called by the dialog
         _mockNotesRepo = Substitute.For<IAdminNotesRepository>();
@@ -61,7 +59,6 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
         Services.AddSingleton(_mockTagDefinitionsRepo);
         Services.AddSingleton(_mockActionsRepo);
         Services.AddSingleton(_mockSnackbar);
-        Services.AddSingleton(_mockHistoryRepo);
         Services.AddSingleton(Substitute.For<IProfileScanService>());
         Services.AddSingleton(Substitute.For<ITelegramSessionManager>());
         Services.AddSingleton(Substitute.For<ITelegramUserRepository>());
@@ -71,7 +68,7 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
             .Returns(Task.FromResult(new List<TagDefinition>()));
 
         // Default: no history entries
-        _mockHistoryRepo.GetByUserIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _mockUserService.GetNameHistoryAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new List<UsernameHistoryRecord>()));
     }
 
@@ -106,7 +103,7 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
         await DisposeComponentsAsync();
 
         // Reset mock returns to defaults (NSubstitute retains overrides across tests)
-        _mockHistoryRepo.GetByUserIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+        _mockUserService.GetNameHistoryAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new List<UsernameHistoryRecord>()));
     }
 
@@ -147,7 +144,7 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
 
         _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
-        _mockHistoryRepo.GetByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+        _mockUserService.GetNameHistoryAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(history));
 
         var provider = RenderDialogProvider();
@@ -177,7 +174,7 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
 
         _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
-        _mockHistoryRepo.GetByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+        _mockUserService.GetNameHistoryAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(history));
 
         var provider = RenderDialogProvider();
@@ -209,7 +206,7 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
 
         _mockUserService.GetUserDetailAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<TelegramUserDetail?>(userDetail));
-        _mockHistoryRepo.GetByUserIdAsync(TestUserId, Arg.Any<CancellationToken>())
+        _mockUserService.GetNameHistoryAsync(TestUserId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(history));
 
         var provider = RenderDialogProvider();
