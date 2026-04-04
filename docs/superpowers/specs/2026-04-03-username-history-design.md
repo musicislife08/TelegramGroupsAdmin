@@ -114,6 +114,60 @@ This is a secondary reference — the primary visibility is through the `Profile
 
 No changes needed. The `ProfileChange` user action will appear automatically in the existing audit timeline rendering.
 
+## Testing
+
+### Unit Tests
+
+**`MessageProcessingServiceProfileDiffTests.cs`** (UnitTests/Telegram/Services)
+
+Tests for the capture logic in the `ProfileDiffDetected` block:
+
+- Inserts history row when username changes
+- Inserts history row when first name changes
+- Inserts history row when last name changes
+- Inserts history row when multiple fields change simultaneously
+- Does not insert history when no diff detected (existing user, same fields)
+- Does not insert history for new users (`existingUser == null`)
+- Does not insert history for trusted/admin users (skipped by `contentCheckSkipReason`)
+- Inserts `ProfileChange` user action with correct actor (`system_identifier = "ProfileDiffDetection"`)
+- User action reason contains old and new values for changed fields only
+- User action includes chat_id and message_id from triggering message
+- Profile scan scheduling failure does not prevent history/action insertion (try/catch isolation)
+
+### Integration Tests
+
+**`UsernameHistoryRepositoryTests.cs`** (IntegrationTests/Repositories)
+
+Tests against a real PostgreSQL database via `MigrationTestHelper`:
+
+- Insert and retrieve history entries for a user
+- History ordered by `recorded_at` descending
+- Cascade delete: deleting parent `telegram_users` row deletes all history
+- Search by past username returns matching user (via repository search query)
+- Search by past first/last name returns matching user
+- Search does not return false positives (different user's history)
+- Multiple history entries for same user returned correctly
+
+**`TelegramUserRepositorySearchTests.cs`** (extend existing or new file)
+
+- `GetPagedUsersAsync` search matches past username from history
+- `GetPagedBannedUsersWithDetailsAsync` search matches past username from history
+- `GetUserTabCountsAsync` counts include users matched by past names
+- `SearchByNameAsync` matches past names (ban command autocomplete)
+
+### Component Tests
+
+**`UserDetailDialogHistoryTests.cs`** (ComponentTests/Components)
+
+bUnit + NSubstitute tests for the name history UI:
+
+- Name history panel not rendered when user has no history entries
+- Name history panel rendered collapsed when user has history entries
+- Expanding panel shows table with correct columns (username, name, date)
+- History entries displayed in reverse chronological order
+- Null username displays gracefully (e.g., "(no username)")
+- Null first/last name displays gracefully
+
 ## Files to Create
 
 | File | Project | Purpose |
@@ -124,6 +178,9 @@ No changes needed. The `ProfileChange` user action will appear automatically in 
 | `IUsernameHistoryRepository.cs` | Telegram/Repositories | Interface |
 | `UsernameHistoryRepository.cs` | Telegram/Repositories | Implementation |
 | EF migration | Data/Migrations | Table + indexes |
+| `MessageProcessingServiceProfileDiffTests.cs` | UnitTests | Capture logic tests |
+| `UsernameHistoryRepositoryTests.cs` | IntegrationTests | DB repository tests |
+| `UserDetailDialogHistoryTests.cs` | ComponentTests | Name history UI tests |
 
 ## Files to Modify
 
