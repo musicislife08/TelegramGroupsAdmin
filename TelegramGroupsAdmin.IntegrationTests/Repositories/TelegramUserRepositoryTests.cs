@@ -178,6 +178,91 @@ public class TelegramUserRepositoryTests
         Assert.That(counts.ActiveCount, Is.GreaterThanOrEqualTo(1));
     }
 
+    [Test]
+    public async Task SearchByNameAsync_MatchesPastUsername()
+    {
+        const long userId = 200010L;
+        await SeedActiveUserAsync(userId, username: "current_handle", firstName: "Search", lastName: "Test");
+
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var historyRepo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+            await historyRepo.InsertAsync(userId, "legacy_handle", "Search", "Test");
+        }
+
+        var results = await _repository!.SearchByNameAsync("legacy_handle", limit: 10);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].TelegramUserId, Is.EqualTo(userId));
+    }
+
+    [Test]
+    public async Task SearchByNameAsync_MatchesPastFirstName()
+    {
+        const long userId = 200011L;
+        await SeedActiveUserAsync(userId, username: "name_search_user", firstName: "CurrentFirst", lastName: "Test");
+
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var historyRepo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+            await historyRepo.InsertAsync(userId, "name_search_user", "FormerFirst", "Test");
+        }
+
+        var results = await _repository!.SearchByNameAsync("FormerFirst", limit: 10);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].TelegramUserId, Is.EqualTo(userId));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_SearchByPastName_DoesNotReturnDifferentUser()
+    {
+        const long userA = 200020L;
+        const long userB = 200021L;
+        await SeedActiveUserAsync(userA, username: "user_a", firstName: "Alice", lastName: "Smith");
+        await SeedActiveUserAsync(userB, username: "user_b", firstName: "Bob", lastName: "Jones");
+
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var historyRepo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+            await historyRepo.InsertAsync(userA, "unique_old_handle", "Alice", "Smith");
+        }
+
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 10,
+            searchText: "unique_old_handle", chatIds: null,
+            sortLabel: null, sortDescending: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(totalCount, Is.EqualTo(1));
+            Assert.That(items[0].TelegramUserId, Is.EqualTo(userA));
+        });
+    }
+
+    [Test]
+    public async Task SearchByNameAsync_DoesNotReturnUserWithoutMatchingHistory()
+    {
+        const long userA = 200030L;
+        const long userB = 200031L;
+        await SeedActiveUserAsync(userA, username: "iso_user_a", firstName: "Ava", lastName: "Test");
+        await SeedActiveUserAsync(userB, username: "iso_user_b", firstName: "Ben", lastName: "Test");
+
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var historyRepo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+            await historyRepo.InsertAsync(userA, "distinctive_old_name", "Ava", "Test");
+        }
+
+        var results = await _repository!.SearchByNameAsync("distinctive_old_name", limit: 10);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(results, Has.Count.EqualTo(1));
+            Assert.That(results[0].TelegramUserId, Is.EqualTo(userA));
+        });
+    }
+
     #endregion
 
     #region GetOrCreateAsync Tests
