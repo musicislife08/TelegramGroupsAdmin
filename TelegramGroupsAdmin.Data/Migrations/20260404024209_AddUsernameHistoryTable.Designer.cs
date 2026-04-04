@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260404024209_AddUsernameHistoryTable")]
+    partial class AddUsernameHistoryTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3526,7 +3529,13 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("UserId")
-                        .HasDatabaseName("ix_username_history_user_id");
+                        .HasDatabaseName("IX_username_history_user_id");
+
+                    b.HasIndex("Username")
+                        .HasDatabaseName("IX_username_history_username_lower");
+
+                    b.HasIndex("FirstName", "LastName")
+                        .HasDatabaseName("IX_username_history_name_lower");
 
                     b.ToTable("username_history");
                 });

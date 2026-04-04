@@ -55,6 +55,7 @@ public record Actor
     public static readonly Actor ProfileScan = FromSystem("profile_scan");
     public static readonly Actor UsernameBlacklist = FromSystem("username_blacklist");
     public static readonly Actor Bootstrap = FromSystem("bootstrap");
+    public static readonly Actor ProfileDiffDetection = FromSystem("profile_diff_detection");
 
     /// <summary>
     /// Create actor from web user
@@ -113,6 +114,7 @@ public record Actor
             "profile_scan" => "Profile Scan",
             "username_blacklist" => "Username Blacklist",
             "bootstrap" => "CLI Bootstrap",
+            "profile_diff_detection" => "Profile Change Detection",
             _ => systemIdentifier
         };
 

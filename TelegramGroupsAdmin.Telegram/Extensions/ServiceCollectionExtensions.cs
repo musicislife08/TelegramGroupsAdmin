@@ -58,6 +58,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageTranslationService, MessageTranslationService>();
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+            services.AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>();
 
             // Profile scan results
             services.AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>();
