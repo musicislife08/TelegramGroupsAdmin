@@ -33,6 +33,5 @@ public class UsernameHistoryDto
     public DateTimeOffset RecordedAt { get; set; }
 
     // Navigation
-    [ForeignKey(nameof(UserId))]
-    public virtual TelegramUserDto? User { get; set; }
+    public TelegramUserDto? User { get; set; }
 }
