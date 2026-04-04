@@ -675,6 +675,29 @@ public partial class MessageProcessingService(
             {
                 LogProfileChangeDetected(logger, message.From.ToLogDebug(), existingUser.ToLogInfo(), message.From.ToLogInfo());
 
+                // Record previous profile values in username_history
+                var historyRepo = messageScope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+                await historyRepo.InsertAsync(
+                    existingUser.TelegramUserId,
+                    existingUser.Username,
+                    existingUser.FirstName,
+                    existingUser.LastName,
+                    cancellationToken);
+
+                // Record profile change in user_actions audit trail
+                var userActionsRepo = messageScope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+                var changeReason = BuildProfileChangeReason(existingUser, message.From);
+                await userActionsRepo.InsertAsync(new UserActionRecord(
+                    Id: 0,
+                    UserId: existingUser.TelegramUserId,
+                    ActionType: UserActionType.ProfileChange,
+                    MessageId: message.MessageId,
+                    ChatId: message.Chat.Id,
+                    IssuedBy: Actor.FromSystem("profile_diff_detection"),
+                    IssuedAt: DateTimeOffset.UtcNow,
+                    ExpiresAt: null,
+                    Reason: changeReason), cancellationToken);
+
                 try
                 {
                     var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
@@ -816,6 +839,22 @@ public partial class MessageProcessingService(
         return !string.Equals(existing.FirstName, current.FirstName, StringComparison.Ordinal)
             || !string.Equals(existing.LastName, current.LastName, StringComparison.Ordinal)
             || !string.Equals(existing.Username, current.Username, StringComparison.Ordinal);
+    }
+
+    private static string BuildProfileChangeReason(TelegramUser old, global::Telegram.Bot.Types.User current)
+    {
+        var changes = new List<string>();
+
+        if (!string.Equals(old.Username, current.Username, StringComparison.Ordinal))
+            changes.Add($"Username: @{old.Username ?? "(none)"} → @{current.Username ?? "(none)"}");
+
+        if (!string.Equals(old.FirstName, current.FirstName, StringComparison.Ordinal))
+            changes.Add($"First name: {old.FirstName ?? "(none)"} → {current.FirstName ?? "(none)"}");
+
+        if (!string.Equals(old.LastName, current.LastName, StringComparison.Ordinal))
+            changes.Add($"Last name: {old.LastName ?? "(none)"} → {current.LastName ?? "(none)"}");
+
+        return string.Join(", ", changes);
     }
 
     // REFACTOR-2: Extracted methods to specialized handlers
