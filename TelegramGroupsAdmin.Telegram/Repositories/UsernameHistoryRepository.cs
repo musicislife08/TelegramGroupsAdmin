@@ -28,11 +28,12 @@ public class UsernameHistoryRepository(IDbContextFactory<AppDbContext> contextFa
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-        return await context.UsernameHistory
+        var dtos = await context.UsernameHistory
             .AsNoTracking()
             .Where(h => h.UserId == userId)
             .OrderByDescending(h => h.RecordedAt)
-            .Select(h => h.ToModel())
             .ToListAsync(cancellationToken);
+
+        return dtos.Select(h => h.ToModel()).ToList();
     }
 }
