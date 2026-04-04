@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -58,6 +59,7 @@ public class TelegramUserRepositoryTests
         });
 
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+        services.AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>();
 
         _serviceProvider = services.BuildServiceProvider();
 
@@ -73,12 +75,110 @@ public class TelegramUserRepositoryTests
         _repository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
     }
 
+    private async Task SeedActiveUserAsync(long userId, string? username = null, string? firstName = null, string? lastName = null)
+    {
+        await using var scope = _serviceProvider!.CreateAsyncScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+        var now = DateTimeOffset.UtcNow;
+        await userRepo.UpsertAsync(new TelegramUser(
+            TelegramUserId: userId,
+            Username: username,
+            FirstName: firstName,
+            LastName: lastName,
+            UserPhotoPath: null,
+            PhotoHash: null,
+            PhotoFileUniqueId: null,
+            IsBot: false,
+            IsTrusted: false,
+            IsBanned: false,
+            KickCount: 0,
+            BotDmEnabled: false,
+            FirstSeenAt: now,
+            LastSeenAt: now,
+            CreatedAt: now,
+            UpdatedAt: now,
+            IsActive: true));
+    }
+
     [TearDown]
     public void TearDown()
     {
         _testHelper?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
     }
+
+    #region Search with Username History Tests
+
+    [Test]
+    public async Task GetPagedUsersAsync_SearchMatchesPastUsername()
+    {
+        // Seed an active user with current username "new_name"
+        const long userId = 200001L;
+        await SeedActiveUserAsync(userId, username: "new_name", firstName: "Current", lastName: "User");
+
+        // Insert a history entry recording the old username
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var historyRepo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+            await historyRepo.InsertAsync(userId, "old_name", "Current", "User");
+        }
+
+        // Search by old username — should find the user via username_history join
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 10,
+            searchText: "old_name", chatIds: null,
+            sortLabel: null, sortDescending: false);
+
+        Assert.That(totalCount, Is.EqualTo(1));
+        Assert.That(items[0].TelegramUserId, Is.EqualTo(userId));
+    }
+
+    [Test]
+    public async Task GetPagedUsersAsync_SearchMatchesPastFirstName()
+    {
+        // Seed an active user with current first name "NewFirst"
+        const long userId = 200002L;
+        await SeedActiveUserAsync(userId, username: "history_user", firstName: "NewFirst", lastName: "User");
+
+        // Insert a history entry recording the old first name
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var historyRepo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+            await historyRepo.InsertAsync(userId, "history_user", "OldFirst", "User");
+        }
+
+        // Search by old first name — should find the user via username_history join
+        var (items, totalCount) = await _repository!.GetPagedUsersAsync(
+            UiModels.UserListFilter.Active, skip: 0, take: 10,
+            searchText: "OldFirst", chatIds: null,
+            sortLabel: null, sortDescending: false);
+
+        Assert.That(totalCount, Is.EqualTo(1));
+        Assert.That(items[0].TelegramUserId, Is.EqualTo(userId));
+    }
+
+    [Test]
+    public async Task GetUserTabCountsAsync_IncludesUsersMatchedByPastNames()
+    {
+        // Seed an active user with a current username that won't match the search
+        const long userId = 200003L;
+        await SeedActiveUserAsync(userId, username: "current_handle", firstName: "Present", lastName: "User");
+
+        // Insert a history entry with a distinctive old username
+        await using (var scope = _serviceProvider!.CreateAsyncScope())
+        {
+            var historyRepo = scope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+            await historyRepo.InsertAsync(userId, "historic_handle", "Present", "User");
+        }
+
+        // Tab counts filtered by the old name must include the user in the active count
+        var counts = await _repository!.GetUserTabCountsAsync(
+            chatIds: null, searchText: "historic_handle");
+
+        Assert.That(counts.ActiveCount, Is.GreaterThanOrEqualTo(1));
+    }
+
+    #endregion
 
     #region GetOrCreateAsync Tests
 
