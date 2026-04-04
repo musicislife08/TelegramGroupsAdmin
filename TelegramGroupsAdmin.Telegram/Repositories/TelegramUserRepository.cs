@@ -487,11 +487,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         if (!string.IsNullOrWhiteSpace(searchText))
         {
             var search = searchText.Trim().ToLower();
-            query = query.Where(u =>
-                (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
-                (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
-                (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
-                EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%"));
+            query = ApplySearchFilter(query, context, search);
         }
 
         // Get total count before pagination
@@ -566,11 +562,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         if (!string.IsNullOrWhiteSpace(searchText))
         {
             var search = searchText.Trim().ToLower();
-            query = query.Where(u =>
-                (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
-                (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
-                (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
-                EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%"));
+            query = ApplySearchFilter(query, context, search);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -674,11 +666,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         if (!string.IsNullOrWhiteSpace(searchText))
         {
             var search = searchText.Trim().ToLower();
-            baseQuery = baseQuery.Where(u =>
-                (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
-                (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
-                (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
-                EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%"));
+            baseQuery = ApplySearchFilter(baseQuery, context, search);
         }
 
         // Run 5 count queries sequentially (DbContext is not thread-safe)
@@ -1172,7 +1160,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Fuzzy search: match against combined "first last" name OR username
+        // Fuzzy search: match against combined "first last" name OR username OR past names
         // Searches ALL users (active and inactive) for ban command
         var matches = await context.TelegramUsers
             .AsNoTracking()
@@ -1180,7 +1168,12 @@ public class TelegramUserRepository : ITelegramUserRepository
                 // Match against combined full name (first + space + last)
                 (u.FirstName + " " + u.LastName).ToLower().Contains(searchLower) ||
                 // Or match against username
-                (u.Username != null && u.Username.ToLower().Contains(searchLower)))
+                (u.Username != null && u.Username.ToLower().Contains(searchLower)) ||
+                // Or match against past names from username_history
+                context.UsernameHistory.Any(h =>
+                    h.UserId == u.TelegramUserId &&
+                    ((h.FirstName + " " + h.LastName).ToLower().Contains(searchLower) ||
+                     (h.Username != null && h.Username.ToLower().Contains(searchLower)))))
             .OrderBy(u => u.FirstName) // Alphabetical for consistent ordering
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -1293,5 +1286,27 @@ public class TelegramUserRepository : ITelegramUserRepository
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    // ============================================================================
+    // Search Helpers
+    // ============================================================================
+
+    /// <summary>
+    /// Builds a predicate that matches users by current OR past names from username_history.
+    /// </summary>
+    private static IQueryable<DataModels.TelegramUserDto> ApplySearchFilter(
+        IQueryable<DataModels.TelegramUserDto> query, AppDbContext context, string search)
+    {
+        return query.Where(u =>
+            (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
+            (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
+            (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
+            EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%") ||
+            context.UsernameHistory.Any(h =>
+                h.UserId == u.TelegramUserId &&
+                ((h.Username != null && EF.Functions.ILike(h.Username, $"%{search}%")) ||
+                 (h.FirstName != null && EF.Functions.ILike(h.FirstName, $"%{search}%")) ||
+                 (h.LastName != null && EF.Functions.ILike(h.LastName, $"%{search}%")))));
     }
 }
