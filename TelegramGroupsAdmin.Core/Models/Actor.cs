@@ -113,6 +113,7 @@ public record Actor
             "profile_scan" => "Profile Scan",
             "username_blacklist" => "Username Blacklist",
             "bootstrap" => "CLI Bootstrap",
+            "profile_diff_detection" => "Profile Change Detection",
             _ => systemIdentifier
         };
 
