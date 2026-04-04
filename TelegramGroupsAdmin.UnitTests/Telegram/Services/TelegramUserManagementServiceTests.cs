@@ -20,6 +20,7 @@ public class TelegramUserManagementServiceTests
 {
     private ITelegramUserRepository _mockUserRepo = null!;
     private IUserActionsRepository _mockActionsRepo = null!;
+    private IUsernameHistoryRepository _mockHistoryRepo = null!;
     private ILogger<TelegramUserManagementService> _mockLogger = null!;
     private TelegramUserManagementService _service = null!;
 
@@ -30,6 +31,7 @@ public class TelegramUserManagementServiceTests
     {
         _mockUserRepo = Substitute.For<ITelegramUserRepository>();
         _mockActionsRepo = Substitute.For<IUserActionsRepository>();
+        _mockHistoryRepo = Substitute.For<IUsernameHistoryRepository>();
 
         // Logger is required by constructor but intentionally not verified.
         // Logging is an implementation detail - tests focus on business logic outcomes.
@@ -38,6 +40,7 @@ public class TelegramUserManagementServiceTests
         _service = new TelegramUserManagementService(
             _mockUserRepo,
             _mockActionsRepo,
+            _mockHistoryRepo,
             _mockLogger);
     }
 
