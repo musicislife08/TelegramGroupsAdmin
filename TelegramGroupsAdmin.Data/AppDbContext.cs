@@ -647,15 +647,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // UsernameHistory indexes
         modelBuilder.Entity<UsernameHistoryDto>()
             .HasIndex(h => h.UserId)
-            .HasDatabaseName("IX_username_history_user_id");
-
-        modelBuilder.Entity<UsernameHistoryDto>()
-            .HasIndex(h => h.Username)
-            .HasDatabaseName("IX_username_history_username_lower");
-
-        modelBuilder.Entity<UsernameHistoryDto>()
-            .HasIndex(h => new { h.FirstName, h.LastName })
-            .HasDatabaseName("IX_username_history_name_lower");
+            .HasDatabaseName("ix_username_history_user_id");
 
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()
