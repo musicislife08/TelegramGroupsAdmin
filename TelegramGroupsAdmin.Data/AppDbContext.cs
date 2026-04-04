@@ -35,6 +35,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Telegram integration tables
     public DbSet<TelegramUserDto> TelegramUsers => Set<TelegramUserDto>();
+    public DbSet<UsernameHistoryDto> UsernameHistory => Set<UsernameHistoryDto>();
     public DbSet<TelegramUserMappingRecordDto> TelegramUserMappings => Set<TelegramUserMappingRecordDto>();
     public DbSet<TelegramLinkTokenRecordDto> TelegramLinkTokens => Set<TelegramLinkTokenRecordDto>();
     public DbSet<ManagedChatRecordDto> ManagedChats => Set<ManagedChatRecordDto>();
@@ -254,6 +255,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasOne(ut => ut.TelegramUser)
             .WithMany()
             .HasForeignKey(ut => ut.TelegramUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // UsernameHistory → TelegramUsers (cascade delete)
+        modelBuilder.Entity<UsernameHistoryDto>()
+            .HasOne(h => h.User)
+            .WithMany()
+            .HasForeignKey(h => h.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // ============================================================================
@@ -635,6 +643,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.ProfileScannedAt)
             .HasDatabaseName("ix_telegram_users_profile_scanned_at"); // Background re-scan job ordering
+
+        // UsernameHistory indexes
+        modelBuilder.Entity<UsernameHistoryDto>()
+            .HasIndex(h => h.UserId)
+            .HasDatabaseName("IX_username_history_user_id");
+
+        modelBuilder.Entity<UsernameHistoryDto>()
+            .HasIndex(h => h.Username)
+            .HasDatabaseName("IX_username_history_username_lower");
+
+        modelBuilder.Entity<UsernameHistoryDto>()
+            .HasIndex(h => new { h.FirstName, h.LastName })
+            .HasDatabaseName("IX_username_history_name_lower");
 
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()
