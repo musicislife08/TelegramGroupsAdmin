@@ -693,7 +693,7 @@ public partial class MessageProcessingService(
                     ActionType: UserActionType.ProfileChange,
                     MessageId: message.MessageId,
                     ChatId: message.Chat.Id,
-                    IssuedBy: Actor.FromSystem("profile_diff_detection"),
+                    IssuedBy: Actor.ProfileDiffDetection,
                     IssuedAt: DateTimeOffset.UtcNow,
                     ExpiresAt: null,
                     Reason: changeReason), cancellationToken);
