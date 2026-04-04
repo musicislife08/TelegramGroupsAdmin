@@ -18,7 +18,7 @@
                     @Report.Status.ToString()
                 </MudChip>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    <span class="local-timestamp" data-utc="@Report.ReportedAt.ToString("o")">@Report.ReportedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    <LocalTimestamp Value="@Report.ReportedAt" />
                 </MudText>
             </MudStack>
         </CardHeaderContent>
@@ -43,7 +43,7 @@
 
                 @if (_message.PhotoLocalPath != null)
                 {
-                    <MudImage Src="@MediaPathUtilities.GetPhotoWebPath(_message.PhotoLocalPath)"
+                    <MudImage Src="@MediaUtilities.GetPhotoWebPath(_message.PhotoLocalPath)"
                               Alt="Reported image"
                               ObjectFit="ObjectFit.Contain"
                               Width="300"
@@ -59,7 +59,7 @@
                 @if (_message.DeletedAt.HasValue)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Error">
-                        Deleted <span class="local-timestamp" data-utc="@_message.DeletedAt.Value.ToString("o")">@_message.DeletedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                        Deleted <LocalTimestamp Value="@_message.DeletedAt.Value" />
                     </MudChip>
                 }
 

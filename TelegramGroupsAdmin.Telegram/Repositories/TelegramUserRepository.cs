@@ -118,64 +118,43 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <summary>
-    /// Upsert (insert or update) Telegram user record.
+    /// Upsert (insert or update) Telegram user record using atomic PostgreSQL ON CONFLICT DO UPDATE.
     /// Used by FetchUserPhotoJob and message processing to maintain user data.
+    /// NOTE: IsTrusted and BotDmEnabled are never updated on conflict — only set by dedicated methods.
+    /// NOTE: IsActive is hardcoded to true on conflict — sending a message definitively makes user active.
     /// </summary>
     public async Task UpsertAsync(UiModels.TelegramUser user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var existing = await context.TelegramUsers
-            .FirstOrDefaultAsync(u => u.TelegramUserId == user.TelegramUserId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var isTrusted = TelegramConstants.IsSystemUser(user.TelegramUserId);
 
-        if (existing != null)
-        {
-            // Update existing record
-            existing.Username = user.Username;
-            existing.FirstName = user.FirstName;
-            existing.LastName = user.LastName;
-            existing.UserPhotoPath = user.UserPhotoPath;
-            existing.PhotoHash = user.PhotoHash;
-            // NOTE: IsTrusted is NOT updated here - it's only set via TrustUserAsync/UntrustUserAsync
-            // to prevent message processing from clearing trust status set by admin/auto-trust
-            // NOTE: BotDmEnabled is NOT updated here - it's only set via EnableBotDmAsync/DisableBotDmAsync
-            // to prevent message processing from resetting DM status after user completes /start
-            // NOTE: IsActive IS updated here - sending a message definitively makes user active
-            // (unlike IsTrusted which is admin-controlled, IsActive is behavior-driven)
-            existing.IsActive = true;
-            existing.LastSeenAt = user.LastSeenAt;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
+        await context.Database.ExecuteSqlAsync($"""
+            INSERT INTO telegram_users (
+                telegram_user_id, username, first_name, last_name,
+                user_photo_path, photo_hash, is_active, is_trusted,
+                is_bot, is_banned, bot_dm_enabled,
+                first_seen_at, last_seen_at, created_at, updated_at
+            ) VALUES (
+                {user.TelegramUserId}, {user.Username}, {user.FirstName}, {user.LastName},
+                {user.UserPhotoPath}, {user.PhotoHash}, {user.IsActive}, {isTrusted},
+                {user.IsBot}, {false}, {false},
+                {now}, {user.LastSeenAt}, {now}, {now}
+            )
+            ON CONFLICT (telegram_user_id) DO UPDATE SET
+                username = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                user_photo_path = EXCLUDED.user_photo_path,
+                photo_hash = EXCLUDED.photo_hash,
+                is_active = true,
+                last_seen_at = EXCLUDED.last_seen_at,
+                updated_at = {now}
+            """, cancellationToken);
 
-            _logger.LogDebug(
-                "Updated Telegram user {TelegramUserId} (@{Username})",
-                user.TelegramUserId,
-                user.Username);
-        }
-        else
-        {
-            // Insert new record
-            var entity = user.ToDto();
-            entity.CreatedAt = DateTimeOffset.UtcNow;
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
-
-            // Always trust Telegram system accounts (channel posts, anonymous admin posts, etc.)
-            if (TelegramConstants.IsSystemUser(user.TelegramUserId))
-            {
-                entity.IsTrusted = true;
-                _logger.LogInformation(
-                    "Created Telegram system account {User} with automatic trust",
-                    user.ToLogInfo());
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "Created Telegram user {User}",
-                    user.ToLogDebug());
-            }
-
-            context.TelegramUsers.Add(entity);
-        }
-
-        await context.SaveChangesAsync(cancellationToken);
+        _logger.LogDebug(
+            "Upserted Telegram user {User}",
+            user.ToLogDebug());
     }
 
     /// <summary>
@@ -308,9 +287,9 @@ public class TelegramUserRepository : ITelegramUserRepository
 
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Enabled bot DMs for {User}",
-                entity.ToLogInfo());
+                entity.ToLogDebug());
         }
     }
 
@@ -508,11 +487,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         if (!string.IsNullOrWhiteSpace(searchText))
         {
             var search = searchText.Trim().ToLower();
-            query = query.Where(u =>
-                (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
-                (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
-                (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
-                EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%"));
+            query = ApplySearchFilter(query, context, search);
         }
 
         // Get total count before pagination
@@ -587,11 +562,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         if (!string.IsNullOrWhiteSpace(searchText))
         {
             var search = searchText.Trim().ToLower();
-            query = query.Where(u =>
-                (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
-                (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
-                (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
-                EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%"));
+            query = ApplySearchFilter(query, context, search);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -695,11 +666,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         if (!string.IsNullOrWhiteSpace(searchText))
         {
             var search = searchText.Trim().ToLower();
-            baseQuery = baseQuery.Where(u =>
-                (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
-                (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
-                (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
-                EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%"));
+            baseQuery = ApplySearchFilter(baseQuery, context, search);
         }
 
         // Run 5 count queries sequentially (DbContext is not thread-safe)
@@ -899,28 +866,24 @@ public class TelegramUserRepository : ITelegramUserRepository
         .ToList();
 
         // Get user actions with actor display name enrichment (LEFT JOINs for IssuedBy)
-        var actions = await (
-            from ua in context.UserActions.AsNoTracking()
-            join tu in context.TelegramUsers.AsNoTracking() on ua.TelegramUserId equals tu.TelegramUserId into telegramActors
-            from ta in telegramActors.DefaultIfEmpty()
-            join wu in context.Users.AsNoTracking() on ua.WebUserId equals wu.Id into webActors
-            from wa in webActors.DefaultIfEmpty()
-            join target in context.TelegramUsers.AsNoTracking() on ua.UserId equals target.TelegramUserId into targets
-            from t in targets.DefaultIfEmpty()
-            where ua.UserId == telegramUserId
-            orderby ua.IssuedAt descending
-            select new
+        var actions = await context.UserActions
+            .AsNoTracking()
+            .Where(ua => ua.UserId == telegramUserId)
+            .LeftJoin(context.TelegramUsers, ua => ua.TelegramUserId, tu => tu.TelegramUserId, (ua, ta) => new { ua, ta })
+            .LeftJoin(context.Users, x => x.ua.WebUserId, wu => wu.Id, (x, wa) => new { x.ua, x.ta, wa })
+            .LeftJoin(context.TelegramUsers, x => x.ua.UserId, t => t.TelegramUserId, (x, t) => new
             {
-                Action = ua,
-                TelegramActorUsername = ta.Username,
-                TelegramActorFirstName = ta.FirstName,
-                TelegramActorLastName = ta.LastName,
-                WebActorEmail = wa.Email,
-                TargetUsername = t.Username,
-                TargetFirstName = t.FirstName,
-                TargetLastName = t.LastName
-            }
-        ).ToListAsync(cancellationToken);
+                Action = x.ua,
+                TelegramActorUsername = x.ta != null ? x.ta.Username : null,
+                TelegramActorFirstName = x.ta != null ? x.ta.FirstName : null,
+                TelegramActorLastName = x.ta != null ? x.ta.LastName : null,
+                WebActorEmail = x.wa != null ? x.wa.Email : null,
+                TargetUsername = t != null ? t.Username : null,
+                TargetFirstName = t != null ? t.FirstName : null,
+                TargetLastName = t != null ? t.LastName : null
+            })
+            .OrderByDescending(x => x.Action.IssuedAt)
+            .ToListAsync(cancellationToken);
 
         // Get detection history (join through messages to filter by user)
         var detectionHistory = await (
@@ -1197,7 +1160,7 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Fuzzy search: match against combined "first last" name OR username
+        // Fuzzy search: match against combined "first last" name OR username OR past names
         // Searches ALL users (active and inactive) for ban command
         var matches = await context.TelegramUsers
             .AsNoTracking()
@@ -1205,7 +1168,12 @@ public class TelegramUserRepository : ITelegramUserRepository
                 // Match against combined full name (first + space + last)
                 (u.FirstName + " " + u.LastName).ToLower().Contains(searchLower) ||
                 // Or match against username
-                (u.Username != null && u.Username.ToLower().Contains(searchLower)))
+                (u.Username != null && u.Username.ToLower().Contains(searchLower)) ||
+                // Or match against past names from username_history
+                context.UsernameHistory.Any(h =>
+                    h.UserId == u.TelegramUserId &&
+                    ((h.FirstName + " " + h.LastName).ToLower().Contains(searchLower) ||
+                     (h.Username != null && h.Username.ToLower().Contains(searchLower)))))
             .OrderBy(u => u.FirstName) // Alphabetical for consistent ordering
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -1318,5 +1286,27 @@ public class TelegramUserRepository : ITelegramUserRepository
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.ProfileScannedAt, DateTimeOffset.UtcNow)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+    }
+
+    // ============================================================================
+    // Search Helpers
+    // ============================================================================
+
+    /// <summary>
+    /// Builds a predicate that matches users by current OR past names from username_history.
+    /// </summary>
+    private static IQueryable<DataModels.TelegramUserDto> ApplySearchFilter(
+        IQueryable<DataModels.TelegramUserDto> query, AppDbContext context, string search)
+    {
+        return query.Where(u =>
+            (u.Username != null && EF.Functions.ILike(u.Username, $"%{search}%")) ||
+            (u.FirstName != null && EF.Functions.ILike(u.FirstName, $"%{search}%")) ||
+            (u.LastName != null && EF.Functions.ILike(u.LastName, $"%{search}%")) ||
+            EF.Functions.ILike(u.TelegramUserId.ToString(), $"%{search}%") ||
+            context.UsernameHistory.Any(h =>
+                h.UserId == u.TelegramUserId &&
+                ((h.Username != null && EF.Functions.ILike(h.Username, $"%{search}%")) ||
+                 (h.FirstName != null && EF.Functions.ILike(h.FirstName, $"%{search}%")) ||
+                 (h.LastName != null && EF.Functions.ILike(h.LastName, $"%{search}%")))));
     }
 }

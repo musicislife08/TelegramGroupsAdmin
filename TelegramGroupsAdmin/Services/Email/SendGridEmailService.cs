@@ -1,6 +1,7 @@
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Models;
 
 namespace TelegramGroupsAdmin.Services.Email;
@@ -13,13 +14,16 @@ public class SendGridEmailService : IEmailService
 {
     private readonly ISystemConfigRepository _configRepo;
     private readonly ILogger<SendGridEmailService> _logger;
+    private readonly ApiMetrics _apiMetrics;
 
     public SendGridEmailService(
         ISystemConfigRepository configRepo,
-        ILogger<SendGridEmailService> logger)
+        ILogger<SendGridEmailService> logger,
+        ApiMetrics apiMetrics)
     {
         _configRepo = configRepo;
         _logger = logger;
+        _apiMetrics = apiMetrics;
     }
 
     public async Task SendEmailAsync(string to, string subject, string body, CancellationToken cancellationToken = default)
@@ -73,6 +77,7 @@ public class SendGridEmailService : IEmailService
 
             _logger.LogDebug("Sending email via SendGrid API...");
             var response = await client.SendEmailAsync(msg, cancellationToken);
+            _apiMetrics.RecordSendGridSend("raw", response.IsSuccessStatusCode);
 
             if (response.IsSuccessStatusCode)
             {

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.IO;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using TelegramGroupsAdmin.Configuration;
@@ -12,6 +13,8 @@ using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using System.Diagnostics;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TL;
@@ -26,6 +29,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.UserApi;
 public sealed class ProfileScanService(
     ITelegramSessionManager sessionManager,
     IServiceScopeFactory scopeFactory,
+    PipelineMetrics pipelineMetrics,
+    RecyclableMemoryStreamManager streamManager,
     ILogger<ProfileScanService> logger) : IProfileScanService
 {
     /// <summary>
@@ -34,11 +39,20 @@ public sealed class ProfileScanService(
     /// </summary>
     private static readonly TimeSpan ScanFreshnessWindow = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// Maximum time for the core scan (Telegram API calls, file downloads, AI scoring).
+    /// Prevents hung DC connections from blocking the welcome flow indefinitely.
+    /// </summary>
+    private static readonly TimeSpan ScanTimeout = TimeSpan.FromSeconds(45);
+
     public async Task<ProfileScanResult> ScanUserProfileAsync(
         UserIdentity user,
         ChatIdentity? triggeringChat,
         CancellationToken ct)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var scanSource = triggeringChat is not null ? "welcome" : "rescan";
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
@@ -56,6 +70,7 @@ public sealed class ProfileScanService(
             logger.LogDebug("Profile scan for {User}: recently scanned ({LastScan}), reusing cached score {Score}",
                 user.ToLogDebug(), lastScan, existingUser.ProfileScanScore);
 
+            pipelineMetrics.RecordProfileScanSkipped("dedup");
             var cachedOutcome = await DetermineOutcomeAsync(existingUser.ProfileScanScore.Value, triggeringChat, scope.ServiceProvider, ct);
             return new ProfileScanResult(
                 user.Id,
@@ -73,15 +88,47 @@ public sealed class ProfileScanService(
         if (client == null)
         {
             logger.LogWarning("No User API client available for profile scan of {User}", user.ToLogDebug());
+            pipelineMetrics.RecordProfileScanSkipped("no_session");
             return EmptyResult(user.Id, "No User API session available. Connect a session in Settings.");
         }
 
-        // Top-level guard: if any API call in Steps 1-8 triggers the flood gate,
-        // bail out immediately without permanently excluding the user.
+        // Top-level guard: WTelegram API calls don't accept CancellationToken, so a hung DC
+        // connection (e.g., file download from DC -4) blocks indefinitely. Task.WhenAny races
+        // the scan against a timeout — if the timeout wins, we abandon the scan and return
+        // gracefully so the welcome flow continues.
+        //
+        // The scan task gets its own scope (via ScanWithOwnedScopeAsync) so that if the timeout
+        // fires and this method returns, the abandoned task's scoped services stay alive until
+        // the task completes or faults — preventing ObjectDisposedException on DbContexts.
         try
         {
-            return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat,
-                userRepo, scope.ServiceProvider, ct);
+            var scanTask = ScanWithOwnedScopeAsync(client, user, existingUser, triggeringChat, ct);
+
+            var completedTask = await Task.WhenAny(scanTask, Task.Delay(ScanTimeout, CancellationToken.None));
+
+            if (completedTask != scanTask)
+            {
+                logger.LogWarning(
+                    "Profile scan timed out after {Timeout}s for {User} (WTelegram call hung, likely DC connection issue)",
+                    ScanTimeout.TotalSeconds, user.ToLogDebug());
+
+                // Observe the abandoned task to prevent UnobservedTaskException and log failures
+                _ = scanTask.ContinueWith(
+                    t => logger.LogDebug(t.Exception?.GetBaseException(),
+                        "Abandoned profile scan for {UserId} faulted after timeout", user.Id),
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted,
+                    TaskScheduler.Default);
+
+                pipelineMetrics.RecordProfileScanTimeout();
+                return EmptyResult(user.Id, $"Scan timed out after {ScanTimeout.TotalSeconds}s");
+            }
+
+            var result = await scanTask;
+            pipelineMetrics.RecordProfileScan(
+                OutcomeToTag(result.Outcome), scanSource,
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            return result;
         }
         catch (TelegramFloodWaitException ex)
         {
@@ -89,6 +136,24 @@ public sealed class ProfileScanService(
                 user.ToLogDebug(), ex.Message);
             return EmptyResult(user.Id, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Runs the core scan with its own DI scope. The scope stays alive for the task's full
+    /// lifetime, even if the caller abandons the task due to timeout.
+    /// </summary>
+    private async Task<ProfileScanResult> ScanWithOwnedScopeAsync(
+        IWTelegramApiClient client,
+        UserIdentity user,
+        Models.TelegramUser? existingUser,
+        ChatIdentity? triggeringChat,
+        CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+        return await ScanUserProfileCoreAsync(client, user, existingUser, triggeringChat,
+            userRepo, scope.ServiceProvider, ct);
     }
 
     private async Task<ProfileScanResult> ScanUserProfileCoreAsync(
@@ -106,6 +171,7 @@ public sealed class ProfileScanService(
         {
             logger.LogWarning("Could not resolve {User} — marking as excluded from future rescans", user.ToLogDebug());
             await userRepo.ExcludeFromProfileScanAsync(user.Id, ct);
+            pipelineMetrics.RecordProfileScanSkipped("excluded");
             return EmptyResult(user.Id, "User could not be resolved — they may have deleted their Telegram account.");
         }
 
@@ -283,7 +349,7 @@ public sealed class ProfileScanService(
         var scoringEngine = sp.GetRequiredService<IProfileScoringEngine>();
 
         var scoreResult = await scoringEngine.ScoreAsync(
-            profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, ct);
+            profileData, imageResult.Images, imageResult.Labels, banThreshold, notifyThreshold, cancellationToken: ct);
 
         // ── Step 7: Persist results ──
         await userRepo.UpdateProfileScanDataAsync(
@@ -305,10 +371,9 @@ public sealed class ProfileScanService(
             Outcome: scoreResult.Outcome,
             RuleScore: scoreResult.RuleScore,
             AiScore: scoreResult.AiScore,
-            AiConfidence: scoreResult.AiConfidence,
             AiReason: scoreResult.AiReason,
             AiSignals: scoreResult.AiSignals is { Length: > 0 }
-                ? string.Join(", ", scoreResult.AiSignals) : null), ct);
+                ? string.Join(", ", scoreResult.AiSignals) : null), cancellationToken: ct);
 
         var result = new ProfileScanResult(
             user.Id, bio, personalChannelId, channelTitle, channelAbout,
@@ -583,9 +648,10 @@ public sealed class ProfileScanService(
         {
             try
             {
-                using var ms = new MemoryStream();
+                using var ms = streamManager.GetStream("ProfileScan.ProfilePhoto");
                 var fileType = await client.DownloadProfilePhotoAsync(tlUser, ms, big: false);
-                var resized = await ResizeForVisionAsync(ms.ToArray());
+                ms.Position = 0;
+                var resized = await ResizeForVisionAsync(ms);
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("profile photo");
             }
@@ -601,9 +667,10 @@ public sealed class ProfileScanService(
         {
             try
             {
-                using var ms = new MemoryStream();
+                using var ms = streamManager.GetStream("ProfileScan.ChannelPhoto");
                 var fileType = await client.DownloadProfilePhotoAsync(personalChannel, ms, big: false);
-                var resized = await ResizeForVisionAsync(ms.ToArray());
+                ms.Position = 0;
+                var resized = await ResizeForVisionAsync(ms);
                 images.Add(new ImageInput(resized, ToMimeType(fileType)));
                 labels.Add("personal channel photo");
             }
@@ -628,9 +695,10 @@ public sealed class ProfileScanService(
                     {
                         case MessageMediaPhoto { photo: Photo photo }:
                         {
-                            using var ms = new MemoryStream();
+                            using var ms = streamManager.GetStream("ProfileScan.StoryPhoto");
                             var fileType = await client.DownloadFileAsync(photo, ms);
-                            var resized = await ResizeForVisionAsync(ms.ToArray());
+                            ms.Position = 0;
+                            var resized = await ResizeForVisionAsync(ms);
                             images.Add(new ImageInput(resized, ToMimeType(fileType)));
                             labels.Add("story photo");
                             storyImageCount++;
@@ -643,9 +711,10 @@ public sealed class ProfileScanService(
                             var thumb = doc.LargestThumbSize;
                             if (thumb == null) continue;
 
-                            using var ms = new MemoryStream();
+                            using var ms = streamManager.GetStream("ProfileScan.StoryThumb");
                             await client.DownloadFileAsync(doc, ms, thumb);
-                            var resized = await ResizeForVisionAsync(ms.ToArray());
+                            ms.Position = 0;
+                            var resized = await ResizeForVisionAsync(ms);
                             images.Add(new ImageInput(resized, "image/jpeg"));
                             labels.Add("story video thumbnail");
                             storyImageCount++;
@@ -671,12 +740,19 @@ public sealed class ProfileScanService(
         return new ImageCollectionResult(images, labelString);
     }
 
-    private static async Task<byte[]> ResizeForVisionAsync(byte[] imageBytes, int maxDimension = VisionMaxDimension)
+    private static async Task<byte[]> ResizeForVisionAsync(Stream imageStream, int maxDimension = VisionMaxDimension)
     {
-        using var image = Image.Load(imageBytes);
+        imageStream.Position = 0;
+        using var image = await Image.LoadAsync(imageStream);
 
         if (image.Width <= maxDimension && image.Height <= maxDimension)
-            return imageBytes;
+        {
+            // Image fits — return raw bytes without re-encoding
+            imageStream.Position = 0;
+            using var passthrough = new MemoryStream((int)imageStream.Length);
+            await imageStream.CopyToAsync(passthrough);
+            return passthrough.ToArray();
+        }
 
         image.Mutate(x => x.Resize(new ResizeOptions
         {
@@ -764,4 +840,12 @@ public sealed class ProfileScanService(
     private static ProfileScanResult EmptyResult(long userId, string? skipReason = null) =>
         new(userId, null, null, null, null, false, null, false, false, false,
             0.0m, ProfileScanOutcome.Clean, null, null, ContainsNudity: false, skipReason);
+
+    private static string OutcomeToTag(ProfileScanOutcome outcome) => outcome switch
+    {
+        ProfileScanOutcome.Clean => "clean",
+        ProfileScanOutcome.HeldForReview => "held_for_review",
+        ProfileScanOutcome.Banned => "banned",
+        _ => outcome.ToString().ToLowerInvariant()
+    };
 }

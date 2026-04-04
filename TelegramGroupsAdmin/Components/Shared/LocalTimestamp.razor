@@ -1,4 +1,12 @@
-<span class="local-timestamp" data-utc="@Value.ToString("o")">@Value.ToLocalTime().ToString(Format)</span>
+@if (UserTimeZone is not null)
+{
+    var displayTime = TimeZoneInfo.ConvertTime(Value, UserTimeZone);
+    <span>@displayTime.ToString(Format)</span>
+}
+else
+{
+    <span>&mdash;</span>
+}
 
 @code {
     [Parameter, EditorRequired]
@@ -6,4 +14,7 @@
 
     [Parameter]
     public string Format { get; set; } = "MMM d, yyyy h:mm tt";
+
+    [CascadingParameter]
+    private TimeZoneInfo? UserTimeZone { get; set; }
 }

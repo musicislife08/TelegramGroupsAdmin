@@ -27,7 +27,7 @@
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning">Pending</MudChip>
                 }
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    <span class="local-timestamp" data-utc="@ExamFailure.FailedAt.ToString("o")">@ExamFailure.FailedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    <LocalTimestamp Value="@ExamFailure.FailedAt" />
                 </MudText>
             </MudStack>
         </CardHeaderContent>
@@ -228,7 +228,7 @@
             {
                 <MudAlert Severity="Severity.Info" Dense="true">
                     <b>Reviewed:</b> @ExamFailure.ActionTaken by @(ExamFailure.ReviewedBy ?? "Unknown")
-                    on <span class="local-timestamp" data-utc="@ExamFailure.ReviewedAt.Value.ToString("o")">@ExamFailure.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    on <LocalTimestamp Value="@ExamFailure.ReviewedAt.Value" />
                     @if (ExamFailure.AdminNotes != null)
                     {
                         <br /><b>Notes:</b> @ExamFailure.AdminNotes
@@ -422,7 +422,7 @@
 
     private string? GetPhotoUrl(string photoPath)
     {
-        return MediaPathUtilities.GetPhotoWebPath(photoPath);
+        return MediaUtilities.GetPhotoWebPath(photoPath);
     }
 
     private async Task OnApprove()

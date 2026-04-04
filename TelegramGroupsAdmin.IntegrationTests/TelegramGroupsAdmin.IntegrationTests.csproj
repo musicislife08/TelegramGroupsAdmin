@@ -27,6 +27,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="WireMock.Net" />
   </ItemGroup>
@@ -48,6 +49,11 @@
     <EmbeddedResource Include="TestData\SQL\*.sql" />
     <!-- Legacy (to be removed after migration) -->
     <EmbeddedResource Include="TestData\MLTrainingData.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="PgBouncer\pgbouncer.ini" />
+    <EmbeddedResource Include="PgBouncer\userlist.txt" />
   </ItemGroup>
 
 </Project>

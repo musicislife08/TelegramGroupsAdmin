@@ -24,5 +24,7 @@ public enum UserActionType
     /// <summary>Kick user from a specific chat (ban then immediate unban)</summary>
     Kick = 8,
     /// <summary>Restore user permissions to chat defaults (unmute)</summary>
-    RestorePermissions = 9
+    RestorePermissions = 9,
+    /// <summary>Profile change detected (username, first name, or last name changed)</summary>
+    ProfileChange = 10
 }

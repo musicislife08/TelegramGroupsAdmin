@@ -11,16 +11,17 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 /// </summary>
 public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
-    public CachedBlockedDomainsRepository(AppDbContext context)
+    public CachedBlockedDomainsRepository(IDbContextFactory<AppDbContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task<List<CachedBlockedDomain>> GetAllAsync(long chatId = 0, BlockMode? blockMode = null, CancellationToken cancellationToken = default)
     {
-        var query = _context.CachedBlockedDomains
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.CachedBlockedDomains
             .AsQueryable();
 
         if (chatId == 0)
@@ -48,7 +49,8 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         // Normalize domain before lookup (matches parser normalization)
         domain = NormalizeDomain(domain);
 
-        var dto = await _context.CachedBlockedDomains
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.CachedBlockedDomains
             .FirstOrDefaultAsync(cbd =>
                 cbd.Domain == domain &&
                 (cbd.ChatId == 0 || cbd.ChatId == chatId) &&
@@ -64,7 +66,8 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         domain = NormalizeDomain(domain);
 
         // Check global + chat-specific hard blocks (BlockMode = Hard)
-        var dto = await _context.CachedBlockedDomains
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = await context.CachedBlockedDomains
             .FirstOrDefaultAsync(cbd =>
                 cbd.Domain == domain &&
                 (cbd.ChatId == 0 || cbd.ChatId == chatId) &&
@@ -143,21 +146,24 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
             notesArray
         };
 
-        await _context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
     }
 
     public async Task DeleteBySourceAsync(string sourceType, long sourceId, CancellationToken cancellationToken = default)
     {
         // Source type is currently only "subscription", sourceId is blocklist_subscriptions.id
         // Use ExecuteDeleteAsync to avoid loading entities into memory and prevent concurrency issues
-        await _context.CachedBlockedDomains
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await context.CachedBlockedDomains
             .Where(cbd => cbd.SourceSubscriptionId == sourceId)
             .ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task DeleteAllAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
-        var query = _context.CachedBlockedDomains.AsQueryable();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.CachedBlockedDomains.AsQueryable();
 
         if (chatId == 0)
         {
@@ -176,7 +182,8 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
 
     public async Task<UrlFilterStats> GetStatsAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
-        var query = _context.CachedBlockedDomains.AsQueryable();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var query = context.CachedBlockedDomains.AsQueryable();
 
         if (chatId == 0)
         {
@@ -201,7 +208,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         var softBlockDomains = domainStats.FirstOrDefault(s => s.BlockMode == (int)BlockMode.Soft)?.Count ?? 0;
 
         // PERF-CD-3: Optimized - Single GroupBy query for BlocklistSubscriptions
-        var subscriptionStats = await _context.BlocklistSubscriptions
+        var subscriptionStats = await context.BlocklistSubscriptions
             .GroupBy(bs => new { bs.Enabled, bs.BlockMode })
             .Select(g => new { g.Key.Enabled, g.Key.BlockMode, Count = g.Count() })
             .ToListAsync(cancellationToken);
@@ -215,7 +222,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
 
         // Count whitelisted domains (domain_filters with FilterType=Whitelist)
         // Single query - already optimal
-        var whitelistedDomains = await _context.DomainFilters
+        var whitelistedDomains = await context.DomainFilters
             .CountAsync(df => df.Enabled && df.FilterType == 1, cancellationToken);  // 1 = Whitelist
 
         return new UrlFilterStats(

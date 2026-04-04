@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,7 @@ using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
@@ -31,6 +33,8 @@ public partial class MessageProcessingService(
     CommandRouter commandRouter,
     IChatCache chatCache,
     IServiceProvider serviceProvider,
+    PipelineMetrics pipelineMetrics,
+    ChatMetrics chatMetrics,
     ILogger<MessageProcessingService> logger) : IMessageProcessingService
 {
     // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
@@ -61,6 +65,8 @@ public partial class MessageProcessingService(
         activity?.SetTag("message.message_id", message.MessageId);
         activity?.SetTag("message.chat_type", message.Chat.Type.ToString());
         activity?.SetTag("message.has_text", !string.IsNullOrWhiteSpace(message.Text ?? message.Caption));
+
+        var startTimestamp = Stopwatch.GetTimestamp();
 
         // Skip private chats - only process group messages for history/spam detection
         if (message.Chat.Type == ChatType.Private)
@@ -107,9 +113,7 @@ public partial class MessageProcessingService(
                             message.Text,
                             cancellationToken);
 
-                        logger.LogInformation(
-                            "Processed open-ended exam answer for {User}: Complete={Complete}, Passed={Passed}",
-                            message.From.ToLogInfo(), result.ExamComplete, result.Passed);
+                        LogOpenEndedExamAnswer(logger, message.From.ToLogInfo(), result.ExamComplete, result.Passed);
 
                         // Cancel welcome timeout and update response if exam completed
                         if (result.ExamComplete && result.GroupChatId.HasValue)
@@ -142,11 +146,26 @@ public partial class MessageProcessingService(
                 }
             }
 
+            pipelineMetrics.RecordMessageProcessed("new_message", "skipped",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             return; // Don't process private messages further
         }
 
         // Keep SDK Chat cache warm (used by NotificationHandler and other services)
         chatCache.UpdateChat(message.Chat);
+
+        // Record message type metric for group messages
+        var messageType = message switch
+        {
+            { Photo: not null } => "photo",
+            { Video: not null } => "video",
+            { Animation: not null } => "animation",
+            { Document: not null } => "document",
+            { Sticker: not null } => "sticker",
+            _ when !string.IsNullOrEmpty(message.Text) => "text",
+            _ => "other"
+        };
+        chatMetrics.RecordMessage(messageType);
 
         // Detect Group → Supergroup migration
         // When a Group is upgraded to Supergroup (e.g., when granting admin), Telegram:
@@ -166,6 +185,8 @@ public partial class MessageProcessingService(
             using var migrationScope = scopeFactory.CreateScope();
             var chatService = migrationScope.ServiceProvider.GetRequiredService<IBotChatService>();
             await chatService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
+            pipelineMetrics.RecordMessageProcessed("new_message", "skipped",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             return; // Don't process migration message further
         }
 
@@ -180,11 +201,7 @@ public partial class MessageProcessingService(
 
         if (ServiceMessageHelper.IsServiceMessage(message, deletionConfig, out var shouldDelete))
         {
-            logger.LogDebug(
-                "Detected service message: Type={Type}, MessageId={MessageId}, Chat={Chat}",
-                message.Type,
-                message.MessageId,
-                message.Chat.ToLogDebug());
+            LogDetectedServiceMessage(logger, message.Type.ToString(), message.MessageId, message.Chat.ToLogDebug());
 
             // Store service message for UI consistency with Telegram Desktop
             var serviceMessageText = ServiceMessageHelper.GetServiceMessageText(message);
@@ -233,9 +250,7 @@ public partial class MessageProcessingService(
                 var botInfo = await userService.GetMeAsync(cancellationToken);
                 if (message.LeftChatMember.Id == botInfo.Id)
                 {
-                    logger.LogInformation(
-                        "Skipping deletion of LeftChatMember service message - bot was removed from {Chat}",
-                        message.Chat.ToLogInfo());
+                    LogSkippingBotRemovedDeletion(logger, message.Chat.ToLogInfo());
                     return; // Don't try to delete or process further
                 }
             }
@@ -252,10 +267,7 @@ public partial class MessageProcessingService(
                         deletionSource: "service_message",
                         cancellationToken);
 
-                    logger.LogInformation(
-                        "Deleted service message (type: {Type}) in {Chat}",
-                        message.Type,
-                        message.Chat.ToLogInfo());
+                    LogDeletedServiceMessage(logger, message.Type.ToString(), message.Chat.ToLogInfo());
                 }
                 catch (Exception ex)
                 {
@@ -268,12 +280,11 @@ public partial class MessageProcessingService(
             }
             else
             {
-                logger.LogDebug(
-                    "Skipping deletion of {Type} service message (disabled in config) in {Chat}",
-                    message.Type,
-                    message.Chat.ToLogDebug());
+                LogSkippingServiceMessageDeletion(logger, message.Type.ToString(), message.Chat.ToLogDebug());
             }
 
+            pipelineMetrics.RecordMessageProcessed("new_message", "skipped",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             return; // Don't process service messages further
         }
 
@@ -316,10 +327,7 @@ public partial class MessageProcessingService(
 
                 if (shouldRefreshAdmins)
                 {
-                    logger.LogInformation(
-                        "Refreshing admin cache for {Chat} ({Reason})",
-                        message.Chat.ToLogInfo(),
-                        refreshReason);
+                    LogRefreshingAdminCache(logger, message.Chat.ToLogInfo(), refreshReason);
 
                     try
                     {
@@ -336,7 +344,7 @@ public partial class MessageProcessingService(
             {
                 if (isNewChat)
                 {
-                    logger.LogDebug("Discovered new private {Chat}, skipping admin cache refresh", message.Chat.ToLogDebug());
+                    LogDiscoveredNewPrivateChat(logger, message.Chat.ToLogDebug());
                 }
             }
 
@@ -658,8 +666,6 @@ public partial class MessageProcessingService(
                 CreatedAt: now,
                 UpdatedAt: now
             );
-            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
-
             // Profile change detection: compare Bot API User fields against stored values
             // New users (existingUser == null) get scanned on join, not here.
             // Trusted/admin users are already skipped by contentCheckSkipReason.
@@ -667,24 +673,48 @@ public partial class MessageProcessingService(
                 && contentCheckSkipReason == ContentCheckSkipReason.NotSkipped
                 && ProfileDiffDetected(existingUser, message.From))
             {
-                var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
-                await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                LogProfileChangeDetected(logger, message.From.ToLogDebug(), existingUser.ToLogInfo(), message.From.ToLogInfo());
 
-                logger.LogDebug(
-                    "Profile change detected for {User}, scheduled background scan",
-                    message.From.ToLogDebug());
+                // Record previous profile values in username_history
+                var historyRepo = messageScope.ServiceProvider.GetRequiredService<IUsernameHistoryRepository>();
+                await historyRepo.InsertAsync(
+                    existingUser.TelegramUserId,
+                    existingUser.Username,
+                    existingUser.FirstName,
+                    existingUser.LastName,
+                    cancellationToken);
+
+                // Record profile change in user_actions audit trail
+                var userActionsRepo = messageScope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+                var changeReason = BuildProfileChangeReason(existingUser, message.From);
+                await userActionsRepo.InsertAsync(new UserActionRecord(
+                    Id: 0,
+                    UserId: existingUser.TelegramUserId,
+                    ActionType: UserActionType.ProfileChange,
+                    MessageId: message.MessageId,
+                    ChatId: message.Chat.Id,
+                    IssuedBy: Actor.ProfileDiffDetection,
+                    IssuedAt: DateTimeOffset.UtcNow,
+                    ExpiresAt: null,
+                    Reason: changeReason), cancellationToken);
+
+                try
+                {
+                    var jobScheduler = messageScope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
+                    await jobScheduler.ScheduleProfileScanAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to schedule profile scan for user {UserId}", message.From.Id);
+                }
             }
+
+            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
 
             // Raise event for real-time UI updates
             OnNewMessage?.Invoke(messageRecord);
 
-            logger.LogDebug(
-                "Cached message {MessageId} from {User} in {Chat} (photo: {HasPhoto}, text: {HasText})",
-                message.MessageId,
-                message.From.ToLogDebug(),
-                message.Chat.ToLogDebug(),
-                photoFileId != null,
-                text != null);
+            LogCachedMessage(logger, message.MessageId, message.From.ToLogDebug(), message.Chat.ToLogDebug(), photoFileId != null, text != null);
 
             // Delete command message if requested (AFTER saving to database for FK integrity)
             if (commandResult?.DeleteCommandMessage == true)
@@ -699,7 +729,7 @@ public partial class MessageProcessingService(
                         deletionSource: "command_cleanup",
                         cancellationToken);
 
-                    logger.LogDebug("Deleted command message {MessageId} in {Chat}", message.MessageId, message.Chat.ToLogDebug());
+                    LogDeletedCommandMessage(logger, message.MessageId, message.Chat.ToLogDebug());
                 }
                 catch (Exception ex)
                 {
@@ -729,9 +759,7 @@ public partial class MessageProcessingService(
                 {
                     // Chat is inactive (bot not admin) - skip content detection
                     // Message is already saved, just don't process for spam
-                    logger.LogDebug(
-                        "Skipping content detection for inactive {Chat} - bot is not admin",
-                        message.Chat.ToLogDebug());
+                    LogSkippingContentDetectionInactiveChat(logger, message.Chat.ToLogDebug());
                 }
                 else
                 {
@@ -747,9 +775,14 @@ public partial class MessageProcessingService(
                         cancellationToken);
                 }
             }
+
+            pipelineMetrics.RecordMessageProcessed("new_message", "processed",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
         }
         catch (Exception ex)
         {
+            pipelineMetrics.RecordMessageProcessed("new_message", "error",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             logger.LogError(ex,
                 "Error caching message {MessageId} from {User} in {Chat}",
                 message.MessageId,
@@ -768,6 +801,8 @@ public partial class MessageProcessingService(
         activity?.SetTag("message.message_id", editedMessage.MessageId);
         activity?.SetTag("message.chat_type", editedMessage.Chat.Type.ToString());
 
+        var startTimestamp = Stopwatch.GetTimestamp();
+
         try
         {
             using var scope = scopeFactory.CreateScope();
@@ -780,9 +815,14 @@ public partial class MessageProcessingService(
             {
                 OnMessageEdited?.Invoke(editRecord);
             }
+
+            pipelineMetrics.RecordMessageProcessed("edit", "processed",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
         }
         catch (Exception ex)
         {
+            pipelineMetrics.RecordMessageProcessed("edit", "error",
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             logger.LogError(ex,
                 "Error handling edit for message {MessageId}",
                 editedMessage.MessageId);
@@ -799,6 +839,22 @@ public partial class MessageProcessingService(
         return !string.Equals(existing.FirstName, current.FirstName, StringComparison.Ordinal)
             || !string.Equals(existing.LastName, current.LastName, StringComparison.Ordinal)
             || !string.Equals(existing.Username, current.Username, StringComparison.Ordinal);
+    }
+
+    internal static string BuildProfileChangeReason(TelegramUser old, global::Telegram.Bot.Types.User current)
+    {
+        var changes = new List<string>();
+
+        if (!string.Equals(old.Username, current.Username, StringComparison.Ordinal))
+            changes.Add($"Username: @{old.Username ?? "(none)"} → @{current.Username ?? "(none)"}");
+
+        if (!string.Equals(old.FirstName, current.FirstName, StringComparison.Ordinal))
+            changes.Add($"First name: {old.FirstName ?? "(none)"} → {current.FirstName ?? "(none)"}");
+
+        if (!string.Equals(old.LastName, current.LastName, StringComparison.Ordinal))
+            changes.Add($"Last name: {old.LastName ?? "(none)"} → {current.LastName ?? "(none)"}");
+
+        return string.Join(", ", changes);
     }
 
     // REFACTOR-2: Extracted methods to specialized handlers

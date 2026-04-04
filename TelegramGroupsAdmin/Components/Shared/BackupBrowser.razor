@@ -1,12 +1,9 @@
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
-@using TelegramGroupsAdmin.Core.Extensions
 @using TelegramGroupsAdmin.Core.Models
-@using TelegramGroupsAdmin.Core.Services
 @inject IBackupService BackupService
 @inject IBackupRetentionService RetentionService
 @inject ISnackbar Snackbar
-@inject IJSRuntime Js
-@inject IAuditService AuditService
+@inject NavigationManager NavigationManager
 
 <MudPaper Class="pa-4" Elevation="0" Outlined="true">
     <MudStack Spacing="3">
@@ -276,7 +273,7 @@
                         </tr>
                         <tr>
                             <td><strong>Created At:</strong></td>
-                            <td><span class="local-timestamp" data-utc="@_viewingMetadata.CreatedAt.ToString("o")">@_viewingMetadata.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></td>
+                            <td><LocalTimestamp Value="@_viewingMetadata.CreatedAt" Format="yyyy-MM-dd HH:mm:ss" /></td>
                         </tr>
                         <tr>
                             <td><strong>App Version:</strong></td>
@@ -411,26 +408,9 @@
         }
     }
 
-    private async Task DownloadBackup(BackupFileInfo backup)
+    private void DownloadBackup(BackupFileInfo backup)
     {
-        try
-        {
-            var bytes = await File.ReadAllBytesAsync(backup.FilePath);
-            await Js.InvokeVoidAsync("downloadFile", backup.FileName, Convert.ToBase64String(bytes));
-            Snackbar.Add($"Downloading {backup.FileName}", Severity.Success);
-
-            // Audit log the backup download (security-sensitive action)
-            var actor = WebUser!.ToActor();
-            await AuditService.LogEventAsync(
-                AuditEventType.DataExported,
-                actor: actor,
-                target: null,
-                value: $"Downloaded backup: {backup.FileName} ({FormatBytes(backup.FileSizeBytes)})");
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Download failed: {ex.Message}", Severity.Error);
-        }
+        NavigationManager.NavigateTo($"/api/backup/download/{backup.FileName}", forceLoad: true);
     }
 
     private async Task DeleteBackup(BackupFileInfo backup)

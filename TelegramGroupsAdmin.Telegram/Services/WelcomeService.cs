@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -10,6 +11,7 @@ using static TelegramGroupsAdmin.Core.BackgroundJobs.DeduplicationKeys;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -37,10 +39,13 @@ public class WelcomeService(
     IBotModerationService moderationService,
     IJobScheduler jobScheduler,
     ICasCheckService casCheckService,
+    IUsernameBlacklistService usernameBlacklistService,
     TelegramPhotoService photoService,
     IProfileScanService profileScanService,
     ITelegramSessionManager sessionManager,
     IWelcomeAdmissionHandler admissionHandler,
+    WelcomeMetrics welcomeMetrics,
+    ChatMetrics chatMetrics,
     ILogger<WelcomeService> logger) : IWelcomeService
 {
     // Deletion source constants for audit tracking
@@ -63,6 +68,8 @@ public class WelcomeService(
         ChatMemberUpdated chatMemberUpdate,
         CancellationToken cancellationToken)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
+
         // Detect new user joins (status changed to Member)
         var oldStatus = chatMemberUpdate.OldChatMember.Status;
         var newStatus = chatMemberUpdate.NewChatMember.Status;
@@ -99,13 +106,18 @@ public class WelcomeService(
                     user,
                     "Not whitelisted and not invited by admin",
                     cancellationToken);
+                welcomeMetrics.RecordBotJoin("banned");
                 return;
             }
 
             // Bot is allowed (whitelisted or admin-invited) - skip welcome message
             logger.LogDebug("Skipping welcome for allowed bot {User}", user.ToLogDebug());
+            welcomeMetrics.RecordBotJoin("allowed");
             return;
         }
+
+        // Human user join — record once before any security check
+        chatMetrics.RecordUserJoin();
 
         logger.LogInformation(
             "New user joined: {User} in {Chat}",
@@ -129,6 +141,7 @@ public class WelcomeService(
                     "Skipping welcome for admin/owner: {User} in {Chat}",
                     user.ToLogInfo(),
                     chatMemberUpdate.Chat.ToLogInfo());
+                welcomeMetrics.RecordWelcomeOutcome("skipped_admin", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
                 return;
             }
 
@@ -152,6 +165,7 @@ public class WelcomeService(
                         Reason = "Lazy ban sync: User was globally banned before joining this chat",
                     },
                     cancellationToken);
+                welcomeMetrics.RecordWelcomeOutcome("pre_banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
                 return;
             }
 
@@ -169,11 +183,56 @@ public class WelcomeService(
 
             // ═══════════════════════════════════════════════════════════════════
             // SECURITY CHECKS (always run regardless of config.Enabled)
-            // Order: CAS (fail fast) → Photo fetch → Impersonation → Profile scan
+            // Order: Username blacklist (instant) → CAS (fail fast) → Photo fetch → Impersonation → Profile scan
             // Trusted users skip CAS + profile scan (trust is global)
             // ═══════════════════════════════════════════════════════════════════
 
-            // Step 5: CAS (Combot Anti-Spam) check - auto-ban known spammers FIRST (fail fast)
+            // Step 5: Username blacklist check - auto-ban blacklisted display names FIRST (instant, local DB)
+            // Skip trusted users — trust is global, applied across all groups
+            if (config.JoinSecurity.UsernameBlacklist.Enabled && existingUser?.IsTrusted != true)
+            {
+                var userIdentity = UserIdentity.From(user);
+                var blacklistMatch = await usernameBlacklistService.CheckDisplayNameAsync(
+                    userIdentity.DisplayName, cancellationToken);
+
+                if (blacklistMatch != null)
+                {
+                    logger.LogWarning(
+                        "Username blacklist match: {User} in {Chat} (pattern: {Pattern})",
+                        user.ToLogInfo(),
+                        chatMemberUpdate.Chat.ToLogInfo(),
+                        blacklistMatch.Pattern);
+
+                    // Delete verifying message before ban
+                    await TryDeleteMessageAsync(chatMemberUpdate.Chat.Id, verifyingMessageId.Value, cancellationToken);
+
+                    await moderationService.BanUserAsync(
+                        new BanIntent
+                        {
+                            User = userIdentity,
+                            Executor = Actor.UsernameBlacklist,
+                            Reason = $"Username blacklisted: {blacklistMatch.Pattern}",
+                            Chat = ChatIdentity.From(chatMemberUpdate.Chat)
+                        },
+                        cancellationToken);
+
+                    logger.LogInformation(
+                        "{User} auto-banned (username blacklist), skipping welcome flow",
+                        user.ToLogInfo());
+                    welcomeMetrics.RecordSecurityCheck("username_blacklist", "fail");
+                    welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                    return;
+                }
+
+                welcomeMetrics.RecordSecurityCheck("username_blacklist", "pass");
+            }
+            else
+            {
+                logger.LogDebug("Username blacklist check skipped for {User}", user.ToLogDebug());
+                welcomeMetrics.RecordSecurityCheck("username_blacklist", "skipped");
+            }
+
+            // Step 6: CAS (Combot Anti-Spam) check - auto-ban known spammers FIRST (fail fast)
             // Skip trusted users — trust is global, applied across all groups
             if (config.JoinSecurity.Cas.Enabled && existingUser?.IsTrusted != true)
             {
@@ -204,15 +263,20 @@ public class WelcomeService(
                     logger.LogInformation(
                         "{User} auto-banned (CAS), skipping welcome flow",
                         user.ToLogInfo());
+                    welcomeMetrics.RecordSecurityCheck("cas", "fail");
+                    welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
                     return;
                 }
+
+                welcomeMetrics.RecordSecurityCheck("cas", "pass");
             }
             else
             {
                 logger.LogDebug("CAS check disabled, skipping for {User}", user.ToLogDebug());
+                welcomeMetrics.RecordSecurityCheck("cas", "skipped");
             }
 
-            // Step 6: Photo fetch (sync, ~1.8s) - enables full impersonation detection
+            // Step 7: Photo fetch (sync, ~1.8s) - enables full impersonation detection
             string? userPhotoPath = existingUser?.UserPhotoPath;
             var photoResult = await photoService.GetUserPhotoWithMetadataAsync(
                 user.Id,
@@ -237,7 +301,7 @@ public class WelcomeService(
                     photoResult.RelativePath);
             }
 
-            // Step 7: Impersonation detection (now has photo for full capability)
+            // Step 8: Impersonation detection (now has photo for full capability)
             if (config.JoinSecurity.Impersonation.Enabled)
             {
                 var shouldCheck = await impersonationDetectionService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
@@ -275,6 +339,9 @@ public class WelcomeService(
                             logger.LogInformation(
                                 "{User} auto-banned for impersonation, skipping welcome flow",
                                 user.ToLogInfo());
+                            welcomeMetrics.RecordSecurityCheck("impersonation", "fail");
+                            welcomeMetrics.RecordSecurityCheck("photo_match", "fail");
+                            welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
                             return;
                         }
 
@@ -283,15 +350,29 @@ public class WelcomeService(
                             "{User} flagged for impersonation review (score: {Score}), continuing with welcome flow",
                             user.ToLogInfo(),
                             impersonationResult.TotalScore);
+                        welcomeMetrics.RecordSecurityCheck("impersonation", "pass");
+                        welcomeMetrics.RecordSecurityCheck("photo_match", "pass");
                     }
+                    else
+                    {
+                        welcomeMetrics.RecordSecurityCheck("impersonation", "pass");
+                        welcomeMetrics.RecordSecurityCheck("photo_match", "pass");
+                    }
+                }
+                else
+                {
+                    welcomeMetrics.RecordSecurityCheck("impersonation", "skipped");
+                    welcomeMetrics.RecordSecurityCheck("photo_match", "skipped");
                 }
             }
             else
             {
                 logger.LogDebug("Impersonation detection disabled, skipping for {User}", user.ToLogDebug());
+                welcomeMetrics.RecordSecurityCheck("impersonation", "skipped");
+                welcomeMetrics.RecordSecurityCheck("photo_match", "skipped");
             }
 
-            // Step 8: Profile scan via User API (skip trusted users)
+            // Step 9: Profile scan via User API (skip trusted users)
             if (config.JoinSecurity.ProfileScan.Enabled
                 && config.JoinSecurity.ProfileScan.ScanOnJoin
                 && existingUser?.IsTrusted != true)
@@ -310,6 +391,8 @@ public class WelcomeService(
                         logger.LogInformation(
                             "{User} auto-banned by profile scan (score {Score}), skipping welcome flow",
                             user.ToLogInfo(), scanResult.Score);
+                        welcomeMetrics.RecordSecurityCheck("profile_scan", "fail");
+                        welcomeMetrics.RecordWelcomeOutcome("banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
                         return; // User already banned by ProfileScanService
                     }
 
@@ -326,12 +409,19 @@ public class WelcomeService(
                             user.ToLogInfo(), scanResult.Score);
                         // Fall through — exam will run below if configured (dual-gate: both must pass)
                     }
+
+                    welcomeMetrics.RecordSecurityCheck("profile_scan", "pass");
                 }
                 else
                 {
                     logger.LogDebug("No User API session available, skipping profile scan for {User}",
                         user.ToLogDebug());
+                    welcomeMetrics.RecordSecurityCheck("profile_scan", "skipped");
                 }
+            }
+            else
+            {
+                welcomeMetrics.RecordSecurityCheck("profile_scan", "skipped");
             }
 
             // ═══════════════════════════════════════════════════════════════════
@@ -375,6 +465,7 @@ public class WelcomeService(
                         user.ToLogInfo(),
                         chatMemberUpdate.Chat.ToLogInfo());
                 }
+                welcomeMetrics.RecordWelcomeOutcome("admitted", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
                 return;
             }
 
@@ -416,7 +507,7 @@ public class WelcomeService(
                 chatMemberUpdate.Chat.ToLogDebug(),
                 config.Mode);
 
-            // Step 8: Create welcome response record (pending state)
+            // Step 10: Create welcome response record (pending state)
             var welcomeResponse = new WelcomeResponse(
                 Id: 0, // Will be set by database
                 ChatId: chatMemberUpdate.Chat.Id,
@@ -433,7 +524,7 @@ public class WelcomeService(
 
             var responseId = await welcomeResponsesRepository.InsertAsync(welcomeResponse, cancellationToken);
 
-            // Step 9: Schedule timeout via Quartz.NET
+            // Step 11: Schedule timeout via Quartz.NET
             var payload = new WelcomeTimeoutPayload(
                 UserIdentity.From(user),
                 ChatIdentity.From(chatMemberUpdate.Chat),
@@ -885,10 +976,15 @@ public class WelcomeService(
             ReasonCompletedWelcome,
             cancellationToken);
 
+        var durationMs = existingResponse != null
+            ? (DateTimeOffset.UtcNow - existingResponse.CreatedAt).TotalMilliseconds
+            : 0;
+
         if (admissionResult == AdmissionResult.Admitted)
         {
             await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
             await TryDeleteMessageAsync(chat.Id, welcomeMessageId, cancellationToken);
+            welcomeMetrics.RecordWelcomeOutcome("admitted", durationMs);
         }
         else
         {
@@ -952,6 +1048,11 @@ public class WelcomeService(
             );
             await welcomeResponsesRepository.InsertAsync(newResponse, cancellationToken);
         }
+
+        var durationMs = existingResponse != null
+            ? (DateTimeOffset.UtcNow - existingResponse.CreatedAt).TotalMilliseconds
+            : 0;
+        welcomeMetrics.RecordWelcomeOutcome("denied_rules", durationMs);
     }
 
     private async Task HandleDmAcceptAsync(
@@ -1023,10 +1124,13 @@ public class WelcomeService(
             ReasonCompletedWelcomeDm,
             cancellationToken);
 
+        var durationMs = (DateTimeOffset.UtcNow - welcomeResponse.CreatedAt).TotalMilliseconds;
+
         if (admissionResult == AdmissionResult.Admitted)
         {
             await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
             await TryDeleteMessageAsync(groupChatId, welcomeResponse.WelcomeMessageId, cancellationToken);
+            welcomeMetrics.RecordWelcomeOutcome("admitted", durationMs);
         }
         else
         {
@@ -1126,6 +1230,9 @@ public class WelcomeService(
 
     private async Task HandleUserLeftAsync(Chat chat, User user, CancellationToken cancellationToken = default)
     {
+        welcomeMetrics.RecordUserLeft();
+        chatMetrics.RecordUserLeave();
+
         logger.LogDebug(
             "{User} left {Chat}, recording welcome response if pending",
             user.ToLogDebug(),

@@ -20,7 +20,7 @@
     <MudPaper Class="pa-4 mb-4" Elevation="1">
         <MudTextField @bind-Value="_searchText"
                       Label="Search users"
-                      Placeholder="Search by name, username, or ID..."
+                      Placeholder="Search by name, username, ID, or name history..."
                       Variant="Variant.Outlined"
                       Adornment="Adornment.Start"
                       AdornmentIcon="@Icons.Material.Filled.Search"
@@ -250,14 +250,14 @@
                      Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="User">User</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Joined</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TelegramUserListItem" SortLabel="LastSeen">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="User">
                         <UserInfoCell User="context" ShowBadges="false" />
                     </MudTd>
-                    <MudTd DataLabel="Joined">
+                    <MudTd DataLabel="Last Seen">
                         <LocalTimestamp Value="@context.LastSeenAt" />
                     </MudTd>
                     <MudTd DataLabel="Actions">

@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -24,6 +26,7 @@ public class BotMessageService(
     IMessageHistoryRepository messageRepo,
     IMessageEditService editService,
     ITelegramUserRepository userRepo,
+    ApiMetrics apiMetrics,
     ILogger<BotMessageService> logger) : IBotMessageService
 {
 
@@ -47,6 +50,7 @@ public class BotMessageService(
             replyParameters: replyParameters,
             replyMarkup: replyMarkup,
             ct: cancellationToken);
+        apiMetrics.RecordTelegramApiCall("send_message", success: true);
 
         // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
         var botInfo = await userService.GetMeAsync(cancellationToken);
@@ -145,6 +149,7 @@ public class BotMessageService(
             parseMode: parseMode,
             replyMarkup: replyMarkup,
             ct: cancellationToken);
+        apiMetrics.RecordTelegramApiCall("edit_message", success: true);
 
         var editDate = editedMessage.EditDate.HasValue
             ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero) // DateTime (UTC) → DateTimeOffset
@@ -204,6 +209,7 @@ public class BotMessageService(
         {
             // Delete from Telegram via handler
             await messageHandler.DeleteAsync(chatId, messageId, cancellationToken);
+            apiMetrics.RecordTelegramApiCall("delete_message", success: true);
 
             // Mark as deleted in database
             await messageRepo.MarkMessageAsDeletedAsync(messageId, chatId, deletionSource, cancellationToken);
@@ -216,6 +222,9 @@ public class BotMessageService(
         }
         catch (Exception ex)
         {
+            apiMetrics.RecordTelegramApiCall("delete_message", success: false);
+            apiMetrics.RecordTelegramApiError(ex is ApiRequestException apiEx ? apiEx.ErrorCode.ToString() : ex.GetType().Name);
+
             logger.LogWarning(ex,
                 "Failed to delete message {MessageId} from Telegram (chat: {ChatId}), marking as deleted in DB anyway",
                 messageId,
@@ -255,6 +264,7 @@ public class BotMessageService(
 
         // Get chat info for the name
         var chatInfo = await chatHandler.GetChatAsync(chatId, cancellationToken);
+        apiMetrics.RecordTelegramApiCall("get_chat", success: true);
 
         // Upsert bot to telegram_users table (ensures bot name is available for UI display)
         var now = DateTimeOffset.UtcNow;
@@ -332,6 +342,7 @@ public class BotMessageService(
             text: text,
             showAlert: showAlert,
             ct: cancellationToken);
+        apiMetrics.RecordTelegramApiCall("answer_callback_query", success: true);
     }
 
     /// <summary>
@@ -352,6 +363,7 @@ public class BotMessageService(
             caption: caption,
             parseMode: parseMode,
             ct: cancellationToken);
+        apiMetrics.RecordTelegramApiCall("send_animation", success: true);
 
         // Get bot user info (cached in singleton IBotIdentityCache via IBotUserService)
         var botInfo = await userService.GetMeAsync(cancellationToken);

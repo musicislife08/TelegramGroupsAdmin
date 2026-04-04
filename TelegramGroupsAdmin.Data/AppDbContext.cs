@@ -35,6 +35,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Telegram integration tables
     public DbSet<TelegramUserDto> TelegramUsers => Set<TelegramUserDto>();
+    public DbSet<UsernameHistoryDto> UsernameHistory => Set<UsernameHistoryDto>();
     public DbSet<TelegramUserMappingRecordDto> TelegramUserMappings => Set<TelegramUserMappingRecordDto>();
     public DbSet<TelegramLinkTokenRecordDto> TelegramLinkTokens => Set<TelegramLinkTokenRecordDto>();
     public DbSet<ManagedChatRecordDto> ManagedChats => Set<ManagedChatRecordDto>();
@@ -84,6 +85,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Profile scan results
     public DbSet<ProfileScanResultDto> ProfileScanResults => Set<ProfileScanResultDto>();
+
+    // Username blacklist
+    public DbSet<UsernameBlacklistEntryDto> UsernameBlacklistEntries => Set<UsernameBlacklistEntryDto>();
 
     // Notification tables
     public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
@@ -251,6 +255,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasOne(ut => ut.TelegramUser)
             .WithMany()
             .HasForeignKey(ut => ut.TelegramUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // UsernameHistory → TelegramUsers (cascade delete)
+        modelBuilder.Entity<UsernameHistoryDto>()
+            .HasOne(h => h.User)
+            .WithMany()
+            .HasForeignKey(h => h.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // ============================================================================
@@ -513,6 +524,36 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(tl => tl.LabeledByUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // ============================================================================
+        // Username Blacklist Configuration
+        // Stores display name patterns that trigger auto-ban on join
+        // ============================================================================
+
+        modelBuilder.Entity<UsernameBlacklistEntryDto>(entity =>
+        {
+            entity.Property(e => e.MatchType).HasDefaultValue(0);
+
+            entity.HasOne<UserRecordDto>()
+                .WithMany()
+                .HasForeignKey(e => e.WebUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne<TelegramUserDto>()
+                .WithMany()
+                .HasForeignKey(e => e.TelegramUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "CK_username_blacklist_exclusive_actor",
+                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
+
+            // Prevent duplicate patterns (case-insensitive, only enabled entries)
+            entity.HasIndex(e => e.Pattern)
+                .IsUnique()
+                .HasFilter("enabled = true")
+                .HasDatabaseName("IX_username_blacklist_unique_enabled_pattern");
+        });
+
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -603,6 +644,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(tu => tu.ProfileScannedAt)
             .HasDatabaseName("ix_telegram_users_profile_scanned_at"); // Background re-scan job ordering
 
+        // UsernameHistory indexes
+        modelBuilder.Entity<UsernameHistoryDto>()
+            .HasIndex(h => h.UserId)
+            .HasDatabaseName("ix_username_history_user_id");
+
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()
             .HasIndex(tum => tum.TelegramId)
@@ -645,7 +691,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(bs => bs.BlockMode)
             .HasFilter("block_mode > 0");
         modelBuilder.Entity<BlocklistSubscriptionDto>()
-            .HasIndex(bs => bs.Url);  // For duplicate detection
+            .HasIndex(bs => new { bs.Url, bs.ChatId })
+            .IsUnique();
 
         // DomainFilters indexes
         modelBuilder.Entity<DomainFilterDto>()

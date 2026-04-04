@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.IO;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
@@ -38,10 +39,6 @@ public static class ServiceCollectionExtensions
         }
 
         /// <summary>
-        /// Adds API data services (Message history repository only - no identity)
-        /// </summary>
-
-        /// <summary>
         /// Adds Blazor Server and MudBlazor services
         /// </summary>
         public IServiceCollection AddBlazorServices()
@@ -58,18 +55,8 @@ public static class ServiceCollectionExtensions
             services.AddMudServices();
             services.AddHttpContextAccessor();
 
-            // Add HttpClient for Blazor components (for calling our own API)
-            services.AddScoped(sp =>
-            {
-                var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
-                var httpContext = httpContextAccessor.HttpContext;
-
-                if (httpContext == null) return new HttpClient { BaseAddress = new Uri("http://localhost:5161") };
-                var host = httpContext.Request.Host;
-                var hostString = host.Host == "0.0.0.0" ? $"localhost:{host.Port}" : host.ToString();
-                var baseAddress = $"{httpContext.Request.Scheme}://{hostString}";
-                return new HttpClient { BaseAddress = new Uri(baseAddress) };
-            });
+            services.AddHttpClient("Internal");
+            services.AddScoped<InternalApiClient>();
 
             return services;
         }
@@ -98,7 +85,7 @@ public static class ServiceCollectionExtensions
 
             // Add authorization policies
             services.AddAuthorizationBuilder()
-                .AddPolicy("GlobalAdminOrOwner", policy =>
+                .AddPolicy(AuthenticationConstants.PolicyGlobalAdminOrOwner, policy =>
                     policy.RequireRole("GlobalAdmin", "Owner"))
                 .AddPolicy("OwnerOnly", policy =>
                     policy.RequireRole("Owner"));
@@ -118,6 +105,8 @@ public static class ServiceCollectionExtensions
         public IServiceCollection AddApplicationServices()
         {
             // Note: HybridCache (registered in AddHttpClients) provides L1 in-memory caching
+            // Explicit registration ensures IMemoryCache is available for RateLimitService
+            services.AddMemoryCache();
 
             // Auth services
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
@@ -126,6 +115,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IPendingRecoveryCodesService, TelegramGroupsAdmin.Services.Auth.PendingRecoveryCodesService>();
             services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IRateLimitService, TelegramGroupsAdmin.Services.Auth.RateLimitService>(); // SECURITY-5
             services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAccountLockoutService, TelegramGroupsAdmin.Services.Auth.AccountLockoutService>(); // SECURITY-6
+            services.AddHostedService<TelegramGroupsAdmin.Services.Auth.TokenCleanupService>();
 
             // Core services
             services.AddScoped<IAuthService, AuthService>();
@@ -159,25 +149,28 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageContextProvider, MessageContextAdapter>();
 
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
-            services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Telegram.Services.Media.MediaNotificationService>();
             services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchQueueService>();
             services.AddHostedService<TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchWorkerService>();
 
             // Runtime logging configuration service (Phase 4.7)
             services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
 
-            // Similarity hash backfill service (one-time migration for SimHash deduplication)
-            services.AddScoped<SimilarityHashBackfillService>();
-
-            // Ban celebration GIF hash backfill service (one-time migration for duplicate detection)
-            services.AddScoped<BanCelebrationHashBackfillService>();
-
-            // V1 detection record cleanup (one-time removal of obsolete CAS/SeoScraping records)
-            services.AddScoped<V1DetectionCleanupService>();
-
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
             services.AddHostedService<Services.Docs.DocumentationStartupService>();
+
+            // Memory metrics — ObservableGauges on all stateful singletons for Prometheus/Grafana
+            services.AddSingleton<MemoryMetrics>();
+
+            // RecyclableMemoryStreamManager — pooled MemoryStream buffers for backup pipeline
+            services.AddSingleton(new RecyclableMemoryStreamManager(new RecyclableMemoryStreamManager.Options
+            {
+                BlockSize = 128 * 1024,
+                LargeBufferMultiple = 1024 * 1024,
+                MaximumBufferSize = 512 * 1024 * 1024,
+                MaximumSmallPoolFreeBytes = 16 * 1024 * 1024,
+                MaximumLargePoolFreeBytes = 256 * 1024 * 1024
+            }));
 
             return services;
         }
@@ -192,13 +185,6 @@ public static class ServiceCollectionExtensions
             services.AddHybridCache(options =>
             {
                 options.MaximumPayloadBytes = HttpConstants.HybridCacheMaxPayloadBytes;
-            });
-
-            // HTTP clients
-            services.AddHttpClient<SeoPreviewScraper>(client =>
-            {
-                client.Timeout = HttpConstants.SeoScraperTimeout;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SeoPreviewScraper/1.0)");
             });
 
             // VirusTotal rate limiter (4 requests/minute free tier)

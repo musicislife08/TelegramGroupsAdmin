@@ -13,10 +13,4 @@ public class TokenizerService : ITokenizerService
 
     /// <inheritdoc />
     public string RemoveEmojis(string text) => TextTokenizer.RemoveEmojis(text);
-
-    /// <inheritdoc />
-    public Dictionary<string, int> GetWordFrequencies(string text) => TextTokenizer.GetWordFrequencies(text);
-
-    /// <inheritdoc />
-    public bool IsStopWord(string word) => TextTokenizer.IsStopWord(word);
 }

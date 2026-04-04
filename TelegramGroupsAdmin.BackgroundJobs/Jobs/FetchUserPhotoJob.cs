@@ -3,15 +3,15 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Helpers;
-using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Extensions;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -27,7 +27,8 @@ public class FetchUserPhotoJob(
     ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
     IConfigService configService,
-    IOptions<AppOptions> appOptions) : IJob
+    IOptions<AppOptions> appOptions,
+    JobMetrics jobMetrics) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
     {
@@ -86,7 +87,7 @@ public class FetchUserPhotoJob(
                     try
                     {
                         // Resolve relative path to absolute for disk operations
-                        var absolutePath = MediaPathUtilities.ToAbsolutePath(photoResult.RelativePath, appOptions.Value.DataPath);
+                        var absolutePath = MediaUtilities.ToAbsolutePath(photoResult.RelativePath, appOptions.Value.DataPath);
                         var photoHashBytes = await photoHashService.ComputePhotoHashAsync(absolutePath);
                         if (photoHashBytes != null)
                         {
@@ -148,16 +149,7 @@ public class FetchUserPhotoJob(
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }

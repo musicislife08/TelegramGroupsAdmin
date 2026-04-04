@@ -65,9 +65,11 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
                 return; // _currentModel stays null → Classify() returns null → check abstains
             }
 
-            // Create a NEW classifier instance, train it fully, then swap atomically.
-            // CRITICAL: Never mutate a live classifier (Dictionary fields are not thread-safe for concurrent read+write)
-            var newClassifier = new BayesClassifier(tokenizerService);
+            // Build word-count dictionaries from training data, then construct an immutable
+            // BayesClassifier with frozen snapshots and pre-computed aggregates.
+            // CRITICAL: Never mutate a live classifier — FrozenDictionary fields are read-only by design.
+            var spamCounts = new Dictionary<string, int>();
+            var hamCounts = new Dictionary<string, int>();
 
             var spamCount = 0;
             var hamCount = 0;
@@ -75,14 +77,18 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
 
             foreach (var sample in spamSamples.Concat(hamSamples))
             {
+                var words = tokenizerService.Tokenize(sample.Text);
+
                 if (sample.Label == TrainingLabel.Spam)
                 {
-                    newClassifier.TrainSpam(sample.Text);
+                    foreach (var word in words)
+                        spamCounts[word] = spamCounts.GetValueOrDefault(word, 0) + 1;
                     spamCount++;
                 }
                 else
                 {
-                    newClassifier.TrainHam(sample.Text);
+                    foreach (var word in words)
+                        hamCounts[word] = hamCounts.GetValueOrDefault(word, 0) + 1;
                     hamCount++;
                 }
 
@@ -90,11 +96,15 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
                     explicitCount++;
             }
 
+            var newClassifier = new BayesClassifier(spamCounts, hamCounts, spamCount, hamCount);
+
             var metadata = new BayesClassifierMetadata
             {
                 TrainedAt = DateTimeOffset.UtcNow,
                 SpamSampleCount = spamCount,
-                HamSampleCount = hamCount
+                HamSampleCount = hamCount,
+                SpamVocabularySize = newClassifier.SpamVocabularySize,
+                HamVocabularySize = newClassifier.HamVocabularySize
             };
 
             // Log balance warning
@@ -131,9 +141,8 @@ public sealed class BayesClassifierService : IBayesClassifierService, IDisposabl
         if (model is null)
             return null;
 
-        // Preprocessing: remove emojis (we need ITokenizerService but can't inject Scoped into Singleton)
-        // The BayesClassifier internally uses ITokenizerService for tokenization,
-        // and the check already calls RemoveEmojis before calling us
+        // BayesClassifier.ClassifyMessage does its own span-based tokenization inline —
+        // emoji removal is unnecessary (emojis don't match the \b[\w']+\b regex).
         return model.Classifier.ClassifyMessage(message);
     }
 

@@ -78,18 +78,4 @@ internal static class ModelMappings
         );
     }
 
-    public static DataModels.FileScanQuotaRecord ToDto(this DomainModels.FileScanQuotaModel model)
-    {
-        return new()
-        {
-            Id = model.Id,
-            Service = model.Service,
-            QuotaType = model.QuotaType,
-            QuotaWindowStart = model.QuotaWindowStart,
-            QuotaWindowEnd = model.QuotaWindowEnd,
-            Count = model.Count,
-            LimitValue = model.LimitValue,
-            LastUpdated = model.LastUpdated
-        };
-    }
 }

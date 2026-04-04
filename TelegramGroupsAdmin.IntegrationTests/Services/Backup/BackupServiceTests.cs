@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.IO;
 using NSubstitute;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -94,11 +95,10 @@ public class BackupServiceTests
             .Returns(_ => Task.FromResult($"test_job_{Guid.NewGuid():N}"));
         mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
-        mockJobScheduler.IsScheduledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(false);
         services.AddSingleton(mockJobScheduler);
 
         // Add backup services (using shared extension method from BackgroundJobs library)
+        services.AddSingleton(new RecyclableMemoryStreamManager());
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
@@ -136,36 +136,60 @@ public class BackupServiceTests
         (_serviceProvider as IDisposable)?.Dispose();
     }
 
+    /// <summary>
+    /// Helper to export backup to temp file and return the filepath for streaming tests.
+    /// Caller is responsible for cleanup.
+    /// </summary>
+    private async Task<string> ExportBackupToTempFileAsync(string? passphraseOverride = null)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"test_backup_{Guid.NewGuid():N}.tar.gz");
+        if (passphraseOverride != null)
+        {
+            await _backupService!.ExportToFileAsync(tempPath, passphraseOverride, CancellationToken.None);
+        }
+        else
+        {
+            await _backupService!.ExportToFileAsync(tempPath, CancellationToken.None);
+        }
+        return tempPath;
+    }
+
     #region Export Tests
 
     [Test]
-    public async Task ExportAsync_WithDbPassphrase_ShouldCreateEncryptedBackup()
+    public async Task ExportToFileAsync_WithDbPassphrase_ShouldCreateEncryptedBackup()
     {
         // Arrange - encryption config already set up in SetUp()
 
         // Act
-        var backupBytes = await _backupService!.ExportAsync();
-
-        // Assert
-        Assert.That(backupBytes, Is.Not.Null);
-        Assert.That(backupBytes.Length, Is.GreaterThan(0));
-
-        // Verify backup contains encrypted database entry
-        var isEncrypted = await _backupService.IsEncryptedAsync(backupBytes);
-        Assert.That(isEncrypted, Is.True, "Backup should be encrypted when passphrase is configured");
-
-        // Verify can extract metadata from encrypted backup (metadata is always unencrypted in tar)
-        var metadata = await _backupService.GetMetadataAsync(backupBytes);
-        Assert.That(metadata, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
         {
-            Assert.That(metadata.Version, Is.EqualTo("3.0"));
-            Assert.That(metadata.TableCount, Is.GreaterThan(0));
+            // Assert
+            Assert.That(File.Exists(backupPath), Is.True);
+            Assert.That(new FileInfo(backupPath).Length, Is.GreaterThan(0));
+
+            // Verify backup contains encrypted database entry
+            var isEncrypted = await _backupService!.IsEncryptedAsync(backupPath);
+            Assert.That(isEncrypted, Is.True, "Backup should be encrypted when passphrase is configured");
+
+            // Verify can extract metadata from encrypted backup (metadata is always unencrypted in tar)
+            var metadata = await _backupService!.GetMetadataAsync(backupPath);
+            Assert.That(metadata, Is.Not.Null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(metadata.Version, Is.EqualTo("3.0"));
+                Assert.That(metadata.TableCount, Is.GreaterThan(0));
+            }
+        }
+        finally
+        {
+            File.Delete(backupPath);
         }
     }
 
     [Test]
-    public async Task ExportAsync_WithExplicitPassphrase_ShouldOverrideDbPassphrase()
+    public async Task ExportToFileAsync_WithExplicitPassphrase_ShouldOverrideDbPassphrase()
     {
         // Arrange - Set DB passphrase (should be ignored)
         await using (var context = _testHelper!.GetDbContext())
@@ -179,34 +203,47 @@ public class BackupServiceTests
         const string explicitPassphrase = "explicit-override-pass";
 
         // Act - Export with explicit passphrase
-        var backupBytes = await _backupService!.ExportAsync(explicitPassphrase);
+        var backupPath = await ExportBackupToTempFileAsync(explicitPassphrase);
+        try
+        {
+            // Assert - Should be encrypted (database.json.enc entry in tar)
+            Assert.That(await _backupService!.IsEncryptedAsync(backupPath), Is.True);
 
-        // Assert - Should be encrypted (database.json.enc entry in tar)
-        Assert.That(await _backupService.IsEncryptedAsync(backupBytes), Is.True);
-
-        // Verify restore with explicit passphrase works (decrypts database.json.enc inside tar)
-        Assert.DoesNotThrowAsync(() => _backupService.RestoreAsync(backupBytes, explicitPassphrase));
+            // Verify restore with explicit passphrase works (decrypts database.json.enc inside tar)
+            Assert.DoesNotThrowAsync(() => _backupService.RestoreAsync(backupPath, explicitPassphrase));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
-    public async Task ExportAsync_ShouldIncludeAllExpectedTables()
+    public async Task ExportToFileAsync_ShouldIncludeAllExpectedTables()
     {
         // Act
-        var backupBytes = await _backupService!.ExportAsync();
-        var metadata = await _backupService.GetMetadataAsync(backupBytes);
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            var metadata = await _backupService!.GetMetadataAsync(backupPath);
 
-        // Assert - Verify table count matches golden dataset
-        Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount),
-            $"Expected {GoldenDataset.TotalTableCount} tables in backup (excluding system tables)");
+            // Assert - Verify table count matches golden dataset
+            Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount),
+                $"Expected {GoldenDataset.TotalTableCount} tables in backup (excluding system tables)");
 
-        // Verify metadata contains recent timestamp
-        var now = DateTimeOffset.UtcNow;
-        Assert.That(metadata.CreatedAt, Is.GreaterThan(now.AddMinutes(-5)));
-        Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(now));
+            // Verify metadata contains recent timestamp
+            var now = DateTimeOffset.UtcNow;
+            Assert.That(metadata.CreatedAt, Is.GreaterThan(now.AddMinutes(-5)));
+            Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(now));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
-    public async Task ExportAsync_ShouldDecryptDataProtectionFields()
+    public async Task ExportToFileAsync_ShouldDecryptDataProtectionFields()
     {
         // Arrange - Golden dataset has encrypted API keys
         // Verify seed worked
@@ -217,11 +254,17 @@ public class BackupServiceTests
         }
 
         // Act - Export (should decrypt Data Protection fields)
-        var backupBytes = await _backupService!.ExportAsync();
-
-        // Assert - Export should succeed without errors
-        Assert.That(backupBytes, Is.Not.Null);
-        // Verifies export completed without throwing (decryption successful)
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Assert - Export should succeed without errors
+            Assert.That(File.Exists(backupPath), Is.True);
+            // Verifies export completed without throwing (decryption successful)
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     #endregion
@@ -235,36 +278,49 @@ public class BackupServiceTests
         // We can't call private methods directly, but export implicitly tests this
 
         // Act - Export triggers table discovery
-        var backupBytes = await _backupService!.ExportAsync();
-        var metadata = await _backupService.GetMetadataAsync(backupBytes);
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            var metadata = await _backupService!.GetMetadataAsync(backupPath);
 
-        // Assert - Count should match actual tables in database (excluding tables without DTOs)
-        var actualTableCount = await _testHelper!.ExecuteScalarAsync<long>(@"
-            SELECT COUNT(*)
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_type = 'BASE TABLE'
-            AND table_name NOT IN ('__EFMigrationsHistory', 'cached_blocked_domains', 'file_scan_quota', 'file_scan_results')
-        ");
+            // Assert - Count should match actual tables in database (excluding tables without DTOs)
+            var actualTableCount = await _testHelper!.ExecuteScalarAsync<long>(@"
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                AND table_type = 'BASE TABLE'
+                AND table_name NOT IN ('__EFMigrationsHistory', 'cached_blocked_domains', 'file_scan_quota', 'file_scan_results', 'username_blacklist')
+            ");
 
-        Assert.That(metadata.TableCount, Is.EqualTo(actualTableCount),
-            "Discovered table count should match actual database tables (excluding tables without DTOs)");
+            Assert.That(metadata.TableCount, Is.EqualTo(actualTableCount),
+                "Discovered table count should match actual database tables (excluding tables without DTOs)");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
     public async Task DiscoverTablesAsync_ShouldExcludeSystemTables()
     {
         // Act
-        var backupBytes = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Parse backup to verify exclusions (indirect test via successful export)
+            Assert.That(File.Exists(backupPath), Is.True);
 
-        // Parse backup to verify exclusions (indirect test via successful export)
-        Assert.That(backupBytes, Is.Not.Null);
-
-        // Verify __EFMigrationsHistory and cached_blocked_domains were excluded
-        // (implicitly tested by table count matching non-system tables)
-        var metadata = await _backupService.GetMetadataAsync(backupBytes);
-        Assert.That(metadata.TableCount, Is.LessThan(50),
-            "Should exclude system/cache tables, keeping count reasonable");
+            // Verify __EFMigrationsHistory and cached_blocked_domains were excluded
+            // (implicitly tested by table count matching non-system tables)
+            var metadata = await _backupService!.GetMetadataAsync(backupPath);
+            Assert.That(metadata.TableCount, Is.LessThan(50),
+                "Should exclude system/cache tables, keeping count reasonable");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     #endregion
@@ -276,29 +332,35 @@ public class BackupServiceTests
     {
         // Arrange - Create encrypted backup
         const string passphrase = "restore-test-pass-123";
-        var originalBackup = await _backupService!.ExportAsync(passphrase);
-
-        // Verify original data exists
-        var originalUserCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
-        var originalMessageCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
-
-        using (Assert.EnterMultipleScope())
+        var backupPath = await ExportBackupToTempFileAsync(passphrase);
+        try
         {
-            Assert.That(originalUserCount, Is.GreaterThan(0));
-            Assert.That(originalMessageCount, Is.GreaterThan(0));
+            // Verify original data exists
+            var originalUserCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
+            var originalMessageCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(originalUserCount, Is.GreaterThan(0));
+                Assert.That(originalMessageCount, Is.GreaterThan(0));
+            }
+
+            // Act - Restore (destructive operation)
+            await _backupService!.RestoreAsync(backupPath, passphrase);
+
+            // Assert - Verify data was restored
+            var restoredUserCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
+            var restoredMessageCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(restoredUserCount, Is.EqualTo(originalUserCount));
+                Assert.That(restoredMessageCount, Is.EqualTo(originalMessageCount));
+            }
         }
-
-        // Act - Restore (destructive operation)
-        await _backupService.RestoreAsync(originalBackup, passphrase);
-
-        // Assert - Verify data was restored
-        var restoredUserCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM users");
-        var restoredMessageCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
-
-        using (Assert.EnterMultipleScope())
+        finally
         {
-            Assert.That(restoredUserCount, Is.EqualTo(originalUserCount));
-            Assert.That(restoredMessageCount, Is.EqualTo(originalMessageCount));
+            File.Delete(backupPath);
         }
     }
 
@@ -306,97 +368,126 @@ public class BackupServiceTests
     public async Task RestoreAsync_WithDbPassphrase_ShouldRestoreWithoutExplicitPassphrase()
     {
         // Arrange - Export uses DB passphrase (configured in SetUp), restore reads it back
-        var originalBackup = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            var originalChatCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM managed_chats");
+            Assert.That(originalChatCount, Is.GreaterThan(0));
 
-        var originalChatCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM managed_chats");
-        Assert.That(originalChatCount, Is.GreaterThan(0));
+            // Act - Restore without explicit passphrase (reads DB passphrase automatically)
+            await _backupService!.RestoreAsync(backupPath);
 
-        // Act - Restore without explicit passphrase (reads DB passphrase automatically)
-        await _backupService.RestoreAsync(originalBackup);
-
-        // Assert
-        var restoredChatCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM managed_chats");
-        Assert.That(restoredChatCount, Is.EqualTo(originalChatCount));
+            // Assert
+            var restoredChatCount = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM managed_chats");
+            Assert.That(restoredChatCount, Is.EqualTo(originalChatCount));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
-    public void RestoreAsync_WrongPassphrase_ShouldThrowException()
+    public async Task RestoreAsync_WrongPassphrase_ShouldThrowException()
     {
         // Arrange - Create encrypted backup
-        var backupTask = _backupService!.ExportAsync("correct-passphrase");
-        var backup = backupTask.GetAwaiter().GetResult();
-
-        // Act & Assert - Restore with wrong passphrase should fail (throws CryptographicException)
-        Assert.ThrowsAsync<System.Security.Cryptography.CryptographicException>(async () =>
+        var backupPath = await ExportBackupToTempFileAsync("correct-passphrase");
+        try
         {
-            await _backupService.RestoreAsync(backup, "wrong-passphrase");
-        });
+            // Act & Assert - Restore with wrong passphrase should fail (throws CryptographicException)
+            Assert.ThrowsAsync<System.Security.Cryptography.CryptographicException>(async () =>
+            {
+                await _backupService!.RestoreAsync(backupPath, "wrong-passphrase");
+            });
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
     public async Task RestoreAsync_ShouldWipeAllTablesFirst()
     {
         // Arrange - Create backup and add extra data after backup
-        var backup = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Add extra user after backup (should be wiped during restore)
+            await _testHelper!.ExecuteSqlAsync(@"
+                INSERT INTO telegram_users (telegram_user_id, username, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
+                VALUES (999999, 'extra_user', false, false, NOW(), NOW(), NOW(), NOW())
+            ");
 
-        // Add extra user after backup (should be wiped during restore)
-        await _testHelper!.ExecuteSqlAsync(@"
-            INSERT INTO telegram_users (telegram_user_id, username, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
-            VALUES (999999, 'extra_user', false, false, NOW(), NOW(), NOW(), NOW())
-        ");
+            var countBeforeRestore = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM telegram_users");
+            Assert.That(countBeforeRestore, Is.EqualTo(13), "Should have 12 golden users + 1 extra = 13 before restore");
 
-        var countBeforeRestore = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM telegram_users");
-        Assert.That(countBeforeRestore, Is.EqualTo(13), "Should have 12 golden users + 1 extra = 13 before restore");
+            // Act - Restore (should wipe extra_user)
+            await _backupService!.RestoreAsync(backupPath);
 
-        // Act - Restore (should wipe extra_user)
-        await _backupService.RestoreAsync(backup);
-
-        // Assert - Extra user should be gone
-        var extraUserExists = await _testHelper.ExecuteScalarAsync<bool>(
-            "SELECT EXISTS(SELECT 1 FROM telegram_users WHERE telegram_user_id = 999999)");
-        Assert.That(extraUserExists, Is.False, "Restore should wipe all existing data first");
+            // Assert - Extra user should be gone
+            var extraUserExists = await _testHelper.ExecuteScalarAsync<bool>(
+                "SELECT EXISTS(SELECT 1 FROM telegram_users WHERE telegram_user_id = 999999)");
+            Assert.That(extraUserExists, Is.False, "Restore should wipe all existing data first");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
     public async Task RestoreAsync_ShouldHandleSelfReferencingForeignKeys()
     {
         // Arrange - Golden dataset has users.invited_by → users.id (self-reference)
-        var backup = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Act - Restore (should handle self-referencing FK)
+            await _backupService!.RestoreAsync(backupPath);
 
-        // Act - Restore (should handle self-referencing FK)
-        await _backupService.RestoreAsync(backup);
+            // Assert - Verify self-referencing FK relationships preserved
+            var user2 = await _testHelper!.ExecuteScalarAsync<string>($@"
+                SELECT invited_by
+                FROM users
+                WHERE id = '{GoldenDataset.Users.User2_Id}'
+            ");
 
-        // Assert - Verify self-referencing FK relationships preserved
-        var user2 = await _testHelper!.ExecuteScalarAsync<string>($@"
-            SELECT invited_by
-            FROM users
-            WHERE id = '{GoldenDataset.Users.User2_Id}'
-        ");
-
-        Assert.That(user2, Is.EqualTo(GoldenDataset.Users.User1_Id),
-            "Self-referencing FK (invited_by) should be preserved");
+            Assert.That(user2, Is.EqualTo(GoldenDataset.Users.User1_Id),
+                "Self-referencing FK (invited_by) should be preserved");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
     public async Task RestoreAsync_ShouldReencryptDataProtectionFields()
     {
         // Arrange - Export with decrypted API keys
-        var backup = await _backupService!.ExportAsync();
-
-        // Act - Restore (should re-encrypt using test Data Protection)
-        await _backupService.RestoreAsync(backup);
-
-        // Assert - Verify API keys are re-encrypted
-        await using (var context = _testHelper!.GetDbContext())
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
         {
-            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
-            Assert.That(config?.ApiKeys, Is.Not.Null, "API keys should be re-encrypted after restore");
+            // Act - Restore (should re-encrypt using test Data Protection)
+            await _backupService!.RestoreAsync(backupPath);
 
-            // Verify can decrypt with test Data Protection provider
-            var protector = _dataProtectionProvider!.CreateProtector(DataProtectionPurposes.ApiKeys);
-            var decrypted = protector.Unprotect(config!.ApiKeys!);
-            Assert.That(decrypted, Contains.Substring("VirusTotal"),
-                "Decrypted API keys should contain original test data");
+            // Assert - Verify API keys are re-encrypted
+            await using (var context = _testHelper!.GetDbContext())
+            {
+                var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
+                Assert.That(config?.ApiKeys, Is.Not.Null, "API keys should be re-encrypted after restore");
+
+                // Verify can decrypt with test Data Protection provider
+                var protector = _dataProtectionProvider!.CreateProtector(DataProtectionPurposes.ApiKeys);
+                var decrypted = protector.Unprotect(config!.ApiKeys!);
+                Assert.That(decrypted, Contains.Substring("VirusTotal"),
+                    "Decrypted API keys should contain original test data");
+            }
+        }
+        finally
+        {
+            File.Delete(backupPath);
         }
     }
 
@@ -404,24 +495,30 @@ public class BackupServiceTests
     public async Task RestoreAsync_ShouldResetSequences()
     {
         // Arrange - Create backup with data
-        var backup = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Act - Restore
+            await _backupService!.RestoreAsync(backupPath);
 
-        // Act - Restore
-        await _backupService.RestoreAsync(backup);
+            // Assert - Insert new message_edit, verify ID continues from max
+            // (message_edits.id still has identity/sequence, unlike messages.message_id which uses ValueGeneratedNever)
+            await _testHelper!.ExecuteSqlAsync($@"
+                INSERT INTO message_edits (message_id, chat_id, edit_date, new_text)
+                VALUES ({GoldenDataset.Messages.Msg1_Id}, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test edit')
+            ");
 
-        // Assert - Insert new message_edit, verify ID continues from max
-        // (message_edits.id still has identity/sequence, unlike messages.message_id which uses ValueGeneratedNever)
-        await _testHelper!.ExecuteSqlAsync($@"
-            INSERT INTO message_edits (message_id, chat_id, edit_date, new_text)
-            VALUES ({GoldenDataset.Messages.Msg1_Id}, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test edit')
-        ");
+            var newEditId = await _testHelper.ExecuteScalarAsync<long>(@"
+                SELECT id FROM message_edits WHERE new_text = 'sequence test edit'
+            ");
 
-        var newEditId = await _testHelper.ExecuteScalarAsync<long>(@"
-            SELECT id FROM message_edits WHERE new_text = 'sequence test edit'
-        ");
-
-        Assert.That(newEditId, Is.GreaterThan(0),
-            "Sequence should be reset so new ID is positive after restore");
+            Assert.That(newEditId, Is.GreaterThan(0),
+                "Sequence should be reset so new ID is positive after restore");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     #endregion
@@ -440,23 +537,29 @@ public class BackupServiceTests
         // detection_results → messages
         // configs (no dependencies)
 
-        var backup = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Act - Restore (topological sort must order tables correctly)
+            await _backupService!.RestoreAsync(backupPath);
 
-        // Act - Restore (topological sort must order tables correctly)
-        await _backupService.RestoreAsync(backup);
+            // Assert - Verify all FK relationships intact
+            var detectionCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM detection_results");
+            Assert.That(detectionCount, Is.GreaterThan(0), "Detection results should be restored with FK to messages");
 
-        // Assert - Verify all FK relationships intact
-        var detectionCount = await _testHelper!.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM detection_results");
-        Assert.That(detectionCount, Is.GreaterThan(0), "Detection results should be restored with FK to messages");
-
-        var messageWithUser = await _testHelper.ExecuteScalarAsync<bool>(@"
-            SELECT EXISTS(
-                SELECT 1 FROM messages m
-                INNER JOIN telegram_users tu ON m.user_id = tu.telegram_user_id
-                LIMIT 1
-            )
-        ");
-        Assert.That(messageWithUser, Is.True, "Messages should have valid FK to telegram_users");
+            var messageWithUser = await _testHelper.ExecuteScalarAsync<bool>(@"
+                SELECT EXISTS(
+                    SELECT 1 FROM messages m
+                    INNER JOIN telegram_users tu ON m.user_id = tu.telegram_user_id
+                    LIMIT 1
+                )
+            ");
+            Assert.That(messageWithUser, Is.True, "Messages should have valid FK to telegram_users");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     #endregion
@@ -467,18 +570,24 @@ public class BackupServiceTests
     public async Task GetMetadataAsync_FromEncryptedBackup_ShouldReturnMetadata()
     {
         // Arrange - Use DB passphrase (SetUp() already configured "test-passphrase-12345")
-        var encryptedBackup = await _backupService!.ExportAsync();
-
-        // Act - GetMetadataAsync will retrieve passphrase from DB to decrypt
-        var metadata = await _backupService.GetMetadataAsync(encryptedBackup);
-
-        // Assert
-        Assert.That(metadata, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
         {
-            Assert.That(metadata.Version, Is.EqualTo("3.0"));
-            Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
-            Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+            // Act - GetMetadataAsync will retrieve passphrase from DB to decrypt
+            var metadata = await _backupService!.GetMetadataAsync(backupPath);
+
+            // Assert
+            Assert.That(metadata, Is.Not.Null);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(metadata.Version, Is.EqualTo("3.0"));
+                Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+                Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
+            }
+        }
+        finally
+        {
+            File.Delete(backupPath);
         }
     }
 
@@ -486,27 +595,39 @@ public class BackupServiceTests
     public async Task GetMetadataAsync_FromDbPassphraseBackup_ShouldReturnMetadata()
     {
         // Arrange - ExportAsync() encrypts with DB passphrase; metadata is always readable
-        var backup = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Act
+            var metadata = await _backupService!.GetMetadataAsync(backupPath);
 
-        // Act
-        var metadata = await _backupService.GetMetadataAsync(backup);
-
-        // Assert
-        Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("3.0"));
+            // Assert
+            Assert.That(metadata, Is.Not.Null);
+            Assert.That(metadata.Version, Is.EqualTo("3.0"));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
     public async Task IsEncryptedAsync_WithEncryptedBackup_ShouldReturnTrue()
     {
         // Arrange
-        var encrypted = await _backupService!.ExportAsync("test-pass");
+        var backupPath = await ExportBackupToTempFileAsync("test-pass");
+        try
+        {
+            // Act
+            var isEncrypted = await _backupService!.IsEncryptedAsync(backupPath);
 
-        // Act
-        var isEncrypted = await _backupService.IsEncryptedAsync(encrypted);
-
-        // Assert
-        Assert.That(isEncrypted, Is.True);
+            // Assert
+            Assert.That(isEncrypted, Is.True);
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     // Note: ValidateBackupAsync doesn't exist in BackupService
@@ -518,7 +639,7 @@ public class BackupServiceTests
     #region Error Handling Tests
 
     [Test]
-    public async Task ExportAsync_WithCorruptedJsonbColumn_ShouldFailFastWithClearError()
+    public async Task ExportToFileAsync_WithCorruptedJsonbColumn_ShouldFailFastWithClearError()
     {
         // Arrange - Corrupt the warnings JSONB column with JSON that can't deserialize to List<WarningEntry>
         // This simulates database corruption or schema mismatch that would produce an incomplete backup
@@ -536,9 +657,10 @@ public class BackupServiceTests
         Assert.That(corruptedValue, Does.Contain("not_an_array"), "Test setup: JSONB should be corrupted");
 
         // Act & Assert - Export should fail fast with InvalidOperationException
+        var tempPath = Path.Combine(Path.GetTempPath(), $"test_backup_{Guid.NewGuid():N}.tar.gz");
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await _backupService!.ExportAsync();
+            await _backupService!.ExportToFileAsync(tempPath, CancellationToken.None);
         });
 
         using (Assert.EnterMultipleScope())
@@ -551,21 +673,71 @@ public class BackupServiceTests
     }
 
     [Test]
-    public async Task ExportAsync_WithValidJsonbColumn_ShouldSucceed()
+    public async Task ExportToFileAsync_WithValidJsonbColumn_ShouldSucceed()
     {
         // Arrange - Ensure we have valid JSONB data (golden dataset already has this)
         // This test verifies the happy path still works after adding error handling
 
         // Act
-        var backupBytes = await _backupService!.ExportAsync();
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            // Assert - Export should succeed
+            Assert.That(File.Exists(backupPath), Is.True);
+            Assert.That(new FileInfo(backupPath).Length, Is.GreaterThan(0));
 
-        // Assert - Export should succeed
-        Assert.That(backupBytes, Is.Not.Null);
-        Assert.That(backupBytes.Length, Is.GreaterThan(0));
+            // Verify the backup contains telegram_users table with warnings column
+            var metadata = await _backupService!.GetMetadataAsync(backupPath);
+            Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
+    }
 
-        // Verify the backup contains telegram_users table with warnings column
-        var metadata = await _backupService.GetMetadataAsync(backupBytes);
-        Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
+    [Test]
+    public async Task ExportToFileAsync_CancelledDuringWrite_ShouldCleanUpTempFile()
+    {
+        // Arrange - Use a pre-cancelled token so the export creates the temp file
+        // but fails during tar entry writing (WriteEntryAsync checks the token).
+        // This exercises the finally block's temp file cleanup.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"backup_cleanup_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var filepath = Path.Combine(tempDir, "test_backup.tar.gz");
+
+        try
+        {
+            // Act - Export should fail with cancellation after temp file is created
+            await Assert.ThatAsync(
+                () => _backupService!.ExportToFileAsync(filepath, cts.Token),
+                Throws.InstanceOf<OperationCanceledException>());
+
+            // Assert - No temp files should remain (finally block cleaned up)
+            var tempFiles = Directory.GetFiles(tempDir, "*.tmp");
+            Assert.That(tempFiles, Is.Empty, "Temp file should be cleaned up after cancelled export");
+
+            // Final file should not exist either
+            Assert.That(File.Exists(filepath), Is.False, "Final backup file should not exist after cancelled export");
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public async Task ExportToFileAsync_WithEmptyPassphrase_ShouldThrowArgumentException(string passphrase)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"test_backup_{Guid.NewGuid():N}.tar.gz");
+
+        await Assert.ThatAsync(
+            () => _backupService!.ExportToFileAsync(tempPath, passphrase),
+            Throws.ArgumentException.With.Property(nameof(ArgumentException.ParamName)).EqualTo("passphraseOverride"));
     }
 
     [Test]
@@ -593,17 +765,24 @@ public class BackupServiceTests
             "Test setup: DateTimeOffset should be stored correctly");
 
         // Act - Export and restore
-        var backupBytes = await _backupService!.ExportAsync();
-        await _backupService.RestoreAsync(backupBytes);
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            await _backupService!.RestoreAsync(backupPath);
 
-        // Assert - Verify the DateTimeOffset was preserved through the roundtrip
-        var restoredOffset = await _testHelper.ExecuteScalarAsync<DateTimeOffset>($@"
-            SELECT first_seen_at FROM telegram_users
-            WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
-        ");
+            // Assert - Verify the DateTimeOffset was preserved through the roundtrip
+            var restoredOffset = await _testHelper.ExecuteScalarAsync<DateTimeOffset>($@"
+                SELECT first_seen_at FROM telegram_users
+                WHERE telegram_user_id = {GoldenDataset.TelegramUsers.User1_TelegramUserId}
+            ");
 
-        Assert.That(restoredOffset.UtcDateTime, Is.EqualTo(specificOffset.UtcDateTime).Within(TimeSpan.FromSeconds(1)),
-            "DateTimeOffset UTC instant should be preserved through backup/restore roundtrip");
+            Assert.That(restoredOffset.UtcDateTime, Is.EqualTo(specificOffset.UtcDateTime).Within(TimeSpan.FromSeconds(1)),
+                "DateTimeOffset UTC instant should be preserved through backup/restore roundtrip");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     [Test]
@@ -619,16 +798,23 @@ public class BackupServiceTests
             "Test setup: User3 should have Deleted status (3)");
 
         // Act - Export and restore
-        var backupBytes = await _backupService!.ExportAsync();
-        await _backupService.RestoreAsync(backupBytes);
+        var backupPath = await ExportBackupToTempFileAsync();
+        try
+        {
+            await _backupService!.RestoreAsync(backupPath);
 
-        // Assert - Verify enum was preserved
-        var restoredStatus = await _testHelper.ExecuteScalarAsync<int>($@"
-            SELECT status FROM users WHERE id = '{GoldenDataset.Users.User3_Id}'
-        ");
+            // Assert - Verify enum was preserved
+            var restoredStatus = await _testHelper.ExecuteScalarAsync<int>($@"
+                SELECT status FROM users WHERE id = '{GoldenDataset.Users.User3_Id}'
+            ");
 
-        Assert.That(restoredStatus, Is.EqualTo(GoldenDataset.Users.User3_Status),
-            "Enum value should be preserved through backup/restore roundtrip");
+            Assert.That(restoredStatus, Is.EqualTo(GoldenDataset.Users.User3_Status),
+                "Enum value should be preserved through backup/restore roundtrip");
+        }
+        finally
+        {
+            File.Delete(backupPath);
+        }
     }
 
     #endregion
@@ -807,6 +993,6 @@ public class BackupServiceTests
         public Task<Dictionary<string, bool>> SendMalwareDetectedAsync(ChatIdentity chat, UserIdentity user, string malwareDetails, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendAdminChangedAsync(ChatIdentity chat, UserIdentity user, bool promoted, bool isCreator, CancellationToken ct = default) => Task.FromResult(EmptyResults);
         public Task<Dictionary<string, bool>> SendBackupFailedAsync(string tableName, string error, CancellationToken ct = default) => Task.FromResult(EmptyResults);
-        public Task<Dictionary<string, bool>> SendChatHealthWarningAsync(string chatName, string status, bool isAdmin, IReadOnlyList<string> warnings, CancellationToken ct = default) => Task.FromResult(EmptyResults);
+        public Task<Dictionary<string, bool>> SendChatHealthWarningAsync(string chatName, string status, bool isAdmin, IReadOnlyList<string> warnings, CancellationToken cancellationToken = default) => Task.FromResult(EmptyResults);
     }
 }

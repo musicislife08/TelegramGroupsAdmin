@@ -13,6 +13,8 @@ public class IntermediateAuthService : IIntermediateAuthService
     private readonly ConcurrentDictionary<string, TokenData> _tokens = new();
     private readonly ILogger<IntermediateAuthService> _logger;
 
+    public int EntryCount => _tokens.Count;
+
     public IntermediateAuthService(ILogger<IntermediateAuthService> logger)
     {
         _logger = logger;
@@ -34,19 +36,6 @@ public class IntermediateAuthService : IIntermediateAuthService
 
         _logger.LogInformation("Created intermediate auth token for {Email} ({UserId}), expires at {ExpiresAt}",
             tokenData.Email, userId, tokenData.ExpiresAt);
-
-        // Clean up expired tokens (fire and forget)
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                CleanupExpiredTokens();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to clean up expired intermediate auth tokens");
-            }
-        });
 
         return token;
     }
@@ -126,7 +115,7 @@ public class IntermediateAuthService : IIntermediateAuthService
         return true;
     }
 
-    private void CleanupExpiredTokens()
+    public void CleanupExpiredEntries()
     {
         var now = DateTimeOffset.UtcNow;
         var expiredTokens = _tokens

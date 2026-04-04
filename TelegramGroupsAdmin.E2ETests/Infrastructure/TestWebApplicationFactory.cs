@@ -38,6 +38,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly TestEmailService _testEmailService;
     private string? _tempDataPath;
     private bool _databaseCreated;
+    private int _kestrelPort;
 
     // NSubstitute mocks for external services
     private readonly IAITranslationService _mockAITranslationService;
@@ -196,8 +197,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             .Returns(callInfo => Task.FromResult($"job-{Guid.NewGuid():N}"));
         _mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
-        _mockJobScheduler.IsScheduledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(true));
 
         // Mock IExamEvaluationService - default to pass with high confidence
         // Tests can reconfigure via MockExamEvaluation property
@@ -208,9 +207,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ExamEvaluationResult(Passed: true, Reasoning: "Test passed", Confidence: 0.95));
 
-        // Configure to use Kestrel with dynamic port (port 0)
-        // This MUST be called before StartServer() or accessing Services
-        UseKestrel(0);
+        // Reserve a free port via TcpListener(0), then pass it to both Kestrel and App:BaseUrl
+        // so InternalApiClient (which reads AppOptions.BaseUrl) connects to the right address.
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        _kestrelPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+
+        UseKestrel(_kestrelPort);
     }
 
     /// <summary>
@@ -290,6 +294,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Point data path to temp directory (for data protection keys, media, etc.)
         builder.UseSetting("App:DataPath", _tempDataPath);
 
+        // Set BaseUrl to match the Kestrel port so InternalApiClient connects to this test server
+        builder.UseSetting("App:BaseUrl", $"http://127.0.0.1:{_kestrelPort}");
+
         // Point to test database
         builder.UseSetting("ConnectionStrings:PostgreSQL", ConnectionString);
 
@@ -365,6 +372,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Exam evaluation mock (Scoped to match real app registration)
             services.RemoveAll<IExamEvaluationService>();
             services.AddScoped<IExamEvaluationService>(_ => _mockExamEvaluationService);
+
         });
     }
 

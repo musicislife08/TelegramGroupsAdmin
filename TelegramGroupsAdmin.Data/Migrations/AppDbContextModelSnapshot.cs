@@ -768,7 +768,8 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("Enabled")
                         .HasFilter("enabled = true");
 
-                    b.HasIndex("Url");
+                    b.HasIndex("Url", "ChatId")
+                        .IsUnique();
 
                     b.ToTable("blocklist_subscriptions");
                 });
@@ -2394,10 +2395,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<int?>("AiConfidence")
-                        .HasColumnType("integer")
-                        .HasColumnName("ai_confidence");
-
                     b.Property<string>("AiReason")
                         .HasColumnType("text")
                         .HasColumnName("ai_reason");
@@ -3427,6 +3424,111 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_user_tags_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
                         });
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UsernameBlacklistEntryDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("MatchType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("match_type");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Pattern")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pattern");
+
+                    b.Property<string>("SystemIdentifier")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("system_identifier");
+
+                    b.Property<long?>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.Property<string>("WebUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("web_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Pattern")
+                        .IsUnique()
+                        .HasDatabaseName("IX_username_blacklist_unique_enabled_pattern")
+                        .HasFilter("enabled = true");
+
+                    b.HasIndex("TelegramUserId");
+
+                    b.HasIndex("WebUserId");
+
+                    b.ToTable("username_blacklist", t =>
+                        {
+                            t.HasCheckConstraint("CK_username_blacklist_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
+                        });
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UsernameHistoryDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("FirstName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("first_name");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("last_name");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("Username")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("username");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_username_history_user_id");
+
+                    b.ToTable("username_history");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.VerificationTokenDto", b =>
@@ -4525,6 +4627,30 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("TelegramUser");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UsernameBlacklistEntryDto", b =>
+                {
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
+                        .WithMany()
+                        .HasForeignKey("TelegramUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
+                        .WithMany()
+                        .HasForeignKey("WebUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UsernameHistoryDto", b =>
+                {
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.VerificationTokenDto", b =>

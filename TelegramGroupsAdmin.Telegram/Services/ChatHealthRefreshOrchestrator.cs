@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
@@ -31,17 +32,63 @@ public class ChatHealthRefreshOrchestrator(
     TelegramPhotoService photoService,
     IPhotoHashService photoHashService,
     INotificationService notificationService,
+    ChatMetrics chatMetrics,
     ILogger<ChatHealthRefreshOrchestrator> logger) : IChatHealthRefreshOrchestrator
 {
     /// <summary>
-    /// Perform health check on a specific chat and update cache
+    /// Perform health check on a specific chat and update cache.
+    /// Uses BotChatService.CheckHealthAsync as a quick reachability gate before the full health check.
+    /// After 3 consecutive reachability failures, ManagedChatsRepository.MarkInactiveAsync is called.
     /// </summary>
     public async Task RefreshHealthForChatAsync(ChatIdentity chat, CancellationToken cancellationToken = default)
     {
         try
         {
+            // Quick reachability gate via BotChatService (delegates to Telegram API)
+            var isReachable = await chatService.CheckHealthAsync(chat, cancellationToken);
+
+            if (!isReachable)
+            {
+                chatMetrics.RecordHealthCheck("unreachable");
+                var failureCount = healthCache.IncrementFailureCount(chat.Id);
+                logger.LogDebug("Reachability check failed for {Chat}, consecutive failures: {Count}",
+                    chat.ToLogDebug(), failureCount);
+
+                if (failureCount >= 3)
+                {
+                    logger.LogWarning(
+                        "Chat {Chat} unreachable after {Count} consecutive failures, marking inactive",
+                        chat.ToLogDebug(), failureCount);
+                    await managedChatsRepository.MarkInactiveAsync(chat, cancellationToken);
+                    chatMetrics.RecordChatMarkedInactive();
+                    healthCache.ResetFailureCount(chat.Id);
+                }
+
+                var errorHealth = new ChatHealthStatus
+                {
+                    Chat = chat,
+                    IsReachable = false,
+                    Status = ChatHealthStatusType.Error
+                };
+                errorHealth.Warnings.Add("Chat unreachable - bot may have been removed");
+                healthCache.SetHealth(chat.Id, errorHealth);
+                return;
+            }
+
+            // Reachable — reset failure counter and run detailed health check
+            healthCache.ResetFailureCount(chat.Id);
+
             var health = await PerformHealthCheckAsync(chat, cancellationToken);
             healthCache.SetHealth(chat.Id, health);
+
+            // Record health check result as metric
+            var healthResult = health.Status switch
+            {
+                ChatHealthStatusType.Healthy or ChatHealthStatusType.NotApplicable => "healthy",
+                ChatHealthStatusType.Warning => "degraded",
+                _ => "unreachable"
+            };
+            chatMetrics.RecordHealthCheck(healthResult);
 
             // Update chat name in database if Telegram returned a fresher name
             var freshName = health.Chat.ChatName;
@@ -175,7 +222,7 @@ public class ChatHealthRefreshOrchestrator(
                     status: health.Status.ToString(),
                     isAdmin: health.IsAdmin,
                     warnings: health.Warnings,
-                    ct: cancellationToken);
+                    cancellationToken: CancellationToken.None);
             }
         }
         catch (OperationCanceledException cancelEx)
@@ -227,7 +274,7 @@ public class ChatHealthRefreshOrchestrator(
                     status: health.Status.ToString(),
                     isAdmin: health.IsAdmin,
                     warnings: health.Warnings,
-                    ct: cancellationToken);
+                    cancellationToken: CancellationToken.None);
             }
         }
 

@@ -194,7 +194,7 @@ public class AuthService(
 
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
     {
-        return await userRepository.GetUserCountAsync(cancellationToken) == 0;
+        return !await userRepository.AnyUsersExistAsync(cancellationToken: cancellationToken);
     }
 
     public async Task<RegisterResult> RegisterAsync(string email, string password, string? inviteToken, CancellationToken cancellationToken = default)

@@ -23,17 +23,17 @@ public class MessageStatsService : IMessageStatsService
     public async Task<HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var totalMessages = await context.Messages.CountAsync(cancellationToken);
-        var uniqueUsers = await context.Messages.Select(m => m.UserId).Distinct().CountAsync(cancellationToken);
-        var photoCount = await context.Messages.CountAsync(m => m.PhotoFileId != null, cancellationToken);
+        var totalMessages = await context.Messages.AsNoTracking().CountAsync(cancellationToken);
+        var uniqueUsers = await context.Messages.AsNoTracking().Select(m => m.UserId).Distinct().CountAsync(cancellationToken);
+        var photoCount = await context.Messages.AsNoTracking().CountAsync(m => m.PhotoFileId != null, cancellationToken);
 
         DateTimeOffset? oldestTimestamp = null;
         DateTimeOffset? newestTimestamp = null;
 
         if (totalMessages > 0)
         {
-            oldestTimestamp = await context.Messages.MinAsync(m => m.Timestamp, cancellationToken);
-            newestTimestamp = await context.Messages.MaxAsync(m => m.Timestamp, cancellationToken);
+            oldestTimestamp = await context.Messages.AsNoTracking().MinAsync(m => m.Timestamp, cancellationToken);
+            newestTimestamp = await context.Messages.AsNoTracking().MaxAsync(m => m.Timestamp, cancellationToken);
         }
 
         var result = new HistoryStats(
@@ -110,22 +110,23 @@ public class MessageStatsService : IMessageStatsService
 
         // === CONSOLIDATED QUERY 1: Fetch all message data with spam flag in single query ===
         // Uses LEFT JOIN to include all messages, marking spam where detection results exist
-        var allMessageData = await (
-            from m in context.Messages
-            where m.Timestamp >= startDate && m.Timestamp <= endDate
-            where chatIds.Count == 0 || chatIds.Contains(m.ChatId)
-            join dr in context.DetectionResults on m.MessageId equals dr.MessageId into detections
-            from dr in detections.DefaultIfEmpty()
-            select new
-            {
-                m.MessageId,
-                m.UserId,
-                m.Timestamp,
-                m.ChatId,
-                m.ContentCheckSkipReason,
-                IsSpam = dr != null && dr.IsSpam
-            }
-        ).AsNoTracking().ToListAsync(cancellationToken);
+        var allMessageData = await context.Messages
+            .Where(m => m.Timestamp >= startDate && m.Timestamp <= endDate)
+            .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
+            .LeftJoin(context.DetectionResults,
+                m => m.MessageId,
+                dr => dr.MessageId,
+                (m, dr) => new
+                {
+                    m.MessageId,
+                    m.UserId,
+                    m.Timestamp,
+                    m.ChatId,
+                    m.ContentCheckSkipReason,
+                    IsSpam = dr != null && dr.IsSpam
+                })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
         // === DE-DUPLICATE MESSAGES ===
         // LEFT JOIN can produce duplicate rows if a message has multiple detection results
@@ -315,37 +316,78 @@ public class MessageStatsService : IMessageStatsService
             };
         }
 
-        // 3. Week-over-Week Growth (only if >= 14 days) - all in-memory calculations
+        // 3. Week-over-Week Growth — always computed relative to endDate, independent of startDate.
+        //    The date range filter (startDate) controls which messages appear in the main view,
+        //    but growth is always last-7-days vs prior-7-days from endDate.
+        //    This fixes the 7-day view showing no growth (daysDiff=7 < MinDaysForWeekOverWeekGrowth).
         WeekOverWeekGrowth? weekOverWeekGrowth = null;
-        var hasPreviousPeriod = daysDiff >= AnalyticsConstants.MinDaysForWeekOverWeekGrowth;
+        var currentWeekStart = endDate.AddDays(AnalyticsConstants.CurrentWeekLookbackDays);
+        var previousWeekStart = endDate.AddDays(AnalyticsConstants.PreviousWeekLookbackDays);
+        var previousWeekEnd = currentWeekStart;
+
+        // Check if any messages exist in the previous week window (separate from startDate filter)
+        var previousWeekMessageData = await context.Messages
+            .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
+            .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
+            .LeftJoin(context.DetectionResults,
+                m => m.MessageId,
+                dr => dr.MessageId,
+                (m, dr) => new
+                {
+                    m.MessageId,
+                    m.UserId,
+                    IsSpam = dr != null && dr.IsSpam
+                })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        // De-duplicate previous week messages (same LEFT JOIN de-dup pattern)
+        var distinctPreviousWeek = previousWeekMessageData
+            .GroupBy(m => m.MessageId)
+            .Select(g => g.First())
+            .ToList();
+
+        var hasPreviousPeriod = distinctPreviousWeek.Count > 0;
         if (hasPreviousPeriod)
         {
-            // Split date range into current week (last 7 days) and previous week (7-14 days ago)
-            var currentWeekStart = endDate.AddDays(AnalyticsConstants.CurrentWeekLookbackDays);
-            var previousWeekStart = endDate.AddDays(AnalyticsConstants.PreviousWeekLookbackDays);
-            var previousWeekEnd = currentWeekStart;
+            // Current week metrics — query independently from endDate-7d to endDate
+            // (may already be in distinctMessages for 7d/30d views, but re-querying ensures
+            // correctness regardless of the startDate filter chosen by the user)
+            var currentWeekMessageData = await context.Messages
+                .Where(m => m.Timestamp >= currentWeekStart && m.Timestamp <= endDate)
+                .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId))
+                .LeftJoin(context.DetectionResults,
+                    m => m.MessageId,
+                    dr => dr.MessageId,
+                    (m, dr) => new
+                    {
+                        m.MessageId,
+                        m.UserId,
+                        IsSpam = dr != null && dr.IsSpam
+                    })
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
 
-            // Current week metrics - in-memory filtering
-            var currentWeekData = distinctMessages.Where(m => m.Timestamp >= currentWeekStart).ToList();
-            var currentWeekMessages = currentWeekData.Count;
-            var currentWeekUsers = currentWeekData.Select(m => m.UserId).Distinct().Count();
-            var currentWeekSpam = currentWeekData.Where(m => m.IsSpam).Count();
+            var distinctCurrentWeek = currentWeekMessageData
+                .GroupBy(m => m.MessageId)
+                .Select(g => g.First())
+                .ToList();
+
+            var currentWeekMessages = distinctCurrentWeek.Count;
+            var currentWeekUsers = distinctCurrentWeek.Select(m => m.UserId).Distinct().Count();
+            var currentWeekSpam = distinctCurrentWeek.Count(m => m.IsSpam);
             var currentWeekSpamPct = currentWeekMessages > 0
                 ? (currentWeekSpam / (double)currentWeekMessages * 100.0)
                 : 0;
 
-            // Previous week metrics - in-memory filtering
-            var previousWeekData = distinctMessages
-                .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
-                .ToList();
-            var previousWeekMessages = previousWeekData.Count;
-            var previousWeekUsers = previousWeekData.Select(m => m.UserId).Distinct().Count();
-            var previousWeekSpam = previousWeekData.Where(m => m.IsSpam).Count();
+            var previousWeekMessages = distinctPreviousWeek.Count;
+            var previousWeekUsers = distinctPreviousWeek.Select(m => m.UserId).Distinct().Count();
+            var previousWeekSpam = distinctPreviousWeek.Count(m => m.IsSpam);
             var previousWeekSpamPct = previousWeekMessages > 0
                 ? (previousWeekSpam / (double)previousWeekMessages * 100.0)
                 : 0;
 
-            // Calculate percentage growth
+            // Percentage growth — guard against division by zero (previousWeek = 0 yields 0%, not NaN)
             var messageGrowth = previousWeekMessages > 0
                 ? ((currentWeekMessages - previousWeekMessages) / (double)previousWeekMessages * 100.0)
                 : 0;
@@ -356,11 +398,14 @@ public class MessageStatsService : IMessageStatsService
                 ? ((currentWeekSpamPct - previousWeekSpamPct) / previousWeekSpamPct * 100.0)
                 : 0;
 
+            var previousDailyAvg = previousWeekMessages / 7.0;
+
             weekOverWeekGrowth = new WeekOverWeekGrowth
             {
                 MessageGrowthPercent = messageGrowth,
                 UserGrowthPercent = userGrowth,
                 SpamGrowthPercent = spamGrowth,
+                PreviousDailyAverage = previousDailyAvg,
                 HasPreviousPeriod = true
             };
         }

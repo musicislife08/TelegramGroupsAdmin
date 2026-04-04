@@ -32,9 +32,7 @@
                 <span class="tg-user-name" @onclick="() => OnViewUserDetail.InvokeAsync(Message.User.Id)" @onclick:stopPropagation="true" title="View user details">
                     @GetUserDisplayName()
                 </span>
-                <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
-                    @Message.Timestamp.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
-                </span>
+                <span class="tg-timestamp"><LocalTimestamp Value="@Message.Timestamp" /></span>
 
                 @* User Tags (Phase 4.12) *@
                 @if (UserTags != null && UserTags.Any())
@@ -64,7 +62,7 @@
                 @if (Message.DeletedAt.HasValue)
                 {
                     <span class="tg-badge tg-badge-deleted" title="@($"Deleted: {Message.DeletionSource ?? "unknown"}")">
-                        🗑️ DELETED <span class="local-timestamp" data-utc="@Message.DeletedAt.Value.ToString("o")">@Message.DeletedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                        🗑️ DELETED <LocalTimestamp Value="@Message.DeletedAt.Value" />
                     </span>
                 }
                 @if (Message.EditDate.HasValue)
@@ -551,7 +549,7 @@
             return string.Empty;
 
         // Use centralized utility to construct media path
-        return Core.Utilities.MediaPathUtilities.GetMediaWebPath(filename, (int)mediaType);
+        return Core.Utilities.MediaUtilities.GetMediaWebPath(filename, (int)mediaType);
     }
 
     private bool IsManuallyMarkedAsHam()

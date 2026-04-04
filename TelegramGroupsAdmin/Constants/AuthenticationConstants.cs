@@ -71,4 +71,9 @@ public static class AuthenticationConstants
     /// TOTP manual entry format group size (groups of 4 characters).
     /// </summary>
     public const int TotpManualEntryGroupSize = 4;
+
+    /// <summary>
+    /// Authorization policy name for global admin or owner access.
+    /// </summary>
+    public const string PolicyGlobalAdminOrOwner = "GlobalAdminOrOwner";
 }

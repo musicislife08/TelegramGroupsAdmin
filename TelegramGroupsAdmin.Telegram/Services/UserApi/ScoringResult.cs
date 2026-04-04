@@ -8,7 +8,6 @@ public record ScoringResult(
     ProfileScanOutcome Outcome,
     decimal RuleScore,
     decimal AiScore,
-    int? AiConfidence,
     string? AiReason,
     string[]? AiSignals,
     bool ContainsNudity = false);

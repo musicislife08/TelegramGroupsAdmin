@@ -70,8 +70,8 @@
                     <div class="gif-preview-container" style="width: 100px; height: 60px; position: relative; cursor: pointer;" @onclick="@(() => PreviewGif(context))">
                         @if (!string.IsNullOrEmpty(context.ThumbnailPath))
                         {
-                            <img src="@MediaPathUtilities.GetPhotoWebPath(context.ThumbnailPath)" alt="@(context.Name ?? "GIF")" class="gif-thumbnail" style="max-height: 60px; max-width: 100px; border-radius: 4px;" />
-                            <img src="@MediaPathUtilities.GetPhotoWebPath(context.FilePath)" alt="@(context.Name ?? "GIF")" class="gif-animated" style="max-height: 60px; max-width: 100px; border-radius: 4px; position: absolute; top: 0; left: 0;" />
+                            <img src="@MediaUtilities.GetPhotoWebPath(context.ThumbnailPath)" alt="@(context.Name ?? "GIF")" class="gif-thumbnail" style="max-height: 60px; max-width: 100px; border-radius: 4px;" />
+                            <img src="@MediaUtilities.GetPhotoWebPath(context.FilePath)" alt="@(context.Name ?? "GIF")" class="gif-animated" style="max-height: 60px; max-width: 100px; border-radius: 4px; position: absolute; top: 0; left: 0;" />
                         }
                         else
                         {
@@ -200,7 +200,7 @@
                 <MudCardContent>
                     <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Start">
                         <MudStack AlignItems="AlignItems.Center" Spacing="1">
-                            <img src="@MediaPathUtilities.GetPhotoWebPath(_previewGif.FilePath)" alt="@(_previewGif.Name ?? "GIF")" style="max-height: 120px; max-width: 200px; border-radius: 4px;" />
+                            <img src="@MediaUtilities.GetPhotoWebPath(_previewGif.FilePath)" alt="@(_previewGif.Name ?? "GIF")" style="max-height: 120px; max-width: 200px; border-radius: 4px;" />
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@(_previewGif.Name ?? "GIF")</MudText>
                         </MudStack>
                         <MudStack Spacing="2">

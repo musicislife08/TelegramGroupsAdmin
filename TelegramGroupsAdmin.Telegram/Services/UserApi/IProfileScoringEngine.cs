@@ -15,5 +15,5 @@ public interface IProfileScoringEngine
         string? imageLabels,
         decimal banThreshold,
         decimal notifyThreshold,
-        CancellationToken ct);
+        CancellationToken cancellationToken);
 }

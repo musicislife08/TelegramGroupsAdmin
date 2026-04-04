@@ -45,30 +45,6 @@ public class MessageQueryService : IMessageQueryService
         return results.Select(m => m.ToModel()).ToList();
     }
 
-    public async Task<List<UiModels.MessageRecord>> GetMessagesBeforeAsync(
-        DateTimeOffset? beforeTimestamp = null,
-        int limit = 50,
-        CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var query = context.EnrichedMessages
-            .AsNoTracking()
-            .Where(m => m.ChatId != 0); // Exclude manual training samples (chat_id=0)
-
-        if (beforeTimestamp.HasValue)
-        {
-            query = query.Where(m => m.Timestamp < beforeTimestamp.Value);
-        }
-
-        var results = await query
-            .OrderByDescending(m => m.Timestamp)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
-
-        return results.Select(m => m.ToModel()).ToList();
-    }
-
     public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -203,7 +179,7 @@ public class MessageQueryService : IMessageQueryService
 
             // Validate media path exists on filesystem (nulls if missing)
             // REFACTOR-3: Now uses shared utility to avoid duplication with MessageHistoryRepository
-            var validatedPath = MediaPathUtilities.ValidateMediaPath(
+            var validatedPath = MediaUtilities.ValidateMediaPath(
                 messageModel.MediaLocalPath,
                 (int?)messageModel.MediaType,
                 _imageStoragePath,
@@ -253,24 +229,6 @@ public class MessageQueryService : IMessageQueryService
         }).ToList();
     }
 
-    public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
-        DateTimeOffset startTimestamp,
-        DateTimeOffset endTimestamp,
-        int limit = 1000,
-        CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var results = await context.EnrichedMessages
-            .AsNoTracking()
-            .Where(m => m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp)
-            .OrderByDescending(m => m.Timestamp)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
-
-        return results.Select(m => m.ToModel()).ToList();
-    }
-
     public async Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(long chatId, IEnumerable<int> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -318,36 +276,6 @@ public class MessageQueryService : IMessageQueryService
                 MatchedMessageId: r.MatchedMessageId))
             .Where(c => c.MatchedMessageId.HasValue)
             .ToDictionary(c => c.MatchedMessageId!.Value, c => c);
-    }
-
-    public async Task<List<string>> GetDistinctUserNamesAsync(CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Query from telegram_users table instead of messages
-        var userNames = await context.TelegramUsers
-            .AsNoTracking()
-            .Where(u => u.Username != null && u.Username != "")
-            .Select(u => u.Username!)
-            .Distinct()
-            .OrderBy(u => u)
-            .ToListAsync(cancellationToken);
-
-        return userNames;
-    }
-
-    public async Task<List<string>> GetDistinctChatNamesAsync(CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Query from managed_chats table instead of messages
-        var chatNames = await context.ManagedChats
-            .AsNoTracking()
-            .Where(c => c.ChatName != null && c.ChatName != "")
-            .Select(c => c.ChatName!)
-            .Distinct()
-            .OrderBy(c => c)
-            .ToListAsync(cancellationToken);
-
-        return chatNames;
     }
 
     public async Task<UiModels.PhotoMessageRecord?> GetUserRecentPhotoAsync(long userId, long chatId, CancellationToken cancellationToken = default)
@@ -427,7 +355,7 @@ public class MessageQueryService : IMessageQueryService
         var messageModel = enrichedMessage.ToModel();
 
         // Validate media path exists on filesystem
-        var validatedPath = MediaPathUtilities.ValidateMediaPath(
+        var validatedPath = MediaUtilities.ValidateMediaPath(
             messageModel.MediaLocalPath,
             (int?)messageModel.MediaType,
             _imageStoragePath,

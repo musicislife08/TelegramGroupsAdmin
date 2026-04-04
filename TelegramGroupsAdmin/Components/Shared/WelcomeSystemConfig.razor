@@ -1,4 +1,5 @@
 @using Humanizer
+@using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Models.Welcome
 @using TelegramGroupsAdmin.Core.Services
@@ -48,6 +49,28 @@
                 @* CAS Check Configuration *@
                 <MudItem xs="12">
                     <MudExpansionPanels>
+                        <MudExpansionPanel Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.JoinSecurity.UsernameBlacklist.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>Username Blacklist</MudText>
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="@(_config.JoinSecurity.UsernameBlacklist.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.JoinSecurity.UsernameBlacklist.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                                    Auto-bans users whose display name matches a blacklisted pattern on join.
+                                    Useful for blocking persistent bot accounts that reuse the same name.
+                                </MudText>
+                                <UsernameBlacklistSettings />
+                            </ChildContent>
+                        </MudExpansionPanel>
+
                         <MudExpansionPanel Text="CAS (Combot Anti-Spam)" Expanded="false">
                             <TitleContent>
                                 <div class="d-flex align-center gap-2">

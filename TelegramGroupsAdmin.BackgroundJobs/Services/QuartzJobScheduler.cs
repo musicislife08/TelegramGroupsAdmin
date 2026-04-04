@@ -89,14 +89,6 @@ public class QuartzJobScheduler : IJobScheduler
         return deleted;
     }
 
-    public async Task<bool> IsScheduledAsync(string jobId, CancellationToken cancellationToken = default)
-    {
-        var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
-
-        var jobKey = new JobKey(jobId, "AdHoc");
-        return await scheduler.CheckExists(jobKey, cancellationToken);
-    }
-
     /// <summary>
     /// Map job name to IJob implementation type
     /// Uses BackgroundJobNames constants for compile-time safety
@@ -114,6 +106,7 @@ public class QuartzJobScheduler : IJobScheduler
             BackgroundJobNames.TempbanExpiry => typeof(Jobs.TempbanExpiryJob),
             BackgroundJobNames.RotateBackupPassphrase => typeof(Jobs.RotateBackupPassphraseJob),
             BackgroundJobNames.DataCleanup => typeof(Jobs.DataCleanupJob),
+            BackgroundJobNames.ProfileScan => typeof(Jobs.ProfileScanJob),
             _ => throw new ArgumentException($"Unknown job name: {jobName}", nameof(jobName))
         };
     }

@@ -170,8 +170,8 @@ services:
       # =======================================================================
       # ClamAV Connection (Internal Docker Network)
       # =======================================================================
-      CLAMAV__HOST: clamav
-      CLAMAV__PORT: "3310"
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
 
       # =======================================================================
       # Observability Configuration (Optional - For Development/Debugging)
@@ -184,6 +184,13 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_SERVICE_NAME: TelegramGroupsAdmin
+
+      # =======================================================================
+      # Metrics (Optional - Standalone Prometheus /metrics endpoint)
+      # =======================================================================
+      # Uncomment to expose /metrics without requiring full OTEL stack:
+      # ENABLE_METRICS: "true"
+      # Note: OTEL_EXPORTER_OTLP_ENDPOINT above already enables /metrics implicitly
 
       # =======================================================================
       # Message History Configuration

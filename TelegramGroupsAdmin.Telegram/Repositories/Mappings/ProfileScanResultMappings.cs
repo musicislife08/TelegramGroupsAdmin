@@ -19,7 +19,6 @@ public static class ProfileScanResultMappings
             Outcome: (ProfileScanOutcome)data.Outcome,
             RuleScore: data.RuleScore,
             AiScore: data.AiScore,
-            AiConfidence: data.AiConfidence,
             AiReason: data.AiReason,
             AiSignals: data.AiSignals);
     }
@@ -35,7 +34,6 @@ public static class ProfileScanResultMappings
             Outcome = (int)ui.Outcome,
             RuleScore = ui.RuleScore,
             AiScore = ui.AiScore,
-            AiConfidence = ui.AiConfidence,
             AiReason = ui.AiReason,
             AiSignals = ui.AiSignals
         };

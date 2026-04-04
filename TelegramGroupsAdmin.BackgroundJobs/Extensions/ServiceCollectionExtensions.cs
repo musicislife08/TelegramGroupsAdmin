@@ -4,6 +4,7 @@ using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.BackgroundJobs.Jobs;
 using TelegramGroupsAdmin.BackgroundJobs.Listeners;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
@@ -27,6 +28,9 @@ public static class ServiceCollectionExtensions
 
         // Register ad-hoc job scheduler (for one-time delayed jobs)
         services.AddSingleton<Core.BackgroundJobs.IJobScheduler, QuartzJobScheduler>();
+
+        // Register job metrics
+        services.AddSingleton<JobMetrics>();
 
         // Register Backup services
         services.AddBackupServices();
@@ -88,8 +92,7 @@ public static class ServiceCollectionExtensions
         q.AddJob<DataCleanupJob>(opts => opts.WithIdentity(BackgroundJobNames.DataCleanup).StoreDurably());
         q.AddJob<RefreshUserPhotosJob>(opts => opts.WithIdentity(BackgroundJobNames.UserPhotoRefresh).StoreDurably());
         q.AddJob<ScheduledBackupJob>(opts => opts.WithIdentity(BackgroundJobNames.ScheduledBackup).StoreDurably());
-        q.AddJob<TextClassifierRetrainingJob>(opts => opts.WithIdentity(BackgroundJobNames.TextClassifierRetraining).StoreDurably());
-        q.AddJob<BayesClassifierRetrainingJob>(opts => opts.WithIdentity(BackgroundJobNames.BayesClassifierRetraining).StoreDurably());
+        q.AddJob<ClassifierRetrainingJob>(opts => opts.WithIdentity(BackgroundJobNames.ClassifierRetraining).StoreDurably());
         q.AddJob<ProfileRescanJob>(opts => opts.WithIdentity(BackgroundJobNames.ProfileRescan).StoreDurably());
 
         // Ad-hoc jobs (one-time triggered, no UI)

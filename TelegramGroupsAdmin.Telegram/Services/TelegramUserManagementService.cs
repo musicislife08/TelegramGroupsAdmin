@@ -15,15 +15,18 @@ public class TelegramUserManagementService : ITelegramUserManagementService
 {
     private readonly ITelegramUserRepository _userRepository;
     private readonly IUserActionsRepository _userActionsRepository;
+    private readonly IUsernameHistoryRepository _usernameHistoryRepository;
     private readonly ILogger<TelegramUserManagementService> _logger;
 
     public TelegramUserManagementService(
         ITelegramUserRepository userRepository,
         IUserActionsRepository userActionsRepository,
+        IUsernameHistoryRepository usernameHistoryRepository,
         ILogger<TelegramUserManagementService> logger)
     {
         _userRepository = userRepository;
         _userActionsRepository = userActionsRepository;
+        _usernameHistoryRepository = usernameHistoryRepository;
         _logger = logger;
     }
 
@@ -208,5 +211,11 @@ public class TelegramUserManagementService : ITelegramUserManagementService
             reason ?? "Manual unban");
 
         return true;
+    }
+
+    /// <inheritdoc/>
+    public Task<List<UsernameHistoryRecord>> GetNameHistoryAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    {
+        return _usernameHistoryRepository.GetByUserIdAsync(telegramUserId, cancellationToken);
     }
 }

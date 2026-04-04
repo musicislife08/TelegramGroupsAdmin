@@ -453,4 +453,83 @@ public class ThumbnailServiceTests
     }
 
     #endregion
+
+    #region Magic Byte Detection - Video Content Disguised as GIF
+
+    [Test]
+    public async Task GenerateThumbnailAsync_GifExtensionWithMp4Content_DelegatesToVideoService()
+    {
+        // Arrange - File named .gif but containing MP4 magic bytes (ftyp at offset 4)
+        var sourcePath = Path.Combine(_tempDir, "disguised.gif");
+        var destPath = Path.Combine(_tempDir, "thumb.png");
+
+        await File.WriteAllBytesAsync(sourcePath, CreateMinimalMp4Bytes());
+
+        _mockVideoService.IsAvailable.Returns(true);
+        _mockVideoService.ExtractThumbnailAsync(sourcePath, destPath, 100, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
+
+        // Assert - Should route to video service despite .gif extension
+        Assert.That(result, Is.True);
+        await _mockVideoService.Received(1).ExtractThumbnailAsync(
+            sourcePath, destPath, 100, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task GenerateThumbnailAsync_GifExtensionWithWebMContent_DelegatesToVideoService()
+    {
+        // Arrange - File named .gif but containing WebM/EBML magic bytes
+        var sourcePath = Path.Combine(_tempDir, "disguised.gif");
+        var destPath = Path.Combine(_tempDir, "thumb.png");
+
+        await File.WriteAllBytesAsync(sourcePath, CreateMinimalWebMBytes());
+
+        _mockVideoService.IsAvailable.Returns(true);
+        _mockVideoService.ExtractThumbnailAsync(sourcePath, destPath, 100, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Act
+        var result = await _service.GenerateThumbnailAsync(sourcePath, destPath);
+
+        // Assert - Should route to video service despite .gif extension
+        Assert.That(result, Is.True);
+        await _mockVideoService.Received(1).ExtractThumbnailAsync(
+            sourcePath, destPath, 100, Arg.Any<CancellationToken>());
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Creates bytes with a valid MP4 file signature (ftyp box).
+    /// Only the magic bytes matter — the rest is padding since FFmpeg is mocked.
+    /// </summary>
+    private static byte[] CreateMinimalMp4Bytes() =>
+    [
+        0x00, 0x00, 0x00, 0x1C,       // box size (28 bytes)
+        0x66, 0x74, 0x79, 0x70,       // "ftyp" — MP4/MOV/M4V signature
+        0x69, 0x73, 0x6F, 0x6D,       // brand: "isom"
+        0x00, 0x00, 0x02, 0x00,       // minor version
+        0x69, 0x73, 0x6F, 0x6D,       // compatible brand: "isom"
+        0x69, 0x73, 0x6F, 0x32,       // compatible brand: "iso2"
+        0x6D, 0x70, 0x34, 0x31,       // compatible brand: "mp41"
+    ];
+
+    /// <summary>
+    /// Creates bytes with a valid WebM/MKV file signature (EBML header).
+    /// Only the magic bytes matter — the rest is padding since FFmpeg is mocked.
+    /// </summary>
+    private static byte[] CreateMinimalWebMBytes() =>
+    [
+        0x1A, 0x45, 0xDF, 0xA3,       // EBML header — WebM/MKV signature
+        0x93, 0x42, 0x86, 0x81,       // EBML version element
+        0x01, 0x42, 0xF7, 0x81,       // EBML read version element
+        0x01, 0x42, 0xF2, 0x81,       // padding
+    ];
+
+    #endregion
 }

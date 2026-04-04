@@ -25,12 +25,11 @@ public sealed class ProfileScoringEngine(
     /// <summary>Result from AI vision analysis (Layer 2).</summary>
     private record AiScoringResult(
         decimal Score,
-        int? Confidence,
         string? Reason,
         string[]? Signals,
         bool ContainsNudity = false)
     {
-        public static readonly AiScoringResult Empty = new(0.0m, null, null, null, false);
+        public static readonly AiScoringResult Empty = new(0.0m, null, null, false);
     }
 
     private const decimal MaxScore = 5.0m;
@@ -48,17 +47,17 @@ public sealed class ProfileScoringEngine(
     /// <param name="imageLabels">Labels describing each image (e.g. "Image 1: profile photo, Image 2: pinned story").</param>
     /// <param name="banThreshold">Score at or above which the user should be auto-banned.</param>
     /// <param name="notifyThreshold">Score at or above which admins should be notified.</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<ScoringResult> ScoreAsync(
         ProfileData profile,
         IReadOnlyList<ImageInput> images,
         string? imageLabels,
         decimal banThreshold,
         decimal notifyThreshold,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         // ── Layer 1: Rule-based pre-filters ──
-        var ruleScore = await RunRuleBasedScoringAsync(profile, ct);
+        var ruleScore = await RunRuleBasedScoringAsync(profile, cancellationToken);
 
         if (ruleScore >= banThreshold)
         {
@@ -69,14 +68,13 @@ public sealed class ProfileScoringEngine(
                 Outcome: ProfileScanOutcome.Banned,
                 RuleScore: ruleScore,
                 AiScore: 0.0m,
-                AiConfidence: null,
                 AiReason: "Rule-based detection triggered ban threshold",
                 AiSignals: null,
                 ContainsNudity: false);
         }
 
         // ── Layer 2: AI vision analysis ──
-        var aiResult = await RunAiScoringAsync(profile, images, imageLabels, ct);
+        var aiResult = await RunAiScoringAsync(profile, images, imageLabels, cancellationToken);
         var totalScore = Cap(ruleScore + aiResult.Score);
 
         var outcome = totalScore >= banThreshold
@@ -94,7 +92,6 @@ public sealed class ProfileScoringEngine(
             Outcome: outcome,
             RuleScore: ruleScore,
             AiScore: aiResult.Score,
-            AiConfidence: aiResult.Confidence,
             AiReason: aiResult.Reason,
             AiSignals: aiResult.Signals,
             ContainsNudity: aiResult.ContainsNudity);
@@ -104,7 +101,7 @@ public sealed class ProfileScoringEngine(
     // Layer 1: Rule-based pre-filters
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private async Task<decimal> RunRuleBasedScoringAsync(ProfileData profile, CancellationToken ct)
+    private async Task<decimal> RunRuleBasedScoringAsync(ProfileData profile, CancellationToken cancellationToken)
     {
         var score = 0.0m;
 
@@ -122,7 +119,7 @@ public sealed class ProfileScoringEngine(
             return score;
 
         // Check for blocked URLs
-        var hardBlock = await urlPreFilter.CheckHardBlockAsync(allText, profile.Chat, ct);
+        var hardBlock = await urlPreFilter.CheckHardBlockAsync(allText, profile.Chat, cancellationToken);
         if (hardBlock.ShouldBlock)
         {
             logger.LogInformation("Profile scan for {User}: blocked URL detected ({Domain})",
@@ -131,7 +128,7 @@ public sealed class ProfileScoringEngine(
         }
 
         // Check for stop words
-        var stopWords = (await stopWordsRepository.GetEnabledStopWordsAsync(ct)).ToList();
+        var stopWords = (await stopWordsRepository.GetEnabledStopWordsAsync(cancellationToken)).ToList();
         if (stopWords.Count > 0)
         {
             var lowerText = allText.ToLowerInvariant();
@@ -165,9 +162,9 @@ public sealed class ProfileScoringEngine(
         ProfileData profile,
         IReadOnlyList<ImageInput> images,
         string? imageLabels,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
-        if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, ct))
+        if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ProfileScan, cancellationToken))
         {
             logger.LogWarning("ProfileScan AI feature not configured — only rule-based scoring active");
             return AiScoringResult.Empty;
@@ -180,7 +177,7 @@ public sealed class ProfileScoringEngine(
         {
             try
             {
-                urlMetadata = await urlContentScraping.ScrapeUrlMetadataAsync(allText, ct);
+                urlMetadata = await urlContentScraping.ScrapeUrlMetadataAsync(allText, cancellationToken);
                 if (urlMetadata != null)
                 {
                     logger.LogDebug("Profile scan for {User}: scraped URL metadata for AI context",
@@ -210,16 +207,16 @@ public sealed class ProfileScoringEngine(
             result = images.Count == 1
                 ? await chatService.GetVisionCompletionAsync(
                     AIFeatureType.ProfileScan, systemPrompt, userPrompt,
-                    images[0].Data, images[0].MimeType, options, ct)
+                    images[0].Data, images[0].MimeType, options, cancellationToken)
                 : await chatService.GetVisionCompletionAsync(
                     AIFeatureType.ProfileScan, systemPrompt, userPrompt,
-                    images, options, ct);
+                    images, options, cancellationToken);
         }
         else
         {
             // No images — text-only analysis
             result = await chatService.GetCompletionAsync(
-                AIFeatureType.ProfileScan, systemPrompt, userPrompt, options, ct);
+                AIFeatureType.ProfileScan, systemPrompt, userPrompt, options, cancellationToken);
         }
 
         if (result == null)
@@ -242,18 +239,8 @@ public sealed class ProfileScoringEngine(
                 return AiScoringResult.Empty;
             }
 
-            if (!response.Spam)
-                return new AiScoringResult(0.0m, response.Confidence, response.Reason, response.SignalsDetected, response.ContainsNudity);
-
-            // Map confidence to points (aligned with prompt tiers)
-            var score = response.Confidence switch
-            {
-                >= 80 => 4.5m,  // Definitive spam/explicit → auto-ban
-                >= 40 => 2.5m,  // Suspicious/suggestive → admin review
-                _ => 0.0m       // Minor signals — treat as clean
-            };
-
-            return new AiScoringResult(score, response.Confidence, response.Reason, response.SignalsDetected, response.ContainsNudity);
+            var score = Math.Clamp(response.Score, 0.0m, MaxScore);
+            return new AiScoringResult(score, response.Reason, response.SignalsDetected, response.ContainsNudity);
         }
         catch (JsonException ex)
         {

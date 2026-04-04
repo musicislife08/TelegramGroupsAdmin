@@ -43,7 +43,7 @@
                         <MudStack Spacing="2">
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    <b>Edited:</b> <span class="local-timestamp" data-utc="@edit.EditDate.ToString("o")">@edit.EditDate.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                    <b>Edited:</b> <LocalTimestamp Value="@edit.EditDate" />
                                 </MudText>
                                 <MudStack Row="true" Spacing="1">
                                     @* Phase 4.20: Translation badge *@

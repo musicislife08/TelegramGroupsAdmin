@@ -16,11 +16,6 @@ public enum ScanResultType
     Infected = 1,
 
     /// <summary>
-    /// File is suspicious but not definitively malicious
-    /// </summary>
-    Suspicious = 2,
-
-    /// <summary>
     /// Scan encountered an error
     /// </summary>
     Error = 3,

@@ -14,6 +14,5 @@ public record ProfileScanResultRecord(
     ProfileScanOutcome Outcome,
     decimal RuleScore,
     decimal AiScore,
-    int? AiConfidence,
     string? AiReason,
     string? AiSignals);

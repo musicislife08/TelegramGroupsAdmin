@@ -73,6 +73,10 @@ public class UserDetailDialogTests : MudBlazorTestContext
         Services.AddSingleton(Substitute.For<ITelegramSessionManager>());
         Services.AddSingleton(Substitute.For<ITelegramUserRepository>());
 
+        // Default: no history entries
+        _mockUserService.GetNameHistoryAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<UsernameHistoryRecord>()));
+
         // Default setup for tag definitions
         _mockTagDefinitionsRepo.GetAllAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new List<TagDefinition>()));

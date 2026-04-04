@@ -14,14 +14,6 @@ public interface IMessageQueryService
     Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get messages before a timestamp for cursor-based pagination
-    /// </summary>
-    Task<List<UiModels.MessageRecord>> GetMessagesBeforeAsync(
-        DateTimeOffset? beforeTimestamp = null,
-        int limit = 50,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Get messages for a specific chat with pagination
     /// </summary>
     Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(
@@ -49,31 +41,12 @@ public interface IMessageQueryService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get messages within a date range
-    /// </summary>
-    Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
-        DateTimeOffset startTimestamp,
-        DateTimeOffset endTimestamp,
-        int limit = 1000,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Get content checks for multiple messages (latest detection per message)
     /// </summary>
     Task<Dictionary<int, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(
         long chatId,
         IEnumerable<int> messageIds,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get distinct usernames from telegram_users table
-    /// </summary>
-    Task<List<string>> GetDistinctUserNamesAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get distinct chat names from managed_chats table
-    /// </summary>
-    Task<List<string>> GetDistinctChatNamesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get user's most recent photo in a specific chat

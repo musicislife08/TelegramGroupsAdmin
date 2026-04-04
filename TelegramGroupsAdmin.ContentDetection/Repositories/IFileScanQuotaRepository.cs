@@ -28,37 +28,6 @@ public interface IFileScanQuotaRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get current quota usage for a service
-    /// Returns null if no quota record exists for current window
-    /// </summary>
-    Task<FileScanQuotaModel?> GetCurrentQuotaAsync(
-        string serviceName,
-        string quotaType,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Clean up expired quota records (older than their window)
-    /// Daily quotas: delete if window_end &lt; now
-    /// Monthly quotas: delete if window_end &lt; now
-    /// </summary>
-    Task<int> CleanupExpiredQuotasAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get all quota records for a service (for UI display)
-    /// </summary>
-    Task<List<FileScanQuotaModel>> GetServiceQuotasAsync(
-        string serviceName,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Reset quota usage for a service (admin override)
-    /// </summary>
-    Task ResetQuotaAsync(
-        string serviceName,
-        string quotaType,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Get all active quotas for UI dashboard display (Phase 4.22)
     /// Returns all quota records within their current windows
     /// </summary>

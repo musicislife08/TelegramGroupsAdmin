@@ -2,11 +2,11 @@ using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -23,15 +23,18 @@ public class ChatHealthCheckJob : IJob
     private readonly IChatHealthRefreshOrchestrator _chatHealthRefreshOrchestrator;
     private readonly IConfigService _configService;
     private readonly ILogger<ChatHealthCheckJob> _logger;
+    private readonly JobMetrics _jobMetrics;
 
     public ChatHealthCheckJob(
         IChatHealthRefreshOrchestrator chatHealthRefreshOrchestrator,
         IConfigService configService,
-        ILogger<ChatHealthCheckJob> logger)
+        ILogger<ChatHealthCheckJob> logger,
+        JobMetrics jobMetrics)
     {
         _chatHealthRefreshOrchestrator = chatHealthRefreshOrchestrator;
         _configService = configService;
         _logger = logger;
+        _jobMetrics = jobMetrics;
     }
 
     /// <summary>
@@ -112,16 +115,7 @@ public class ChatHealthCheckJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }

@@ -217,19 +217,6 @@ public class BotMediaService : IBotMediaService
         await _mediaHandler.DownloadFileAsync(filePath, destination, ct);
     }
 
-    public async Task<byte[]> DownloadFileAsBytesAsync(string fileId, CancellationToken ct = default)
-    {
-        var file = await _mediaHandler.GetFileAsync(fileId, ct);
-        if (file.FilePath == null)
-        {
-            throw new InvalidOperationException($"Unable to get file path for file {fileId}");
-        }
-
-        using var memoryStream = new MemoryStream();
-        await _mediaHandler.DownloadFileAsync(file.FilePath, memoryStream, ct);
-        return memoryStream.ToArray();
-    }
-
     public async Task<UserProfilePhotos> GetUserProfilePhotosAsync(
         long userId,
         int offset = 0,

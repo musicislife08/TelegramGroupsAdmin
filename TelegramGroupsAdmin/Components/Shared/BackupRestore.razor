@@ -7,6 +7,7 @@
 @using Microsoft.EntityFrameworkCore
 @using TelegramGroupsAdmin.Data
 @using System.Text.Json
+@implements IDisposable
 @inject IBackupService BackupService
 @inject IBackgroundJobConfigService JobConfigService
 @inject IDbContextFactory<AppDbContext> ContextFactory
@@ -109,7 +110,7 @@ else
                 {
                     <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
                         <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Info</MudText>
-                        <MudText Typo="Typo.body2"><strong>Created:</strong> <span class="local-timestamp" data-utc="@_uploadMetadata.CreatedAt.ToString("o")">@_uploadMetadata.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</span></MudText>
+                        <MudText Typo="Typo.body2"><strong>Created:</strong> <LocalTimestamp Value="@_uploadMetadata.CreatedAt" Format="yyyy-MM-dd HH:mm" /></MudText>
                         <MudText Typo="Typo.body2"><strong>Version:</strong> @_uploadMetadata.Version | <strong>Tables:</strong> @_uploadMetadata.TableCount</MudText>
                         <MudText Typo="Typo.body2"><strong>Size:</strong> @FormatBytes(_selectedFile?.Size ?? 0)</MudText>
                         @if (_uploadIsEncrypted)
@@ -140,7 +141,7 @@ else
                     </SelectedTemplate>
                 </MudFileUpload>
 
-                @if (_backupBytes != null && !_isRestoring)
+                @if (_uploadTempFilePath != null && !_isRestoring)
                 {
                     <MudCheckBox @bind-Value="_confirmWipe" Color="Color.Error" Class="mt-3" Dense="true">
                         I understand this will <strong>permanently delete all current data</strong>
@@ -286,7 +287,7 @@ else
     private bool _uploadIsEncrypted;
     private bool _confirmWipe;
     private bool _isRestoring;
-    private byte[]? _backupBytes;
+    private string? _uploadTempFilePath;
 
     // Backup browser reference
     private BackupBrowser? _backupBrowser;
@@ -496,18 +497,20 @@ else
 
         try
         {
+            // Stream upload to temp file — never buffer entire backup in managed memory
+            CleanupTempFile();
+            _uploadTempFilePath = Path.Combine(Path.GetTempPath(), $"tga_upload_{Guid.NewGuid():N}.tar.gz");
             await using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500); // 500MB max
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
-            _backupBytes = ms.ToArray();
+            await using var tempFile = new FileStream(_uploadTempFilePath, FileMode.Create, FileAccess.Write);
+            await stream.CopyToAsync(tempFile);
 
             // Check if encrypted
-            _uploadIsEncrypted = await BackupService.IsEncryptedAsync(_backupBytes);
+            _uploadIsEncrypted = await BackupService.IsEncryptedAsync(_uploadTempFilePath);
 
             // Try to get metadata (only works for unencrypted backups without passphrase)
             if (!_uploadIsEncrypted)
             {
-                _uploadMetadata = await BackupService.GetMetadataAsync(_backupBytes);
+                _uploadMetadata = await BackupService.GetMetadataAsync(_uploadTempFilePath);
             }
             else
             {
@@ -521,7 +524,7 @@ else
         {
             Snackbar.Add($"Failed to read backup file: {ex.Message}", Severity.Error);
             _selectedFile = null;
-            _backupBytes = null;
+            CleanupTempFile();
         }
 
         StateHasChanged();
@@ -529,13 +532,13 @@ else
 
     private async Task RestoreFromUpload()
     {
-        if (_backupBytes == null || !_confirmWipe)
+        if (_uploadTempFilePath == null || !_confirmWipe)
             return;
 
         try
         {
             // Check if backup is encrypted - if so, ALWAYS prompt for passphrase (don't assume DB passphrase matches)
-            var isEncrypted = await BackupService.IsEncryptedAsync(_backupBytes);
+            var isEncrypted = await BackupService.IsEncryptedAsync(_uploadTempFilePath);
 
             if (isEncrypted)
             {
@@ -543,24 +546,24 @@ else
                 var dialog = await DialogService.ShowAsync<PassphrasePromptDialog>("Enter Backup Passphrase");
                 var dialogResult = await dialog.Result;
 
-            if (dialogResult is null || dialogResult.Canceled || dialogResult.Data == null)
-            {
-                Snackbar.Add("Restore canceled", Severity.Info);
-                return;
-            }
+                if (dialogResult is null || dialogResult.Canceled || dialogResult.Data == null)
+                {
+                    Snackbar.Add("Restore canceled", Severity.Info);
+                    return;
+                }
 
-            var passphrase = dialogResult.Data as string;
-            if (string.IsNullOrWhiteSpace(passphrase))
-            {
-                Snackbar.Add("Passphrase is required for encrypted backups", Severity.Warning);
-                return;
-            }
+                var passphrase = dialogResult.Data as string;
+                if (string.IsNullOrWhiteSpace(passphrase))
+                {
+                    Snackbar.Add("Passphrase is required for encrypted backups", Severity.Warning);
+                    return;
+                }
 
-                await PerformRestoreAsync(_backupBytes, passphrase);
+                await PerformRestoreAsync(_uploadTempFilePath!, passphrase);
             }
             else
             {
-                await PerformRestoreAsync(_backupBytes, null);
+                await PerformRestoreAsync(_uploadTempFilePath!, null);
             }
         }
         catch (Exception ex)
@@ -583,10 +586,8 @@ else
 
         try
         {
-            var bytes = await File.ReadAllBytesAsync(backup.FilePath);
-
             // Check if backup is encrypted - if so, ALWAYS prompt for passphrase (don't assume DB passphrase matches)
-            var isEncrypted = await BackupService.IsEncryptedAsync(bytes);
+            var isEncrypted = await BackupService.IsEncryptedAsync(backup.FilePath);
 
             if (isEncrypted)
             {
@@ -607,47 +608,63 @@ else
                     return;
                 }
 
-                await PerformRestoreAsync(bytes, passphrase);
+                await PerformRestoreAsync(backup.FilePath, passphrase);
             }
             else
             {
-                await PerformRestoreAsync(bytes, null);
+                await PerformRestoreAsync(backup.FilePath, null);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to load backup file: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Failed to restore backup: {ex.Message}", Severity.Error);
         }
     }
 
-    private async Task PerformRestoreAsync(byte[] backupBytes, string? passphrase)
+    private async Task PerformRestoreAsync(string filepath, string? passphrase)
     {
         _isRestoring = true;
         StateHasChanged();
 
         try
         {
-            // Use explicit passphrase if provided, otherwise auto-detect and use DB passphrase
             if (passphrase != null)
             {
-                await BackupService.RestoreAsync(backupBytes, passphrase);
+                await BackupService.RestoreAsync(filepath, passphrase);
             }
             else
             {
-                await BackupService.RestoreAsync(backupBytes);
+                await BackupService.RestoreAsync(filepath);
             }
 
             Snackbar.Add("System restored successfully! You will be logged out.", Severity.Success);
-
             await Task.Delay(2000);
-            Navigation.NavigateTo("/login", forceLoad: true);
+            Navigation.NavigateTo("/", forceLoad: true);
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
             _isRestoring = false;
             StateHasChanged();
         }
+    }
+
+    private void CleanupTempFile()
+    {
+        if (_uploadTempFilePath != null && File.Exists(_uploadTempFilePath))
+        {
+            try { File.Delete(_uploadTempFilePath); }
+            catch { /* best effort */ }
+        }
+        _uploadTempFilePath = null;
+    }
+
+    public void Dispose()
+    {
+        CleanupTempFile();
     }
 
     private static string FormatBytes(long bytes)

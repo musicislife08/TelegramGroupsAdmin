@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Metrics;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -10,14 +11,24 @@ namespace TelegramGroupsAdmin.Telegram.Services.Bot;
 /// Singleton service that maintains an in-memory cache of chat health statuses.
 /// No Telegram API calls - just stores and retrieves state.
 /// </summary>
-public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
+public class ChatHealthCache(ILogger<ChatHealthCache> logger, CacheMetrics cacheMetrics) : IChatHealthCache
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
+    private readonly ConcurrentDictionary<long, int> _failureCounts = new();
 
     public event Action<ChatHealthStatus>? OnHealthUpdate;
 
     public ChatHealthStatus? GetCachedHealth(long chatId)
-        => _healthCache.TryGetValue(chatId, out var health) ? health : null;
+    {
+        if (_healthCache.TryGetValue(chatId, out var health))
+        {
+            cacheMetrics.RecordHit("chat_health");
+            return health;
+        }
+
+        cacheMetrics.RecordMiss("chat_health");
+        return null;
+    }
 
     public IReadOnlyList<ChatIdentity> GetHealthyChatIdentities()
     {
@@ -58,9 +69,18 @@ public class ChatHealthCache(ILogger<ChatHealthCache> logger) : IChatHealthCache
 
     public void RemoveHealth(long chatId)
     {
-        _healthCache.TryRemove(chatId, out _);
+        if (_healthCache.TryRemove(chatId, out _))
+            cacheMetrics.RecordRemoval("chat_health");
     }
 
     public IReadOnlyDictionary<long, ChatHealthStatus> GetAllCachedHealth()
         => _healthCache;
+
+    public int IncrementFailureCount(long chatId)
+        => _failureCounts.AddOrUpdate(chatId, 1, (_, current) => current + 1);
+
+    public void ResetFailureCount(long chatId)
+        => _failureCounts.TryRemove(chatId, out _);
+
+    public int Count => _healthCache.Count;
 }

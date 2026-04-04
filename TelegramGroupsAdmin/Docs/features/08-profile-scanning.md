@@ -101,7 +101,7 @@ The scoring engine runs two layers. See [Scoring Engine](#scoring-engine) for th
 Two writes happen:
 
 1. **User record update** -- profile metadata, score, and Telegram IDs (photo ID, channel photo ID, pinned story IDs) are saved for future change detection
-2. **Scan history record** -- a `ProfileScanResultRecord` is inserted with the full scoring breakdown (rule score, AI score, confidence, reason, signals)
+2. **Scan history record** -- a `ProfileScanResultRecord` is inserted with the full scoring breakdown (rule score, AI score, reason, signals)
 
 If the user was previously excluded from scanning (Step 1 failure), the exclusion flag is cleared on a successful scan.
 
@@ -165,21 +165,22 @@ When Layer 1 does not trigger a ban, the AI layer runs OpenAI vision analysis on
 
 The AI returns a structured JSON response with:
 
-- **spam** (boolean) -- whether any concern exists
-- **confidence** (0-100) -- severity level
+- **score** (0.0-5.0) -- continuous risk assessment on the application's scoring scale
 - **reason** -- human-readable explanation
 - **signals_detected** -- array of identified risk signals
-- **contains_nudity** -- whether any image contains explicit content
+- **contains_nudity** -- whether any image contains visible nudity (triggers blur censoring)
 
-**Confidence-to-score mapping** (when `spam` is true):
+The AI returns the score directly on the 0.0-5.0 scale — no mapping needed. The score is clamped to the valid range via `Math.Clamp`.
 
-| Confidence | Score Added | Meaning |
-|---|---|---|
-| 80-100 | +4.5 | Definitive spam/explicit content -- auto-ban |
-| 40-79 | +2.5 | Suspicious/suggestive -- admin review |
-| 1-39 | +0.0 | Minor signals, treated as clean |
+**Detection categories** assessed by the AI:
+1. Adult / Explicit
+2. Commercial / Service Account
+3. Incoherent / Manufactured
+4. Bot / Mass-Created
+5. Scam / Scheme Promotion
+6. Impersonation
 
-When `spam` is false, the AI score is 0.0 regardless of confidence.
+Multiple aligned signals compound (not average). The AI evaluates whether the profile belongs to a genuine community member.
 
 ### Score Scale
 

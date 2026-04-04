@@ -9,18 +9,19 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 
 public class TagDefinitionsRepository : ITagDefinitionsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<TagDefinitionsRepository> _logger;
 
-    public TagDefinitionsRepository(AppDbContext context, ILogger<TagDefinitionsRepository> logger)
+    public TagDefinitionsRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<TagDefinitionsRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     public async Task<List<TagDefinition>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        var definitions = await _context.TagDefinitions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var definitions = await context.TagDefinitions
             .OrderByDescending(td => td.UsageCount)
             .ThenBy(td => td.TagName)
             .ToListAsync(cancellationToken);
@@ -32,7 +33,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
     {
         var normalizedTag = tagName.ToLowerInvariant();
 
-        var definition = await _context.TagDefinitions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var definition = await context.TagDefinitions
             .FirstOrDefaultAsync(td => td.TagName == normalizedTag, cancellationToken);
 
         return definition?.ToModel();
@@ -42,8 +44,10 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
     {
         var normalizedTag = tagName.Trim().ToLowerInvariant();
 
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
         // Check if already exists
-        var existing = await _context.TagDefinitions
+        var existing = await context.TagDefinitions
             .FirstOrDefaultAsync(td => td.TagName == normalizedTag, cancellationToken);
 
         if (existing != null)
@@ -60,8 +64,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-        _context.TagDefinitions.Add(definition);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.TagDefinitions.Add(definition);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Created tag definition: {TagName} with color {Color}", normalizedTag, color);
 
@@ -72,7 +76,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
     {
         var normalizedTag = tagName.ToLowerInvariant();
 
-        var definition = await _context.TagDefinitions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var definition = await context.TagDefinitions
             .FirstOrDefaultAsync(td => td.TagName == normalizedTag, cancellationToken);
 
         if (definition == null)
@@ -82,7 +87,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
         }
 
         definition.Color = (Data.Models.TagColor)color; // Cast from UI to Data layer
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Updated tag definition color: {TagName} to {Color}", normalizedTag, color);
 
@@ -93,7 +98,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
     {
         var normalizedTag = tagName.ToLowerInvariant();
 
-        var definition = await _context.TagDefinitions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var definition = await context.TagDefinitions
             .FirstOrDefaultAsync(td => td.TagName == normalizedTag, cancellationToken);
 
         if (definition == null)
@@ -108,8 +114,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
             _logger.LogWarning("Deleting tag definition with usage count {Count}: {TagName}", definition.UsageCount, normalizedTag);
         }
 
-        _context.TagDefinitions.Remove(definition);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.TagDefinitions.Remove(definition);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Deleted tag definition: {TagName}", normalizedTag);
 
@@ -120,8 +126,10 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
     {
         var normalizedTag = tagName.ToLowerInvariant();
 
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
         // Find or create tag definition
-        var definition = await _context.TagDefinitions
+        var definition = await context.TagDefinitions
             .FirstOrDefaultAsync(td => td.TagName == normalizedTag, cancellationToken);
 
         if (definition == null)
@@ -134,7 +142,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
                 UsageCount = 1,
                 CreatedAt = DateTimeOffset.UtcNow
             };
-            _context.TagDefinitions.Add(definition);
+            context.TagDefinitions.Add(definition);
 
             _logger.LogInformation("Auto-created tag definition: {TagName}", normalizedTag);
         }
@@ -143,14 +151,15 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
             definition.UsageCount++;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DecrementUsageAsync(string tagName, CancellationToken cancellationToken = default)
     {
         var normalizedTag = tagName.ToLowerInvariant();
 
-        var definition = await _context.TagDefinitions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var definition = await context.TagDefinitions
             .FirstOrDefaultAsync(td => td.TagName == normalizedTag, cancellationToken);
 
         if (definition == null)
@@ -162,7 +171,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
         if (definition.UsageCount > 0)
         {
             definition.UsageCount--;
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
         else
         {
@@ -174,7 +183,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
     {
         var normalizedTag = tagName.ToLowerInvariant();
 
-        return await _context.TagDefinitions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.TagDefinitions
             .AnyAsync(td => td.TagName == normalizedTag, cancellationToken);
     }
 
@@ -182,7 +192,8 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
     {
         var normalizedSearch = searchTerm.ToLowerInvariant();
 
-        var tagNames = await _context.TagDefinitions
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var tagNames = await context.TagDefinitions
             .Where(td => td.TagName.Contains(normalizedSearch))
             .OrderByDescending(td => td.UsageCount)
             .ThenBy(td => td.TagName)

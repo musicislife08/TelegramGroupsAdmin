@@ -29,4 +29,7 @@ public interface ITelegramSessionManager : IAsyncDisposable
 
     /// <summary>Disconnect and cleanup a session. Deactivates in DB, disposes client, removes from cache.</summary>
     Task DisconnectAsync(string webUserId, Actor executor, CancellationToken ct);
+
+    /// <summary>Number of WTelegram clients currently held in the cache.</summary>
+    int ActiveClientCount { get; }
 }

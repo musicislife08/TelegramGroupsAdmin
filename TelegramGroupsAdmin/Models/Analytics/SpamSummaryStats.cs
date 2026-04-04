@@ -2,7 +2,6 @@ namespace TelegramGroupsAdmin.Models.Analytics;
 
 /// <summary>
 /// Spam detection summary statistics for analytics dashboard.
-/// Analytics-specific type (operational code uses ContentDetection.Models.DetectionStats)
 /// </summary>
 public class SpamSummaryStats
 {

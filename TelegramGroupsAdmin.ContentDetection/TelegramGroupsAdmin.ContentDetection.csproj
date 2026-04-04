@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.Extensions.ML" />
     <PackageReference Include="Microsoft.ML" />
     <PackageReference Include="nClam" />
     <PackageReference Include="Npgsql" />

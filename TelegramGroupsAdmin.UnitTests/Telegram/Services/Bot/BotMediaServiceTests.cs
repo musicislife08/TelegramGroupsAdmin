@@ -321,43 +321,6 @@ public class BotMediaServiceTests
         Assert.That(result.FilePath, Is.EqualTo(TestFilePath));
     }
 
-    [Test]
-    public async Task DownloadFileAsBytesAsync_ReturnsFileContents()
-    {
-        // Arrange
-        var expectedFile = new TelegramBotTypes.TGFile { FileId = TestFileId, FilePath = TestFilePath };
-        _mockMediaHandler.GetFileAsync(TestFileId, Arg.Any<CancellationToken>()).Returns(expectedFile);
-
-        var expectedBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47 }; // PNG header
-        _mockMediaHandler.DownloadFileAsync(TestFilePath, Arg.Any<Stream>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
-            {
-                var stream = callInfo.Arg<Stream>();
-                stream.Write(expectedBytes);
-                return Task.CompletedTask;
-            });
-
-        // Act
-        var result = await _service.DownloadFileAsBytesAsync(TestFileId);
-
-        // Assert
-        Assert.That(result, Is.EqualTo(expectedBytes));
-    }
-
-    [Test]
-    public void DownloadFileAsBytesAsync_NoFilePath_ThrowsException()
-    {
-        // Arrange - File has no path
-        var fileWithNoPath = new TelegramBotTypes.TGFile { FileId = TestFileId, FilePath = null };
-        _mockMediaHandler.GetFileAsync(TestFileId, Arg.Any<CancellationToken>()).Returns(fileWithNoPath);
-
-        // Act & Assert
-        var ex = Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.DownloadFileAsBytesAsync(TestFileId));
-
-        Assert.That(ex!.Message, Does.Contain("Unable to get file path"));
-    }
-
     #endregion
 
     #region Helper Methods

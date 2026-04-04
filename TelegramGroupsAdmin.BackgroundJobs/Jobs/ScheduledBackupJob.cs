@@ -4,12 +4,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Constants;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
-using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Core.Models.BackgroundJobSettings;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -22,13 +22,16 @@ public class ScheduledBackupJob : IJob
 {
     private readonly ILogger<ScheduledBackupJob> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly JobMetrics _jobMetrics;
 
     public ScheduledBackupJob(
         ILogger<ScheduledBackupJob> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        JobMetrics jobMetrics)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _jobMetrics = jobMetrics;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -119,11 +122,6 @@ public class ScheduledBackupJob : IJob
 
                 _logger.LogInformation("Backup saved to {Filepath} ({SizeMB:F2} MB)", result.FilePath, backupSizeMb);
 
-                if (result.DeletedCount > 0)
-                {
-                    _logger.LogInformation("Deleted {Count} old backups via retention policy", result.DeletedCount);
-                }
-
                 _logger.LogInformation("Scheduled backup completed successfully");
                 success = true;
             }
@@ -136,16 +134,7 @@ public class ScheduledBackupJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }

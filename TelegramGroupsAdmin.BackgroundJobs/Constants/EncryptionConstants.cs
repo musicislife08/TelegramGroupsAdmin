@@ -57,4 +57,33 @@ public static class EncryptionConstants
     /// Encryption algorithm identifier stored in backup metadata.
     /// </summary>
     public const string EncryptionAlgorithm = "AES-256-GCM";
+
+    /// <summary>
+    /// Plaintext chunk size in bytes for chunked AEAD streaming encryption.
+    /// Each chunk is independently encrypted with AES-GCM using a derived per-chunk nonce.
+    /// </summary>
+    public const int ChunkSize = 1024 * 1024; // 1 MB
+
+    /// <summary>
+    /// Magic header for the chunked AEAD format (version 2).
+    /// Format: TGAEC2 + null terminator = 7 bytes.
+    /// </summary>
+    public static readonly byte[] ChunkedMagicHeader = "TGAEC2\0"u8.ToArray();
+
+    /// <summary>
+    /// Magic header for the legacy single-shot AES-GCM format (version 1).
+    /// Format: TGAENC + null terminator = 7 bytes.
+    /// </summary>
+    public static readonly byte[] LegacyMagicHeader = "TGAENC\0"u8.ToArray();
+
+    /// <summary>
+    /// Chunked format version byte. Allows future format evolution.
+    /// </summary>
+    public const byte ChunkedFormatVersion = 0x01;
+
+    /// <summary>
+    /// Total header size for the chunked format:
+    /// magic (7) + version (1) + salt (32) + base nonce (12) = 52 bytes.
+    /// </summary>
+    public const int ChunkedHeaderSize = 7 + 1 + SaltSizeBytes + NonceSizeBytes;
 }

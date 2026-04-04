@@ -2,8 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.BackgroundJobs.Metrics;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 
@@ -18,13 +18,16 @@ public class BlocklistSyncJob : IJob
 {
     private readonly IBlocklistSyncService _syncService;
     private readonly ILogger<BlocklistSyncJob> _logger;
+    private readonly JobMetrics _jobMetrics;
 
     public BlocklistSyncJob(
         IBlocklistSyncService syncService,
-        ILogger<BlocklistSyncJob> logger)
+        ILogger<BlocklistSyncJob> logger,
+        JobMetrics jobMetrics)
     {
         _syncService = syncService;
         _logger = logger;
+        _jobMetrics = jobMetrics;
     }
 
     /// <summary>
@@ -101,16 +104,7 @@ public class BlocklistSyncJob : IJob
         finally
         {
             var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
-
-            // Record metrics (using TagList to avoid boxing/allocations)
-            var tags = new TagList
-            {
-                { "job_name", jobName },
-                { "status", success ? "success" : "failure" }
-            };
-
-            TelemetryConstants.JobExecutions.Add(1, tags);
-            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
+            _jobMetrics.RecordJobExecution(jobName, success, elapsedMs);
         }
     }
 }

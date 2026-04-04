@@ -387,7 +387,6 @@
 
     private async Task TriggerRetrainingAsync()
     {
-        await JobTriggerService.TriggerNowAsync(BackgroundJobNames.TextClassifierRetraining, payload: new { });
-        await JobTriggerService.TriggerNowAsync(BackgroundJobNames.BayesClassifierRetraining, payload: new { });
+        await JobTriggerService.TriggerNowAsync(BackgroundJobNames.ClassifierRetraining, payload: new { });
     }
 }

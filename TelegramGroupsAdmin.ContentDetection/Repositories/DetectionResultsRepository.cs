@@ -57,12 +57,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         return detectionResults
             .Join(context.Messages, dr => new { dr.MessageId, dr.ChatId }, m => new { m.MessageId, m.ChatId }, (dr, m) => new { dr, m })
-            .GroupJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, users) => new { x.dr, x.m, users })
-            .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.dr, x.m, user })
-            .GroupJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.dr, x.m, x.user, tgUsers })
-            .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new { x.dr, x.m, x.user, tgUser })
-            .GroupJoin(context.MessageTranslations, x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId }, mt => new { mt.MessageId, mt.ChatId }, (x, translations) => new { x.dr, x.m, x.user, x.tgUser, translations })
-            .SelectMany(x => x.translations.DefaultIfEmpty(), (x, translation) => new
+            .LeftJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, user) => new { x.dr, x.m, user })
+            .LeftJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUser) => new { x.dr, x.m, x.user, tgUser })
+            .LeftJoin(context.MessageTranslations, x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId }, mt => new { mt.MessageId, mt.ChatId }, (x, translation) => new
             {
                 x.dr,
                 x.m,
@@ -155,19 +152,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             .ToDictionary(g => g.Key, g => g.ToList());
     }
 
-    public async Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await WithActorJoins(
-                context.DetectionResults.AsNoTracking(),
-                context)
-            .OrderByDescending(x => x.DetectedAt)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
-
-        return results;
-    }
-
     public async Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -179,17 +163,22 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // Phase 4.20+: Use translated text when available (matches spam detection behavior)
         // - Spam detection runs on translated text for non-English messages
         // - Training samples should match what was analyzed (COALESCE: translated > original)
-        var results = await (
-            from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
-            join mt in context.MessageTranslations on new { MessageId = (int?)m.MessageId, ChatId = (long?)m.ChatId } equals new { mt.MessageId, mt.ChatId } into translations
-            from mt in translations.DefaultIfEmpty()
-            where dr.UsedForTraining == true
-                && m.MessageText != null
-                && m.MessageText != ""
-            orderby dr.IsSpam descending
-            select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam }
-        ).ToListAsync(cancellationToken);
+        var results = await context.DetectionResults
+            .AsNoTracking()
+            .Join(context.Messages,
+                dr => new { dr.MessageId, dr.ChatId },
+                m => new { m.MessageId, m.ChatId },
+                (dr, m) => new { dr, m })
+            .LeftJoin(context.MessageTranslations,
+                x => new { MessageId = (int?)x.m.MessageId, ChatId = (long?)x.m.ChatId },
+                mt => new { mt.MessageId, mt.ChatId },
+                (x, mt) => new { x.dr, x.m, mt })
+            .Where(x => x.dr.UsedForTraining == true
+                && x.m.MessageText != null
+                && x.m.MessageText != "")
+            .OrderByDescending(x => x.dr.IsSpam)
+            .Select(x => new { MessageText = x.mt != null ? x.mt.TranslatedText : x.m.MessageText, x.dr.IsSpam })
+            .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} training samples for Bayes classifier (used_for_training = true)",
@@ -216,29 +205,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         _logger.LogDebug(
             "Retrieved {Count} spam samples for similarity check (used_for_training = true)",
-            results.Count);
-
-        return results!;
-    }
-
-    public async Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Mirror of GetSpamSamplesForSimilarityAsync but for ham samples
-        // Use query syntax for EF Core translation compatibility
-        var results = await (
-            from dr in context.DetectionResults.AsNoTracking()
-            join m in context.Messages on new { dr.MessageId, dr.ChatId } equals new { m.MessageId, m.ChatId }
-            where dr.IsSpam == false
-                && dr.UsedForTraining == true
-                && m.MessageText != null
-                && m.MessageText != ""
-            orderby dr.DetectedAt descending
-            select m.MessageText
-        ).Take(limit).ToListAsync(cancellationToken);
-
-        _logger.LogDebug(
-            "Retrieved {Count} ham samples for similarity check (used_for_training = true)",
             results.Count);
 
         return results!;
@@ -278,72 +244,6 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             minMessageLength);
 
         return results;
-    }
-
-    public async Task<DetectionStats> GetStatsAsync(CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // MH1: Single query optimization - calculate all stats in one database round-trip
-        var since24h = DateTimeOffset.UtcNow.AddDays(-1);
-
-        var stats = await context.DetectionResults
-            .AsNoTracking()
-            .GroupBy(dr => 1) // Group all rows together for aggregation
-            .Select(g => new
-            {
-                TotalDetections = g.Count(),
-                SpamDetected = g.Count(dr => dr.IsSpam),
-                AverageScore = g.Average(dr => dr.Score),
-                Last24hDetections = g.Count(dr => dr.DetectedAt >= since24h),
-                Last24hSpam = g.Count(dr => dr.DetectedAt >= since24h && dr.IsSpam)
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        // Handle empty table case
-        if (stats == null)
-        {
-            return new DetectionStats
-            {
-                TotalDetections = 0,
-                SpamDetected = 0,
-                SpamPercentage = 0,
-                AverageScore = 0,
-                Last24hDetections = 0,
-                Last24hSpam = 0,
-                Last24hSpamPercentage = 0
-            };
-        }
-
-        return new DetectionStats
-        {
-            TotalDetections = stats.TotalDetections,
-            SpamDetected = stats.SpamDetected,
-            SpamPercentage = stats.TotalDetections > 0 ? (double)stats.SpamDetected / stats.TotalDetections * 100 : 0,
-            AverageScore = stats.AverageScore,
-            Last24hDetections = stats.Last24hDetections,
-            Last24hSpam = stats.Last24hSpam,
-            Last24hSpamPercentage = stats.Last24hDetections > 0 ? (double)stats.Last24hSpam / stats.Last24hDetections * 100 : 0
-        };
-    }
-
-    public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var deleted = await context.DetectionResults
-            .Where(dr => dr.DetectedAt < timestamp)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        if (deleted > 0)
-        {
-            _logger.LogWarning(
-                "Deleted {Count} old detection results (timestamp < {Timestamp})",
-                deleted,
-                timestamp);
-        }
-
-        return deleted;
     }
 
     // ====================================================================================

@@ -217,44 +217,6 @@ public class MessageHistoryRepositoryTests
     }
 
     [Test]
-    public async Task GetMessagesBeforeAsync_WithNoTimestamp_ShouldReturnRecentMessages()
-    {
-        // Act
-        var messages = await _queryService!.GetMessagesBeforeAsync(beforeTimestamp: null, limit: 50);
-
-        // Assert
-        Assert.That(messages, Is.Not.Null);
-        Assert.That(messages.Count, Is.GreaterThan(0));
-        Assert.That(messages.Count, Is.LessThanOrEqualTo(50));
-    }
-
-    [Test]
-    public async Task GetMessagesBeforeAsync_WithTimestamp_ShouldReturnMessagesBeforeCursor()
-    {
-        // Arrange - Get a message to use as cursor
-        var allMessages = await _queryService!.GetRecentMessagesAsync(limit: 100);
-        Assert.That(allMessages.Count, Is.GreaterThan(10), "Need enough messages for pagination test");
-
-        var cursorMessage = allMessages[5]; // Use 6th message as cursor
-
-        // Act - Get messages before cursor
-        var messagesBefore = await _queryService.GetMessagesBeforeAsync(
-            beforeTimestamp: cursorMessage.Timestamp,
-            limit: 50);
-
-        // Assert
-        Assert.That(messagesBefore, Is.Not.Null);
-        Assert.That(messagesBefore.Count, Is.GreaterThan(0));
-
-        // All returned messages should be before cursor timestamp
-        foreach (var msg in messagesBefore)
-        {
-            Assert.That(msg.Timestamp, Is.LessThan(cursorMessage.Timestamp),
-                $"Message {msg.MessageId} timestamp should be before cursor {cursorMessage.MessageId}");
-        }
-    }
-
-    [Test]
     public async Task GetMessagesByChatIdAsync_ShouldFilterByChat()
     {
         // Arrange
@@ -334,31 +296,6 @@ public class MessageHistoryRepositoryTests
         var messagesWithDetection = messages.Where(m => m.DetectionResults.Count > 0).ToList();
         Assert.That(messagesWithDetection.Count, Is.GreaterThan(0),
             "Golden dataset should have messages with detection results");
-    }
-
-    [Test]
-    public async Task GetMessagesByDateRangeAsync_ShouldFilterByDateRange()
-    {
-        // Arrange - Get timestamp range from existing messages
-        var allMessages = await _queryService!.GetRecentMessagesAsync(limit: 100);
-        Assert.That(allMessages.Count, Is.GreaterThan(5));
-
-        var startDate = allMessages.Last().Timestamp; // Oldest in dataset
-        var endDate = allMessages[allMessages.Count / 2].Timestamp; // Middle timestamp
-
-        // Act
-        var filteredMessages = await _queryService.GetMessagesByDateRangeAsync(startDate, endDate, limit: 1000);
-
-        // Assert
-        Assert.That(filteredMessages, Is.Not.Null);
-
-        foreach (var msg in filteredMessages)
-        {
-            Assert.That(msg.Timestamp, Is.GreaterThanOrEqualTo(startDate),
-                $"Message {msg.MessageId} should be after start date");
-            Assert.That(msg.Timestamp, Is.LessThanOrEqualTo(endDate),
-                $"Message {msg.MessageId} should be before end date");
-        }
     }
 
     [Test]
@@ -834,7 +771,7 @@ public class MessageHistoryRepositoryTests
         Assert.That(retrievedBefore!.MediaLocalPath, Is.Null);
 
         // Create test media file on disk (required by ValidateMediaPath)
-        // MediaPathUtilities.GetMediaStoragePath returns: "media/video/filename.mp4"
+        // MediaUtilities.GetMediaStoragePath returns: "media/video/filename.mp4"
         // So full path is: {_imageStoragePath}/media/video/filename.mp4
         const string testMediaFileName = "test_video_999003.mp4";
         var mediaVideoSubfolder = Path.Combine(_imageStoragePath!, "media", "video");
@@ -1394,36 +1331,6 @@ public class MessageHistoryRepositoryTests
                 Assert.That(messageIds, Does.Contain(messageId), "Returned message ID should be in request list");
             }
         }
-    }
-
-    [Test]
-    public async Task GetDistinctUserNamesAsync_ShouldReturnUserNames()
-    {
-        // Act
-        var userNames = await _queryService!.GetDistinctUserNamesAsync();
-
-        // Assert
-        Assert.That(userNames, Is.Not.Null);
-        Assert.That(userNames.Count, Is.GreaterThan(0), "Golden dataset should have users");
-
-        // Verify distinct (no duplicates)
-        var uniqueNames = userNames.Distinct().ToList();
-        Assert.That(userNames.Count, Is.EqualTo(uniqueNames.Count), "Should return distinct names only");
-    }
-
-    [Test]
-    public async Task GetDistinctChatNamesAsync_ShouldReturnChatNames()
-    {
-        // Act
-        var chatNames = await _queryService!.GetDistinctChatNamesAsync();
-
-        // Assert
-        Assert.That(chatNames, Is.Not.Null);
-        Assert.That(chatNames.Count, Is.GreaterThan(0), "Golden dataset should have chats");
-
-        // Verify distinct (no duplicates)
-        var uniqueNames = chatNames.Distinct().ToList();
-        Assert.That(chatNames.Count, Is.EqualTo(uniqueNames.Count), "Should return distinct names only");
     }
 
     [Test]

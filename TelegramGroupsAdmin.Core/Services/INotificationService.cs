@@ -92,6 +92,6 @@ public interface INotificationService
         string status,
         bool isAdmin,
         IReadOnlyList<string> warnings,
-        CancellationToken ct = default);
+        CancellationToken cancellationToken = default);
 
 }

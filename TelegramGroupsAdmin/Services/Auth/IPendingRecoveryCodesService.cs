@@ -32,4 +32,15 @@ public interface IPendingRecoveryCodesService
     /// <param name="userId">The user ID (must match stored userId)</param>
     /// <returns>True if recovery codes are available</returns>
     bool HasRecoveryCodes(string token, string userId);
+
+    /// <summary>
+    /// Number of pending recovery code entries (for memory instrumentation).
+    /// </summary>
+    int EntryCount { get; }
+
+    /// <summary>
+    /// Removes all expired recovery code entries from the in-memory store.
+    /// Called by <see cref="TokenCleanupService"/> on a periodic timer.
+    /// </summary>
+    void CleanupExpiredEntries();
 }

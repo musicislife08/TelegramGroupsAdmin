@@ -11,6 +11,9 @@ using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Services;
+using TelegramGroupsAdmin.Services.Auth;
+using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Core.Services;
 using HumanCron;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,7 +45,7 @@ Directory.CreateDirectory(mlModelsPath);
 // NOTE: We intentionally train fresh on every startup (~3 seconds) to ensure
 // the model uses the latest training data. For a homelab single-instance deployment,
 // this startup cost is acceptable and guarantees data freshness. The model is
-// persisted to disk for the scheduled retraining job (TextClassifierRetrainingJob).
+// persisted to disk for the scheduled retraining job (ClassifierRetrainingJob).
 
 // Application services (auth, users, messages, etc.)
 builder.Services.AddApplicationServices();
@@ -137,37 +140,52 @@ builder.Services.AddHealthChecks()
         name: "postgresql",
         tags: ["ready", "db"]);
 
-// OpenTelemetry Observability (optional - enabled via OTEL_EXPORTER_OTLP_ENDPOINT)
+// OpenTelemetry Observability (optional - metrics via ENABLE_METRICS or OTEL_EXPORTER_OTLP_ENDPOINT, tracing via OTEL_EXPORTER_OTLP_ENDPOINT)
 // Supports both Seq (logs + traces) and Aspire Dashboard (logs + traces + metrics)
 var otlpEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
 var serviceName = builder.Configuration["OTEL_SERVICE_NAME"] ?? "TelegramGroupsAdmin";
 var serviceVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
 var environment = builder.Environment.EnvironmentName;
+var metricsEnabled = !string.IsNullOrEmpty(otlpEndpoint)
+                  || !string.IsNullOrEmpty(builder.Configuration["ENABLE_METRICS"]);
 
-if (!string.IsNullOrEmpty(otlpEndpoint))
+// Note: Logging is handled by Serilog's OpenTelemetry sink (configured above in UseSerilog)
+
+// Configure resource once, then conditionally add metrics/tracing pipelines
+if (metricsEnabled)
 {
-    // Note: Logging is handled by Serilog's OpenTelemetry sink (configured above in UseSerilog)
-    builder.Services.AddOpenTelemetry()
+    var otelBuilder = builder.Services.AddOpenTelemetry()
         .ConfigureResource(resource => resource
             .AddService(serviceName, serviceVersion: serviceVersion)
             .AddAttributes(new Dictionary<string, object>
             {
                 ["deployment.environment"] = environment
-            }))
-        .WithTracing(tracing => tracing
+            }));
+
+    // Metrics pipeline: activates on ENABLE_METRICS or OTEL_EXPORTER_OTLP_ENDPOINT
+    otelBuilder.WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation()  // Request rate, duration, active requests
+               .AddHttpClientInstrumentation()  // HTTP client success/failure rates
+               .AddRuntimeInstrumentation()     // GC, CPU, memory, thread pool
+               .AddMeter("Npgsql")              // Npgsql database metrics (connections, commands, bytes)
+               .AddMeter("TelegramGroupsAdmin.*")  // Custom meters (from TelemetryConstants)
+               .AddPrometheusExporter();        // Expose /metrics endpoint for Prometheus scraping
+
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+            metrics.AddOtlpExporter();          // Send metrics to Aspire Dashboard (only when OTLP endpoint set)
+    });
+
+    // Tracing pipeline: activates only on OTEL_EXPORTER_OTLP_ENDPOINT
+    if (!string.IsNullOrEmpty(otlpEndpoint))
+    {
+        otelBuilder.WithTracing(tracing => tracing
             .AddAspNetCoreInstrumentation()  // Blazor Server requests, SignalR circuits
             .AddHttpClientInstrumentation()  // OpenAI, VirusTotal, Telegram Bot API
             .AddSource("Npgsql")             // Npgsql automatic tracing (via Npgsql.OpenTelemetry package)
             .AddSource("TelegramGroupsAdmin.*")  // Custom ActivitySources (from TelemetryConstants)
-            .AddOtlpExporter())              // Send traces to Aspire Dashboard
-        .WithMetrics(metrics => metrics
-            .AddAspNetCoreInstrumentation()  // Request rate, duration, active requests
-            .AddHttpClientInstrumentation()  // HTTP client success/failure rates
-            .AddRuntimeInstrumentation()     // GC, CPU, memory, thread pool
-            .AddMeter("Npgsql")              // Npgsql database metrics (connections, commands, bytes)
-            .AddMeter("TelegramGroupsAdmin.*")  // Custom meters (from TelemetryConstants)
-            .AddOtlpExporter()               // Send metrics to Aspire Dashboard
-            .AddPrometheusExporter());       // ALSO expose /metrics endpoint for Prometheus scraping
+            .AddOtlpExporter());             // Send traces to Aspire Dashboard
+    }
 }
 
 var app = builder.Build();
@@ -214,11 +232,11 @@ if (args.Contains("--backup"))
     var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.IBackupService>();
 
     app.Logger.LogInformation("Creating encrypted backup...");
-    var backupBytes = await backupService.ExportAsync(passphrase); // Use passphrase override for CLI
-    await File.WriteAllBytesAsync(backupPath, backupBytes);
+    await backupService.ExportToFileAsync(backupPath, passphrase, CancellationToken.None);
 
+    var backupSize = new FileInfo(backupPath).Length;
     app.Logger.LogInformation("✅ Encrypted backup created: {Path} ({Size:F2} MB)",
-        backupPath, backupBytes.Length / 1024.0 / 1024.0);
+        backupPath, backupSize / 1024.0 / 1024.0);
     app.Logger.LogInformation("🔐 Store your passphrase securely - you'll need it to restore this backup!");
     app.Logger.LogInformation("Exiting (--backup flag).");
     Environment.Exit(0);
@@ -262,13 +280,34 @@ if (args.Contains("--restore"))
     using var scope = app.Services.CreateScope();
     var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.IBackupService>();
 
-    app.Logger.LogInformation("Reading encrypted backup...");
-    var backupBytes = await File.ReadAllBytesAsync(restorePath);
-
     app.Logger.LogInformation("Decrypting and restoring backup...");
-    await backupService.RestoreAsync(backupBytes, passphrase); // Use explicit passphrase for CLI restore
+    await backupService.RestoreAsync(restorePath, passphrase); // Use explicit passphrase for CLI restore
 
     app.Logger.LogInformation("✅ System restore complete. Exiting (--restore flag).");
+    Environment.Exit(0);
+}
+
+// Check for --bootstrap flag to create initial Owner account (for K8s init containers)
+// Runs after migrations, before ML training - needs database ready but not the classifier
+if (args.Contains("--bootstrap"))
+{
+    var bootstrapPath = args.SkipWhile(a => a != "--bootstrap").Skip(1).FirstOrDefault();
+
+    using var scope = app.Services.CreateScope();
+    var result = await BootstrapOwnerService.ExecuteAsync(
+        filePath: bootstrapPath,
+        userRepository: scope.ServiceProvider.GetRequiredService<IUserRepository>(),
+        passwordHasher: scope.ServiceProvider.GetRequiredService<IPasswordHasher>(),
+        auditService: scope.ServiceProvider.GetRequiredService<IAuditService>(),
+        logger: app.Logger);
+
+    if (!result.Success)
+    {
+        app.Logger.LogError("Bootstrap failed: {Message}", result.Message);
+        Environment.Exit(1);
+    }
+
+    app.Logger.LogInformation("Bootstrap complete. Exiting.");
     Environment.Exit(0);
 }
 
@@ -310,11 +349,19 @@ app.ConfigurePipeline();
 // Map API endpoints
 app.MapApiEndpoints();
 
-// Map Prometheus metrics endpoint (only if OpenTelemetry is enabled)
-if (!string.IsNullOrEmpty(otlpEndpoint))
+// Map Prometheus metrics endpoint (if metrics pipeline is enabled)
+if (metricsEnabled)
 {
+    // Force-resolve MemoryMetrics to register ObservableGauges on stateful singletons.
+    // Without this, DI never instantiates it since nothing injects it.
+    app.Services.GetRequiredService<MemoryMetrics>();
+
     app.MapPrometheusScrapingEndpoint();
-    app.Logger.LogInformation("Prometheus metrics endpoint mapped to /metrics");
+    var activatedBy = !string.IsNullOrEmpty(otlpEndpoint)
+        ? "OTEL_EXPORTER_OTLP_ENDPOINT"
+        : "ENABLE_METRICS";
+    app.Logger.LogInformation(
+        "Prometheus metrics endpoint mapped to /metrics (via {ActivatedBy})", activatedBy);
 }
 
 app.Run();

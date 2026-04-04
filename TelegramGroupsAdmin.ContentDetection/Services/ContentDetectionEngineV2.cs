@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.Configuration.Models.ContentDetection;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Metrics;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Extensions;
 
@@ -19,7 +20,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 /// Fixes the critical bug where abstentions (finding nothing) voted "Clean" and cancelled spam signals
 /// Key change: Score = Σ(positive_scores) instead of Net = Σ(spam) - Σ(clean)
 /// </summary>
-public class ContentDetectionEngineV2 : IContentDetectionEngine
+public partial class ContentDetectionEngineV2 : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngineV2> _logger;
     private readonly IContentDetectionConfigRepository _configRepository;
@@ -28,6 +29,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
     private readonly IUrlPreFilterService _preFilterService;
     private readonly ContentDetectionOptions _spamDetectionOptions;
+    private readonly DetectionMetrics _detectionMetrics;
 
     // Action thresholds are per-chat config (ContentDetectionConfig.AutoBanThreshold / ReviewQueueThreshold)
     // Safety clamps are in ContentDetectionConstants (MinScore / MaxScore)
@@ -39,7 +41,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         IPromptVersionRepository promptVersionRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
         IUrlPreFilterService preFilterService,
-        IOptions<ContentDetectionOptions> spamDetectionOptions)
+        IOptions<ContentDetectionOptions> spamDetectionOptions,
+        DetectionMetrics detectionMetrics)
     {
         _logger = logger;
         _configRepository = configRepository;
@@ -48,6 +51,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         _contentChecksV2 = contentChecksV2;
         _preFilterService = preFilterService;
         _spamDetectionOptions = spamDetectionOptions.Value;
+        _detectionMetrics = detectionMetrics;
     }
 
     private async Task<ContentDetectionConfig> GetConfigAsync(ContentCheckRequest request, CancellationToken cancellationToken)
@@ -145,8 +149,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 var activePrompt = await _promptVersionRepo.GetActiveVersionAsync(request.Chat.Id, cancellationToken);
                 var systemPrompt = activePrompt?.PromptText;
 
-                _logger.LogDebug("Running AI veto check for {User} (custom prompt: {HasCustom})",
-                    request.User.ToLogDebug(), systemPrompt != null);
+                LogRunningAIVetoCheck(_logger, request.User.ToLogDebug(), systemPrompt != null);
 
                 var vetoRequest = request with { HasSpamFlags = true };
                 var checkRequest = BuildAIRequest(vetoRequest, config, spamFeatureConfig, systemPrompt, pipelineResult.OcrExtractedText, pipelineResult.VisionAnalysisText, cancellationToken);
@@ -169,8 +172,14 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 // AI ran successfully and returned clean (score = 0.0, not abstained) - veto the spam detection
                 if (vetoResultV2.Score == 0.0)
                 {
-                    _logger.LogInformation("AI vetoed spam detection for {User} (clean result with 0.0 score)",
-                        request.User.ToLogInfo());
+                    LogAIVetoedSpamDetection(_logger, request.User.ToLogInfo());
+
+                    // Record veto for each algorithm that was overridden
+                    foreach (var check in pipelineResult.CheckResults.Where(r => r.Score > 0 && !r.Abstained))
+                    {
+                        _detectionMetrics.RecordVeto(check.CheckName.ToString());
+                    }
+
                     var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoResultV2);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;
@@ -178,8 +187,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
                 // AI confirmed spam - AI score is the sole authority for action determination
                 // Pipeline scores served as a gate to trigger the veto; AI verdict drives the action
-                _logger.LogDebug("AI confirmed spam for {User} with score {Score}",
-                    request.User.ToLogDebug(), vetoResultV2.Score);
+                LogAIConfirmedSpam(_logger, request.User.ToLogDebug(), vetoResultV2.Score);
 
                 var confirmedResult = pipelineResult with
                 {
@@ -376,7 +384,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 User = originalRequest.User,
                 Chat = originalRequest.Chat,
                 PhotoFileId = originalRequest.PhotoFileId ?? "",
-                PhotoUrl = originalRequest.PhotoUrl,
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
                 CustomPrompt = null,
                 CancellationToken = cancellationToken
@@ -446,16 +453,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
         // Record metrics
-        TelemetryConstants.SpamDetectionDuration.Record(durationMs,
-            new KeyValuePair<string, object?>("algorithm", check.CheckName),
-            new KeyValuePair<string, object?>("version", "v2"));
-
-        var resultType = result.Abstained ? "abstained" : (result.Score >= 1.0 ? "spam" : "low_confidence");
-
-        TelemetryConstants.SpamDetections.Add(1,
-            new KeyValuePair<string, object?>("algorithm", check.CheckName),
-            new KeyValuePair<string, object?>("result", resultType),
-            new KeyValuePair<string, object?>("version", "v2"));
+        var resultType = result.Abstained ? "abstained" : (result.Score >= 1.0 ? "spam" : "clean");
+        _detectionMetrics.RecordSpamDetection(check.CheckName.ToString(), resultType, durationMs);
 
         if (activity != null)
         {
@@ -491,19 +490,12 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         };
     }
 
-    private static void RecordDetectionMetrics(long startTimestamp, ContentDetectionResult result, Activity? activity)
+    private void RecordDetectionMetrics(long startTimestamp, ContentDetectionResult result, Activity? activity)
     {
         var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
-        TelemetryConstants.SpamDetectionDuration.Record(durationMs,
-            new KeyValuePair<string, object?>("algorithm", "pipeline"),
-            new KeyValuePair<string, object?>("version", "v2"));
-
         var resultType = result.IsSpam ? "spam" : "clean";
-        TelemetryConstants.SpamDetections.Add(1,
-            new KeyValuePair<string, object?>("algorithm", "pipeline"),
-            new KeyValuePair<string, object?>("result", resultType),
-            new KeyValuePair<string, object?>("version", "v2"));
+        _detectionMetrics.RecordSpamDetection("pipeline", resultType, durationMs);
 
         if (activity != null)
         {

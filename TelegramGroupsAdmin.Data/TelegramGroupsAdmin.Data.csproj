@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TelegramGroupsAdmin.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL" />
     <PackageReference Include="Dapper" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" />

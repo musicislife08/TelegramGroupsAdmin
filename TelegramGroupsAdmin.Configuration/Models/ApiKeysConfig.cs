@@ -20,25 +20,6 @@ public class ApiKeysConfig
     /// </summary>
     public string? SendGrid { get; set; }
 
-    // Legacy properties - used only for migration from old format
-    // Will be copied to AIConnectionKeys dictionary on first load
-    // TODO: Remove these after all deployments have migrated
-
-    /// <summary>
-    /// Legacy OpenAI API key - migrated to AIConnectionKeys["openai"]
-    /// </summary>
-    public string? OpenAI { get; set; }
-
-    /// <summary>
-    /// Legacy Azure OpenAI API key - migrated to AIConnectionKeys["azure-openai"]
-    /// </summary>
-    public string? AzureOpenAI { get; set; }
-
-    /// <summary>
-    /// Legacy Local AI API key - migrated to AIConnectionKeys["local-ai"]
-    /// </summary>
-    public string? LocalAI { get; set; }
-
     /// <summary>
     /// Per-connection API keys for AI providers.
     /// Maps connection ID (from AIProviderConfig.Connections) to API key.
@@ -53,43 +34,7 @@ public class ApiKeysConfig
     {
         return !string.IsNullOrWhiteSpace(VirusTotal) ||
                !string.IsNullOrWhiteSpace(SendGrid) ||
-               AIConnectionKeys.Count > 0 ||
-               // Legacy properties check
-               !string.IsNullOrWhiteSpace(OpenAI) ||
-               !string.IsNullOrWhiteSpace(AzureOpenAI) ||
-               !string.IsNullOrWhiteSpace(LocalAI);
-    }
-
-    /// <summary>
-    /// Migrates legacy API key properties to the new AIConnectionKeys dictionary.
-    /// Returns true if any migration was performed.
-    /// </summary>
-    public bool MigrateLegacyKeys()
-    {
-        var migrated = false;
-
-        if (!string.IsNullOrWhiteSpace(OpenAI) && !AIConnectionKeys.ContainsKey("openai"))
-        {
-            AIConnectionKeys["openai"] = OpenAI;
-            OpenAI = null;
-            migrated = true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(AzureOpenAI) && !AIConnectionKeys.ContainsKey("azure-openai"))
-        {
-            AIConnectionKeys["azure-openai"] = AzureOpenAI;
-            AzureOpenAI = null;
-            migrated = true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(LocalAI) && !AIConnectionKeys.ContainsKey("local-ai"))
-        {
-            AIConnectionKeys["local-ai"] = LocalAI;
-            LocalAI = null;
-            migrated = true;
-        }
-
-        return migrated;
+               AIConnectionKeys.Count > 0;
     }
 
     /// <summary>

@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class TelegramMediaService(
     ILogger<TelegramMediaService> logger,
     IBotMediaService mediaService,
-    IOptions<AppOptions> appOptions)
+    IOptions<AppOptions> appOptions) : ITelegramMediaService
 {
     // Telegram Bot API file download limit (standard api.telegram.org)
     private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
@@ -52,7 +52,7 @@ public class TelegramMediaService(
             var uniqueFileName = $"{mediaType.ToString().ToLowerInvariant()}_{messageId}_{file.FileUniqueId}{extension}";
 
             // Get subdirectory from centralized utility
-            var subDir = MediaPathUtilities.GetMediaSubdirectory((int)mediaType);
+            var subDir = MediaUtilities.GetMediaSubdirectory((int)mediaType);
 
             // Ensure media subdirectory exists (e.g., /data/media/video/)
             var mediaDir = Path.Combine(_mediaStoragePath, "media", subDir);
@@ -134,6 +134,7 @@ public class TelegramMediaService(
             MediaType.Sticker => ".webp",       // Telegram stickers are WebP
             MediaType.VideoNote => ".mp4",      // Circular videos are MP4
             MediaType.Document => ".bin",       // Unknown document type
+            MediaType.Photo => ".jpg",          // Telegram photos are JPEG
             _ => ".dat"
         };
     }

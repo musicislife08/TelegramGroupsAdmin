@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 using Testably.Abstractions;
@@ -45,6 +46,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
             services.AddScoped<IReportCallbackContextRepository, ReportCallbackContextRepository>(); // DM action button contexts
             services.AddScoped<ILinkedChannelsRepository, LinkedChannelsRepository>(); // Linked channel impersonation detection
+            services.AddScoped<IUsernameBlacklistRepository, UsernameBlacklistRepository>();
             // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
             services.AddScoped<IExamSessionRepository, ExamSessionRepository>(); // Phase 2: Entrance exam state tracking
@@ -56,6 +58,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageTranslationService, MessageTranslationService>();
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+            services.AddScoped<IUsernameHistoryRepository, UsernameHistoryRepository>();
 
             // Profile scan results
             services.AddScoped<IProfileScanResultsRepository, ProfileScanResultsRepository>();
@@ -76,6 +79,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITelegramImageService, TelegramImageService>();
             services.AddScoped<TelegramPhotoService>();
             services.AddScoped<TelegramMediaService>();
+            services.AddScoped<ITelegramMediaService>(sp => sp.GetRequiredService<TelegramMediaService>());
 
             // Message processing handlers (REFACTOR-1: extracted from MessageProcessingService)
             services.AddScoped<Handlers.MediaProcessingHandler>();
@@ -168,6 +172,9 @@ public static class ServiceCollectionExtensions
             // CAS (Combot Anti-Spam) check on user join
             services.AddSingleton<ICasCheckService, CasCheckService>();
 
+            // Username blacklist check on user join
+            services.AddScoped<IUsernameBlacklistService, UsernameBlacklistService>();
+
             // Bot command system (Keyed Services pattern)
             // Commands are Scoped (to allow injecting Scoped services like BotModerationService)
             // CommandRouter is Singleton (creates scopes internally when executing commands)
@@ -187,9 +194,13 @@ public static class ServiceCollectionExtensions
             services.AddKeyedScoped<IBotCommand, DeleteCommand>(CommandNames.Delete);
             services.AddKeyedScoped<IBotCommand, MyStatusCommand>(CommandNames.MyStatus);
             services.AddSingleton<CommandRouter>();
+            services.AddSingleton<PipelineMetrics>();
 
             // Caching services (singletons for cross-request state)
             services.AddSingleton<IChatCache, ChatCache>();
+            services.AddSingleton<ChatMetrics>(); // Depends on IChatCache for ObservableGauge callback
+            services.AddSingleton<WelcomeMetrics>();
+            services.AddSingleton<ReportMetrics>();
             services.AddSingleton<IChatHealthCache, ChatHealthCache>();
             services.AddSingleton<IBotIdentityCache, BotIdentityCache>();
 
