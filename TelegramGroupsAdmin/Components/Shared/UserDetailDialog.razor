@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Services.Bot
 @using TelegramGroupsAdmin.Telegram.Services.Moderation
+@using TelegramGroupsAdmin.Telegram.Repositories
 @inject ITelegramUserManagementService UserManagementService
 @inject IBotModerationService ModerationService
 @inject IAdminNotesRepository AdminNotesRepository
@@ -15,6 +16,7 @@
 @inject NavigationManager Navigation
 @inject TelegramGroupsAdmin.Telegram.Services.UserApi.IProfileScanService ProfileScanService
 @inject TelegramGroupsAdmin.Telegram.Repositories.ITelegramUserRepository TelegramUserRepository
+@inject IUsernameHistoryRepository UsernameHistoryRepo
 
 <MudDialog>
     <DialogContent>
@@ -423,6 +425,36 @@
                     </MudPaper>
                 }
 
+                <!-- Name History -->
+                @if (_nameHistory.Count > 0)
+                {
+                    <MudExpansionPanels Class="mt-4" Elevation="0">
+                        <MudExpansionPanel Text="@($"Name History ({_nameHistory.Count})")"
+                                           Icon="@Icons.Material.Filled.History"
+                                           Expanded="false">
+                            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Name</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var entry in _nameHistory)
+                                    {
+                                        <tr>
+                                            <td>@(entry.Username != null ? $"@{entry.Username}" : "(no username)")</td>
+                                            <td>@FormatName(entry.FirstName, entry.LastName)</td>
+                                            <td>@entry.RecordedAt.LocalDateTime.ToString("MMM d, yyyy")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+
                 <!-- Admin Notes (Phase 4.12) -->
                 <MudPaper Elevation="1" Class="pa-3 mb-4">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
@@ -556,6 +588,7 @@
     private TelegramUserDetail? _userDetail;
     private bool _loading = true;
     private Dictionary<string, TagColor> _tagColorMap = new();
+    private List<UsernameHistoryRecord> _nameHistory = [];
 
     // Timeline state
     private bool _timelineExpanded;
@@ -593,6 +626,7 @@
         try
         {
             _userDetail = await UserManagementService.GetUserDetailAsync(UserId);
+            _nameHistory = await UsernameHistoryRepo.GetByUserIdAsync(UserId);
         }
         catch (Exception ex)
         {
@@ -1194,5 +1228,11 @@
                 Snackbar.Add($"Error removing warning: {ex.Message}", Severity.Error);
             }
         }
+    }
+
+    private static string FormatName(string? firstName, string? lastName)
+    {
+        var parts = new[] { firstName, lastName }.Where(p => !string.IsNullOrEmpty(p));
+        return parts.Any() ? string.Join(" ", parts) : "(no name)";
     }
 }
