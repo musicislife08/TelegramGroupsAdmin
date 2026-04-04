@@ -98,6 +98,18 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
         return _dialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
     }
 
+    [SetUp]
+    public async Task SetUp()
+    {
+        // Clear previously rendered components so each test starts with a fresh DOM.
+        // Without this, provider.Markup accumulates dialogs from prior tests in the fixture.
+        await DisposeComponentsAsync();
+
+        // Reset mock returns to defaults (NSubstitute retains overrides across tests)
+        _mockHistoryRepo.GetByUserIdAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<UsernameHistoryRecord>()));
+    }
+
     #region Name History Panel Tests
 
     [Test]
