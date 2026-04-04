@@ -841,7 +841,7 @@ public partial class MessageProcessingService(
             || !string.Equals(existing.Username, current.Username, StringComparison.Ordinal);
     }
 
-    private static string BuildProfileChangeReason(TelegramUser old, global::Telegram.Bot.Types.User current)
+    internal static string BuildProfileChangeReason(TelegramUser old, global::Telegram.Bot.Types.User current)
     {
         var changes = new List<string>();
 
