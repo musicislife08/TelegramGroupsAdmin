@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using NSubstitute;
@@ -39,6 +40,10 @@ public class UserDetailDialogHistoryTests : MudBlazorTestContext
 
         // Add WebUser cascading value (mirrors MainLayout where CascadingValue wraps MudDialogProvider)
         this.AddTestWebUser();
+
+        // Cascade TimeZoneInfo so LocalTimestamp renders formatted dates instead of mdash
+        RenderTree.TryAdd<CascadingValue<TimeZoneInfo?>>(p =>
+            p.Add(cv => cv.Value, TimeZoneInfo.Utc));
 
         // Create mocks for services used by the dialog
         _mockUserService = Substitute.For<ITelegramUserManagementService>();
