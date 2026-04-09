@@ -292,6 +292,11 @@ Block:
 - **[Ban Celebration](features/09-ban-celebration.md)** - Celebratory GIFs on bans
 - **[Send As Admin](features/10-send-as-admin.md)** - Send messages as your personal account
 - **[Per-User Messages](features/11-per-user-messages.md)** - Cross-chat user message history
+- **[Analytics Dashboard](features/12-analytics.md)** - Understand your spam detection performance
+- **[Backup & Restore](features/14-backup-restore.md)** - Protect your data with encrypted backups
+- **[Audit Log](features/17-audit-log.md)** - Track every action taken in your system
+- **[Settings Reference](admin/04-settings-reference.md)** - Find any setting quickly
+- **[External Integrations](admin/05-integrations.md)** - Understand the services TGA connects to
 
 ## Need Help?
 
