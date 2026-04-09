@@ -72,11 +72,11 @@ Three sub-changes:
 PostgreSQL does not support parameterizing identifiers (table/column names) — only data values. Identifier quoting is the correct defense for DDL.
 
 ```csharp
-private static string QuoteIdentifier(string identifier)
+public static string QuoteIdentifier(string identifier)
     => $"\"{identifier.Replace("\"", "\"\"")}\"";
 ```
 
-Place this as a `private static` method in `BackupService`. `TableExportService` and `SequenceIntegrityTests` each get their own copy (test code should not depend on production internals, and these are one-liners not worth extracting to a shared utility).
+Place this as a single `public static` utility method (e.g., in a `SqlHelper` class) shared by `BackupService`, `TableExportService`, and `SequenceIntegrityTests`.
 
 **Sites to fix:**
 - `BackupService.cs:743` — `ALTER TABLE ... DROP CONSTRAINT` (tableName, constraint_name)
