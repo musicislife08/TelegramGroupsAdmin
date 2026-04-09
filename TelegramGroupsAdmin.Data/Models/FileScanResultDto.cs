@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// EF Core entity for file_scan_results table - stores file scanning results for caching and auditing
 /// </summary>
 [Table("file_scan_results")]
-public class FileScanResultRecord
+public class FileScanResultDto
 {
     [Key]
     [Column("id")]
