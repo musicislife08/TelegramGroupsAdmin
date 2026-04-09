@@ -33,7 +33,7 @@ internal static class ModelMappings
 
     // FileScanResult mappings (Phase 4.17: File Scanning)
 
-    public static DomainModels.FileScanResultModel ToModel(this DataModels.FileScanResultRecord dto)
+    public static DomainModels.FileScanResultModel ToModel(this DataModels.FileScanResultDto dto)
     {
         return new DomainModels.FileScanResultModel(
             Id: dto.Id,
@@ -47,7 +47,7 @@ internal static class ModelMappings
         );
     }
 
-    public static DataModels.FileScanResultRecord ToDto(this DomainModels.FileScanResultModel model)
+    public static DataModels.FileScanResultDto ToDto(this DomainModels.FileScanResultModel model)
     {
         return new()
         {
