@@ -1,40 +1,66 @@
 # Notifications
 
-TGA keeps you informed about important events through real-time notifications in the web interface.
+TGA can notify you about important events through three channels: **Telegram DM**, **Email**, and **Web Push** (the in-app notification bell). Each channel can be independently configured per event type, so you get exactly the alerts you want, where you want them.
 
-## The Notification Bell
+## Setting Up Telegram DM Notifications
 
-Look for the bell icon in the top navigation bar. When new events occur, it shows a red badge with the unread count.
+Before TGA can send you Telegram DMs, two steps are required:
 
-Click the bell to see your recent notifications. Each notification shows:
+### Step 1: Link Your Telegram Account
 
-- **Icon** — Color-coded by event type for quick recognition
-- **Subject** — What happened
-- **Message** — Brief details
-- **Time** — How long ago it occurred
+1. In the TGA web app, go to your **Profile** page
+2. Find the **Linked Telegram Accounts** section
+3. Click **Generate Token** — this creates a one-time security token
+4. Copy the token
+5. Open a private chat with your TGA bot in Telegram
+6. Send `/link <token>` (paste the token after /link)
+7. The bot confirms the link and deletes the message for security
+
+This connects your Telegram identity to your web admin account, so TGA knows where to send your DMs.
+
+### Step 2: Start the Bot
+
+In your private chat with the TGA bot, send `/start`. This is a **Telegram API requirement** — bots can only send DMs to users who have initiated a conversation first.
+
+Once both steps are complete, the Telegram DM channel becomes available in your notification preferences.
 
 ## What Triggers Notifications
 
-| Event | What It Means |
-|-------|---------------|
-| **Spam Detected** | A message was flagged by the detection engine |
-| **Spam Auto-Deleted** | A high-confidence spam message was automatically removed |
-| **User Banned** | A user was banned (automatically or manually) |
-| **Message Reported** | A message was reported by a group member |
-| **Malware Detected** | A file shared in your group was flagged as malicious |
-| **Chat Admin Changed** | Bot admin status or permissions changed in a group |
-| **Chat Health Warning** | A group's health check detected an issue |
-| **Backup Failed** | A scheduled backup failed to complete |
+| Event | Who Gets Notified |
+|-------|-------------------|
+| **Spam Detected** | Chat admins + global admins |
+| **Spam Auto-Deleted** | Chat admins + global admins |
+| **User Banned** | Chat admins + global admins |
+| **Message Reported** | Chat admins + global admins |
+| **Malware Detected** | Chat admins + global admins |
+| **Exam Failed** | Admins for that chat |
+| **Profile Scan Alert** | Chat admins + global admins |
+| **Chat Admin Changed** | Owners only |
+| **Chat Health Warning** | Owners only |
+| **Backup Failed** | Owners only |
 
-## Managing Notifications
+Some Telegram DM notifications include **action buttons** — for example, a Profile Scan Alert DM lets you tap Ban, Kick, or Allow directly from Telegram without opening the web app.
 
-- **Mark as read** — Click the checkmark on individual notifications
-- **Delete** — Click the X to remove a notification
-- **Mark all read** — Clears the unread count for all notifications
-- **Clear all** — Removes all notifications from the list
+## Configuring Your Preferences
 
-Notifications update in real-time — you don't need to refresh the page to see new events.
+Go to your **Profile** -> **Notification Preferences** to control what you receive:
 
-## Configuring Notifications
+- **Telegram DM** tab — Select which events send you a Telegram message (requires linked account)
+- **Email** tab — Select which events send you an email, with optional digest batching
+- **Web Push** tab — Select which events appear in the notification bell and trigger browser notifications
 
-To manage notification preferences, go to **Settings** -> **Notifications** -> **Web Push Notifications**.
+Each admin configures their own preferences independently. You can enable spam alerts via Telegram DM but only receive backup failures by email — whatever combination works for you.
+
+## The Pending Queue
+
+If TGA tries to DM you but can't (you haven't run `/start` yet, or you temporarily blocked the bot), the message is **queued automatically**. When you run `/start` again, all pending notifications are delivered immediately.
+
+Queued messages expire after 30 days if undelivered.
+
+## Telegram Admins Without Web Accounts
+
+Telegram group admins who don't have a linked web account still receive DM notifications automatically — as long as they've run `/start` with the bot. They receive all notifications for groups they admin, delivered exclusively via Telegram DM.
+
+## The Notification Bell
+
+The bell icon in the top navigation bar shows your web push notifications with a red unread count badge. Click it to see recent events, mark them as read, or clear them. These update in real-time.
