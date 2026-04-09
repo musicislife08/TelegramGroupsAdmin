@@ -196,6 +196,43 @@ Both thresholds are configurable per chat.
 
 ---
 
+## What Happens When Someone Is Flagged
+
+When a user's profile score crosses the review threshold, TGA creates a **Profile Scan Alert** and notifies you.
+
+### Seeing the Alert
+
+1. Navigate to **Reports** in the sidebar
+2. Use the **Type** dropdown and select **Profile Scan Alerts**
+3. Each alert card shows the user's profile details, score breakdown, and flagged reasons
+
+The user remains restricted in the group until you take action — they cannot send messages or interact until you decide.
+
+### Your Three Options
+
+| Action | What It Does |
+|--------|-------------|
+| **Allow** (green) | Clears the alert, restores the user's permissions, and lets them participate normally |
+| **Ban** (red) | Permanently bans the user from the group and removes their messages |
+| **Kick** (orange) | Removes the user from the group without a permanent ban — they can rejoin |
+
+### Multi-Group Behavior
+
+If you manage multiple groups and a user triggered alerts in several of them, acting on one alert **automatically resolves the matching alerts in your other groups**. You don't need to review the same user separately in each group.
+
+### How This Connects to the Welcome System
+
+Profile scanning works alongside the Welcome system to gate new user admission:
+
+1. User joins the group
+2. Profile scan runs and scores their profile
+3. If flagged, the user stays restricted until you review the alert
+4. If the user also needs to pass a Welcome exam, both gates must clear before they get full access
+
+This means a user won't slip through just because they passed the exam — if their profile looks suspicious, you still get the final say.
+
+---
+
 ## Change Detection
 
 Before running the expensive image collection and AI scoring steps (Steps 5-8), the scanner compares 15 metadata fields against stored values from the previous scan. If nothing changed, the previous score is reused.
