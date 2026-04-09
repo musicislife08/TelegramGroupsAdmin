@@ -21,7 +21,7 @@ TelegramGroupsAdmin is a comprehensive content detection and moderation tool for
 
 ### Performance
 
-- Handles 500-5,000 messages per day easily
+- Handles thousands of messages per day easily
 - Average detection time: 255ms per message
 - Designed for groups with 10-1,000 members
 
@@ -49,12 +49,44 @@ The first user to register becomes the **Owner** with full access to all feature
 3. Enter your Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
 4. Click **Save**
 
-### 4. Set Up Two-Factor Authentication (Recommended)
+### 4. Set Up Two-Factor Authentication (Required)
 
-1. After first login, you'll be prompted to set up 2FA
+1. After first login, you are required to set up 2FA (Owner accounts can override this for other admins)
 2. Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)
 3. Enter the 6-digit code to confirm
 4. Save your backup codes in a secure location
+
+## Understanding the Dashboard
+
+### Main Dashboard (Home)
+
+- **Recent Activity** - Live feed of messages and detections
+- **Spam Statistics** - Detection rates and trends
+- **Quick Actions** - Common moderation tasks
+
+### Analytics Page
+
+- **Detection Trends** - Graphs showing spam over time
+- **Algorithm Performance** - Which checks catch the most spam
+- **False Positive Rate** - Track accuracy improvements
+
+### Messages Page
+
+- **All Messages** - Browse all cached messages from your groups
+- **Filters** - Search by user, date, spam status, deleted messages
+- **Infinite Scroll** - Loads 50 messages at a time as you scroll
+- **Send As Admin** - Bot/Me toggle to send messages as your personal account
+
+### Reports Page
+
+Use the **Type** dropdown to filter reports:
+
+- **Moderation Reports** - Spam detections needing review (borderline scores, auto-deleted confirmations)
+- **Impersonation Alerts** - Users flagged for impersonating admins or other members
+- **Exam Reviews** - Failed welcome exam attempts requiring admin review
+- **Profile Scan Alerts** - Suspicious profiles detected on join (see [Profile Scanning](features/08-profile-scanning.md))
+
+Use the **Status** filter to show only pending items or all history.
 
 ## Initial Configuration (First 24 Hours)
 
@@ -79,9 +111,7 @@ Start with simple, reliable detection methods:
    - **Invisible Character Detection** - Unicode abuse detection
    - **URL Blocklist** - Malicious domain blocking
 
-2. Set conservative thresholds:
-   - **Auto-Ban Threshold**: 5.0 points (very high confidence required)
-   - **Review Queue Threshold**: 2.5 points
+2. The default thresholds (Auto-Ban: 4.0, Review Queue: 2.5) are well-calibrated — no changes needed
 
 3. Click **Save All Changes**
 
@@ -94,7 +124,17 @@ Start with simple, reliable detection methods:
 3. In the **Whitelist** panel (center), add trusted domains your group uses frequently
 4. Click **Save URL Filters**
 
-### Step 4: Review Your First Detections
+### Step 4: Connect an AI Provider (Optional)
+
+Connecting an AI provider unlocks several powerful features: AI Veto (reduces false positives by 80-90%), Image Spam Detection, Video Spam Detection, and the AI Prompt Builder.
+
+1. Navigate to **Settings** -> **System** -> **AI Providers**
+2. Enter your API key (OpenAI or compatible provider)
+3. Click **Save**
+
+You can enable AI-powered checks later in **Settings** -> **Content Detection** -> **AI Integration**.
+
+### Step 5: Review Your First Detections
 
 1. Navigate to **Reports** in the sidebar
 2. View spam detections in the review queue
@@ -118,25 +158,11 @@ Once you have enough training data, enable smarter detection:
 3. Keep thresholds at default for now
 4. **Save All Changes**
 
-### Use AI-Powered Threshold Tuning
-
-Let the system recommend optimal settings:
-
-1. Navigate to **Settings** -> **Content Detection** -> **Detection Algorithms**
-2. Select **Analysis Period**: Last 30 days
-3. Click **Generate Recommendations**
-4. Review each recommendation:
-   - Shows current vs. recommended threshold
-   - Displays expected false positive reduction
-   - Shows model confidence (prefer >=85%)
-5. Click **Apply Threshold** on high-confidence recommendations
-
 ### Disable Training Mode
 
 1. Go to **Settings** -> **Content Detection** -> **Detection Algorithms**
 2. Toggle **Training Mode** to OFF
-3. Reduce **Auto-Ban Threshold** from 5.0 to 4.0 points
-4. **Save All Changes**
+3. **Save All Changes**
 
 **Result**: System now auto-bans high-confidence spam.
 
@@ -185,39 +211,12 @@ Min Message Length: 10
 6. Optionally customize the **System Prompt** for your group's context
 7. Click **Save**
 
-## Understanding the Dashboard
-
-### Main Dashboard (Home)
-
-- **Recent Activity** - Live feed of messages and detections
-- **Spam Statistics** - Detection rates and trends
-- **Quick Actions** - Common moderation tasks
-
-### Analytics Page
-
-- **Detection Trends** - Graphs showing spam over time
-- **Algorithm Performance** - Which checks catch the most spam
-- **False Positive Rate** - Track accuracy improvements
-
-### Messages Page
-
-- **All Messages** - Browse all cached messages from your groups
-- **Filters** - Search by user, date, spam status, deleted messages
-- **Infinite Scroll** - Loads 50 messages at a time as you scroll
-- **Send As Admin** - Bot/Me toggle to send messages as your personal account
-
-### Reports Page
-
-- **Review Queue** - Borderline spam needing manual review
-- **Spam Reports** - Confirmed spam detections
-- **User Reports** - Flagged users and ban history
-
 ## Common Workflows
 
 ### Reviewing Spam Detections
 
 1. Click **Reports** in sidebar
-2. Select **Review Queue** tab
+2. Use the **Type** dropdown to filter by report type
 3. For each message:
    - Read the full message and context
    - Check which checks flagged it
@@ -240,32 +239,6 @@ Min Message Length: 10
 1. Navigate to **Users** page and click on a user
 2. In the User Detail Dialog, click **View Messages**
 3. Browse all messages from that user across every monitored group
-
-### Adding Custom Blocked Domains
-
-1. Go to **Settings** -> **Content Detection** -> **URL Filtering**
-2. In the **Hard Block** panel, scroll to **Manual Domains**
-3. Enter domains (one per line):
-   ```
-   evil-site.com
-   scam-domain.net
-   *.suspicious-pattern.org
-   ```
-4. Supports wildcards: `*.example.com` blocks all subdomains
-5. Click **Save URL Filters**
-
-### Whitelisting Trusted Domains
-
-1. Go to **Settings** -> **Content Detection** -> **URL Filtering**
-2. In the **Whitelist** panel (center), add trusted domains:
-   ```
-   yourcompany.com
-   github.com
-   wikipedia.org
-   ```
-3. Click **Save URL Filters**
-
-**Result**: These domains will never be flagged, even if they appear on blocklists.
 
 ## Tips for Best Results
 
@@ -292,7 +265,7 @@ Min Message Length: 10
 
 ### Use Custom Prompts (OpenAI)
 
-Tailor spam detection to your group's context:
+Tailor AI spam detection to your group's context using the [AI Prompt Builder](features/06-ai-prompt-builder.md). Navigate to **Settings** -> **Content Detection** -> **AI Integration** to customize the system prompt:
 
 **Example for crypto trading group**:
 ```
@@ -322,7 +295,7 @@ Block:
 
 ## Need Help?
 
-- **Review Queue not working?** Check that Training Mode is OFF
+- **Auto-ban not working?** Check that Training Mode is OFF and your thresholds are set
 - **Too many false positives?** Enable OpenAI Veto or increase thresholds
 - **Spam getting through?** Enable more checks and lower thresholds
 - **Bot not responding?** Verify bot token is configured in Settings -> Telegram -> Bot Configuration and bot is admin in your Telegram group with proper permissions
