@@ -55,7 +55,7 @@ Each admin configures their own preferences independently. You can enable spam a
 
 If TGA tries to DM you but can't (you haven't run `/start` yet, or you temporarily blocked the bot), the message is **queued automatically**. When you run `/start` again, all pending notifications are delivered immediately.
 
-Queued messages expire after 30 days if undelivered.
+Queued messages expire after 30 days if undelivered and are silently discarded. Check the [Audit Log](17-audit-log.md) for historical notification activity if you've been away.
 
 ## Telegram Admins Without Web Accounts
 

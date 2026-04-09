@@ -43,7 +43,7 @@ Settings marked with **per-chat** can be customized for individual groups via th
 
 | Subsection | What's In There | Learn More |
 |------------|----------------|------------|
-| **Detection Algorithms** | Enable/disable individual checks, Training Mode, thresholds **per-chat** | [Spam Detection](../features/03-spam-detection.md) |
+| **Detection Algorithms** | Enable/disable individual checks, Training Mode, thresholds (defaults: Auto-Ban 4.0, Review Queue 2.5) **per-chat** | [Spam Detection](../features/03-spam-detection.md) |
 | **AI Integration** | OpenAI Veto, image/video analysis, custom system prompt **per-chat** | [AI Prompt Builder](../features/06-ai-prompt-builder.md) |
 | **URL Filtering** | Blocklists, whitelists, manual domains **per-chat** | [URL Filtering](../features/04-url-filtering.md) |
 | **File Scanning** | ClamAV and VirusTotal file scanning toggles | [Spam Detection](../features/03-spam-detection.md) |

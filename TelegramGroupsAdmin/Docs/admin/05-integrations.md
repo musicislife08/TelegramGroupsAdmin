@@ -62,6 +62,6 @@ TGA connects to several external services to provide its detection and moderatio
 
 **Do you need to configure it?** Optional but unlocks significant capabilities. Go to **Settings** -> **Telegram** -> **User API** and enter your Telegram phone number. You'll need to complete SMS verification to establish the session.
 
-**Session management:** Your Telegram session is stored securely in the database and persists across TGA restarts. You only need to authenticate once unless you log out or your session expires.
+**Session management:** Your Telegram session is stored securely in the database and persists across TGA restarts. You only need to authenticate once unless you log out or your session expires. Treat this session like a password — it grants full access to the linked Telegram account.
 
 **What happens if it's unavailable:** Features that require the User API (profile scanning, send-as-admin) are disabled. The bot continues to work normally for all other detection and moderation tasks.
