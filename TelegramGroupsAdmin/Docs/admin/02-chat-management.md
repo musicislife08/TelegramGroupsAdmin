@@ -375,6 +375,8 @@ Click **View Details** on any chat to see:
 
 [Screenshot: Chat health details panel]
 
+For a complete guide to health statuses, checks, the 3-strike rule, and troubleshooting, see **[Chat Health Monitoring](03-chat-health.md)**.
+
 ---
 
 ## Managing Chat Admins
