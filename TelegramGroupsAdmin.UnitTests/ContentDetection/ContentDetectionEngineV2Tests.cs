@@ -805,6 +805,96 @@ public class ContentDetectionEngineV2Tests
         await check.Received(1).CheckAsync(Arg.Any<ContentCheckRequestBase>());
     }
 
+    [Test]
+    public async Task CheckMessageAsync_AlwaysRun_True_TrustedUser_CheckStillRuns()
+    {
+        // Arrange - Spacing enabled + AlwaysRun, but user is trusted
+        var check = BuildCheck(CheckName.Spacing, score: 3.0, abstained: false);
+        // ShouldExecute returns false (simulates trusted user skip)
+        check.ShouldExecute(Arg.Any<ContentCheckRequest>()).Returns(false);
+
+        var config = BuildPermissiveConfig();
+        config.Spacing.Enabled = true;
+        config.Spacing.AlwaysRun = true;
+
+        _configRepository
+            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+
+        var engine = BuildEngine([check]);
+        var request = new ContentCheckRequest
+        {
+            Message = "test message",
+            User = TestUser,
+            Chat = TestChat,
+            IsUserTrusted = true
+        };
+
+        // Act
+        var result = await engine.CheckMessageAsync(request);
+
+        // Assert - AlwaysRun bypasses ShouldExecute, so check runs
+        await check.Received(1).CheckAsync(Arg.Any<ContentCheckRequestBase>());
+        Assert.That(result.TotalScore, Is.EqualTo(3.0));
+    }
+
+    [Test]
+    public async Task CheckMessageAsync_AlwaysRun_False_TrustedUser_CheckSkipped()
+    {
+        // Arrange - Spacing enabled but NOT AlwaysRun, user is trusted
+        var check = BuildCheck(CheckName.Spacing, score: 3.0, abstained: false);
+        check.ShouldExecute(Arg.Any<ContentCheckRequest>()).Returns(false);
+
+        var config = BuildPermissiveConfig();
+        config.Spacing.Enabled = true;
+        config.Spacing.AlwaysRun = false;
+
+        _configRepository
+            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+
+        var engine = BuildEngine([check]);
+        var request = new ContentCheckRequest
+        {
+            Message = "test message",
+            User = TestUser,
+            Chat = TestChat,
+            IsUserTrusted = true
+        };
+
+        // Act
+        var result = await engine.CheckMessageAsync(request);
+
+        // Assert - ShouldExecute returned false, AlwaysRun is false, so check is skipped
+        await check.DidNotReceive().CheckAsync(Arg.Any<ContentCheckRequestBase>());
+        Assert.That(result.TotalScore, Is.EqualTo(0.0));
+    }
+
+    [Test]
+    public async Task CheckMessageAsync_AlwaysRun_True_Disabled_CheckStillSkipped()
+    {
+        // Arrange - Spacing disabled, even with AlwaysRun = true
+        var check = BuildCheck(CheckName.Spacing, score: 3.0, abstained: false);
+
+        var config = BuildPermissiveConfig();
+        config.Spacing.Enabled = false;
+        config.Spacing.AlwaysRun = true;
+
+        _configRepository
+            .GetEffectiveConfigAsync(Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns(config);
+
+        var engine = BuildEngine([check]);
+        var request = BuildRequest("test message");
+
+        // Act
+        var result = await engine.CheckMessageAsync(request);
+
+        // Assert - Enabled=false short-circuits, AlwaysRun doesn't matter
+        await check.DidNotReceive().CheckAsync(Arg.Any<ContentCheckRequestBase>());
+        Assert.That(result.TotalScore, Is.EqualTo(0.0));
+    }
+
     #endregion
 
     // ---------------------------------------------------------------------------

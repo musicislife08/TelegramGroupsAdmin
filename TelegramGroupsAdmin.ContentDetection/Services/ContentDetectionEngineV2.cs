@@ -300,6 +300,25 @@ public partial class ContentDetectionEngineV2 : IContentDetectionEngine
         if (!enabled)
             return false;
 
+        // Keep in sync with enabled switch above (CAS, FileScanning, OpenAI use separate paths)
+        var alwaysRun = check.CheckName switch
+        {
+            CheckName.StopWords => config.StopWords.AlwaysRun,
+            CheckName.Bayes => config.Bayes.AlwaysRun,
+            CheckName.Similarity => config.Similarity.AlwaysRun,
+            CheckName.Spacing => config.Spacing.AlwaysRun,
+            CheckName.InvisibleChars => config.InvisibleChars.AlwaysRun,
+            CheckName.ThreatIntel => config.ThreatIntel.AlwaysRun,
+            CheckName.UrlBlocklist => config.UrlBlocklist.AlwaysRun,
+            CheckName.ImageSpam => config.ImageSpam.AlwaysRun,
+            CheckName.VideoSpam => config.VideoSpam.AlwaysRun,
+            CheckName.ChannelReply => config.ChannelReply.AlwaysRun,
+            _ => false
+        };
+
+        if (alwaysRun)
+            return true;
+
         return check.ShouldExecute(request);
     }
 
