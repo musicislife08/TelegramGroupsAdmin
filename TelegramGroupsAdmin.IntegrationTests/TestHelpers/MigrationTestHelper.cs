@@ -172,8 +172,9 @@ public class MigrationTestHelper : IDisposable
 
         // Terminate any existing connections to the database
         await using var terminateCmd = new NpgsqlCommand(
-            $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{_databaseName}'",
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1",
             connection);
+        terminateCmd.Parameters.Add(new NpgsqlParameter { Value = _databaseName });
         await terminateCmd.ExecuteNonQueryAsync();
 
         // Drop the database

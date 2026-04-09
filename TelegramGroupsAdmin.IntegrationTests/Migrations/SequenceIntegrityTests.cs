@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 
 namespace TelegramGroupsAdmin.IntegrationTests.Migrations;
@@ -159,13 +160,14 @@ public class SequenceIntegrityTests
                 var checkSequenceSql = $@"
                     SELECT
                         COALESCE(s.last_value, 0) as sequence_value,
-                        COALESCE((SELECT MAX(id) FROM {tableName}), 0) as max_id
+                        COALESCE((SELECT MAX(id) FROM {SqlHelper.QuoteIdentifier(tableName)}), 0) as max_id
                     FROM pg_sequences s
-                    WHERE s.sequencename = '{seqName}'";
+                    WHERE s.sequencename = $1";
 
                 await using var connection = new Npgsql.NpgsqlConnection(helper.ConnectionString);
                 await connection.OpenAsync();
                 await using var cmd = new Npgsql.NpgsqlCommand(checkSequenceSql, connection);
+                cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = seqName });
                 await using var reader = await cmd.ExecuteReaderAsync();
 
                 if (await reader.ReadAsync())

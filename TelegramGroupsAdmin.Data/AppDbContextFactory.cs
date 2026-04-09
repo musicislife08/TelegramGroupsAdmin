@@ -12,10 +12,10 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
     {
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
 
-        // Try environment variable first, fall back to dummy connection string for design-time operations
-        // Actual connection string comes from configuration at runtime
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? "Host=localhost;Database=telegram_groups_admin;Username=tgadmin;Password=changeme";
+            ?? throw new InvalidOperationException(
+                "ConnectionStrings__DefaultConnection environment variable is required for EF Core " +
+                "design-time operations (migrations). Set it before running dotnet ef commands.");
 
         optionsBuilder.UseNpgsql(connectionString);
 
