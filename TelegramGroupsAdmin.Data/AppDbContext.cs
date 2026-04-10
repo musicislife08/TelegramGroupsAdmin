@@ -80,7 +80,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TagDefinitionDto> TagDefinitions => Set<TagDefinitionDto>();
 
     // File scanning tables (Phase 4.17)
-    public DbSet<FileScanResultRecord> FileScanResults => Set<FileScanResultRecord>();
+    public DbSet<FileScanResultDto> FileScanResults => Set<FileScanResultDto>();
     public DbSet<FileScanQuotaRecord> FileScanQuotas => Set<FileScanQuotaRecord>();
 
     // Profile scan results
@@ -718,9 +718,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // File scanning indexes (Phase 4.17)
         // FileScanResults indexes - hash lookup for caching
-        modelBuilder.Entity<FileScanResultRecord>()
+        modelBuilder.Entity<FileScanResultDto>()
             .HasIndex(fsr => fsr.FileHash);  // Primary cache lookup
-        modelBuilder.Entity<FileScanResultRecord>()
+        modelBuilder.Entity<FileScanResultDto>()
             .HasIndex(fsr => new { fsr.Scanner, fsr.ScannedAt });  // Analytics queries
 
         // FileScanQuota indexes - service + window queries for quota tracking

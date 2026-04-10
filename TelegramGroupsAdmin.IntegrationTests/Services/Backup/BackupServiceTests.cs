@@ -289,7 +289,7 @@ public class BackupServiceTests
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
                 AND table_type = 'BASE TABLE'
-                AND table_name NOT IN ('__EFMigrationsHistory', 'cached_blocked_domains', 'file_scan_quota', 'file_scan_results', 'username_blacklist')
+                AND table_name NOT IN ('__EFMigrationsHistory', 'cached_blocked_domains', 'file_scan_quota', 'username_blacklist')
             ");
 
             Assert.That(metadata.TableCount, Is.EqualTo(actualTableCount),

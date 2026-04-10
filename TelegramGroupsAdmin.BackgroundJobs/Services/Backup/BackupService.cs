@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IO;
 using Npgsql;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Attributes;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Core.Services;
@@ -740,7 +741,7 @@ public class BackupService : IBackupService
         foreach (var fk in fkConstraints)
         {
             await connection.ExecuteAsync(
-                $"ALTER TABLE {tableName} DROP CONSTRAINT \"{fk.constraint_name}\"",
+                $"ALTER TABLE {SqlHelper.QuoteIdentifier(tableName)} DROP CONSTRAINT {SqlHelper.QuoteIdentifier(fk.constraint_name)}",
                 transaction: transaction);
         }
 
@@ -779,7 +780,7 @@ public class BackupService : IBackupService
             .Where(m => m.ColumnName != null && !generatedColumnSet.Contains(m.ColumnName)) // Exclude GENERATED ALWAYS columns
             .ToList();
 
-        var columnList = string.Join(", ", columnMappings.Select(m => m.ColumnName));
+        var columnList = string.Join(", ", columnMappings.Select(m => SqlHelper.QuoteIdentifier(m.ColumnName!)));
         // Add ::jsonb cast for JSONB columns to handle text→jsonb conversion
         var paramList = string.Join(", ", columnMappings.Select(m =>
             m.ColumnName != null && jsonbColumnSet.Contains(m.ColumnName)
@@ -788,7 +789,7 @@ public class BackupService : IBackupService
 
         // Use OVERRIDING SYSTEM VALUE for tables with GENERATED ALWAYS AS IDENTITY columns
         // This allows us to insert explicit ID values during restore
-        var sql = $"INSERT INTO {tableName} ({columnList}) OVERRIDING SYSTEM VALUE VALUES ({paramList})";
+        var sql = $"INSERT INTO {SqlHelper.QuoteIdentifier(tableName)} ({columnList}) OVERRIDING SYSTEM VALUE VALUES ({paramList})";
 
         // Deserialize JSON elements back to DTO type
         var jsonOptions = new JsonSerializerOptions
@@ -834,7 +835,7 @@ public class BackupService : IBackupService
         foreach (var fk in fkConstraints)
         {
             await connection.ExecuteAsync(
-                $"ALTER TABLE {tableName} ADD CONSTRAINT \"{fk.constraint_name}\" {fk.constraint_def}",
+                $"ALTER TABLE {SqlHelper.QuoteIdentifier(tableName)} ADD CONSTRAINT {SqlHelper.QuoteIdentifier(fk.constraint_name)} {fk.constraint_def}",
                 transaction: transaction);
         }
 
@@ -871,8 +872,8 @@ public class BackupService : IBackupService
             // Reset sequence to max(positive values) from the table
             // Ignore negative values (manual inserts like negative message_ids for training samples)
             // Sequences only generate positive integers, so we only care about max positive value
-            var resetSql = $"SELECT setval('{sequenceName}', COALESCE((SELECT MAX({columnName}) FROM {tableName} WHERE {columnName} > 0), 1))";
-            var newSeqValue = await connection.ExecuteScalarAsync<long>(resetSql);
+            var resetSql = $"SELECT setval(@seqName::regclass, COALESCE((SELECT MAX({SqlHelper.QuoteIdentifier(columnName)}) FROM {SqlHelper.QuoteIdentifier(tableName)} WHERE {SqlHelper.QuoteIdentifier(columnName)} > 0), 1))";
+            var newSeqValue = await connection.ExecuteScalarAsync<long>(resetSql, new { seqName = sequenceName });
 
             _logger.LogDebug("Reset sequence {SequenceName} for {TableName}.{ColumnName} to {NewValue}",
                 sequenceName, tableName, columnName, newSeqValue);
@@ -890,7 +891,7 @@ public class BackupService : IBackupService
 
         foreach (var table in sortedTables)
         {
-            await connection.ExecuteAsync($"DELETE FROM {table}", transaction: transaction);
+            await connection.ExecuteAsync($"DELETE FROM {SqlHelper.QuoteIdentifier(table)}", transaction: transaction);
             _logger.LogDebug("Wiped table: {TableName}", table);
         }
     }

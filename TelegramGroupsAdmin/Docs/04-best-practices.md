@@ -43,7 +43,7 @@ Both thresholds are configurable per chat in **Settings > Content Detection**.
 - **Conservative start**: Set AutoBan to 4.5 and ReviewQueue to 3.0 during the first week, then lower as you gain confidence in detection accuracy.
 - **Use Training Mode** to route all detections to the review queue before enabling auto-ban.
 - **Review false positives**: Mark incorrectly flagged messages as ham to improve ML training data.
-- **Use AI-Powered Threshold Tuning** once you have 100+ total detections and 50+ AI veto events to let the system recommend optimal settings.
+- **Review algorithm performance** in Analytics -> Performance to see which checks are most effective for your groups.
 
 ## Ongoing Maintenance
 

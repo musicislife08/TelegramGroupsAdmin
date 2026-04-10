@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Attributes;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
@@ -62,7 +63,9 @@ public class TableExportService
 
         // Build column list - cast JSONB to text for manual deserialization
         var columnList = string.Join(", ", columnMappings.Select(m =>
-            m.IsJsonb ? $"{m.ColumnName}::text AS {m.ColumnName}" : m.ColumnName));
+            m.IsJsonb
+                ? $"{SqlHelper.QuoteIdentifier(m.ColumnName)}::text AS {SqlHelper.QuoteIdentifier(m.ColumnName)}"
+                : SqlHelper.QuoteIdentifier(m.ColumnName)));
 
         var columnNames = columnMappings.Select(m => m.ColumnName).ToList();
 
@@ -71,7 +74,7 @@ public class TableExportService
                         columnNames.Contains("created_at") ? "created_at" :
                         columnNames.FirstOrDefault() ?? "id";
 
-        var sql = $"SELECT {columnList} FROM {tableName} ORDER BY {sortColumn}";
+        var sql = $"SELECT {columnList} FROM {SqlHelper.QuoteIdentifier(tableName)} ORDER BY {SqlHelper.QuoteIdentifier(sortColumn)}";
 
         var records = new List<object>();
 

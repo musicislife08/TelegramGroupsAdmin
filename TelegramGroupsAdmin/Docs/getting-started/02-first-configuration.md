@@ -396,7 +396,7 @@ Once you're comfortable with the basics, consider:
 
 - **[AI Prompt Builder](../features/06-ai-prompt-builder.md)** - Customize AI spam detection for your group's context
 - **[Content Tester](../features/05-content-tester.md)** - Test detection rules before deploying
-- **ML Threshold Tuning** - Let AI optimize your thresholds
+- **[Stop Word Recommendations](../features/16-stop-word-recommendations.md)** - Let TGA suggest stop words based on your spam patterns
 
 ---
 
