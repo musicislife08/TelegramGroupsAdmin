@@ -43,6 +43,7 @@
     <PackageVersion Include="Microsoft.ML" Version="5.0.0" />
     <PackageVersion Include="Microsoft.SemanticKernel" Version="1.73.0" />
     <PackageVersion Include="Microsoft.SemanticKernel.Abstractions" Version="1.73.0" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.6" />
 
     <!-- Telegram -->
     <PackageVersion Include="Telegram.Bot" Version="22.9.5.3" />
