@@ -186,6 +186,64 @@
                     </MudExpansionPanels>
                 </MudItem>
 
+                @* Trusted User Bypass Section *@
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Class="mr-1" />
+                        Trusted User Bypass
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                        When enabled, trusted users skip the welcome flow and all security checks.
+                        Linked web administrators (Owner, GlobalAdmin) and Telegram chat admins
+                        always bypass regardless of this toggle.
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudExpansionPanels>
+                        <MudExpansionPanel Expanded="false">
+                            <TitleContent>
+                                <div class="d-flex align-center gap-2">
+                                    <MudSwitch @bind-Value="_config.TrustedBypass.Enabled"
+                                               Color="Color.Primary"
+                                               @onclick:stopPropagation="true" />
+                                    <MudText>Trusted User Bypass</MudText>
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="@(_config.TrustedBypass.Enabled ? Color.Success : Color.Default)">
+                                        @(_config.TrustedBypass.Enabled ? "Enabled" : "Disabled")
+                                    </MudChip>
+                                </div>
+                            </TitleContent>
+                            <ChildContent>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+                                    An auto-deleting announcement is posted in the chat each time a user is
+                                    bypassed — whether trusted, a linked web admin, or a chat admin — so other
+                                    admins know this user was auto-admitted.
+                                </MudText>
+                                <MudGrid>
+                                    <MudItem xs="12">
+                                        <MudTextField @bind-Value="_config.TrustedBypass.AnnouncementMessage"
+                                                      Label="Announcement Message"
+                                                      Lines="3"
+                                                      Disabled="!_config.TrustedBypass.Enabled"
+                                                      HelperText="@($"Variables: {TrustedBypassConfig.UsernameVariable}, {TrustedBypassConfig.ChatNameVariable}")" />
+                                    </MudItem>
+                                    <MudItem xs="12" md="4">
+                                        <MudNumericField T="int"
+                                                         @bind-Value="_config.TrustedBypass.AnnouncementTtlSeconds"
+                                                         Label="Auto-delete after (seconds)"
+                                                         Min="10"
+                                                         Max="300"
+                                                         Disabled="!_config.TrustedBypass.Enabled"
+                                                         HelperText="10-300 seconds" />
+                                    </MudItem>
+                                </MudGrid>
+                            </ChildContent>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                </MudItem>
+
                 <MudItem xs="12">
                     <MudText Typo="Typo.subtitle2" GutterBottom="true">Welcome Mode</MudText>
                     <MudRadioGroup @bind-Value="_config.Mode" Disabled="!_config.Enabled">
