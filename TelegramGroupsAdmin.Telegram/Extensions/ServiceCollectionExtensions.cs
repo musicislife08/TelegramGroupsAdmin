@@ -139,6 +139,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
             services.AddScoped<IWelcomeService, WelcomeService>();
             services.AddSingleton<IWelcomeAdmissionHandler, WelcomeAdmissionHandler>(); // Dual-gate admission (profile scan + welcome)
+            services.AddSingleton<IWelcomeBypassResolver, WelcomeBypassResolver>();
             services.AddSingleton<IBanCallbackService, BanCallbackService>(); // Ban user selection callbacks
             services.AddSingleton<IReportCallbackService, ReportCallbackService>(); // Report moderation action callbacks
 
