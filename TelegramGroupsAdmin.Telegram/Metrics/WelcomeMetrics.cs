@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Metrics;
 
@@ -8,6 +9,18 @@ namespace TelegramGroupsAdmin.Telegram.Metrics;
 /// </summary>
 public sealed class WelcomeMetrics
 {
+    // Outcome labels for bypass-flow results.
+    // Private — callers use the typed RecordBypassOutcome method below.
+    private const string OutcomeBypassChatAdmin = "skipped_bypass_chatadmin";
+    private const string OutcomeBypassWebAdmin = "skipped_bypass_webadmin";
+    private const string OutcomeBypassTrusted = "skipped_bypass_trusted";
+
+    // Error messages for the impossible-to-reach switch arms.
+    private const string BypassOutcomeNoneUnreachable =
+        "Reached outcome mapping with BypassDecision.None";
+    private const string BypassOutcomeUnmappedFormat =
+        "Unmapped bypass decision: {0}";
+
     private readonly Counter<long> _joinsTotal;
     private readonly Counter<long> _securityChecksTotal;
     private readonly Counter<long> _botJoinsTotal;
@@ -49,6 +62,24 @@ public sealed class WelcomeMetrics
     {
         _joinsTotal.Add(1, new TagList { { "result", result } });
         _duration.Record(durationMs, new TagList { { "result", result } });
+    }
+
+    /// <summary>
+    /// Record a welcome bypass with the correct outcome label for the given decision.
+    /// Throws on None or unmapped decisions — the caller is responsible for guarding the None case upstream.
+    /// </summary>
+    public void RecordBypassOutcome(BypassDecision decision, double elapsedMs)
+    {
+        var outcome = decision switch
+        {
+            BypassDecision.ChatAdmin => OutcomeBypassChatAdmin,
+            BypassDecision.WebAdmin => OutcomeBypassWebAdmin,
+            BypassDecision.Trusted => OutcomeBypassTrusted,
+            BypassDecision.None => throw new InvalidOperationException(BypassOutcomeNoneUnreachable),
+            _ => throw new InvalidOperationException(
+                string.Format(BypassOutcomeUnmappedFormat, decision)),
+        };
+        RecordWelcomeOutcome(outcome, elapsedMs);
     }
 
     public void RecordSecurityCheck(string check, string result)
