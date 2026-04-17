@@ -26,6 +26,7 @@ public class SystemActorIdsTests
         Assert.That(Actor.UsernameBlacklist.GetSystemIdentifier(), Is.EqualTo(SystemActorIds.UsernameBlacklist));
         Assert.That(Actor.Bootstrap.GetSystemIdentifier(), Is.EqualTo(SystemActorIds.Bootstrap));
         Assert.That(Actor.ProfileDiffDetection.GetSystemIdentifier(), Is.EqualTo(SystemActorIds.ProfileDiffDetection));
+        Assert.That(Actor.WelcomeBypass.GetSystemIdentifier(), Is.EqualTo(SystemActorIds.WelcomeBypass));
     }
 
     [Test]
