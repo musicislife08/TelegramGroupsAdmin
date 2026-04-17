@@ -17,8 +17,7 @@ public interface ITelegramUserRepository
     /// The returned object reflects current DB state (including IsBanned, IsTrusted, etc.).
     /// </summary>
     Task<UiModels.TelegramUser> GetOrCreateAsync(
-        long telegramUserId, string? username, string? firstName, string? lastName, bool isBot,
-        CancellationToken cancellationToken = default);
+        UserIdentity user, bool isBot, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets multiple Telegram users by their Telegram IDs in a single query.
@@ -105,7 +104,7 @@ public interface ITelegramUserRepository
     /// Increment user's all-time kick count by 1. Returns rows affected (0 = unknown user, 1 = success).
     /// Source of truth for kick escalation logic (not derived from audit log).
     /// </summary>
-    Task<int> IncrementKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default);
+    Task<int> IncrementKickCountAsync(UserIdentity user, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get user's all-time kick count for escalation decisions.

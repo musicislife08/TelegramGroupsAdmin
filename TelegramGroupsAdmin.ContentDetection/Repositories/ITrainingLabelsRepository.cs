@@ -16,7 +16,7 @@ public interface ITrainingLabelsRepository
     /// <param name="messageId">Message ID to label</param>
     /// <param name="chatId">Chat ID the message belongs to</param>
     /// <param name="label">Training label (Spam or Ham)</param>
-    /// <param name="labeledByUserId">User ID who created the label (nullable for system/migrated labels)</param>
+    /// <param name="actor">Actor who created the label (system, telegram user, or web user)</param>
     /// <param name="reason">Optional reason/explanation for the label</param>
     /// <param name="auditLogId">Optional audit log ID linking to moderation action</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -24,7 +24,7 @@ public interface ITrainingLabelsRepository
         int messageId,
         long chatId,
         TrainingLabel label,
-        long? labeledByUserId = null,
+        Actor actor,
         string? reason = null,
         long? auditLogId = null,
         CancellationToken cancellationToken = default);

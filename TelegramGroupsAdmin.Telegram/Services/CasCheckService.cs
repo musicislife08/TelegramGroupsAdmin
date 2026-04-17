@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -29,24 +31,24 @@ public class CasCheckService : ICasCheckService
         _cache = cache;
     }
 
-    public async Task<CasCheckResult> CheckUserAsync(long userId, CasConfig casConfig, CancellationToken cancellationToken = default)
+    public async Task<CasCheckResult> CheckUserAsync(UserIdentity user, CasConfig casConfig, CancellationToken cancellationToken = default)
     {
         // Caller is responsible for checking casConfig.Enabled before calling this method
         // Use GetOrCreateAsync for cache-aside with stampede protection
         // Factory throws on API failure to prevent caching transient errors
-        var cacheKey = $"cas_user_{userId}";
+        var cacheKey = $"cas_user_{user.Id}";
         try
         {
             return await _cache.GetOrCreateAsync(
                 cacheKey,
-                async ct => await CallCasApiAsync(userId, casConfig, ct),
+                async ct => await CallCasApiAsync(user, casConfig, ct),
                 CacheOptions,
                 cancellationToken: cancellationToken);
         }
         catch (InvalidOperationException ex) when (ex.Message.StartsWith("CAS API"))
         {
             // API failure - fail open (don't cache, retry next time)
-            _logger.LogWarning(ex, "CAS check failed for user {UserId}, failing open", userId);
+            _logger.LogWarning(ex, "CAS check failed for {User}, failing open", user.ToLogDebug());
             return new CasCheckResult(false, null);
         }
     }
@@ -58,12 +60,12 @@ public class CasCheckService : ICasCheckService
     /// Thrown on API failure (non-success status, unparseable response, timeout, network error).
     /// Prevents HybridCache from caching transient errors.
     /// </exception>
-    private async Task<CasCheckResult> CallCasApiAsync(long userId, CasConfig casConfig, CancellationToken cancellationToken)
+    private async Task<CasCheckResult> CallCasApiAsync(UserIdentity user, CasConfig casConfig, CancellationToken cancellationToken)
     {
         try
         {
             var httpClient = _httpClientFactory.CreateClient();
-            var apiUrl = $"{casConfig.ApiUrl.TrimEnd('/')}/check?user_id={userId}";
+            var apiUrl = $"{casConfig.ApiUrl.TrimEnd('/')}/check?user_id={user.Id}";
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(casConfig.Timeout);
@@ -74,7 +76,7 @@ public class CasCheckService : ICasCheckService
                 request.Headers.Add("User-Agent", casConfig.UserAgent);
             }
 
-            _logger.LogDebug("CAS check for user {UserId}: Calling {ApiUrl}", userId, apiUrl);
+            _logger.LogDebug("CAS check for {User}: Calling {ApiUrl}", user.ToLogDebug(), apiUrl);
 
             using var response = await httpClient.SendAsync(request, timeoutCts.Token);
 
@@ -102,12 +104,12 @@ public class CasCheckService : ICasCheckService
 
             if (isBanned)
             {
-                _logger.LogInformation("CAS check: User {UserId} is BANNED (reason: {Reason})",
-                    userId, reason ?? "No reason provided");
+                _logger.LogInformation("CAS check: {User} is BANNED (reason: {Reason})",
+                    user.ToLogInfo(), reason ?? "No reason provided");
             }
             else
             {
-                _logger.LogDebug("CAS check: User {UserId} not found in database", userId);
+                _logger.LogDebug("CAS check: {User} not found in database", user.ToLogDebug());
             }
 
             return result;

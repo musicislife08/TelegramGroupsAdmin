@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -275,7 +276,7 @@ public class TelegramUserRepositoryTests
 
         // Act
         var result = await _repository!.GetOrCreateAsync(
-            newUserId, "new_user", "New", "Person", isBot: false);
+            new UserIdentity(newUserId, FirstName: "New", LastName: "Person", Username: "new_user"), isBot: false);
 
         // Assert — verify the returned object has correct defaults
         Assert.Multiple(() =>
@@ -305,7 +306,7 @@ public class TelegramUserRepositoryTests
 
         // Act
         var result = await _repository!.GetOrCreateAsync(
-            existingUserId, "different_username", "Different", "Name", isBot: false);
+            new UserIdentity(existingUserId, FirstName: "Different", LastName: "Name", Username: "different_username"), isBot: false);
 
         // Assert — should return the DB state, not the parameters we passed
         Assert.Multiple(() =>
@@ -326,7 +327,7 @@ public class TelegramUserRepositoryTests
 
         // Act
         var result = await _repository.GetOrCreateAsync(
-            userId, "alice_user", "Alice", "Anderson", isBot: false);
+            new UserIdentity(userId, FirstName: "Alice", LastName: "Anderson", Username: "alice_user"), isBot: false);
 
         // Assert — critical for the WelcomeService early-out path
         Assert.That(result.IsBanned, Is.True,
@@ -344,7 +345,7 @@ public class TelegramUserRepositoryTests
 
         // Act
         var result = await _repository!.GetOrCreateAsync(
-            systemUserId, null, "Telegram", null, isBot: false);
+            new UserIdentity(systemUserId, FirstName: "Telegram", LastName: null, Username: null), isBot: false);
 
         // Assert — system users get automatic trust
         Assert.Multiple(() =>

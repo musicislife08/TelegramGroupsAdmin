@@ -181,7 +181,7 @@ public class BotChatService(
                     if (isNowAdmin)
                     {
                         // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
-                        await userRepo.GetOrCreateAsync(affectedUser.Id, affectedUser.Username, affectedUser.FirstName, affectedUser.LastName, affectedUser.IsBot, ct);
+                        await userRepo.GetOrCreateAsync(UserIdentity.From(affectedUser), affectedUser.IsBot, ct);
 
                         var isCreator = newStatus == ChatMemberStatus.Creator;
                         await chatAdminsRepo.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: ct);
@@ -285,7 +285,7 @@ public class BotChatService(
             if (isNowAdmin)
             {
                 // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
-                await userRepo.GetOrCreateAsync(user.Id, user.Username, user.FirstName, user.LastName, user.IsBot, ct);
+                await userRepo.GetOrCreateAsync(UserIdentity.From(user), user.IsBot, ct);
 
                 var isCreator = newStatus == ChatMemberStatus.Creator;
                 await chatAdminsRepo.UpsertAsync(chat.Id, user.Id, isCreator, ct);
@@ -450,7 +450,7 @@ public class BotChatService(
             foreach (var admin in admins)
             {
                 // Ensure user exists in telegram_users first (FK constraint)
-                await userRepo.GetOrCreateAsync(admin.User.Id, admin.User.Username, admin.User.FirstName, admin.User.LastName, admin.User.IsBot, ct);
+                await userRepo.GetOrCreateAsync(UserIdentity.From(admin.User), admin.User.IsBot, ct);
 
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 var wasNew = !cachedAdminIds.Contains(admin.User.Id);

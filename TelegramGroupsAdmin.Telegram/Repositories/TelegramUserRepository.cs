@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -41,13 +42,12 @@ public class TelegramUserRepository : ITelegramUserRepository
 
     /// <inheritdoc/>
     public async Task<UiModels.TelegramUser> GetOrCreateAsync(
-        long telegramUserId, string? username, string? firstName, string? lastName, bool isBot,
-        CancellationToken cancellationToken = default)
+        UserIdentity user, bool isBot, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await context.TelegramUsers
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, cancellationToken);
+            .FirstOrDefaultAsync(u => u.TelegramUserId == user.Id, cancellationToken);
 
         if (existing != null)
             return existing.ToModel();
@@ -55,12 +55,12 @@ public class TelegramUserRepository : ITelegramUserRepository
         var now = DateTimeOffset.UtcNow;
         var entity = new DataModels.TelegramUserDto
         {
-            TelegramUserId = telegramUserId,
-            Username = username,
-            FirstName = firstName,
-            LastName = lastName,
+            TelegramUserId = user.Id,
+            Username = user.Username,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
             IsBot = isBot,
-            IsTrusted = TelegramConstants.IsSystemUser(telegramUserId),
+            IsTrusted = TelegramConstants.IsSystemUser(user.Id),
             IsBanned = false,
             BotDmEnabled = false,
             FirstSeenAt = now,
@@ -75,12 +75,11 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (entity.IsTrusted)
         {
-            _logger.LogInformation("Created Telegram system account {TelegramUserId} with automatic trust", telegramUserId);
+            _logger.LogInformation("Created Telegram system account {TelegramUserId} with automatic trust", user.Id);
         }
         else
         {
-            _logger.LogInformation("Created Telegram user {FirstName} {LastName} ({TelegramUserId})",
-                firstName, lastName, telegramUserId);
+            _logger.LogInformation("Created Telegram user {User}", user.ToLogInfo());
         }
 
         return entity.ToModel();
@@ -1077,12 +1076,12 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <inheritdoc />
-    public async Task<int> IncrementKickCountAsync(long telegramUserId, CancellationToken cancellationToken = default)
+    public async Task<int> IncrementKickCountAsync(UserIdentity user, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var rowsAffected = await context.TelegramUsers
-            .Where(u => u.TelegramUserId == telegramUserId)
+            .Where(u => u.TelegramUserId == user.Id)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(u => u.KickCount, u => u.KickCount + 1)
                 .SetProperty(u => u.UpdatedAt, DateTimeOffset.UtcNow),
@@ -1090,11 +1089,11 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         if (rowsAffected == 0)
         {
-            _logger.LogWarning("Cannot increment kick count for unknown user {UserId}", telegramUserId);
+            _logger.LogWarning("Cannot increment kick count for unknown user {User}", user.ToLogDebug());
             return 0;
         }
 
-        _logger.LogInformation("Incremented kick count for user {UserId}", telegramUserId);
+        _logger.LogInformation("Incremented kick count for {User}", user.ToLogInfo());
 
         return rowsAffected;
     }

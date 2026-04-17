@@ -139,8 +139,7 @@ public class WelcomeServiceTests
         // User exists and is not banned
         _telegramUserRepository
             .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(NonBannedTelegramUser);
 
         // Bot protection allows bots by default
@@ -265,8 +264,7 @@ public class WelcomeServiceTests
         // Arrange — repository returns a globally banned user
         _telegramUserRepository
             .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         var update = CreateJoinUpdate();
@@ -287,7 +285,7 @@ public class WelcomeServiceTests
 
         // Early-exit: CAS check must NOT be called
         await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<long>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
+            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
             Arg.Any<CancellationToken>());
 
         // Early-exit: profile scan must NOT be called
@@ -334,8 +332,7 @@ public class WelcomeServiceTests
 
         // Assert — the leave path must not attempt to fetch/create a user record
         await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
         // No mute should happen either
         await _moderationService.DidNotReceive().RestrictUserAsync(
@@ -373,8 +370,7 @@ public class WelcomeServiceTests
 
         // Human join path must not execute — user record must not be fetched
         await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -407,8 +403,7 @@ public class WelcomeServiceTests
 
         // User record path must not execute
         await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -438,15 +433,14 @@ public class WelcomeServiceTests
 
         // Assert — admin short-circuits before GetOrCreateAsync
         await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
         // No mute, no CAS check, no profile scan
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
 
         await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<long>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
+            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -465,8 +459,7 @@ public class WelcomeServiceTests
 
         // Assert — creator also short-circuits before GetOrCreateAsync
         await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
@@ -489,8 +482,7 @@ public class WelcomeServiceTests
 
         // Assert — the early-return guard must fire, nothing processed
         await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-            Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
 
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
@@ -502,8 +494,7 @@ public class WelcomeServiceTests
         // Arrange
         _telegramUserRepository
             .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(BannedTelegramUser);
 
         var update = CreateJoinUpdate();

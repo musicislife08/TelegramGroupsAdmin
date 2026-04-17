@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -22,6 +23,10 @@ public class ExamSessionRepositoryTests
 {
     private const long TestChatId = -1001234567890L;
     private const long TestUserId = 123456789L;
+
+    private static ChatIdentity TestChat => new(TestChatId, "Test Chat");
+    private static UserIdentity TestUser => UserIdentity.FromId(TestUserId);
+    private static UserIdentity UserWithOffset(int offset) => UserIdentity.FromId(TestUserId + offset);
 
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
@@ -71,7 +76,7 @@ public class ExamSessionRepositoryTests
 
         // Act
         var sessionId = await _repository!.CreateSessionAsync(
-            TestChatId, TestUserId, expiresAt);
+            TestChat, TestUser, expiresAt);
 
         // Assert
         Assert.That(sessionId, Is.GreaterThan(0));
@@ -85,7 +90,7 @@ public class ExamSessionRepositoryTests
 
         // Act
         var sessionId = await _repository!.CreateSessionAsync(
-            TestChatId, TestUserId, expiresAt);
+            TestChat, TestUser, expiresAt);
         var session = await _repository.GetByIdAsync(sessionId);
 
         // Assert
@@ -109,7 +114,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act
         var session = await _repository.GetSessionAsync(TestChatId, TestUserId);
@@ -138,7 +143,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange - create expired session
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(-1); // Already expired
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act
         var session = await _repository.GetSessionAsync(TestChatId, TestUserId);
@@ -158,7 +163,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act
         await _repository.RecordMcAnswerAsync(sessionId, 0, "A", [1, 0, 2, 3]);
@@ -183,7 +188,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
         var shuffle = new[] { 2, 0, 3, 1 };
 
         // Act
@@ -204,7 +209,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act - Record 3 answers
         await _repository.RecordMcAnswerAsync(sessionId, 0, "A", [0, 1, 2, 3]);
@@ -232,7 +237,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act
         await _repository.RecordOpenEndedAnswerAsync(sessionId, "I love coding!");
@@ -247,7 +252,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
         var unicodeAnswer = "I love coding! 🚀 Привет мир 中文";
 
         // Act
@@ -267,7 +272,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act
         await _repository.DeleteSessionAsync(sessionId);
@@ -282,7 +287,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act
         await _repository.DeleteSessionAsync(TestChatId, TestUserId);
@@ -303,8 +308,8 @@ public class ExamSessionRepositoryTests
         var expiredTime = DateTimeOffset.UtcNow.AddMinutes(-5);
         var activeTime = DateTimeOffset.UtcNow.AddMinutes(5);
 
-        var expiredId = await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiredTime);
-        var activeId = await _repository.CreateSessionAsync(TestChatId, TestUserId + 1, activeTime);
+        var expiredId = await _repository!.CreateSessionAsync(TestChat, TestUser, expiredTime);
+        var activeId = await _repository.CreateSessionAsync(TestChat, UserWithOffset(1), activeTime);
 
         // Act
         var deleted = await _repository.DeleteExpiredSessionsAsync();
@@ -331,7 +336,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act
         var hasSession = await _repository.HasActiveSessionAsync(TestChatId, TestUserId);
@@ -355,7 +360,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange
         var expiredTime = DateTimeOffset.UtcNow.AddMinutes(-1);
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiredTime);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, expiredTime);
 
         // Act
         var hasSession = await _repository.HasActiveSessionAsync(TestChatId, TestUserId);
@@ -373,7 +378,7 @@ public class ExamSessionRepositoryTests
     {
         // Arrange - create session in one chat
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
 
         // Act - find by user only (for DM handling)
         var session = await _repository.GetActiveSessionForUserAsync(TestUserId);
@@ -406,9 +411,9 @@ public class ExamSessionRepositoryTests
     {
         // Arrange - create multiple sessions in same chat
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
-        await _repository.CreateSessionAsync(TestChatId, TestUserId + 1, expiresAt);
-        await _repository.CreateSessionAsync(TestChatId, TestUserId + 2, expiresAt);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, expiresAt);
+        await _repository.CreateSessionAsync(TestChat, UserWithOffset(1), expiresAt);
+        await _repository.CreateSessionAsync(TestChat, UserWithOffset(2), expiresAt);
 
         // Act
         var sessions = await _repository.GetActiveSessionsAsync(TestChatId);
@@ -424,8 +429,8 @@ public class ExamSessionRepositoryTests
         var activeTime = DateTimeOffset.UtcNow.AddMinutes(5);
         var expiredTime = DateTimeOffset.UtcNow.AddMinutes(-1);
 
-        await _repository!.CreateSessionAsync(TestChatId, TestUserId, activeTime);
-        await _repository.CreateSessionAsync(TestChatId, TestUserId + 1, expiredTime);
+        await _repository!.CreateSessionAsync(TestChat, TestUser, activeTime);
+        await _repository.CreateSessionAsync(TestChat, UserWithOffset(1), expiredTime);
 
         // Act
         var sessions = await _repository.GetActiveSessionsAsync(TestChatId);

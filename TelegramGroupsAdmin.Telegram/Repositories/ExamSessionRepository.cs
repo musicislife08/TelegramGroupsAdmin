@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Extensions;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 
@@ -30,8 +32,8 @@ public class ExamSessionRepository : IExamSessionRepository
     }
 
     public async Task<long> CreateSessionAsync(
-        long chatId,
-        long userId,
+        ChatIdentity chat,
+        UserIdentity user,
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken = default)
     {
@@ -39,8 +41,8 @@ public class ExamSessionRepository : IExamSessionRepository
 
         var entity = new ExamSessionDto
         {
-            ChatId = chatId,
-            UserId = userId,
+            ChatId = chat.Id,
+            UserId = user.Id,
             CurrentQuestionIndex = 0,
             StartedAt = DateTimeOffset.UtcNow,
             ExpiresAt = expiresAt
@@ -50,8 +52,8 @@ public class ExamSessionRepository : IExamSessionRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Created exam session #{SessionId} for user {UserId} in chat {ChatId} (expires: {ExpiresAt})",
-            entity.Id, userId, chatId, expiresAt);
+            "Created exam session {SessionId} for {User} in {Chat} (expires: {ExpiresAt})",
+            entity.Id, user.ToLogInfo(), chat.ToLogInfo(), expiresAt);
 
         return entity.Id;
     }

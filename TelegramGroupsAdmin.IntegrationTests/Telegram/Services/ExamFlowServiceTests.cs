@@ -272,7 +272,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiredTime = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var sessionId = await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiredTime);
+        var sessionId = await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiredTime);
 
         var user = TelegramTestFactory.CreateUser(id: TestUserId, firstName: "Test");
         var message = TelegramTestFactory.CreateMessage(
@@ -301,7 +301,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        var sessionId = await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        var sessionId = await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Different user tries to answer
         var wrongUser = TelegramTestFactory.CreateUser(id: TestUserId + 1, firstName: "Wrong");
@@ -339,7 +339,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Act
         var hasSession = await examFlowService.HasActiveSessionAsync(
@@ -379,7 +379,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Act
         var context = await examFlowService.GetActiveExamContextAsync(UserIdentity.FromId(TestUserId));
@@ -416,7 +416,7 @@ public class ExamFlowServiceTests
         var sessionRepo = scope.ServiceProvider.GetRequiredService<IExamSessionRepository>();
 
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        await sessionRepo.CreateSessionAsync(TestChatId, TestUserId, expiresAt);
+        await sessionRepo.CreateSessionAsync(new ChatIdentity(TestChatId, "Test Chat"), UserIdentity.FromId(TestUserId), expiresAt);
 
         // Act
         await examFlowService.CancelSessionAsync(

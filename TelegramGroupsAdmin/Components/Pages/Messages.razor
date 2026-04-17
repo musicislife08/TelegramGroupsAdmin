@@ -991,7 +991,7 @@
                 message.MessageId,
                 message.Chat.Id,
                 label: TrainingLabel.Ham,
-                labeledByUserId: executor.GetTelegramUserId(),
+                actor: executor,
                 reason: reason,
                 auditLogId: null);
 

@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
 /// <summary>
@@ -9,14 +11,14 @@ public interface IExamSessionRepository
     /// <summary>
     /// Create a new exam session for a user joining a chat.
     /// </summary>
-    /// <param name="chatId">The chat where user joined</param>
-    /// <param name="userId">The Telegram user ID</param>
+    /// <param name="chat">The chat where user joined</param>
+    /// <param name="user">The Telegram user</param>
     /// <param name="expiresAt">When the session expires (matches welcome timeout)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The created session ID</returns>
     Task<long> CreateSessionAsync(
-        long chatId,
-        long userId,
+        ChatIdentity chat,
+        UserIdentity user,
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken = default);
 
