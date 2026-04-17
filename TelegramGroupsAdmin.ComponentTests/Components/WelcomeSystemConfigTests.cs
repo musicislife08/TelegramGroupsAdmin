@@ -477,4 +477,81 @@ public class WelcomeSystemConfigTests : WelcomeSystemConfigTestContext
     }
 
     #endregion
+
+    #region Trusted User Bypass Tests
+
+    [Test]
+    public void TrustedBypassPanel_Renders_WhenConfigLoaded()
+    {
+        // Arrange
+        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+            .Returns(new WelcomeConfig());
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert
+        cut.WaitForAssertion(() =>
+        {
+            Assert.That(cut.Markup, Does.Contain("Trusted User Bypass"));
+        });
+    }
+
+    [Test]
+    public void TrustedBypassPanel_FieldsDisabled_WhenToggleOff()
+    {
+        // Arrange - TrustedBypass.Enabled defaults to false
+        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                TrustedBypass = new TrustedBypassConfig { Enabled = false }
+            });
+
+        // Act
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Assert - MudBlazor renders disabled fields with the disabled attribute
+        cut.WaitForAssertion(() =>
+        {
+            var disabledInputs = cut.FindAll("input[disabled], textarea[disabled]");
+            Assert.That(disabledInputs.Count, Is.GreaterThan(0));
+        });
+    }
+
+    [Test]
+    public async Task Save_PersistsTrustedBypass_ThroughConfigService()
+    {
+        // Arrange - MainWelcomeMessage must be non-empty so LoadConfig takes the "load as-is"
+        // path and does not reset TrustedBypass to defaults.
+        ConfigService.GetAsync<WelcomeConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                MainWelcomeMessage = "Welcome {username}!",
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessage = "custom message",
+                    AnnouncementTtlSeconds = 45,
+                }
+            });
+
+        var cut = Render<WelcomeSystemConfig>();
+
+        // Capture the config passed to SaveAsync so we can assert its values
+        WelcomeConfig? captured = null;
+        ConfigService.SaveAsync<WelcomeConfig>(
+            Arg.Any<ConfigType>(), Arg.Any<ChatIdentity>(), Arg.Do<WelcomeConfig>(c => captured = c))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await cut.InvokeAsync(() => cut.Instance.SaveConfiguration());
+
+        // Assert
+        Assert.That(captured, Is.Not.Null, "SaveAsync was not called");
+        Assert.That(captured!.TrustedBypass.Enabled, Is.True);
+        Assert.That(captured.TrustedBypass.AnnouncementMessage, Is.EqualTo("custom message"));
+        Assert.That(captured.TrustedBypass.AnnouncementTtlSeconds, Is.EqualTo(45));
+    }
+
+    #endregion
 }
