@@ -33,17 +33,19 @@ Linked web administrators (Owner, GlobalAdmin) face the same friction — there'
 
 ## Requirements
 
-**Bypass rules, in priority order (first match wins):**
+**Bypass rules, in priority order (first match wins). All three share identical effective behavior; only the audit reason and metric label differ.**
 
-1. **Telegram chat admin / creator** — already handled today at `WelcomeService.cs:138`. Unchanged.
+1. **Telegram chat admin / creator** — `ChatMember.Status` is `Administrator` or `Creator`. **Always on**, not configurable.
 2. **Linked web admin** — joining user's Telegram ID resolves via `ITelegramUserMappingRepository.GetPermissionLevelByTelegramIdAsync` to permission level `GlobalAdmin (1)` or `Owner (2)`. **Always on**, not configurable.
 3. **Trusted user** — `telegram_users.is_trusted = true` AND `WelcomeConfig.TrustedBypass.Enabled = true` for the chat. **Toggle-gated**, default off.
 
-When rule 2 or 3 fires (rule 1 keeps its existing silent skip):
+When any rule fires, the behavior is identical:
 - User is NOT restricted, NO security checks run (CAS, username blacklist, impersonation, profile scan), NO welcome consent flow
 - User is marked active via `ITelegramUserRepository.ActivateAsync`
 - An audit log row is written to `user_actions` with `action_type = WelcomeBypass` and a reason string describing which rule fired
 - An announcement message is posted in the chat and scheduled for auto-deletion after the configured TTL
+
+**Behavioral change from today:** the existing Step 1 silent-skip for Telegram chat admins (`WelcomeService.cs:138`) is replaced by the unified bypass path. Chat admins will now create audit rows and trigger announcements, matching the other bypass paths. The existing `skipped_admin` metric label is retired in favor of `skipped_bypass_chatadmin`.
 
 ## Design
 
@@ -90,8 +92,9 @@ public interface IWelcomeBypassResolver
 public enum BypassDecision
 {
     None = 0,
-    WebAdmin = 1,
-    Trusted = 2,
+    ChatAdmin = 1,   // Telegram chat admin or creator
+    WebAdmin = 2,    // Linked GlobalAdmin/Owner
+    Trusted = 3,     // IsTrusted + toggle enabled
 }
 ```
 
@@ -108,7 +111,18 @@ public sealed class WelcomeBypassResolver(
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
 
-        // Rule 2: Web admin (always on)
+        // Rule 1: Telegram chat admin / creator (always on)
+        var userService = sp.GetRequiredService<IBotUserService>();
+        var chatMember = await userService.GetChatMemberAsync(chat.Id, user.Id, cancellationToken);
+        if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
+        {
+            logger.LogInformation(
+                "Welcome bypass: {User} in {Chat} - Telegram chat admin/creator",
+                user.ToLogInfo(), chat.ToLogInfo());
+            return BypassDecision.ChatAdmin;
+        }
+
+        // Rule 2: Linked web admin (always on)
         var mappingRepo = sp.GetRequiredService<ITelegramUserMappingRepository>();
         var permissionLevel = await mappingRepo.GetPermissionLevelByTelegramIdAsync(user.Id, cancellationToken);
         if (permissionLevel is (int)PermissionLevel.GlobalAdmin or (int)PermissionLevel.Owner)
@@ -149,9 +163,12 @@ public sealed class WelcomeBypassResolver(
 A new "Step 2.5" is inserted into `WelcomeService.HandleChatMemberUpdateAsync`, after the pre-banned early-out (Step 2) and before permission restriction (Step 3):
 
 ```csharp
+// REMOVED: the existing Step 1 "if admin/creator, skip" block at the original
+// line 138 is deleted. That responsibility moves into the resolver below.
+
 // Step 2: Pre-banned early-out (existing, unchanged)
 
-// Step 2.5: NEW - Trusted / web-admin bypass
+// Step 2.5: NEW - unified privileged/trusted bypass (chat admin, web admin, or trusted user)
 var bypassDecision = await bypassResolver.ResolveAsync(userIdentity, chatIdentity, cancellationToken);
 if (bypassDecision != BypassDecision.None)
 {
@@ -160,9 +177,16 @@ if (bypassDecision != BypassDecision.None)
     await PostBypassAnnouncementIfConfiguredAsync(
         chatMemberUpdate.Chat, user, config, cancellationToken: cancellationToken);
 
-    var outcome = bypassDecision == BypassDecision.WebAdmin
-        ? "skipped_bypass_webadmin"
-        : "skipped_bypass_trusted";
+    var outcome = bypassDecision switch
+    {
+        BypassDecision.ChatAdmin => "skipped_bypass_chatadmin",
+        BypassDecision.WebAdmin  => "skipped_bypass_webadmin",
+        BypassDecision.Trusted   => "skipped_bypass_trusted",
+        BypassDecision.None      => throw new InvalidOperationException(
+                                      "Reached outcome mapping with BypassDecision.None"),
+        _                        => throw new InvalidOperationException(
+                                      $"Unmapped bypass decision: {bypassDecision}"),
+    };
     welcomeMetrics.RecordWelcomeOutcome(outcome,
         Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
     return;
@@ -213,7 +237,7 @@ Reuses the existing "send a message, schedule its deletion" pattern already used
 
 ```csharp
 /// <summary>
-/// User auto-admitted past the welcome flow due to trusted status or linked web admin identity.
+/// User auto-admitted past the welcome flow due to privileged status (Telegram chat admin, linked web admin) or trusted status.
 /// </summary>
 WelcomeBypass = 11
 ```
@@ -231,7 +255,7 @@ Implementation writes a `UserActionRecord` with:
 - `ActionType = UserActionType.WelcomeBypass`
 - `IssuedBy = Actor.WelcomeBypass`
 - `ChatId = chat.Id`
-- `Reason = decision switch { BypassDecision.WebAdmin => "Linked web admin (GlobalAdmin/Owner)", BypassDecision.Trusted => "Trusted user, bypass enabled", _ => "Bypass" }`
+- `Reason = decision switch { BypassDecision.ChatAdmin => "Telegram chat admin/creator", BypassDecision.WebAdmin => "Linked web admin (GlobalAdmin/Owner)", BypassDecision.Trusted => "Trusted user, bypass enabled", _ => "Bypass" }`
 
 ### 5. `SystemActorIds` constants refactor
 
@@ -348,7 +372,7 @@ New expansion panel titled "Trusted User Bypass", placed below the "Security on 
 **TelegramGroupsAdmin.UnitTests:**
 - `TrustedBypassConfigTests` — defaults, JSON round-trip
 - `WelcomeConfigMappingsTests` — round-trip the nested object, null-safe handling
-- `WelcomeBypassResolverTests` — parameterized matrix of 7 cases (Owner linked, GlobalAdmin linked, chat-only Admin, unlinked+trusted+toggle on, unlinked+trusted+toggle off, unlinked+untrusted, null config)
+- `WelcomeBypassResolverTests` — parameterized matrix of 9 cases: Telegram chat admin → `ChatAdmin`; Telegram chat creator → `ChatAdmin`; Owner linked (not chat admin) → `WebAdmin`; GlobalAdmin linked (not chat admin) → `WebAdmin`; chat-level Admin linked (level 0, not chat admin) → falls through, evaluates trust; unlinked+trusted+toggle on → `Trusted`; unlinked+trusted+toggle off → `None`; unlinked+untrusted → `None`; null config (chat has no welcome config yet) → `None`
 - `WelcomeServiceTests` — new bypass test group covering WebAdmin/Trusted/None branches, pre-banned ordering invariant, empty announcement, zero TTL
 - `AuditHandlerTests` — `LogWelcomeBypassAsync` writes correct row
 - `SystemActorIdsTests` — every `Actor` static field derives from `SystemActorIds.*`
@@ -368,11 +392,14 @@ New expansion panel titled "Trusted User Bypass", placed below the "Security on 
 
 ### 8. Observability
 
-**Prometheus (via `WelcomeMetrics.RecordWelcomeOutcome`):** Two new label values on the existing `welcome_outcome` counter:
-- `skipped_bypass_webadmin`
-- `skipped_bypass_trusted`
+**Prometheus (via `WelcomeMetrics.RecordWelcomeOutcome`):** Three new label values on the existing `welcome_outcome` counter, replacing the legacy `skipped_admin` label:
+- `skipped_bypass_chatadmin` (replaces `skipped_admin` — Telegram chat admins/creators)
+- `skipped_bypass_webadmin` (linked GlobalAdmin/Owner)
+- `skipped_bypass_trusted` (IsTrusted + toggle on)
 
 No new instruments, no new meters.
+
+**Dashboard migration:** any Grafana panel filtering on `welcome_outcome{outcome="skipped_admin"}` must be updated to `outcome="skipped_bypass_chatadmin"`. Other existing labels (`accepted`, `denied`, `timeout`, `banned`, `pre_banned`, etc.) are unchanged.
 
 **Logs:** The resolver logs at INFO when a bypass fires (with structured user/chat/decision fields). `WelcomeService` relies on the existing outcome log + metric pattern. `AuditHandler.LogWelcomeBypassAsync` logs at DEBUG.
 
@@ -388,8 +415,8 @@ No new instruments, no new meters.
 4. Create `TrustedBypassConfig`, wire onto `WelcomeConfig`, update `WelcomeConfigMappings`
 5. Create `IWelcomeBypassResolver` + `WelcomeBypassResolver` + `BypassDecision` enum; DI registration
 6. Add `IAuditHandler.LogWelcomeBypassAsync` + implementation
-7. Modify `WelcomeService.HandleChatMemberUpdateAsync` — inject resolver/job-scheduler/audit, add Step 2.5, add `PostBypassAnnouncementIfConfiguredAsync` helper
-8. Add new metric label usage in `WelcomeMetrics` (no class changes — labels are strings)
+7. Modify `WelcomeService.HandleChatMemberUpdateAsync` — inject resolver/job-scheduler/audit, **remove the existing Step 1 chat-admin/creator skip block** (now handled by the resolver), add Step 2.5 for the unified bypass, add `PostBypassAnnouncementIfConfiguredAsync` helper
+8. Update `WelcomeMetrics` outcome-label usage — replace the retired `skipped_admin` label with `skipped_bypass_chatadmin`, add `skipped_bypass_webadmin` and `skipped_bypass_trusted` (labels are strings — no class changes)
 9. Update `WelcomeSystemConfig.razor` with new expansion panel
 10. Update `TestWelcomeConfigBuilder`
 11. Add SQL fixture for linked-admin test seed
