@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 
@@ -106,10 +107,10 @@ public class AdminMentionHandler
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
-                "Notified {AdminCount} admins in chat {ChatId} for @admin mention by user {UserId}",
+                "Notified {AdminCount} admins in {Chat} for @admin mention by {User}",
                 mentionsList.Count,
-                message.Chat.Id,
-                message.From?.Id);
+                message.Chat.ToLogInfo(),
+                message.From.ToLogInfo());
         }
         catch (Exception ex)
         {
