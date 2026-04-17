@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -16,6 +17,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
@@ -44,6 +46,8 @@ public class WelcomeService(
     IProfileScanService profileScanService,
     ITelegramSessionManager sessionManager,
     IWelcomeAdmissionHandler admissionHandler,
+    IWelcomeBypassResolver bypassResolver,
+    IAuditHandler auditHandler,
     WelcomeMetrics welcomeMetrics,
     ChatMetrics chatMetrics,
     ILogger<WelcomeService> logger) : IWelcomeService
@@ -133,23 +137,12 @@ public class WelcomeService(
 
         try
         {
-            // Step 1: Check if user is an admin/owner - skip all checks for admins
-            var chatMember = await userService.GetChatMemberAsync(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
-            if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
-            {
-                logger.LogInformation(
-                    "Skipping welcome for admin/owner: {User} in {Chat}",
-                    user.ToLogInfo(),
-                    chatMemberUpdate.Chat.ToLogInfo());
-                welcomeMetrics.RecordWelcomeOutcome("skipped_admin", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
-                return;
-            }
-
             // Step 2: Ensure user record exists (FK constraint for audit logging)
             var existingUser = await telegramUserRepository.GetOrCreateAsync(
                 UserIdentity.From(user), user.IsBot, cancellationToken);
 
-            // Early-out: If user is already globally banned, apply single-chat ban and skip welcome
+            // Early-out: If user is already globally banned, apply single-chat ban and skip welcome.
+            // Pre-banned status wins over any bypass — this MUST run before Step 2.5.
             if (existingUser.IsBanned)
             {
                 logger.LogInformation(
@@ -166,6 +159,29 @@ public class WelcomeService(
                     },
                     cancellationToken);
                 welcomeMetrics.RecordWelcomeOutcome("pre_banned", Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                return;
+            }
+
+            // Step 2.5: Unified privileged/trusted bypass (chat admin, web admin, or trusted user).
+            // Short-circuits BEFORE mute (Step 3) — bypassed users are never muted.
+            var bypassDecision = await bypassResolver.ResolveAsync(
+                UserIdentity.From(user),
+                ChatIdentity.From(chatMemberUpdate.Chat),
+                cancellationToken);
+            if (bypassDecision != BypassDecision.None)
+            {
+                await telegramUserRepository.ActivateAsync(user.Id, cancellationToken);
+                await auditHandler.LogWelcomeBypassAsync(
+                    UserIdentity.From(user),
+                    ChatIdentity.From(chatMemberUpdate.Chat),
+                    bypassDecision,
+                    cancellationToken);
+                await PostBypassAnnouncementIfConfiguredAsync(
+                    chatMemberUpdate.Chat, user, config, cancellationToken);
+
+                welcomeMetrics.RecordBypassOutcome(
+                    bypassDecision,
+                    Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
                 return;
             }
 
@@ -600,6 +616,49 @@ public class WelcomeService(
         {
             logger.LogDebug(ex, "Failed to edit message {MessageId} (non-fatal)", messageId);
         }
+    }
+
+    /// <summary>
+    /// Post the trusted-bypass announcement message in chat and schedule its auto-deletion.
+    /// No-op when the announcement message is blank or the TTL is not positive — those are
+    /// the configured "disable announcement" signals.
+    /// </summary>
+    private async Task PostBypassAnnouncementIfConfiguredAsync(
+        Chat chat,
+        User user,
+        WelcomeConfig config,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(config.TrustedBypass.AnnouncementMessage))
+        {
+            return;
+        }
+        if (config.TrustedBypass.AnnouncementTtlSeconds <= 0)
+        {
+            return;
+        }
+
+        var text = config.TrustedBypass.AnnouncementMessage
+            .Replace(TrustedBypassConfig.UsernameVariable, TelegramDisplayName.FormatMention(user))
+            .Replace(TrustedBypassConfig.ChatNameVariable, chat.Title ?? string.Empty);
+
+        var announcement = await messageService.SendAndSaveMessageAsync(
+            chatId: chat.Id,
+            text: text,
+            parseMode: ParseMode.Html,
+            cancellationToken: cancellationToken);
+
+        var deletePayload = new DeleteMessagePayload(
+            chat.Id,
+            announcement.MessageId,
+            "welcome_bypass_announcement");
+
+        await jobScheduler.ScheduleJobAsync(
+            BackgroundJobNames.DeleteMessage,
+            deletePayload,
+            delaySeconds: config.TrustedBypass.AnnouncementTtlSeconds,
+            deduplicationKey: None,
+            cancellationToken);
     }
 
     public async Task HandleCallbackQueryAsync(

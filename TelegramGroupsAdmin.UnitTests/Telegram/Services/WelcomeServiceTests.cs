@@ -6,6 +6,7 @@ using global::Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models.Welcome;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -13,6 +14,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Bot;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.UserApi;
 using TelegramGroupsAdmin.Telegram.Metrics;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
@@ -54,6 +56,8 @@ public class WelcomeServiceTests
     private ITelegramSessionManager _sessionManager = null!;
     private IWelcomeAdmissionHandler _admissionHandler = null!;
     private IUsernameBlacklistService _usernameBlacklistService = null!;
+    private IWelcomeBypassResolver _bypassResolver = null!;
+    private IAuditHandler _auditHandler = null!;
 
     // TelegramPhotoService is concrete — built with mocked sub-dependencies.
     private TelegramPhotoService _photoService = null!;
@@ -110,6 +114,8 @@ public class WelcomeServiceTests
         _sessionManager = Substitute.For<ITelegramSessionManager>();
         _admissionHandler = Substitute.For<IWelcomeAdmissionHandler>();
         _usernameBlacklistService = Substitute.For<IUsernameBlacklistService>();
+        _bypassResolver = Substitute.For<IWelcomeBypassResolver>();
+        _auditHandler = Substitute.For<IAuditHandler>();
 
         // Build TelegramPhotoService with mocked sub-dependencies so it never touches the real
         // file system. GetUserPhotoWithMetadataAsync calls IBotMediaService, which is mocked to
@@ -191,6 +197,8 @@ public class WelcomeServiceTests
             _profileScanService,
             _sessionManager,
             _admissionHandler,
+            _bypassResolver,
+            _auditHandler,
             new WelcomeMetrics(),
             new ChatMetrics(Substitute.For<IChatCache>()),
             NullLogger<WelcomeService>.Instance);
@@ -408,59 +416,47 @@ public class WelcomeServiceTests
 
     #endregion
 
-    #region Test 5: Admin joining — welcome flow is skipped entirely
+    #region Test 5: Admin/Owner joining — bypass path skips mute and security checks
 
     [Test]
-    public async Task HandleChatMemberUpdate_AdminJoining_SkipsWelcome()
+    public async Task HandleChatMemberUpdate_AdminJoining_BypassesWelcomeViaResolver()
     {
-        // Arrange — GetChatMemberAsync returns Administrator status
-        var adminUser = new User
-        {
-            Id = TestUserId,
-            FirstName = "Alice",
-            Username = "alice_tg",
-            IsBot = false
-        };
-
-        _userService
-            .GetChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatMemberAdministrator { User = adminUser });
-
-        var update = CreateJoinUpdate(user: adminUser);
-
-        // Act
-        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
-
-        // Assert — admin short-circuits before GetOrCreateAsync
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
-
-        // No mute, no CAS check, no profile scan
-        await _moderationService.DidNotReceive().RestrictUserAsync(
-            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
-
-        await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Test]
-    public async Task HandleChatMemberUpdate_OwnerJoining_SkipsWelcome()
-    {
-        // Arrange — GetChatMemberAsync returns Creator (owner) status
-        _userService
-            .GetChatMemberAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
-            .Returns(new ChatMemberOwner { User = TestUser });
+        // Arrange — resolver flags the user as a Telegram chat admin/creator
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(BypassDecision.ChatAdmin);
 
         var update = CreateJoinUpdate();
 
         // Act
         await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
 
-        // Assert — creator also short-circuits before GetOrCreateAsync
-        await _telegramUserRepository.DidNotReceive().GetOrCreateAsync(
-            Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        // Assert — bypass short-circuits before mute, CAS, and profile scan
+        await _moderationService.DidNotReceive().RestrictUserAsync(
+            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
 
+        await _casCheckService.DidNotReceive().CheckUserAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
+            Arg.Any<CancellationToken>());
+
+        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_OwnerJoining_BypassesWelcomeViaResolver()
+    {
+        // Arrange — resolver treats owner as ChatAdmin decision (Rule 1 covers both)
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(BypassDecision.ChatAdmin);
+
+        var update = CreateJoinUpdate();
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Assert — owner also short-circuits before mute
         await _moderationService.DidNotReceive().RestrictUserAsync(
             Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
     }
@@ -516,6 +512,192 @@ public class WelcomeServiceTests
             Assert.That(capturedIntent!.User.Id, Is.EqualTo(TestUserId));
             Assert.That(capturedIntent.Chat.Id, Is.EqualTo(TestChatId));
         }
+    }
+
+    #endregion
+
+    #region Bypass path (Step 2.5)
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassChatAdmin_SkipsSecurityAndConsentFlow()
+    {
+        // Arrange — resolver decides ChatAdmin bypass
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(BypassDecision.ChatAdmin);
+
+        var update = CreateJoinUpdate();
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(update, CancellationToken.None);
+
+        // Assert — mute and security checks are skipped
+        await _moderationService.DidNotReceive().RestrictUserAsync(
+            Arg.Any<RestrictIntent>(), Arg.Any<CancellationToken>());
+
+        await _casCheckService.DidNotReceive().CheckUserAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<TelegramGroupsAdmin.Configuration.Models.Welcome.CasConfig>(),
+            Arg.Any<CancellationToken>());
+
+        await _profileScanService.DidNotReceive().ScanUserProfileAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+
+        // User activated and bypass audited
+        await _telegramUserRepository.Received(1).ActivateAsync(TestUserId, Arg.Any<CancellationToken>());
+        await _auditHandler.Received(1).LogWelcomeBypassAsync(
+            Arg.Any<UserIdentity>(),
+            Arg.Any<ChatIdentity>(),
+            BypassDecision.ChatAdmin,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_PostsAnnouncementAndSchedulesDelete()
+    {
+        // Arrange — Trusted bypass, announcement configured with text + positive TTL
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(BypassDecision.Trusted);
+
+        var config = new WelcomeConfig
+        {
+            Enabled = true,
+            TrustedBypass = new TrustedBypassConfig
+            {
+                Enabled = true,
+                AnnouncementMessage = "hello {username}",
+                AnnouncementTtlSeconds = 30
+            }
+        };
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(config);
+
+        _messageService
+            .SendAndSaveMessageAsync(
+                Arg.Any<long>(), Arg.Any<string>(),
+                Arg.Any<ParseMode?>(),
+                Arg.Any<ReplyParameters?>(),
+                Arg.Any<InlineKeyboardMarkup?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Message { Id = 5001, Chat = new Chat { Id = TestChatId } });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — announcement sent as HTML containing the configured body
+        await _messageService.Received(1).SendAndSaveMessageAsync(
+            chatId: TestChatId,
+            text: Arg.Is<string>(s => s.Contains("hello")),
+            parseMode: ParseMode.Html,
+            replyParameters: Arg.Any<ReplyParameters?>(),
+            replyMarkup: Arg.Any<InlineKeyboardMarkup?>(),
+            cancellationToken: Arg.Any<CancellationToken>());
+
+        // And its auto-delete is scheduled
+        await _jobScheduler.Received(1).ScheduleJobAsync(
+            BackgroundJobNames.DeleteMessage,
+            Arg.Is<DeleteMessagePayload>(p => p.ChatId == TestChatId && p.MessageId == 5001),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_EmptyMessage_DoesNotPostAnnouncement()
+    {
+        // Arrange — Trusted bypass, announcement message is whitespace-only
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(BypassDecision.Trusted);
+
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessage = "  ",
+                    AnnouncementTtlSeconds = 30
+                }
+            });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — no announcement posted, no delete scheduled
+        await _messageService.DidNotReceive().SendAndSaveMessageAsync(
+            Arg.Any<long>(), Arg.Any<string>(),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+
+        await _jobScheduler.DidNotReceive().ScheduleJobAsync(
+            Arg.Any<string>(),
+            Arg.Any<DeleteMessagePayload>(),
+            Arg.Any<int>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_BypassTrusted_ZeroTtl_DoesNotPostAnnouncement()
+    {
+        // Arrange — Trusted bypass, TTL is zero (disables announcement)
+        _bypassResolver
+            .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
+            .Returns(BypassDecision.Trusted);
+
+        _configService
+            .GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, Arg.Any<long>())
+            .Returns(new WelcomeConfig
+            {
+                Enabled = true,
+                TrustedBypass = new TrustedBypassConfig
+                {
+                    Enabled = true,
+                    AnnouncementMessage = "x",
+                    AnnouncementTtlSeconds = 0
+                }
+            });
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — no announcement posted
+        await _messageService.DidNotReceive().SendAndSaveMessageAsync(
+            Arg.Any<long>(), Arg.Any<string>(),
+            Arg.Any<ParseMode?>(),
+            Arg.Any<ReplyParameters?>(),
+            Arg.Any<InlineKeyboardMarkup?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task HandleChatMemberUpdate_PreBanned_BeatsBypass_BansAndReturns()
+    {
+        // Arrange — pre-banned user. Resolver should not be consulted at all.
+        _telegramUserRepository
+            .GetOrCreateAsync(Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(BannedTelegramUser);
+
+        // Act
+        await _sut.HandleChatMemberUpdateAsync(CreateJoinUpdate(), CancellationToken.None);
+
+        // Assert — resolver never called; ban is synced
+        await _bypassResolver.DidNotReceive().ResolveAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>());
+
+        await _moderationService.Received(1).SyncBanToChatAsync(
+            Arg.Any<SyncBanIntent>(), Arg.Any<CancellationToken>());
+
+        // And bypass is not audited
+        await _auditHandler.DidNotReceive().LogWelcomeBypassAsync(
+            Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<BypassDecision>(),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion
