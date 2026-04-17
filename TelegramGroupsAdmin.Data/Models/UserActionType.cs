@@ -26,5 +26,10 @@ public enum UserActionType
     /// <summary>Restore user permissions to chat defaults (unmute)</summary>
     RestorePermissions = 9,
     /// <summary>Profile change detected (username, first name, or last name changed)</summary>
-    ProfileChange = 10
+    ProfileChange = 10,
+    /// <summary>
+    /// User auto-admitted past the welcome flow due to privileged status
+    /// (Telegram chat admin, linked web admin) or trusted status.
+    /// </summary>
+    WelcomeBypass = 11
 }
