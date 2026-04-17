@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
@@ -13,6 +14,12 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 /// </summary>
 public class AuditHandler : IAuditHandler
 {
+    // Bypass reason strings - only emitted from this class.
+    private const string BypassReasonChatAdmin = "Telegram chat admin/creator";
+    private const string BypassReasonWebAdmin  = "Linked web admin (GlobalAdmin/Owner)";
+    private const string BypassReasonTrusted   = "Trusted user, bypass enabled";
+    private const string BypassReasonFallback  = "Bypass";
+
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly ILogger<AuditHandler> _logger;
 
@@ -115,6 +122,29 @@ public class AuditHandler : IAuditHandler
         _logger.LogDebug(
             "Recorded {ActionType} action for {User} in {Chat} by {Executor}",
             UserActionType.Kick, user.ToLogDebug(), chat.ToLogDebug(), executor.GetDisplayText());
+    }
+
+    /// <inheritdoc />
+    public async Task LogWelcomeBypassAsync(
+        UserIdentity user,
+        ChatIdentity chat,
+        BypassDecision decision,
+        CancellationToken cancellationToken = default)
+    {
+        var reason = decision switch
+        {
+            BypassDecision.ChatAdmin => BypassReasonChatAdmin,
+            BypassDecision.WebAdmin  => BypassReasonWebAdmin,
+            BypassDecision.Trusted   => BypassReasonTrusted,
+            _                        => BypassReasonFallback,
+        };
+
+        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reason, chatId: chat.Id);
+        await _userActionsRepository.InsertAsync(record, cancellationToken);
+
+        _logger.LogDebug(
+            "Recorded {ActionType} action for {User} in {Chat} (decision: {Decision})",
+            UserActionType.WelcomeBypass, user.ToLogDebug(), chat.ToLogDebug(), decision);
     }
 
     private static UserActionRecord CreateRecord(
