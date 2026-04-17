@@ -349,21 +349,6 @@ public class UserRepository : IUserRepository
         return entity?.ToModel();
     }
 
-    public async Task UseInviteAsync(string token, string userId, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Invites.FirstOrDefaultAsync(i => i.Token == token, cancellationToken);
-        if (entity == null) return;
-
-        entity.UsedBy = userId;
-        entity.Status = DataModels.InviteStatus.Used;
-        entity.ModifiedAt = DateTimeOffset.UtcNow;
-
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation("Invite {Token} used by user {UserId}", token, userId);
-    }
-
     public async Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
