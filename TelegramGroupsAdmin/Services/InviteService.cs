@@ -23,34 +23,6 @@ public class InviteService : IInviteService
         _logger = logger;
     }
 
-    public async Task<InviteResult> CreateInviteAsync(string createdBy, int expirationDays = 7, CancellationToken cancellationToken = default)
-    {
-        var token = Guid.NewGuid().ToString();
-        var createdAt = DateTimeOffset.UtcNow;
-        var expiresAt = createdAt.AddDays(expirationDays);
-
-        var invite = new InviteRecord(
-            Token: token,
-            CreatedBy: createdBy,
-            CreatedAt: createdAt,
-            ExpiresAt: expiresAt,
-            UsedBy: null,
-            PermissionLevel: 0, // Default to Admin
-            Status: InviteStatus.Pending,
-            ModifiedAt: null
-        );
-
-        await _inviteRepository.CreateAsync(invite, cancellationToken);
-
-        _logger.LogInformation("Created invite {Token} by user {UserId}, expires at {ExpiresAt}",
-            token, createdBy, expiresAt);
-
-        // Generate full URL using configured base URL
-        var url = $"{_appOptions.BaseUrl}/register?invite={Uri.EscapeDataString(token)}";
-
-        return new InviteResult(token, url, expiresAt);
-    }
-
     public async Task<InviteRecord?> GetInviteAsync(string token, CancellationToken cancellationToken = default)
     {
         return await _inviteRepository.GetByTokenAsync(token, cancellationToken);

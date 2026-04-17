@@ -101,7 +101,7 @@ public class TrainingHandler : ITrainingHandler
                 messageId,
                 chat.Id,
                 label: TrainingLabel.Spam,
-                labeledByUserId: executor.GetTelegramUserId(), // Null if executor is web user or system
+                actor: executor,
                 reason: labelReason,
                 auditLogId: null,
                 cancellationToken: cancellationToken);

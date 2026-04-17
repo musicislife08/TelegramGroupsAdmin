@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.IntegrationTests.TestHelpers;
@@ -111,8 +112,8 @@ public class TelegramUserRepositoryKickCountTests
         const long userId = 100_002L;
         await CreateTestUserAsync(userId);
 
-        await _repository!.IncrementKickCountAsync(userId);
-        await _repository!.IncrementKickCountAsync(userId);
+        await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userId));
+        await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userId));
 
         // Act
         var kickCount = await _repository!.GetKickCountAsync(userId);
@@ -133,7 +134,7 @@ public class TelegramUserRepositoryKickCountTests
         await CreateTestUserAsync(userId);
 
         // Act — returns rows affected (1 = success)
-        var result = await _repository!.IncrementKickCountAsync(userId);
+        var result = await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userId));
 
         // Assert
         Assert.That(result, Is.EqualTo(1));
@@ -147,9 +148,10 @@ public class TelegramUserRepositoryKickCountTests
         await CreateTestUserAsync(userId);
 
         // Act — each call returns rows affected (always 1 for existing user)
-        var result1 = await _repository!.IncrementKickCountAsync(userId);
-        var result2 = await _repository!.IncrementKickCountAsync(userId);
-        var result3 = await _repository!.IncrementKickCountAsync(userId);
+        var identity = UserIdentity.FromId(userId);
+        var result1 = await _repository!.IncrementKickCountAsync(identity);
+        var result2 = await _repository!.IncrementKickCountAsync(identity);
+        var result3 = await _repository!.IncrementKickCountAsync(identity);
 
         // Assert — rows affected is always 1; actual count verified via GetKickCountAsync
         using (Assert.EnterMultipleScope())
@@ -171,7 +173,7 @@ public class TelegramUserRepositoryKickCountTests
         const long userId = 999_999L;
 
         // Act
-        var result = await _repository!.IncrementKickCountAsync(userId);
+        var result = await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userId));
 
         // Assert
         Assert.That(result, Is.EqualTo(0));
@@ -199,9 +201,9 @@ public class TelegramUserRepositoryKickCountTests
         await CreateTestUserAsync(userA);
         await CreateTestUserAsync(userB);
 
-        await _repository!.IncrementKickCountAsync(userA);
-        await _repository!.IncrementKickCountAsync(userA);
-        await _repository!.IncrementKickCountAsync(userB);
+        await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userA));
+        await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userA));
+        await _repository!.IncrementKickCountAsync(UserIdentity.FromId(userB));
 
         // Act
         var countA = await _repository!.GetKickCountAsync(userA);

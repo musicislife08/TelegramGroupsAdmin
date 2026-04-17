@@ -94,7 +94,7 @@ public class TrainingLabelsRepositoryTests
             messageId,
             GoldenDataset.Messages.Msg6_ChatId,
             TrainingLabel.Spam,
-            userId,
+            Actor.FromTelegramUser(userId),
             "Manual spam marking by admin",
             auditLogId: 123);
 
@@ -123,7 +123,7 @@ public class TrainingLabelsRepositoryTests
             messageId,
             GoldenDataset.Messages.Msg7_ChatId,
             TrainingLabel.Ham,
-            labeledByUserId: null, // System-generated
+            actor: Actor.SystemSeed, // System-generated
             "False positive correction");
 
         // Assert
@@ -147,7 +147,7 @@ public class TrainingLabelsRepositoryTests
             messageId,
             GoldenDataset.ManagedChats.MainChat_Id,
             TrainingLabel.Ham,
-            GoldenDataset.TelegramUsers.User4_TelegramUserId,
+            Actor.FromTelegramUser(GoldenDataset.TelegramUsers.User4_TelegramUserId),
             "Corrected to ham");
 
         // Assert - Should update, not duplicate
@@ -177,8 +177,8 @@ public class TrainingLabelsRepositoryTests
         var tasks = new List<Task>();
         for (int i = 0; i < 5; i++)
         {
-            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Spam, userId1, "Concurrent spam"));
-            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Ham, userId2, "Concurrent ham"));
+            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Spam, Actor.FromTelegramUser(userId1), "Concurrent spam"));
+            tasks.Add(_repository!.UpsertLabelAsync(messageId, GoldenDataset.Messages.Msg11_ChatId, TrainingLabel.Ham, Actor.FromTelegramUser(userId2), "Concurrent ham"));
         }
         await Task.WhenAll(tasks);
 

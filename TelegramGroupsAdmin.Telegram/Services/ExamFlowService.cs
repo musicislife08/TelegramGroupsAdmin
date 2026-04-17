@@ -110,13 +110,7 @@ public class ExamFlowService : IExamFlowService
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
             var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
-            var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
-
-            _logger.LogInformation(
-                "Created exam session {SessionId} for {User} in {Chat}",
-                sessionId,
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+            var sessionId = await sessionRepo.CreateSessionAsync(ChatIdentity.From(chat), UserIdentity.From(user), expiresAt, cancellationToken);
 
             // Send first question to user's DM (user.Id is the DM chat ID)
             int messageId;
@@ -193,13 +187,7 @@ public class ExamFlowService : IExamFlowService
             var welcomeResponse = await welcomeRepo.GetByUserAndChatAsync(user.Id, chat.Id, cancellationToken);
             var expiresAt = CalculateExamExpiry(welcomeResponse, config.TimeoutSeconds);
 
-            var sessionId = await sessionRepo.CreateSessionAsync(chat.Id, user.Id, expiresAt, cancellationToken);
-
-            _logger.LogInformation(
-                "Created exam session {SessionId} for {User} in {Chat}",
-                sessionId,
-                user.ToLogInfo(),
-                chat.ToLogInfo());
+            var sessionId = await sessionRepo.CreateSessionAsync(chat, UserIdentity.From(user), expiresAt, cancellationToken);
 
             // Send exam intro (MainWelcomeMessage) first - rules/guidelines without buttons
             var username = TelegramDisplayName.FormatMention(user);

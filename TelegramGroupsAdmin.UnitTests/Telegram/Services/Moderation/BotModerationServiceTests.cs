@@ -2385,7 +2385,7 @@ public class BotModerationServiceTests
         Assert.That(result.Success, Is.True);
 
         await _mockTelegramUserRepository.Received(1).IncrementKickCountAsync(
-            userId, Arg.Any<CancellationToken>());
+            UserIdentity.FromId(userId), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -2421,7 +2421,7 @@ public class BotModerationServiceTests
 
         // Assert — IncrementKickCountAsync must not be called on the ban escalation path
         await _mockTelegramUserRepository.DidNotReceive().IncrementKickCountAsync(
-            Arg.Any<long>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -2450,7 +2450,7 @@ public class BotModerationServiceTests
 
         // Assert
         await _mockTelegramUserRepository.DidNotReceive().IncrementKickCountAsync(
-            Arg.Any<long>(), Arg.Any<CancellationToken>());
+            Arg.Any<UserIdentity>(), Arg.Any<CancellationToken>());
     }
 
     // ---------------------------------------------------------------------------

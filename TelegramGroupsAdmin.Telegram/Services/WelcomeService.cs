@@ -147,7 +147,7 @@ public class WelcomeService(
 
             // Step 2: Ensure user record exists (FK constraint for audit logging)
             var existingUser = await telegramUserRepository.GetOrCreateAsync(
-                user.Id, user.Username, user.FirstName, user.LastName, user.IsBot, cancellationToken);
+                UserIdentity.From(user), user.IsBot, cancellationToken);
 
             // Early-out: If user is already globally banned, apply single-chat ban and skip welcome
             if (existingUser.IsBanned)
@@ -187,11 +187,12 @@ public class WelcomeService(
             // Trusted users skip CAS + profile scan (trust is global)
             // ═══════════════════════════════════════════════════════════════════
 
+            var userIdentity = UserIdentity.From(user);
+
             // Step 5: Username blacklist check - auto-ban blacklisted display names FIRST (instant, local DB)
             // Skip trusted users — trust is global, applied across all groups
             if (config.JoinSecurity.UsernameBlacklist.Enabled && existingUser?.IsTrusted != true)
             {
-                var userIdentity = UserIdentity.From(user);
                 var blacklistMatch = await usernameBlacklistService.CheckDisplayNameAsync(
                     userIdentity.DisplayName, cancellationToken);
 
@@ -236,7 +237,7 @@ public class WelcomeService(
             // Skip trusted users — trust is global, applied across all groups
             if (config.JoinSecurity.Cas.Enabled && existingUser?.IsTrusted != true)
             {
-                var casResult = await casCheckService.CheckUserAsync(user.Id, config.JoinSecurity.Cas, cancellationToken);
+                var casResult = await casCheckService.CheckUserAsync(userIdentity, config.JoinSecurity.Cas, cancellationToken);
                 if (casResult.IsBanned)
                 {
                     logger.LogWarning(

@@ -50,7 +50,6 @@ public interface IUserRepository
     Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
     Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken cancellationToken = default);
     Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken cancellationToken = default);
-    Task UseInviteAsync(string token, string userId, CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken cancellationToken = default);
     Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken cancellationToken = default);

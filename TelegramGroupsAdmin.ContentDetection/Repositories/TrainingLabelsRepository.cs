@@ -42,12 +42,14 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
         int messageId,
         long chatId,
         TrainingLabel label,
-        long? labeledByUserId = null,
+        Actor actor,
         string? reason = null,
         long? auditLogId = null,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var labeledByUserId = actor.GetTelegramUserId();
 
         // Use PostgreSQL's ON CONFLICT DO UPDATE for atomic upsert (no race condition)
         await context.Database.ExecuteSqlAsync($@"
@@ -62,8 +64,8 @@ public class TrainingLabelsRepository : ITrainingLabelsRepository
             cancellationToken);
 
         _logger.LogInformation(
-            "Upserted training label for message {MessageId}: {Label} (by user {UserId})",
-            messageId, label, labeledByUserId);
+            "Upserted training label for message {MessageId}: {Label} (by {Actor})",
+            messageId, label, actor.GetDisplayText());
     }
 
     /// <summary>

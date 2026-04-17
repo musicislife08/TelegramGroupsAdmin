@@ -267,9 +267,9 @@ public class StartCommand : IBotCommand
         }
 
         _logger.LogInformation(
-            "Started entrance exam in DM for user {UserId} from group {GroupId}",
-            examPayload.UserId,
-            examPayload.ChatId);
+            "Started entrance exam in DM for {User} from {Chat}",
+            message.From.ToLogInfo(),
+            chat.ToLogInfo());
 
         // Empty result - the exam service sends the first question
         return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);

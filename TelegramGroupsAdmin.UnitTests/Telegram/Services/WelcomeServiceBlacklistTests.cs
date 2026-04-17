@@ -138,8 +138,7 @@ public class WelcomeServiceBlacklistTests
         // User exists and is not banned
         _telegramUserRepository
             .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(NonBannedTelegramUser);
 
         // Bot protection allows bots by default
@@ -184,7 +183,7 @@ public class WelcomeServiceBlacklistTests
 
         // CAS returns not banned by default
         _casCheckService
-            .CheckUserAsync(Arg.Any<long>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
+            .CheckUserAsync(Arg.Any<UserIdentity>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
             .Returns(new CasCheckResult(IsBanned: false, Reason: null));
 
         _sut = new WelcomeService(
@@ -305,7 +304,7 @@ public class WelcomeServiceBlacklistTests
 
         // Early-exit: CAS check must NOT be called (short-circuited by blacklist)
         await _casCheckService.DidNotReceive().CheckUserAsync(
-            Arg.Any<long>(),
+            Arg.Any<UserIdentity>(),
             Arg.Any<CasConfig>(),
             Arg.Any<CancellationToken>());
     }
@@ -323,7 +322,7 @@ public class WelcomeServiceBlacklistTests
             .Returns((UsernameBlacklistEntry?)null);
 
         _casCheckService
-            .CheckUserAsync(Arg.Any<long>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
+            .CheckUserAsync(Arg.Any<UserIdentity>(), Arg.Any<CasConfig>(), Arg.Any<CancellationToken>())
             .Returns(new CasCheckResult(IsBanned: false, Reason: null));
 
         var update = CreateJoinUpdate();
@@ -337,7 +336,7 @@ public class WelcomeServiceBlacklistTests
 
         // CAS was called (blacklist didn't short-circuit)
         await _casCheckService.Received(1).CheckUserAsync(
-            Arg.Any<long>(),
+            Arg.Any<UserIdentity>(),
             Arg.Any<CasConfig>(),
             Arg.Any<CancellationToken>());
 
@@ -356,8 +355,7 @@ public class WelcomeServiceBlacklistTests
         // Arrange — repository returns a trusted user
         _telegramUserRepository
             .GetOrCreateAsync(
-                Arg.Any<long>(), Arg.Any<string?>(), Arg.Any<string?>(),
-                Arg.Any<string?>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+                Arg.Any<UserIdentity>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(TrustedTelegramUser);
 
         var update = CreateJoinUpdate();

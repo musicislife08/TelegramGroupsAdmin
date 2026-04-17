@@ -567,8 +567,8 @@ public class BotModerationService : IBotModerationService
 
         // Increment kick count (non-critical — kick already succeeded on Telegram)
         await SafeExecuteAsync(
-            () => _telegramUserRepository.IncrementKickCountAsync(intent.User.Id, cancellationToken),
-            $"Increment kick count for user {intent.User.Id}");
+            () => _telegramUserRepository.IncrementKickCountAsync(intent.User, cancellationToken),
+            $"Increment kick count for {intent.User.ToLogDebug()}");
 
         return new ModerationResult
         {

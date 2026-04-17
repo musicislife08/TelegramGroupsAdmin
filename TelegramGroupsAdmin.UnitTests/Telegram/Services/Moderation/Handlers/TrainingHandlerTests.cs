@@ -169,7 +169,7 @@ public class TrainingHandlerTests
             messageId,
             Arg.Any<long>(),
             TrainingLabel.Spam,
-            userId,
+            executor,
             Arg.Any<string>(),
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
@@ -197,7 +197,7 @@ public class TrainingHandlerTests
         // Assert - Should not create any records
         await _mockDetectionRepo.DidNotReceiveWithAnyArgs().InsertAsync(default!, default);
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
-            default, default, default, default, default, default, default);
+            default, default, default, default!, default, default, default);
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
             string.Empty, new object(), default);
     }
@@ -231,7 +231,7 @@ public class TrainingHandlerTests
 
         // Assert - NO training label created (no text)
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
-            default, default, default, default, default, default, default);
+            default, default, default, default!, default, default, default);
 
         // Assert - NO retraining triggered (no text training data)
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
@@ -290,7 +290,7 @@ public class TrainingHandlerTests
             Arg.Any<int>(),
             Arg.Any<long>(),
             Arg.Any<TrainingLabel>(),
-            telegramUserId, // Should extract from Actor
+            Arg.Is<Actor>(a => a.GetTelegramUserId() == telegramUserId), // Should extract from Actor
             Arg.Any<string>(),
             Arg.Any<long?>(),
             Arg.Any<CancellationToken>());
@@ -323,7 +323,7 @@ public class TrainingHandlerTests
             messageId,
             Arg.Any<long>(),
             TrainingLabel.Spam,
-            (long?)null, // System actor has no telegram user ID
+            Arg.Is<Actor>(a => a == executor), // System actor has no telegram user ID
             SpamDetectionConstants.AutoDetectedSpamReason,
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
@@ -379,7 +379,7 @@ public class TrainingHandlerTests
             messageId,
             Arg.Any<long>(),
             TrainingLabel.Spam,
-            (long?)null, // WebUser has no telegram user ID
+            Arg.Is<Actor>(a => a == executor), // WebUser has no telegram user ID
             SpamDetectionConstants.ManualSpamReason,
             auditLogId: null,
             cancellationToken: Arg.Any<CancellationToken>());
