@@ -49,6 +49,16 @@ When any rule fires, the behavior is identical:
 
 ## Design
 
+### Constants policy
+
+Every user-visible or DB-persisted string literal introduced by this feature is declared as a named constant, never inlined at the call site. The rule:
+
+- **Used by multiple classes or projects** → lives in its own `static class` (e.g., `SystemActorIds`).
+- **Used only within a single class** → a `private const string` at the top of that class (e.g., log format strings in the resolver, reason strings in the audit handler, error strings in switch-expression default arms).
+- **Exposed for consumers who need to reference the token** (e.g., UI helper text showing valid template variables) → `public const string` on the owning config class.
+
+This applies to metric labels, audit reason strings, log-message format strings, template variable tokens (`{username}`, `{chat_name}`), and switch-expression error messages. `BackgroundJobNames.DeleteMessage` and similar established constant stores are reused without duplication.
+
 ### 1. Configuration shape
 
 New nested config object, stored inside the existing Welcome JSONB config row. **No database migration required.**
@@ -57,12 +67,21 @@ New nested config object, stored inside the existing Welcome JSONB config row. *
 // TelegramGroupsAdmin.Configuration/Models/Welcome/TrustedBypassConfig.cs
 public class TrustedBypassConfig
 {
+    // Public so UI helper text and service code reference the same token.
+    public const string UsernameVariable = "{username}";
+    public const string ChatNameVariable = "{chat_name}";
+
+    // Defaults are internal consts so tests, UI reset-to-default, and .Default
+    // factories all share one source of truth.
+    internal const string DefaultAnnouncementMessage =
+        UsernameVariable + " welcomed automatically — trusted from other groups.";
+    internal const int DefaultAnnouncementTtlSeconds = 30;
+
     public bool Enabled { get; set; } = false;
 
-    public string AnnouncementMessage { get; set; }
-        = "{username} welcomed automatically — trusted from other groups.";
+    public string AnnouncementMessage { get; set; } = DefaultAnnouncementMessage;
 
-    public int AnnouncementTtlSeconds { get; set; } = 30;
+    public int AnnouncementTtlSeconds { get; set; } = DefaultAnnouncementTtlSeconds;
 }
 ```
 
@@ -105,6 +124,14 @@ public sealed class WelcomeBypassResolver(
     IServiceScopeFactory scopeFactory,
     ILogger<WelcomeBypassResolver> logger) : IWelcomeBypassResolver
 {
+    // Log format strings live here because they are only used by this class.
+    private const string LogFormatChatAdmin =
+        "Welcome bypass: {User} in {Chat} - Telegram chat admin/creator";
+    private const string LogFormatWebAdmin =
+        "Welcome bypass: {User} in {Chat} - linked web admin (level {Level})";
+    private const string LogFormatTrusted =
+        "Welcome bypass: {User} in {Chat} - trusted user, bypass enabled";
+
     public async Task<BypassDecision> ResolveAsync(
         UserIdentity user, ChatIdentity chat, CancellationToken cancellationToken)
     {
@@ -116,9 +143,7 @@ public sealed class WelcomeBypassResolver(
         var chatMember = await userService.GetChatMemberAsync(chat.Id, user.Id, cancellationToken);
         if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
         {
-            logger.LogInformation(
-                "Welcome bypass: {User} in {Chat} - Telegram chat admin/creator",
-                user.ToLogInfo(), chat.ToLogInfo());
+            logger.LogInformation(LogFormatChatAdmin, user.ToLogInfo(), chat.ToLogInfo());
             return BypassDecision.ChatAdmin;
         }
 
@@ -127,9 +152,7 @@ public sealed class WelcomeBypassResolver(
         var permissionLevel = await mappingRepo.GetPermissionLevelByTelegramIdAsync(user.Id, cancellationToken);
         if (permissionLevel is (int)PermissionLevel.GlobalAdmin or (int)PermissionLevel.Owner)
         {
-            logger.LogInformation(
-                "Welcome bypass: {User} in {Chat} - linked web admin (level {Level})",
-                user.ToLogInfo(), chat.ToLogInfo(), permissionLevel);
+            logger.LogInformation(LogFormatWebAdmin, user.ToLogInfo(), chat.ToLogInfo(), permissionLevel);
             return BypassDecision.WebAdmin;
         }
 
@@ -145,9 +168,7 @@ public sealed class WelcomeBypassResolver(
         var userRepo = sp.GetRequiredService<ITelegramUserRepository>();
         if (await userRepo.IsTrustedAsync(user.Id, cancellationToken))
         {
-            logger.LogInformation(
-                "Welcome bypass: {User} in {Chat} - trusted user, bypass enabled",
-                user.ToLogInfo(), chat.ToLogInfo());
+            logger.LogInformation(LogFormatTrusted, user.ToLogInfo(), chat.ToLogInfo());
             return BypassDecision.Trusted;
         }
 
@@ -163,8 +184,16 @@ public sealed class WelcomeBypassResolver(
 A new "Step 2.5" is inserted into `WelcomeService.HandleChatMemberUpdateAsync`, after the pre-banned early-out (Step 2) and before permission restriction (Step 3):
 
 ```csharp
+// At top of WelcomeService class — error messages for the impossible-to-reach
+// switch arms. Only used by the handler below, so they live here, not in a
+// shared file.
+private const string BypassOutcomeNoneUnreachable =
+    "Reached outcome mapping with BypassDecision.None";
+private const string BypassOutcomeUnmappedFormat =
+    "Unmapped bypass decision: {0}";
+
 // REMOVED: the existing Step 1 "if admin/creator, skip" block at the original
-// line 138 is deleted. That responsibility moves into the resolver below.
+// line 138 is deleted. That responsibility moves into the resolver.
 
 // Step 2: Pre-banned early-out (existing, unchanged)
 
@@ -177,23 +206,44 @@ if (bypassDecision != BypassDecision.None)
     await PostBypassAnnouncementIfConfiguredAsync(
         chatMemberUpdate.Chat, user, config, cancellationToken: cancellationToken);
 
-    var outcome = bypassDecision switch
-    {
-        BypassDecision.ChatAdmin => "skipped_bypass_chatadmin",
-        BypassDecision.WebAdmin  => "skipped_bypass_webadmin",
-        BypassDecision.Trusted   => "skipped_bypass_trusted",
-        BypassDecision.None      => throw new InvalidOperationException(
-                                      "Reached outcome mapping with BypassDecision.None"),
-        _                        => throw new InvalidOperationException(
-                                      $"Unmapped bypass decision: {bypassDecision}"),
-    };
-    welcomeMetrics.RecordWelcomeOutcome(outcome,
+    welcomeMetrics.RecordBypassOutcome(bypassDecision,
         Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
     return;
 }
 
 // Step 3: Restrict permissions (existing, unchanged)
 ```
+
+The metric label routing is pushed down into `WelcomeMetrics` as a dedicated recording method (per the project's metrics convention — see `TelegramGroupsAdmin.Core/CLAUDE.md`):
+
+```csharp
+// TelegramGroupsAdmin.Telegram/Metrics/WelcomeMetrics.cs
+public sealed class WelcomeMetrics
+{
+    // Outcome labels live on the metrics class because it owns their schema.
+    // They're private because callers use the typed recording method below.
+    private const string OutcomeBypassChatAdmin = "skipped_bypass_chatadmin";
+    private const string OutcomeBypassWebAdmin  = "skipped_bypass_webadmin";
+    private const string OutcomeBypassTrusted   = "skipped_bypass_trusted";
+
+    public void RecordBypassOutcome(BypassDecision decision, double elapsedMs)
+    {
+        var outcome = decision switch
+        {
+            BypassDecision.ChatAdmin => OutcomeBypassChatAdmin,
+            BypassDecision.WebAdmin  => OutcomeBypassWebAdmin,
+            BypassDecision.Trusted   => OutcomeBypassTrusted,
+            BypassDecision.None      => throw new InvalidOperationException(
+                                          BypassOutcomeNoneUnreachable),
+            _                        => throw new InvalidOperationException(
+                                          string.Format(BypassOutcomeUnmappedFormat, decision)),
+        };
+        RecordWelcomeOutcome(outcome, elapsedMs);
+    }
+}
+```
+
+This keeps the metric-label strings encapsulated in the metrics class (nothing outside `WelcomeMetrics` knows the raw label values), and the handler in `WelcomeService` just calls `welcomeMetrics.RecordBypassOutcome(decision, elapsedMs)`. The error strings are shared between `WelcomeService` and `WelcomeMetrics` because the switch can appear in either — move them to `TelegramGroupsAdmin.Telegram/Services/Welcome/BypassErrorMessages.cs` if both classes end up needing them; otherwise keep as `private const` on whichever is the sole owner.
 
 **Ordering invariant:** Bypass runs *after* the pre-banned check, so a pre-banned user cannot bypass regardless of trust status.
 
@@ -207,9 +257,11 @@ private async Task PostBypassAnnouncementIfConfiguredAsync(
     if (config.TrustedBypass.AnnouncementTtlSeconds <= 0)
         return;
 
+    // Tokens come from TrustedBypassConfig so UI helper text and service code
+    // reference the exact same string.
     var text = config.TrustedBypass.AnnouncementMessage
-        .Replace("{username}", TelegramDisplayName.FormatMention(user))
-        .Replace("{chat_name}", chat.Title ?? string.Empty);
+        .Replace(TrustedBypassConfig.UsernameVariable, TelegramDisplayName.FormatMention(user))
+        .Replace(TrustedBypassConfig.ChatNameVariable, chat.Title ?? string.Empty);
 
     var announcement = await messageService.SendAndSaveMessageAsync(
         chatId: chat.Id,
@@ -251,11 +303,24 @@ Task LogWelcomeBypassAsync(
     CancellationToken cancellationToken = default);
 ```
 
-Implementation writes a `UserActionRecord` with:
-- `ActionType = UserActionType.WelcomeBypass`
-- `IssuedBy = Actor.WelcomeBypass`
-- `ChatId = chat.Id`
-- `Reason = decision switch { BypassDecision.ChatAdmin => "Telegram chat admin/creator", BypassDecision.WebAdmin => "Linked web admin (GlobalAdmin/Owner)", BypassDecision.Trusted => "Trusted user, bypass enabled", _ => "Bypass" }`
+Implementation writes a `UserActionRecord` with `ActionType = UserActionType.WelcomeBypass`, `IssuedBy = Actor.WelcomeBypass`, `ChatId = chat.Id`, and the reason string selected from constants declared at the top of `AuditHandler`:
+
+```csharp
+// At top of AuditHandler class — only this class emits these strings.
+private const string BypassReasonChatAdmin = "Telegram chat admin/creator";
+private const string BypassReasonWebAdmin  = "Linked web admin (GlobalAdmin/Owner)";
+private const string BypassReasonTrusted   = "Trusted user, bypass enabled";
+private const string BypassReasonFallback  = "Bypass";
+
+// Inside LogWelcomeBypassAsync:
+var reason = decision switch
+{
+    BypassDecision.ChatAdmin => BypassReasonChatAdmin,
+    BypassDecision.WebAdmin  => BypassReasonWebAdmin,
+    BypassDecision.Trusted   => BypassReasonTrusted,
+    _                        => BypassReasonFallback,
+};
+```
 
 ### 5. `SystemActorIds` constants refactor
 
@@ -348,7 +413,7 @@ New expansion panel titled "Trusted User Bypass", placed below the "Security on 
                                   Label="Announcement Message"
                                   Lines="3"
                                   Disabled="!_config.TrustedBypass.Enabled"
-                                  HelperText="Variables: {username}, {chat_name}" />
+                                  HelperText="@($"Variables: {TrustedBypassConfig.UsernameVariable}, {TrustedBypassConfig.ChatNameVariable}")" />
                 </MudItem>
                 <MudItem xs="12" md="4">
                     <MudNumericField T="int"
@@ -392,12 +457,12 @@ New expansion panel titled "Trusted User Bypass", placed below the "Security on 
 
 ### 8. Observability
 
-**Prometheus (via `WelcomeMetrics.RecordWelcomeOutcome`):** Three new label values on the existing `welcome_outcome` counter, replacing the legacy `skipped_admin` label:
+**Prometheus (via a new `WelcomeMetrics.RecordBypassOutcome(BypassDecision, elapsedMs)` method):** Three new label values on the existing `welcome_outcome` counter, replacing the legacy `skipped_admin` label. The labels are declared as `private const string` fields on `WelcomeMetrics` so no caller sees the raw strings:
 - `skipped_bypass_chatadmin` (replaces `skipped_admin` — Telegram chat admins/creators)
 - `skipped_bypass_webadmin` (linked GlobalAdmin/Owner)
 - `skipped_bypass_trusted` (IsTrusted + toggle on)
 
-No new instruments, no new meters.
+No new instruments, no new meters — just one new recording method.
 
 **Dashboard migration:** any Grafana panel filtering on `welcome_outcome{outcome="skipped_admin"}` must be updated to `outcome="skipped_bypass_chatadmin"`. Other existing labels (`accepted`, `denied`, `timeout`, `banned`, `pre_banned`, etc.) are unchanged.
 
@@ -412,11 +477,11 @@ No new instruments, no new meters.
 1. Add `SystemActorIds` constants class and refactor `Actor.cs` to use it
 2. Add `UserActionType.WelcomeBypass = 11` enum value (both copies)
 3. Add `Actor.WelcomeBypass` static field
-4. Create `TrustedBypassConfig`, wire onto `WelcomeConfig`, update `WelcomeConfigMappings`
-5. Create `IWelcomeBypassResolver` + `WelcomeBypassResolver` + `BypassDecision` enum; DI registration
-6. Add `IAuditHandler.LogWelcomeBypassAsync` + implementation
-7. Modify `WelcomeService.HandleChatMemberUpdateAsync` — inject resolver/job-scheduler/audit, **remove the existing Step 1 chat-admin/creator skip block** (now handled by the resolver), add Step 2.5 for the unified bypass, add `PostBypassAnnouncementIfConfiguredAsync` helper
-8. Update `WelcomeMetrics` outcome-label usage — replace the retired `skipped_admin` label with `skipped_bypass_chatadmin`, add `skipped_bypass_webadmin` and `skipped_bypass_trusted` (labels are strings — no class changes)
+4. Create `TrustedBypassConfig` with public const template variables (`UsernameVariable`, `ChatNameVariable`) and internal default constants; wire onto `WelcomeConfig`; update `WelcomeConfigMappings`
+5. Create `IWelcomeBypassResolver` + `WelcomeBypassResolver` + `BypassDecision` enum; declare log-format `private const` strings at the top of the resolver class; DI registration
+6. Add `IAuditHandler.LogWelcomeBypassAsync` + implementation with `private const` bypass-reason strings at the top of `AuditHandler`
+7. Modify `WelcomeService.HandleChatMemberUpdateAsync` — inject resolver/job-scheduler/audit, **remove the existing Step 1 chat-admin/creator skip block** (now handled by the resolver), add Step 2.5 for the unified bypass, add `PostBypassAnnouncementIfConfiguredAsync` helper that uses `TrustedBypassConfig.UsernameVariable` / `ChatNameVariable` constants for token replacement
+8. Add `WelcomeMetrics.RecordBypassOutcome(BypassDecision, double)` method with `private const` outcome-label strings on the class; update existing `skipped_admin` call sites (the retired block in `WelcomeService`) to flow through the new method
 9. Update `WelcomeSystemConfig.razor` with new expansion panel
 10. Update `TestWelcomeConfigBuilder`
 11. Add SQL fixture for linked-admin test seed
