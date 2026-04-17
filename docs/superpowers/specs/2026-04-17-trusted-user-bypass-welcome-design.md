@@ -502,7 +502,7 @@ No new instruments, no new meters — just one new recording method.
   **Mitigation:** The auto-announcement message is precisely for this — it explicitly states the bypass reason in-chat. Audit page provides after-the-fact investigation.
 
 - **Risk:** Silent failure of announcement delivery (rate limit, network) could make admins unaware of a bypass.
-  **Mitigation:** Announcement delivery failure logs at ERROR via existing `WelcomeService` try/catch. Audit row is written *before* announcement, so the audit trail is authoritative even if the announcement fails.
+  **Mitigation:** Audit row is written *before* the announcement, so the admin-facing audit trail is authoritative even if in-chat delivery fails — admins investigating via the Audit page will still see every bypass event. Announcement delivery failure also logs at ERROR via existing `WelcomeService` try/catch, but **log access is currently owner-only** — the Internal Logs Page that will give admins log visibility is tracked by **#274 feat: Internal Logs Page (Replace Seq)** and is not yet shipped. Until #274 lands, only the instance owner (via Seq / OTEL backend) sees delivery-failure ERRORs in real time; admins rely on the audit trail alone.
 
 - **Risk:** Existing chats upgrading suddenly start bypassing.
   **Mitigation:** Default is `TrustedBypass.Enabled = false`. Bypass is strictly opt-in per chat. Web-admin bypass only fires for users with an active `telegram_user_mappings` row, which requires an explicit `/link` command flow — no retroactive behavior change.
