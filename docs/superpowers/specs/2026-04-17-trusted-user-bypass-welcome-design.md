@@ -399,6 +399,7 @@ No new instruments, no new meters.
 15. **File GitHub issue for admin-on-admin moderation hierarchy + confirmation UX** as a follow-up to this PR; file it at whichever implementation step the plan assigns it to, not before
 16. Verify metrics dashboard auto-picks up new outcome labels in Grafana
 17. Manual smoke test: enable bypass in a test chat, have a trusted user join, verify announcement appears and is auto-deleted after TTL, verify audit row in UI
+18. When opening the PR, check open issues for related work and reference them in the PR body with `See also #N` (do not use closing keywords) — at the time of design, **#411** ("refactor: Simplify WelcomeService join security pipeline") is the known related open issue. Our change adds a new early-exit (Step 2.5) in the same method #411 plans to reorganize, so the linkage is useful to whoever picks up #411
 
 ## Risks & mitigations
 
