@@ -6,11 +6,11 @@
 
 ## Overview
 
-Add an opt-in per-chat capability to let auto-trusted users (and linked web administrators) skip the welcome consent flow and all join-time security checks. A short, auto-deleting announcement is posted in the chat whenever a bypass fires so admins and members see why the user walked in clean.
+Add an opt-in per-chat capability to let trusted users (and linked web administrators) skip the welcome consent flow and all join-time security checks. A short, auto-deleting announcement is posted in the chat whenever a bypass fires so admins and members see why the user walked in clean.
 
 ## Motivation
 
-TGA already tracks "trust" as a global flag on `telegram_users` — users who post N non-spam messages (subject to an account-age gate) are automatically trusted across all managed chats. Today, these trusted users still go through the welcome consent flow (restrict, Accept/Deny or entrance exam, timeout) every time they join a new chat, even though they've already demonstrated non-spam behavior elsewhere. That's friction admins don't want.
+TGA tracks "trust" as a global flag on `telegram_users` that can be earned automatically (posting N non-spam messages subject to an account-age gate) or granted manually by an admin. Either way, trusted users still go through the full welcome consent flow (restrict, Accept/Deny or entrance exam, timeout) every time they join a new chat, even though they've already been vetted. That's friction admins don't want.
 
 Linked web administrators (Owner, GlobalAdmin) face the same friction — there's no mechanism today to recognize a logged-in TGA web admin when they join a chat as a Telegram user. We want them to walk in clean, always.
 
@@ -231,7 +231,7 @@ Implementation writes a `UserActionRecord` with:
 - `ActionType = UserActionType.WelcomeBypass`
 - `IssuedBy = Actor.WelcomeBypass`
 - `ChatId = chat.Id`
-- `Reason = decision switch { BypassDecision.WebAdmin => "Linked web admin (GlobalAdmin/Owner)", BypassDecision.Trusted => "Auto-trusted user, bypass enabled", _ => "Bypass" }`
+- `Reason = decision switch { BypassDecision.WebAdmin => "Linked web admin (GlobalAdmin/Owner)", BypassDecision.Trusted => "Trusted user, bypass enabled", _ => "Bypass" }`
 
 ### 5. `SystemActorIds` constants refactor
 
@@ -292,7 +292,7 @@ New expansion panel titled "Trusted User Bypass", placed below the "Security on 
         Trusted User Bypass
     </MudText>
     <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
-        When enabled, users with trusted status (auto-trust or manual) skip the welcome flow
+        When enabled, trusted users skip the welcome flow
         and all security checks. Linked web administrators (Owner, GlobalAdmin) always bypass
         regardless of this toggle.
     </MudText>
