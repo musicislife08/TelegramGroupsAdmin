@@ -27,7 +27,19 @@ public static class WelcomeConfigMappings
             AcceptButtonText = data.AcceptButtonText,
             DenyButtonText = data.DenyButtonText,
             DmButtonText = data.DmButtonText,
-            ExamConfig = data.ExamConfig?.ToModel()
+            ExamConfig = data.ExamConfig?.ToModel(),
+            TrustedBypass = data.TrustedBypass is null
+                ? new TrustedBypassConfig()
+                : new TrustedBypassConfig
+                {
+                    Enabled = data.TrustedBypass.Enabled,
+                    AnnouncementMessage = string.IsNullOrEmpty(data.TrustedBypass.AnnouncementMessage)
+                        ? TrustedBypassConfig.DefaultAnnouncementMessage
+                        : data.TrustedBypass.AnnouncementMessage,
+                    AnnouncementTtlSeconds = data.TrustedBypass.AnnouncementTtlSeconds <= 0
+                        ? TrustedBypassConfig.DefaultAnnouncementTtlSeconds
+                        : data.TrustedBypass.AnnouncementTtlSeconds,
+                }
         };
     }
 
@@ -45,7 +57,13 @@ public static class WelcomeConfigMappings
             AcceptButtonText = model.AcceptButtonText,
             DenyButtonText = model.DenyButtonText,
             DmButtonText = model.DmButtonText,
-            ExamConfig = model.ExamConfig?.ToData()
+            ExamConfig = model.ExamConfig?.ToData(),
+            TrustedBypass = new TrustedBypassConfigData
+            {
+                Enabled = model.TrustedBypass.Enabled,
+                AnnouncementMessage = model.TrustedBypass.AnnouncementMessage,
+                AnnouncementTtlSeconds = model.TrustedBypass.AnnouncementTtlSeconds,
+            }
         };
     }
 

@@ -62,4 +62,9 @@ public class WelcomeConfigData
     /// Entrance exam configuration (EntranceExam mode only).
     /// </summary>
     public ExamConfigData? ExamConfig { get; set; }
+
+    /// <summary>
+    /// Nullable for backward compatibility — existing JSONB blobs may not have this key yet.
+    /// </summary>
+    public TrustedBypassConfigData? TrustedBypass { get; set; }
 }
