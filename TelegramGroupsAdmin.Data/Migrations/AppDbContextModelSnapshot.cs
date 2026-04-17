@@ -1758,7 +1758,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("file_scan_quota");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanResultRecord", b =>
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanResultDto", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()

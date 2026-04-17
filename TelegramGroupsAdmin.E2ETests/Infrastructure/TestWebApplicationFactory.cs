@@ -431,10 +431,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
                 // Terminate existing connections
                 using var terminateCmd = connection.CreateCommand();
-                terminateCmd.CommandText = $@"
+                terminateCmd.CommandText = @"
                     SELECT pg_terminate_backend(pid)
                     FROM pg_stat_activity
-                    WHERE datname = '{_databaseName}' AND pid <> pg_backend_pid()";
+                    WHERE datname = $1 AND pid <> pg_backend_pid()";
+                terminateCmd.Parameters.Add(new NpgsqlParameter { Value = _databaseName });
                 terminateCmd.ExecuteNonQuery();
 
                 // Drop the database
