@@ -139,7 +139,11 @@ public class AuditHandler : IAuditHandler
             _                        => BypassReasonFallback,
         };
 
-        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reason, chatId: chat.Id);
+        // NOTE: chat_id is intentionally NOT written here. The user_actions table enforces
+        // CK_user_actions_message_chat_null_consistency: (message_id IS NULL) = (chat_id IS NULL).
+        // A bypass has no message context, so both must be null. The chat context is captured
+        // in the structured log below and is derivable from the surrounding welcome flow.
+        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reason);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(

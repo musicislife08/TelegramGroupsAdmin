@@ -55,7 +55,10 @@ public class AuditHandlerTests
         Assert.That(captured, Is.Not.Null);
         Assert.That(captured!.ActionType, Is.EqualTo(UserActionType.WelcomeBypass));
         Assert.That(captured.IssuedBy.GetSystemIdentifier(), Is.EqualTo(SystemActorIds.WelcomeBypass));
-        Assert.That(captured.ChatId, Is.EqualTo(-200));
+        // ChatId is intentionally null: CK_user_actions_message_chat_null_consistency requires
+        // (message_id IS NULL) = (chat_id IS NULL), and a bypass has no message context.
+        Assert.That(captured.ChatId, Is.Null);
+        Assert.That(captured.MessageId, Is.Null);
         Assert.That(captured.Reason, Is.EqualTo("Telegram chat admin/creator"));
     }
 
