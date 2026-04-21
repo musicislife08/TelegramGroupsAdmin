@@ -97,7 +97,7 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogRestrictAsync(UserIdentity user, ChatIdentity? chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.Mute, executor, reason);
+        var record = CreateRecord(user.Id, UserActionType.Mute, executor, reason, chatId: chat?.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
         LogRecorded(UserActionType.Mute, user, executor);
     }

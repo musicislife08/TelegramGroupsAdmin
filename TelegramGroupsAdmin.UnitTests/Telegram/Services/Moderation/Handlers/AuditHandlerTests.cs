@@ -144,4 +144,42 @@ public class AuditHandlerTests
             "RestorePermissions is not scoped to a specific message.");
         Assert.That(captured.Reason, Is.EqualTo("exam passed"));
     }
+
+    [Test]
+    public async Task LogRestrictAsync_WithChat_PersistsChatId()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
+            .Returns(1L);
+
+        await _handler.LogRestrictAsync(
+            UserIdentity.FromId(100),
+            ChatIdentity.FromId(-200),
+            Actor.AutoDetection,
+            reason: "test mute",
+            CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.ActionType, Is.EqualTo(UserActionType.Mute));
+        Assert.That(captured.ChatId, Is.EqualTo(-200), "Mute audit row records the chat where the mute was applied");
+    }
+
+    [Test]
+    public async Task LogRestrictAsync_NullChat_LeavesChatIdNull()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
+            .Returns(1L);
+
+        await _handler.LogRestrictAsync(
+            UserIdentity.FromId(100),
+            chat: null,
+            Actor.AutoDetection,
+            reason: "global mute",
+            CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.ChatId, Is.Null, "Global mute (null chat) leaves chat_id null");
+        Assert.That(captured.MessageId, Is.Null);
+    }
 }
