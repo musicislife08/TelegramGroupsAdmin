@@ -2071,3 +2071,16 @@ Run this once all 20 tasks are complete to verify the plan covered the spec:
 - Test-run convention: run full suite in background via `dotnet test > /tmp/<name>.log 2>&1 &` (the full suite runs ~20 minutes; do not block the session on it).
 - Don't run the app normally — use `dotnet run --migrate-only` for validation (Telegram singleton constraint).
 - No emojis in code (global project rule).
+
+---
+
+## Fix-as-found (added 2026-04-20)
+
+**Discovered during Task 14 integration testing.** The `AuditHandler.LogWelcomeBypassAsync` chat_id write (original Task 8 spec) hit a DB CHECK constraint `CK_user_actions_message_chat_null_consistency` that enforces `(message_id IS NULL) = (chat_id IS NULL)`. Investigation showed this constraint was too strict — it rejects legitimate chat-scoped, message-less events. The same bug silently affects `LogKickAsync` and `LogRestorePermissionsAsync`, which accept a `ChatIdentity` parameter but drop chat_id on write.
+
+**Scope expansion (per owner fix-as-found policy):**
+
+- Relax the constraint to `(message_id IS NULL) OR (chat_id IS NOT NULL)` — preserves the original "no orphaned message references" invariant while permitting chat-scoped-without-message audits.
+- Revert the Task 14 workaround that stripped chat_id from bypass audit rows; bypass audits now record the chat as originally designed.
+- Fix `LogKickAsync` and `LogRestorePermissionsAsync` to persist chat_id. This closes a pre-existing audit-context gap.
+- One new EF Core migration: `RelaxUserActionsChatMessageConstraint`.

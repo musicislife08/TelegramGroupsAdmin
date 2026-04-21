@@ -105,7 +105,7 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogRestorePermissionsAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.RestorePermissions, executor, reason);
+        var record = CreateRecord(user.Id, UserActionType.RestorePermissions, executor, reason, chatId: chat.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -116,7 +116,7 @@ public class AuditHandler : IAuditHandler
     /// <inheritdoc />
     public async Task LogKickAsync(UserIdentity user, ChatIdentity chat, Actor executor, string? reason, CancellationToken cancellationToken = default)
     {
-        var record = CreateRecord(user.Id, UserActionType.Kick, executor, reason);
+        var record = CreateRecord(user.Id, UserActionType.Kick, executor, reason, chatId: chat.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(
@@ -139,11 +139,7 @@ public class AuditHandler : IAuditHandler
             _                        => BypassReasonFallback,
         };
 
-        // NOTE: chat_id is intentionally NOT written here. The user_actions table enforces
-        // CK_user_actions_message_chat_null_consistency: (message_id IS NULL) = (chat_id IS NULL).
-        // A bypass has no message context, so both must be null. The chat context is captured
-        // in the structured log below and is derivable from the surrounding welcome flow.
-        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reason);
+        var record = CreateRecord(user.Id, UserActionType.WelcomeBypass, Actor.WelcomeBypass, reason, chatId: chat.Id);
         await _userActionsRepository.InsertAsync(record, cancellationToken);
 
         _logger.LogDebug(

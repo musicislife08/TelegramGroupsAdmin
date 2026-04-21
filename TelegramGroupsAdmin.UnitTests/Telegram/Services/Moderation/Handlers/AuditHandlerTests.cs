@@ -19,6 +19,9 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Handlers;
 /// Test Coverage:
 /// - LogWelcomeBypassAsync: Verifies correct ActionType, IssuedBy, ChatId, and Reason
 ///   for each BypassDecision variant (ChatAdmin, WebAdmin, Trusted).
+/// - LogKickAsync / LogRestorePermissionsAsync: Verifies the ChatIdentity parameter is
+///   persisted to the audit row (regression guard for the fix-as-found where chat_id was
+///   silently dropped on these paths).
 ///
 /// Mocking Strategy:
 /// - NSubstitute for IUserActionsRepository
@@ -55,10 +58,10 @@ public class AuditHandlerTests
         Assert.That(captured, Is.Not.Null);
         Assert.That(captured!.ActionType, Is.EqualTo(UserActionType.WelcomeBypass));
         Assert.That(captured.IssuedBy.GetSystemIdentifier(), Is.EqualTo(SystemActorIds.WelcomeBypass));
-        // ChatId is intentionally null: CK_user_actions_message_chat_null_consistency requires
-        // (message_id IS NULL) = (chat_id IS NULL), and a bypass has no message context.
-        Assert.That(captured.ChatId, Is.Null);
-        Assert.That(captured.MessageId, Is.Null);
+        Assert.That(captured.ChatId, Is.EqualTo(-200),
+            "Bypass audit rows record the chat where the join occurred.");
+        Assert.That(captured.MessageId, Is.Null,
+            "Bypass has no specific message context.");
         Assert.That(captured.Reason, Is.EqualTo("Telegram chat admin/creator"));
     }
 
@@ -92,5 +95,53 @@ public class AuditHandlerTests
             CancellationToken.None);
 
         Assert.That(captured!.Reason, Is.EqualTo("Trusted user, bypass enabled"));
+    }
+
+    [Test]
+    public async Task LogKickAsync_PersistsChatId()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
+            .Returns(1L);
+
+        var executor = Actor.FromTelegramUser(999, "Admin");
+        await _handler.LogKickAsync(
+            UserIdentity.FromId(100),
+            ChatIdentity.FromId(-200),
+            executor,
+            "test reason",
+            CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.ActionType, Is.EqualTo(UserActionType.Kick));
+        Assert.That(captured.ChatId, Is.EqualTo(-200),
+            "Kick audit row records the chat where the kick happened.");
+        Assert.That(captured.MessageId, Is.Null,
+            "Kick is not scoped to a specific message.");
+        Assert.That(captured.Reason, Is.EqualTo("test reason"));
+    }
+
+    [Test]
+    public async Task LogRestorePermissionsAsync_PersistsChatId()
+    {
+        UserActionRecord? captured = null;
+        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
+            .Returns(1L);
+
+        var executor = Actor.FromSystem("ExamFlow");
+        await _handler.LogRestorePermissionsAsync(
+            UserIdentity.FromId(100),
+            ChatIdentity.FromId(-200),
+            executor,
+            "exam passed",
+            CancellationToken.None);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.ActionType, Is.EqualTo(UserActionType.RestorePermissions));
+        Assert.That(captured.ChatId, Is.EqualTo(-200),
+            "RestorePermissions audit row records the chat where permissions were restored.");
+        Assert.That(captured.MessageId, Is.Null,
+            "RestorePermissions is not scoped to a specific message.");
+        Assert.That(captured.Reason, Is.EqualTo("exam passed"));
     }
 }

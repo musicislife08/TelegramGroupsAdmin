@@ -365,8 +365,8 @@ public class WelcomeFlowBypassIntegrationTests
                 "Exclusive-arc: web_user_id must be null when system_identifier is set.");
             Assert.That(rows[0].TelegramUserId, Is.Null,
                 "Exclusive-arc: telegram_user_id (actor column) must be null when system_identifier is set.");
-            Assert.That(rows[0].ChatId, Is.Null,
-                "CK_user_actions_message_chat_null_consistency: (message_id IS NULL) = (chat_id IS NULL). Bypass has no message context.");
+            Assert.That(rows[0].ChatId, Is.EqualTo(TestChatId),
+                "Bypass audit row records the chat where the join occurred.");
             Assert.That(rows[0].MessageId, Is.Null,
                 "Bypass rows never reference a specific message.");
         }
