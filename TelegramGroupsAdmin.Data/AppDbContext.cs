@@ -376,11 +376,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 "CK_user_actions_exclusive_actor",
                 "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
 
-        // UserActions: message_id and chat_id must be both null or both non-null
+        // UserActions: reject orphaned message references (a message_id requires a chat_id).
+        // A chat_id without a message_id is allowed for chat-scoped, message-less audit events
+        // (e.g. welcome bypass, kick, restore permissions).
         modelBuilder.Entity<UserActionRecordDto>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_user_actions_message_chat_null_consistency",
-                "(message_id IS NULL) = (chat_id IS NULL)"));
+                "(message_id IS NULL) OR (chat_id IS NOT NULL)"));
 
         // DetectionResults: Exactly one actor must be non-null
         modelBuilder.Entity<DetectionResultRecordDto>()
