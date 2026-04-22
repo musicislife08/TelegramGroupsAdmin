@@ -153,7 +153,9 @@ public class TrustedBypassConfig
     public const string UsernameVariable = "{username}";
     public const string ChatNameVariable = "{chat_name}";
     public const int MinAnnouncementTtlSeconds = 0;
-    public const int MaxAnnouncementMessageLength = 4096;
+    // 3500 = 4096 (Telegram wire limit) − ~600 chars headroom for
+    // {username}/{chat_name} expansion and worst-case HTML encoding.
+    public const int MaxAnnouncementTemplateLength = 3500;
     internal const int DefaultAnnouncementTtlSeconds = 30;
     internal const string DefaultAnnouncementMessageAdmin =
         UsernameVariable + " welcomed automatically — admin.";
@@ -206,35 +208,54 @@ Add a component test that renders with `{ MainWelcomeMessage = "", TrustedBypass
 
 ### 2.3 Input clamping (review finding: Security M1)
 
-**File:** `TelegramGroupsAdmin.Configuration/Mappings/WelcomeConfigMappings.cs`
+**Why at the consumer, not the mapping layer:** `ConfigService.GetAsync<WelcomeConfig>` and `SaveAsync<WelcomeConfig>` use `JsonSerializer` directly against the business model — the `WelcomeConfigData` DTO and `WelcomeConfigMappings.ToModel` / `.ToData` are not invoked at runtime for Welcome config. Investigation confirmed parallel configs (ContentDetection, UserApi) use dedicated repositories that DO invoke their mappings, but the Welcome path was never wired. See §5 "Known gaps" for the broader wiring follow-up. Putting validation in the mapping would be invisible to the runtime; putting it in the consumer guarantees execution.
 
-Update `ToModel` TrustedBypass coalescing:
+**File:** `TelegramGroupsAdmin.Telegram/Services/WelcomeService.cs` (inside `PostBypassAnnouncementIfConfiguredAsync`)
 
 ```csharp
-TrustedBypass = data.TrustedBypass is null
-    ? new TrustedBypassConfig()
-    : new TrustedBypassConfig
-    {
-        Enabled = data.TrustedBypass.Enabled,
-        AnnouncementMessageAdmin = ClampMessage(data.TrustedBypass.AnnouncementMessageAdmin),
-        AnnouncementMessageTrusted = ClampMessage(data.TrustedBypass.AnnouncementMessageTrusted),
-        AnnouncementTtlSeconds = Math.Max(
-            TrustedBypassConfig.MinAnnouncementTtlSeconds,
-            data.TrustedBypass.AnnouncementTtlSeconds),
-    }
+// Constants on TrustedBypassConfig:
+//   public const int MinAnnouncementTtlSeconds = 0;
+//   public const int MaxAnnouncementTemplateLength = 3500;
+// (Template max = 3500, not 4096, to leave ~600 chars of headroom for
+//  {username}/{chat_name} expansion + worst-case HTML encoding. Telegram's
+//  4096-byte message limit applies to the rendered output.)
 
-static string ClampMessage(string? value) =>
-    string.IsNullOrEmpty(value) ? string.Empty :
-    value.Length <= TrustedBypassConfig.MaxAnnouncementMessageLength ? value :
-    value[..TrustedBypassConfig.MaxAnnouncementMessageLength];
+var template = decision switch
+{
+    BypassDecision.Admin => config.TrustedBypass.AnnouncementMessageAdmin,
+    BypassDecision.Trusted => config.TrustedBypass.AnnouncementMessageTrusted,
+    _ => null,
+};
+
+if (string.IsNullOrWhiteSpace(template)) return;
+
+if (template.Length > TrustedBypassConfig.MaxAnnouncementTemplateLength)
+{
+    _logger.LogWarning(
+        "TrustedBypass {Decision} template exceeds {Max} chars (was {Actual}); truncating. Chat: {Chat}",
+        decision, TrustedBypassConfig.MaxAnnouncementTemplateLength, template.Length, chat.ToLogInfo());
+    template = template[..TrustedBypassConfig.MaxAnnouncementTemplateLength];
+}
+
+var ttl = Math.Max(TrustedBypassConfig.MinAnnouncementTtlSeconds,
+                   config.TrustedBypass.AnnouncementTtlSeconds);
+
+// … then substitute variables + encode + send …
 ```
 
 Notes:
-- Empty message = skip announcement (intentional per-type opt-out); no default fallback
-- TTL floor at 0; no upper bound (admin can set hours/days if desired)
-- Message truncates to 4096 chars silently — defends against hand-edited JSONB rows. UI `MaxLength` prevents legitimate flows from hitting this path. Mapping layer is a static `extension(T)` class without access to a logger; no-warn truncate is appropriate here.
+- Empty/whitespace template = skip announcement (per-type opt-out); no default fallback
+- TTL floor at 0; no upper bound (admin controls)
+- Message truncates to 3500 chars with a warning log so admins can diagnose. Defensive against hand-edited JSONB rows; UI `MaxLength` prevents legitimate flows from hitting this path.
 
-**UI** (`WelcomeSystemConfig.razor`): add `MaxLength="@TrustedBypassConfig.MaxAnnouncementMessageLength"` and `Counter="@TrustedBypassConfig.MaxAnnouncementMessageLength"` to both announcement template fields. Helper text mentions the 4096 Telegram limit.
+**Constants live on `TrustedBypassConfig`** even though the mapping isn't invoked — the UI and the consumer both reference them, and they belong with the model they describe:
+
+```csharp
+public const int MinAnnouncementTtlSeconds = 0;
+public const int MaxAnnouncementTemplateLength = 3500;
+```
+
+**UI** (`WelcomeSystemConfig.razor`): add `MaxLength="@TrustedBypassConfig.MaxAnnouncementTemplateLength"` and `Counter="@TrustedBypassConfig.MaxAnnouncementTemplateLength"` to both announcement template fields. Helper text mentions that the rendered message (after variable expansion) is subject to Telegram's 4096-byte limit.
 
 ### 2.4 Integration test for relaxed CK constraint (review finding: Test #2)
 
@@ -286,15 +307,20 @@ _logger.LogDebug(
 
 `chat.ToLogDebug()` handles null correctly. Narrow change; does not touch siblings (they already have this inline).
 
-### 2.9 Mapping coalescing tests (review finding: Test #6)
+### 2.9 Mapping + consumer validation tests (review finding: Test #6, retargeted)
+
+Because clamping moved to the consumer (§2.3), test coverage also shifts.
+
+**File:** `TelegramGroupsAdmin.UnitTests/Telegram/Services/WelcomeServiceTests.cs`
+
+Add tests for the consumer-side clamping:
+- `PostBypassAnnouncement_OverLengthTemplate_TruncatesAndLogsWarning` — template of 5000 chars → truncated to 3500, warning logged
+- `PostBypassAnnouncement_NegativeTtl_ClampsToZero` — `AnnouncementTtlSeconds = -5` → scheduled delete delay is 0
+- `PostBypassAnnouncement_EmptyTemplate_Skips` — empty string → no `SendMessageAsync` call, no `ScheduleJobAsync` call
 
 **File:** `TelegramGroupsAdmin.UnitTests/Configuration/WelcomeConfigMappingsTests.cs`
 
-Update/add to match the clamping shape in 2.3:
-- Empty `AnnouncementMessageAdmin` roundtrips as empty (no default fallback)
-- Empty `AnnouncementMessageTrusted` roundtrips as empty
-- Negative `AnnouncementTtlSeconds` clamps to 0
-- `AnnouncementMessageAdmin` of 5000 chars truncates to 4096 with warning
+Update the existing mapping tests to reflect the two-field shape (`AnnouncementMessageAdmin` / `AnnouncementMessageTrusted`). Roundtrip coverage for the new fields is the only change here; the mapping no longer has clamping responsibility, so no clamp tests belong.
 
 ### 2.10 Consolidate `UserActionType` + `PermissionLevel` into Core (review finding: Concurrency #7)
 
@@ -359,6 +385,34 @@ Add one scenario:
 - Exception-path tests for `ActivateAsync` / `LogWelcomeBypassAsync` (Test #12 — deferred)
 - TOCTOU between resolver and activation (dropped — polling queue serializes updates, no race)
 - Admin-on-admin moderation UX (separate known follow-up)
+- Wiring `ConfigService` through the Data-DTO/Mapping layer for Welcome (and ~5 other configs) — see §5
+
+## 5. Known gaps (deferred follow-up PR)
+
+### 5.1 `ConfigService` bypasses the Data DTO layer for most config types
+
+`ConfigService.GetAsync<T>` and `SaveAsync<T>` (`TelegramGroupsAdmin.Core/Services/ConfigService.cs`) use `JsonSerializer` directly against the business model `T`. This correctly serializes/deserializes but skips the `*ConfigData` DTO and `*ConfigMappings` layer that was designed to separate the wire-stable JSON shape from the business model.
+
+**Affected configs** (all go through `ConfigService.GetAsync<T>` / `SaveAsync<T>` without their mapping being invoked):
+- `WelcomeConfig` ↔ `WelcomeConfigData` (+ `WelcomeConfigMappings`)
+- `LogConfig` — verify whether a mapping exists
+- `ModerationConfig` — verify
+- `UrlFilterConfig` (maps to `BotProtectionConfig` column) — verify
+- `TelegramBotConfig` — verify
+- `ServiceMessageDeletionConfig` — verify
+- `BanCelebrationConfig` — verify
+
+**Unaffected (already wired):**
+- `ContentDetectionConfig` — uses EF Core `OwnsOne().ToJson()` via `ContentDetectionConfigRepository.GetGlobalConfigAsync` which explicitly calls `entity.Config.ToModel()`
+- `UserApiConfig` — `SystemConfigRepository.GetUserApiConfigAsync` deserializes to `UserApiConfigData` and calls `.ToModel()`; save does `.ToData()` → serialize
+
+**Impact:** Mapping layer is inert for the affected configs. Any validation, coalescing, or default-handling written into their `ToModel` / `ToData` methods is skipped. The `TrustedBypassConfigData` updates in §1.3 of this spec are kept for structural parity with the other configs (so the layer is internally consistent) but do not execute at runtime.
+
+**Resolution options (for the follow-up PR):**
+- (a) Teach `ConfigService` to route through a mapper registry when one is registered for `T`.
+- (b) Migrate each affected config to its own dedicated repository (like `UserApiConfig`).
+
+Neither is in scope for this bypass-review follow-up.
 
 ## Risks
 
