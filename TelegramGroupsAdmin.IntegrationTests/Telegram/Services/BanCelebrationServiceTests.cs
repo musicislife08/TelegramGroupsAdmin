@@ -560,7 +560,7 @@ public class BanCelebrationServiceTests
             context.UserActions.Add(new Data.Models.UserActionRecordDto
             {
                 TelegramUserId = existingUserIds[i],
-                ActionType = Data.Models.UserActionType.Ban,
+                ActionType = (int)UserActionType.Ban,
                 IssuedAt = DateTimeOffset.UtcNow,
                 Reason = "Test ban"
             });

@@ -279,7 +279,7 @@ public class WelcomeFlowBypassIntegrationTests
         var bypassRows = await context.UserActions
             .AsNoTracking()
             .Where(a => a.UserId == PreBannedUserTelegramId
-                        && a.ActionType == UserActionType.WelcomeBypass)
+                        && a.ActionType == (int)UserActionType.WelcomeBypass)
             .ToListAsync();
         Assert.That(bypassRows, Is.Empty,
             "Pre-banned user must not produce a bypass audit row — pre-ban short-circuit wins.");
@@ -350,7 +350,7 @@ public class WelcomeFlowBypassIntegrationTests
         var rows = await context.UserActions
             .AsNoTracking()
             .Where(a => a.UserId == telegramUserId
-                        && a.ActionType == UserActionType.WelcomeBypass)
+                        && a.ActionType == (int)UserActionType.WelcomeBypass)
             .ToListAsync();
 
         using (Assert.EnterMultipleScope())

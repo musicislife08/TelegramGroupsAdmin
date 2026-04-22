@@ -160,7 +160,7 @@ public class AuditHandlerTests
         {
             Assert.That(record!.UserId, Is.EqualTo(ValidUserId));
             Assert.That(record.MessageId, Is.EqualTo(messageId));
-            Assert.That(record.ActionType, Is.EqualTo(Data.Models.UserActionType.Delete));
+            Assert.That(record.ActionType, Is.EqualTo((int)UserActionType.Delete));
             Assert.That(record.SystemIdentifier, Is.EqualTo("IntegrationTest"));
         }
     }
@@ -237,7 +237,7 @@ public class AuditHandlerTests
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var record = await context.UserActions
-            .Where(ua => ua.UserId == ValidUserId && ua.ActionType == Data.Models.UserActionType.Ban)
+            .Where(ua => ua.UserId == ValidUserId && ua.ActionType == (int)UserActionType.Ban)
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null);
@@ -285,7 +285,7 @@ public class AuditHandlerTests
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var record = await context.UserActions
-            .Where(ua => ua.UserId == ValidUserId && ua.ActionType == Data.Models.UserActionType.Warn)
+            .Where(ua => ua.UserId == ValidUserId && ua.ActionType == (int)UserActionType.Warn)
             .FirstOrDefaultAsync();
 
         Assert.That(record, Is.Not.Null);

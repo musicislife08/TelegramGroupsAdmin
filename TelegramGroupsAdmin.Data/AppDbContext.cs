@@ -856,10 +856,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(mc => mc.ChatType)
             .HasConversion<int>();
 
-        modelBuilder.Entity<UserActionRecordDto>()
-            .Property(ua => ua.ActionType)
-            .HasConversion<int>();
-
         modelBuilder.Entity<ReportDto>()
             .Property(r => r.Type)
             .HasDefaultValue((short)0);
