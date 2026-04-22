@@ -414,6 +414,13 @@ Add one scenario:
 
 Neither is in scope for this bypass-review follow-up.
 
+**Action required:** Create a GitHub issue to track this work before the bypass-review PR merges. The issue should:
+- Reference this spec (`docs/superpowers/specs/2026-04-20-welcome-bypass-followup-design.md` §5.1)
+- List the affected configs (Welcome confirmed; Log, Moderation, UrlFilter, TelegramBot, ServiceMessageDeletion, BanCelebration to be verified during the issue's scoping phase)
+- Outline both resolution options (mapper registry vs. per-config repositories) and defer the choice to the issue's design discussion
+- Use the `enhancement` + `backend` + `technical-debt` labels (verify against current TGA label set before filing)
+- Link back from the bypass-review PR body so the architectural follow-up is discoverable from the code review that surfaced it
+
 ## Risks
 
 - **Enum consolidation blast radius.** `UserActionType` + `PermissionLevel` consolidation touches many files. Most changes are `using`-statement retargets and one method-signature return-type change. EF Core mapping must continue to persist as `int`; `HasConversion<int>()` should remain on the DbSet configuration.
