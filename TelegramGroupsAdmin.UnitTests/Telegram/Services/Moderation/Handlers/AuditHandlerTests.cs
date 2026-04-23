@@ -43,7 +43,7 @@ public class AuditHandlerTests
     }
 
     [Test]
-    public async Task LogWelcomeBypassAsync_ChatAdmin_WritesExpectedRow()
+    public async Task LogWelcomeBypassAsync_Admin_WritesExpectedRow()
     {
         UserActionRecord? captured = null;
         _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
@@ -52,7 +52,7 @@ public class AuditHandlerTests
         await _handler.LogWelcomeBypassAsync(
             UserIdentity.FromId(100),
             ChatIdentity.FromId(-200),
-            BypassDecision.ChatAdmin,
+            BypassDecision.Admin,
             CancellationToken.None);
 
         Assert.That(captured, Is.Not.Null);
@@ -62,24 +62,9 @@ public class AuditHandlerTests
             "Bypass audit rows record the chat where the join occurred.");
         Assert.That(captured.MessageId, Is.Null,
             "Bypass has no specific message context.");
-        Assert.That(captured.Reason, Is.EqualTo("Telegram chat admin/creator"));
+        Assert.That(captured.Reason, Is.EqualTo("Admin identified (Telegram chat admin or linked web admin)"));
     }
 
-    [Test]
-    public async Task LogWelcomeBypassAsync_WebAdmin_WritesExpectedRow()
-    {
-        UserActionRecord? captured = null;
-        _userActionsRepo.InsertAsync(Arg.Do<UserActionRecord>(r => captured = r), Arg.Any<CancellationToken>())
-            .Returns(1L);
-
-        await _handler.LogWelcomeBypassAsync(
-            UserIdentity.FromId(100),
-            ChatIdentity.FromId(-200),
-            BypassDecision.WebAdmin,
-            CancellationToken.None);
-
-        Assert.That(captured!.Reason, Is.EqualTo("Linked web admin (GlobalAdmin/Owner)"));
-    }
 
     [Test]
     public async Task LogWelcomeBypassAsync_Trusted_WritesExpectedRow()

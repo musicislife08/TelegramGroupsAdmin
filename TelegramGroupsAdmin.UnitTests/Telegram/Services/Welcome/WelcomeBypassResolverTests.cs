@@ -66,7 +66,7 @@ public class WelcomeBypassResolverTests
 
         var decision = await _resolver.ResolveAsync(TestUser(), TestChat(), CancellationToken.None);
 
-        Assert.That(decision, Is.EqualTo(BypassDecision.ChatAdmin));
+        Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
     }
 
     [Test]
@@ -76,7 +76,7 @@ public class WelcomeBypassResolverTests
 
         var decision = await _resolver.ResolveAsync(TestUser(), TestChat(), CancellationToken.None);
 
-        Assert.That(decision, Is.EqualTo(BypassDecision.ChatAdmin));
+        Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
     }
 
     [Test]
@@ -88,7 +88,7 @@ public class WelcomeBypassResolverTests
 
         var decision = await _resolver.ResolveAsync(TestUser(), TestChat(), CancellationToken.None);
 
-        Assert.That(decision, Is.EqualTo(BypassDecision.WebAdmin));
+        Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
     }
 
     [Test]
@@ -100,7 +100,7 @@ public class WelcomeBypassResolverTests
 
         var decision = await _resolver.ResolveAsync(TestUser(), TestChat(), CancellationToken.None);
 
-        Assert.That(decision, Is.EqualTo(BypassDecision.WebAdmin));
+        Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
     }
 
     [Test]

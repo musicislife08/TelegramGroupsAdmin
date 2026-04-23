@@ -11,8 +11,7 @@ public sealed class WelcomeMetrics
 {
     // Outcome labels for bypass-flow results.
     // Private — callers use the typed RecordBypassOutcome method below.
-    private const string OutcomeBypassChatAdmin = "skipped_bypass_chatadmin";
-    private const string OutcomeBypassWebAdmin = "skipped_bypass_webadmin";
+    private const string OutcomeBypassAdmin = "skipped_bypass_admin";
     private const string OutcomeBypassTrusted = "skipped_bypass_trusted";
 
     // Error messages for the impossible-to-reach switch arms.
@@ -72,8 +71,7 @@ public sealed class WelcomeMetrics
     {
         var outcome = decision switch
         {
-            BypassDecision.ChatAdmin => OutcomeBypassChatAdmin,
-            BypassDecision.WebAdmin => OutcomeBypassWebAdmin,
+            BypassDecision.Admin => OutcomeBypassAdmin,
             BypassDecision.Trusted => OutcomeBypassTrusted,
             BypassDecision.None => throw new InvalidOperationException(BypassOutcomeNoneUnreachable),
             _ => throw new InvalidOperationException(

@@ -424,7 +424,7 @@ public class WelcomeServiceTests
         // Arrange — resolver flags the user as a Telegram chat admin/creator
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.ChatAdmin);
+            .Returns(BypassDecision.Admin);
 
         var update = CreateJoinUpdate();
 
@@ -449,7 +449,7 @@ public class WelcomeServiceTests
         // Arrange — resolver treats owner as ChatAdmin decision (Rule 1 covers both)
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.ChatAdmin);
+            .Returns(BypassDecision.Admin);
 
         var update = CreateJoinUpdate();
 
@@ -524,7 +524,7 @@ public class WelcomeServiceTests
         // Arrange — resolver decides ChatAdmin bypass
         _bypassResolver
             .ResolveAsync(Arg.Any<UserIdentity>(), Arg.Any<ChatIdentity>(), Arg.Any<CancellationToken>())
-            .Returns(BypassDecision.ChatAdmin);
+            .Returns(BypassDecision.Admin);
 
         var update = CreateJoinUpdate();
 
@@ -547,7 +547,7 @@ public class WelcomeServiceTests
         await _auditHandler.Received(1).LogWelcomeBypassAsync(
             Arg.Any<UserIdentity>(),
             Arg.Any<ChatIdentity>(),
-            BypassDecision.ChatAdmin,
+            BypassDecision.Admin,
             Arg.Any<CancellationToken>());
     }
 

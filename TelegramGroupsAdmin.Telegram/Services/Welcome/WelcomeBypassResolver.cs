@@ -21,10 +21,8 @@ public sealed class WelcomeBypassResolver(
     ILogger<WelcomeBypassResolver> logger) : IWelcomeBypassResolver
 {
     // Log format strings live here because they are only used by this class.
-    private const string LogFormatChatAdmin =
-        "Welcome bypass: {User} in {Chat} - Telegram chat admin/creator";
-    private const string LogFormatWebAdmin =
-        "Welcome bypass: {User} in {Chat} - linked web admin (level {Level})";
+    private const string LogFormatAdmin =
+        "Welcome bypass: {User} in {Chat} - admin identified (Telegram chat admin or linked web admin)";
     private const string LogFormatTrusted =
         "Welcome bypass: {User} in {Chat} - trusted user, bypass enabled";
 
@@ -39,8 +37,8 @@ public sealed class WelcomeBypassResolver(
         var chatMember = await userService.GetChatMemberAsync(chat.Id, user.Id, cancellationToken);
         if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
         {
-            logger.LogInformation(LogFormatChatAdmin, user.ToLogInfo(), chat.ToLogInfo());
-            return BypassDecision.ChatAdmin;
+            logger.LogInformation(LogFormatAdmin, user.ToLogInfo(), chat.ToLogInfo());
+            return BypassDecision.Admin;
         }
 
         // Rule 2: Linked web admin (always on)
@@ -48,8 +46,8 @@ public sealed class WelcomeBypassResolver(
         var permissionLevel = await mappingRepo.GetPermissionLevelByTelegramIdAsync(user.Id, cancellationToken);
         if (permissionLevel >= PermissionLevel.GlobalAdmin)
         {
-            logger.LogInformation(LogFormatWebAdmin, user.ToLogInfo(), chat.ToLogInfo(), permissionLevel);
-            return BypassDecision.WebAdmin;
+            logger.LogInformation(LogFormatAdmin, user.ToLogInfo(), chat.ToLogInfo());
+            return BypassDecision.Admin;
         }
 
         // Rule 3: Trusted user (toggle-gated)

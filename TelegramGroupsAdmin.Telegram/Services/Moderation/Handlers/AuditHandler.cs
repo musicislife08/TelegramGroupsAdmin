@@ -15,8 +15,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 public class AuditHandler : IAuditHandler
 {
     // Bypass reason strings - only emitted from this class.
-    private const string BypassReasonChatAdmin = "Telegram chat admin/creator";
-    private const string BypassReasonWebAdmin  = "Linked web admin (GlobalAdmin/Owner)";
+    private const string BypassReasonAdmin   = "Admin identified (Telegram chat admin or linked web admin)";
     private const string BypassReasonTrusted   = "Trusted user, bypass enabled";
     private const string BypassReasonFallback  = "Bypass";
 
@@ -133,8 +132,7 @@ public class AuditHandler : IAuditHandler
     {
         var reason = decision switch
         {
-            BypassDecision.ChatAdmin => BypassReasonChatAdmin,
-            BypassDecision.WebAdmin  => BypassReasonWebAdmin,
+            BypassDecision.Admin   => BypassReasonAdmin,
             BypassDecision.Trusted   => BypassReasonTrusted,
             _                        => BypassReasonFallback,
         };

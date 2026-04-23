@@ -146,7 +146,7 @@ public class WelcomeFlowBypassIntegrationTests
 
     /// <summary>
     /// Scenario 1: Joining user is a Telegram chat administrator.
-    /// Expectation: resolver returns <see cref="BypassDecision.ChatAdmin"/>, audit row is
+    /// Expectation: resolver returns <see cref="BypassDecision.Admin"/>, audit row is
     /// written with the chat-admin reason string, and no welcome_responses row is inserted.
     /// </summary>
     [Test]
@@ -166,18 +166,18 @@ public class WelcomeFlowBypassIntegrationTests
         var decision = await _bypassResolver!.ResolveAsync(user, chat, CancellationToken.None);
         await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
 
-        // Assert — the decision was ChatAdmin and a matching user_actions row exists.
-        Assert.That(decision, Is.EqualTo(BypassDecision.ChatAdmin));
+        // Assert — the decision was Admin and a matching user_actions row exists.
+        Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
         await AssertBypassAuditRowAsync(
             TrustedUserTelegramId,
-            expectedReason: "Telegram chat admin/creator");
+            expectedReason: "Admin identified (Telegram chat admin or linked web admin)");
         await AssertNoWelcomeResponseAsync(TrustedUserTelegramId);
     }
 
     /// <summary>
     /// Scenario 2: Joining user is linked to an Owner-level web admin via
     /// 07_base_telegram_user_mappings.sql. Expectation: resolver returns
-    /// <see cref="BypassDecision.WebAdmin"/> with the WebAdmin reason string.
+    /// <see cref="BypassDecision.Admin"/> with the WebAdmin reason string.
     /// </summary>
     [Test]
     public async Task WebAdminJoin_LinkedOwner_WritesAuditAndBypasses()
@@ -192,10 +192,10 @@ public class WelcomeFlowBypassIntegrationTests
         await _auditHandler!.LogWelcomeBypassAsync(user, chat, decision, CancellationToken.None);
 
         // Assert
-        Assert.That(decision, Is.EqualTo(BypassDecision.WebAdmin));
+        Assert.That(decision, Is.EqualTo(BypassDecision.Admin));
         await AssertBypassAuditRowAsync(
             LinkedOwnerTelegramUserId,
-            expectedReason: "Linked web admin (GlobalAdmin/Owner)");
+            expectedReason: "Admin identified (Telegram chat admin or linked web admin)");
         await AssertNoWelcomeResponseAsync(LinkedOwnerTelegramUserId);
     }
 
